@@ -1,3 +1,4 @@
+from io import BytesIO
 import json
 from types import SimpleNamespace
 import unittest
@@ -7,7 +8,34 @@ from app import create_app
 from app.services import email_service
 
 
+class _BufferedResponse:
+    def read(self, size=-1):
+        if not hasattr(self, '_stream'):
+            self._stream = BytesIO(self._payload_bytes())
+        return self._stream.read(size)
+
+
 class EmailServiceTest(unittest.TestCase):
+    def test_email_receipts_are_bounded_closed_and_never_retried(self):
+        from tests.test_external_response_limits import Response
+        user = SimpleNamespace(email='fixture@example.test', display_name='Fixture')
+        for body in (b'x' * (64 * 1024 + 1), b'{', b'[]'):
+            response = Response(body)
+            with patch.object(email_service, 'urlopen', return_value=response) as request:
+                self.assertFalse(email_service.send_email_verification(user, 'fixture-token')['sent'])
+            self.assertTrue(response.closed)
+            request.assert_called_once()
+
+    def test_email_http_error_body_is_closed_without_private_logging(self):
+        from urllib.error import HTTPError
+        body = BytesIO(b'private')
+        error = HTTPError('https://example.test', 401, 'private-key', {}, body)
+        with patch.object(email_service, 'urlopen', side_effect=error), self.assertLogs(self.app.logger, level='WARNING') as logs:
+            result = email_service.send_email_verification(SimpleNamespace(email='fixture@example.test', display_name='Fixture'), 'token')
+        self.assertFalse(result['sent'])
+        self.assertTrue(body.closed)
+        self.assertNotIn('private-key', str(logs.output))
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",
@@ -32,14 +60,14 @@ class EmailServiceTest(unittest.TestCase):
     def test_access_approval_email_uses_neoapps_portal_copy(self):
         captured = {}
 
-        class FakeResponse:
+        class FakeResponse(_BufferedResponse):
             def __enter__(self):
                 return self
 
             def __exit__(self, *_args):
                 return False
 
-            def read(self):
+            def _payload_bytes(self):
                 return b'{"messageId":"test"}'
 
         def fake_urlopen(request, timeout):
@@ -71,14 +99,14 @@ class EmailServiceTest(unittest.TestCase):
     def test_email_verification_copy_uses_the_default_seven_day_expiration(self):
         captured = {}
 
-        class FakeResponse:
+        class FakeResponse(_BufferedResponse):
             def __enter__(self):
                 return self
 
             def __exit__(self, *_args):
                 return False
 
-            def read(self):
+            def _payload_bytes(self):
                 return b'{"messageId":"test"}'
 
         def fake_urlopen(request, timeout):

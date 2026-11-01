@@ -5,6 +5,7 @@ import json
 import re
 import zlib
 import gc
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
@@ -36,17 +37,27 @@ def transport_scope():
         yield
     finally:
         _transport_scope.reset(token)
-        close=getattr(scope['client'],'close',None)
-        if callable(close): close()
+        _close_client(scope['client'])
+
+
+def _close_client(client):
+    close = getattr(client, 'close', None)
+    if callable(close):
+        try:
+            close()
+        except Exception:
+            # Cleanup must not replace a verified receipt or the actual I/O
+            # failure. No provider exception text (it may contain private data).
+            logging.getLogger(__name__).warning('FROST transport cleanup failed.')
 
 
 def _client(config):
     scope=_transport_scope.get()
     if scope is None:
-        return provider._r2_client(config)
+        raise RuntimeError('FROST transport requires an owned operation.')
     if scope['client'] is None or scope['config']!=config:
-        close=getattr(scope['client'],'close',None)
-        if callable(close): close()
+        previous, scope['client'] = scope['client'], None
+        _close_client(previous)
         scope['config'],scope['client']=config,provider._r2_client(config)
     return scope['client']
 

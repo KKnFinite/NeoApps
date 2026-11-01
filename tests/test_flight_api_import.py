@@ -1,3 +1,4 @@
+from io import BytesIO
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
 import json
@@ -59,6 +60,13 @@ from app.services.flight_api import (
 from app.services.sort_timeline import ensure_sort_timeline_settings, sort_timeline_context
 
 
+class _BufferedResponse:
+    def read(self, size=-1):
+        if not hasattr(self, '_stream'):
+            self._stream = BytesIO(self._payload_bytes())
+        return self._stream.read(size)
+
+
 class FakeFlightClient:
     def __init__(self, payload):
         self.payload = payload
@@ -94,6 +102,23 @@ class ErrorFlightClient:
 
 
 class FlightApiImportTest(unittest.TestCase):
+    def test_invalid_bounded_provider_response_preserves_canonical_mission(self):
+        from unittest.mock import patch
+        from tests.test_external_response_limits import Response
+        mission = self._mission('arrival', '5X123', eta_datetime_utc=datetime(2026, 6, 1, 7, 5))
+        db.session.add(mission)
+        db.session.commit()
+        for body in (b'x' * 101, b'{"arrivals":{}}', b'{'):
+            response = Response(body)
+            with patch.dict(os.environ, {'AERODATABOX_API_KEY': 'fixture-key'}), patch.object(
+                    flight_api_service, 'urlopen', return_value=response), patch.object(
+                    flight_api_service, 'MAX_FIDS_RESPONSE_BYTES', 100):
+                result = run_flight_api_import(self.gateway, self.operation)
+            self.assertTrue(result['provider_error'])
+            self.assertEqual(SortDateMission.query.count(), 1)
+            self.assertEqual(db.session.get(SortDateMission, mission.id).eta_datetime_utc, datetime(2026, 6, 1, 7, 5))
+            self.assertTrue(response.closed)
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",
@@ -160,14 +185,14 @@ class FlightApiImportTest(unittest.TestCase):
     def test_rapidapi_client_builds_fids_request_shape(self):
         captured = {}
 
-        class FakeResponse:
+        class FakeResponse(_BufferedResponse):
             def __enter__(self):
                 return self
 
             def __exit__(self, _exc_type, _exc, _tb):
                 return False
 
-            def read(self):
+            def _payload_bytes(self):
                 return b'{"arrivals": [], "departures": []}'
 
         def fake_urlopen(request, timeout):
@@ -246,14 +271,14 @@ class FlightApiImportTest(unittest.TestCase):
     def test_rapidapi_client_strips_key_whitespace_before_sending(self):
         captured = {}
 
-        class FakeResponse:
+        class FakeResponse(_BufferedResponse):
             def __enter__(self):
                 return self
 
             def __exit__(self, _exc_type, _exc, _tb):
                 return False
 
-            def read(self):
+            def _payload_bytes(self):
                 return b'{"arrivals": [], "departures": []}'
 
         def fake_urlopen(request, timeout):
@@ -910,14 +935,14 @@ class FlightApiImportTest(unittest.TestCase):
         db.session.commit()
         captured = {}
 
-        class FakeResponse:
+        class FakeResponse(_BufferedResponse):
             def __enter__(self):
                 return self
 
             def __exit__(self, _exc_type, _exc, _tb):
                 return False
 
-            def read(self):
+            def _payload_bytes(self):
                 return b'{"arrivals": [], "departures": []}'
 
         def fake_urlopen(request, timeout):
@@ -3473,14 +3498,14 @@ class FlightApiTestPageTest(unittest.TestCase):
     def _install_provider_payload(self, payload):
         calls = []
 
-        class FakeResponse:
+        class FakeResponse(_BufferedResponse):
             def __enter__(self):
                 return self
 
             def __exit__(self, _exc_type, _exc, _tb):
                 return False
 
-            def read(self):
+            def _payload_bytes(self):
                 return json.dumps(payload).encode("utf-8")
 
         def fake_urlopen(request, timeout):
@@ -3909,14 +3934,14 @@ class FlightApiTestPageTest(unittest.TestCase):
         db.session.add(mission)
         db.session.commit()
 
-        class FakeResponse:
+        class FakeResponse(_BufferedResponse):
             def __enter__(self):
                 return self
 
             def __exit__(self, _exc_type, _exc, _tb):
                 return False
 
-            def read(self):
+            def _payload_bytes(self):
                 return json.dumps(
                     {
                         "arrivals": [
@@ -4119,14 +4144,14 @@ class FlightApiTestPageTest(unittest.TestCase):
         db.session.add_all([operation, mission])
         db.session.commit()
 
-        class FakeResponse:
+        class FakeResponse(_BufferedResponse):
             def __enter__(self):
                 return self
 
             def __exit__(self, _exc_type, _exc, _tb):
                 return False
 
-            def read(self):
+            def _payload_bytes(self):
                 return json.dumps(
                     {
                         "arrivals": [

@@ -6,6 +6,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from app.services.bounded_http import ExternalResponseError, read_json
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import and_, or_
@@ -85,6 +86,35 @@ class FlightApiProviderError(FlightApiConfigurationError):
         self.diagnostics = diagnostics or {}
 
 
+# Airport FIDS covers a bounded operational window, not a worldwide archive.
+# 8 MiB leaves ample room for busy-airport movement lists and nested metadata.
+MAX_FIDS_RESPONSE_BYTES = 8 * 1024 * 1024
+
+
+def _validate_fids_payload(payload, depth=0):
+    if depth > 8:
+        raise ExternalResponseError('Provider flight response nesting is invalid.')
+    if isinstance(payload, list):
+        if not all(isinstance(item, dict) for item in payload):
+            raise ExternalResponseError('Provider flight records are invalid.')
+        return payload
+    if not isinstance(payload, dict):
+        raise ExternalResponseError('Provider flight response structure is invalid.')
+    collections = ('arrivals', 'departures', 'arrival', 'departure', 'flights', 'items')
+    wrappers = ('data', 'result', 'response')
+    if not any(key in payload for key in collections + wrappers):
+        raise ExternalResponseError('Provider flight response contains no movement collection.')
+    for key in collections:
+        if key in payload and payload[key] is not None:
+            if not isinstance(payload[key], list):
+                raise ExternalResponseError('Provider flight collection is invalid.')
+            _validate_fids_payload(payload[key], depth + 1)
+    for key in wrappers:
+        if key in payload and payload[key] is not None:
+            _validate_fids_payload(payload[key], depth + 1)
+    return payload
+
+
 class RapidApiFlightClient:
     def fetch_fids(self, gateway_code, start_local, end_local, api_key):
         request, diagnostics = build_rapidapi_request(
@@ -95,13 +125,13 @@ class RapidApiFlightClient:
         )
         try:
             with urlopen(request, timeout=20) as response:
-                return json.loads(response.read().decode("utf-8"))
+                return _validate_fids_payload(read_json(response, maximum=MAX_FIDS_RESPONSE_BYTES))
         except HTTPError as error:
             diagnostics["provider_status_code"] = error.code
-            diagnostics["provider_response_snippet"] = _safe_provider_response_snippet(
-                error,
-                api_key,
-            )
+            try:
+                diagnostics["provider_response_snippet"] = _safe_provider_response_snippet(error, api_key)
+            finally:
+                error.close()
             message = f"Provider returned {error.code} {error.reason or 'error'}."
             if error.code == 403:
                 message += (
@@ -112,14 +142,14 @@ class RapidApiFlightClient:
                 message,
                 diagnostics=diagnostics,
             ) from error
-        except (URLError, TimeoutError) as error:
+        except (URLError, OSError) as error:
             raise FlightApiProviderError(
-                f"Provider request failed: {error}",
+                f"Provider request failed: {_redact_provider_response(str(error), api_key)}",
                 diagnostics=diagnostics,
             ) from error
-        except json.JSONDecodeError as error:
+        except ExternalResponseError as error:
             raise FlightApiProviderError(
-                "Provider returned invalid JSON.",
+                str(error),
                 diagnostics=diagnostics,
             ) from error
 

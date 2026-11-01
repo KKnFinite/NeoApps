@@ -21,6 +21,7 @@ from app.services.gateway_matrix import (
     sort_lookup_window_for_operation,
 )
 from app.services.memory_diagnostics import memory_diagnostics
+from app.services.bounded_http import ExternalResponseError, read_json
 
 
 KRFD_ICAO = "KRFD"
@@ -34,7 +35,18 @@ FORECAST_TTL = timedelta(minutes=30)
 FORECAST_STALE_TTL = timedelta(hours=24)
 POINTS_TTL = timedelta(days=1)
 POINTS_STALE_TTL = timedelta(days=7)
+# Single-station observations and point metadata are small. Hourly forecasts
+# include a full NWS horizon; grid data contains many time series. These bounds
+# apply independently to compressed and decoded bytes, without truncation.
+METAR_MAX_BYTES = 256 * 1024
+POINTS_MAX_BYTES = 256 * 1024
+HOURLY_MAX_BYTES = 1024 * 1024
+GRID_MAX_BYTES = 4 * 1024 * 1024
+FAILURE_BACKOFF_SECONDS = 60
+MAX_FAILURE_BACKOFF_SECONDS = 15 * 60
 _CACHE = {}
+_FAILURES = {}
+_INFLIGHT = set()
 _CACHE_LOCK = threading.RLock()
 _ISO_DURATION = re.compile(r"^PT(?:(\d+)H)?(?:(\d+)M)?$")
 
@@ -108,6 +120,7 @@ def clear_neosubzero_weather_cache():
     """Clear the process-local provider cache (primarily for focused tests)."""
     with _CACHE_LOCK:
         _CACHE.clear()
+        _FAILURES.clear()
 
 
 def parse_aviation_weather_metar(payload):
@@ -339,33 +352,64 @@ def _weather_enabled():
 
 
 def _cached_fetch(key, ttl, stale_ttl, fetcher, *, now):
+    # Also used by the bounded FROST observation reader with epoch seconds.
+    at = now.timestamp() if isinstance(now, datetime) else float(now)
+    ttl_seconds = ttl.total_seconds() if isinstance(ttl, timedelta) else float(ttl)
+    stale_seconds = stale_ttl.total_seconds() if isinstance(stale_ttl, timedelta) else float(stale_ttl)
     with _CACHE_LOCK:
         cached = _CACHE.get(key)
-        if cached and now - cached["fetched_at"] < ttl:
+        if cached and at - cached["fetched_at"] < ttl_seconds:
             return {"value": cached["value"], "stale": False, "error": None}
-        try:
-            value = fetcher(now=now)
-        except Exception:
-            if cached and now - cached["fetched_at"] < stale_ttl:
-                return {
-                    "value": cached["value"],
-                    "stale": True,
-                    "error": "Latest weather refresh failed; showing last good data.",
-                }
-            return {
-                "value": None,
-                "stale": False,
-                "error": "Weather data is temporarily unavailable.",
-            }
-        _CACHE[key] = {"value": value, "fetched_at": now}
+        failure = _FAILURES.get(key)
+        if key in _INFLIGHT or (failure and at < failure['next_retry_at']):
+            return _last_good(cached, at, stale_seconds)
+        _INFLIGHT.add(key)
+    # No provider I/O under the cache lock. Other operators return immediately
+    # with bounded-age evidence/unavailable; unrelated providers remain usable.
+    try:
+        value = fetcher(now=now)
+    except Exception:
+        with _CACHE_LOCK:
+            attempts = min((_FAILURES.get(key) or {}).get('attempts', 0) + 1, 16)
+            delay = min(FAILURE_BACKOFF_SECONDS * 2 ** (attempts - 1), MAX_FAILURE_BACKOFF_SECONDS)
+            _FAILURES[key] = dict(attempts=attempts, last_failed_at=at, next_retry_at=at + delay)
+            return _last_good(_CACHE.get(key), at, stale_seconds)
+    else:
+        with _CACHE_LOCK:
+            _CACHE[key] = {"value": value, "fetched_at": at}
+            _FAILURES.pop(key, None)
         return {"value": value, "stale": False, "error": None}
+    finally:
+        with _CACHE_LOCK:
+            _INFLIGHT.discard(key)
+
+
+def _last_good(cached, at, stale_seconds):
+    if cached and at - cached['fetched_at'] < stale_seconds:
+        return dict(value=cached['value'], stale=True,
+                    error="Latest weather refresh failed; showing last good data.")
+    return dict(value=None, stale=False, error="Weather data is temporarily unavailable.")
 
 
 def _fetch_metar(*, now=None):
     query = urlencode({"ids": KRFD_ICAO, "format": "json", "hours": 2})
-    payload = _request_json(f"{AVIATION_WEATHER_METAR_URL}?{query}")
-    if not isinstance(payload, list) or not payload:
+    payload = _request_json(f"{AVIATION_WEATHER_METAR_URL}?{query}", max_bytes=METAR_MAX_BYTES)
+    if not isinstance(payload, list) or not payload or any(
+        not isinstance(row, dict) or row.get('icaoId') != KRFD_ICAO for row in payload
+    ):
         raise NeoSubZeroWeatherError("KRFD METAR is unavailable.")
+    return payload
+
+
+def _fetch_points(*, now=None):
+    payload = _request_json(NWS_POINTS_URL.format(latitude=KRFD_LATITUDE, longitude=KRFD_LONGITUDE),
+                            max_bytes=POINTS_MAX_BYTES)
+    properties = payload.get('properties') if isinstance(payload, dict) else None
+    if not isinstance(properties, dict) or not all(
+        isinstance(properties.get(key), str) and properties[key].startswith('https://api.weather.gov/')
+        for key in ('forecastHourly', 'forecastGridData')
+    ):
+        raise NeoSubZeroWeatherError('NWS point response is invalid.')
     return payload
 
 
@@ -374,12 +418,7 @@ def _fetch_forecast(*, now):
         "krfd_nws_points",
         POINTS_TTL,
         POINTS_STALE_TTL,
-        lambda **_kwargs: _request_json(
-            NWS_POINTS_URL.format(
-                latitude=KRFD_LATITUDE,
-                longitude=KRFD_LONGITUDE,
-            )
-        ),
+        _fetch_points,
         now=now,
     )
     properties = (points.get("value") or {}).get("properties") or {}
@@ -387,16 +426,23 @@ def _fetch_forecast(*, now):
     grid_url = properties.get("forecastGridData")
     if not hourly_url or not grid_url:
         raise NeoSubZeroWeatherError("NWS forecast grid is unavailable.")
-    hourly = _request_json(hourly_url)
-    grid = _request_json(grid_url)
+    hourly = _request_json(hourly_url, max_bytes=HOURLY_MAX_BYTES)
+    grid = _request_json(grid_url, max_bytes=GRID_MAX_BYTES)
+    for payload in (hourly, grid):
+        if not isinstance(payload, dict) or not isinstance(payload.get('properties'), dict):
+            raise NeoSubZeroWeatherError('NWS forecast response is invalid.')
+    periods = hourly['properties'].get('periods')
+    if not isinstance(periods, list) or not periods or not all(isinstance(row, dict) for row in periods):
+        raise NeoSubZeroWeatherError('NWS hourly periods are unavailable.')
     return {"hourly": hourly, "grid": grid}
 
 
-def _request_json(url, *, max_bytes=None):
+def _request_json(url, *, max_bytes=GRID_MAX_BYTES):
     request = Request(
         url,
         headers={
             "Accept": "application/geo+json, application/json",
+            "Accept-Encoding": "identity",
             "User-Agent": current_app.config.get(
                 "NEOSUBZERO_WEATHER_USER_AGENT",
                 "NeoAppsWeather/1.0 (https://github.com/KKnFinite/NeoApps)",
@@ -405,12 +451,15 @@ def _request_json(url, *, max_bytes=None):
     )
     try:
         with urlopen(request, timeout=8) as response:
-            raw=response.read(max_bytes+1) if max_bytes is not None else response.read()
-            if max_bytes is not None and len(raw)>max_bytes:
-                raise NeoSubZeroWeatherError('Official weather response exceeds the bounded request limit.')
-            return json.loads(raw.decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
-        raise NeoSubZeroWeatherError("Official weather source is unavailable.") from exc
+            payload = read_json(response, maximum=max_bytes)
+            if not isinstance(payload, (dict, list)):
+                raise ExternalResponseError('Official weather response structure is invalid.')
+            return payload
+    except HTTPError as exc:
+        exc.close()
+        raise NeoSubZeroWeatherError("Official weather source is unavailable.") from None
+    except (URLError, OSError, ExternalResponseError) as exc:
+        raise NeoSubZeroWeatherError("Official weather source is unavailable.") from None
 
 
 def _forecast_cards(gateway, operation, payload, *, now=None):
@@ -615,6 +664,8 @@ def _weather_revision(snapshot):
     payload = {
         "metar": metar_row.get("reportTime") if isinstance(metar_row, dict) else None,
         "forecast": hourly_properties.get("generatedAt") or hourly_properties.get("updateTime"),
+        "metar_stale": snapshot['metar']['stale'],
+        "forecast_stale": snapshot['forecast']['stale'],
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 

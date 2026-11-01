@@ -5,10 +5,12 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from flask import current_app
+from app.services.bounded_http import ExternalResponseError, read_body
 
 
 BREVO_SMTP_EMAIL_URL = "https://api.brevo.com/v3/smtp/email"
 BREVO_SMTP_EMAIL_HOST = "api.brevo.com"
+MAX_EMAIL_RECEIPT_BYTES = 64 * 1024
 
 
 def send_vendor_invitation(user, token):
@@ -120,9 +122,16 @@ def _send_transactional_email(
 
     try:
         with urlopen(request, timeout=10) as response:  # nosec B310
-            response_body = response.read().decode("utf-8")
-    except (HTTPError, URLError, TimeoutError) as error:
-        current_app.logger.warning("Brevo email send failed: %s", error)
+            # Brevo returns a small message receipt, never the email contents.
+            response_body = read_body(response, maximum=MAX_EMAIL_RECEIPT_BYTES).decode("utf-8")
+            if not isinstance(json.loads(response_body), dict):
+                raise ExternalResponseError('Invalid email provider receipt.')
+    except (HTTPError, URLError, OSError, ValueError, RecursionError) as error:
+        if isinstance(error, HTTPError):
+            error.close()
+        # A lost/invalid receipt is unverified; do not retry this POST here or
+        # log provider bodies, tokens, addresses, or credential-bearing errors.
+        current_app.logger.warning("Brevo email delivery receipt unavailable (%s).", type(error).__name__)
         return {"sent": False, "reason": "send_failed"}
 
     return {"sent": True, "response": response_body}
