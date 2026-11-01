@@ -642,6 +642,18 @@ for _table in ('neoscorpion_spear_observations', 'neoscorpion_spear_fleet_observ
     POSTGRES_OPTIONAL_COLUMNS.setdefault(_table, {})['verified_at'] = 'TIMESTAMP'
     LOCAL_SQLITE_OPTIONAL_COLUMNS.setdefault(_table, {})['verified_at'] = 'DATETIME'
 
+POSTGRES_OPTIONAL_COLUMNS.setdefault('neoscorpion_spear_observations', {})['reconciled_at'] = 'TIMESTAMP'
+LOCAL_SQLITE_OPTIONAL_COLUMNS.setdefault('neoscorpion_spear_observations', {})['reconciled_at'] = 'DATETIME'
+
+
+def _sync_spear_reconciliation_index(table_names):
+    """Add only queue metadata/index; never rewrite historical evidence."""
+    if 'neoscorpion_spear_observations' in table_names:
+        from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation
+        index = next(index for index in NeoScorpionSpearObservation.__table__.indexes
+                     if index.name == 'ix_spear_decision_unresolved')
+        index.create(bind=db.session.connection(), checkfirst=True)
+
 # One SubZero contract feeds both canonical dialect registries.
 from app.services.neosubzero_schema import NEOSUBZERO_OPTIONAL_COLUMNS
 for _table, _columns in NEOSUBZERO_OPTIONAL_COLUMNS.items():
@@ -696,6 +708,7 @@ def sync_local_sqlite_schema(app):
             )
             existing_columns.add(column_name)
 
+    _sync_spear_reconciliation_index(table_names)
     _sync_staffing_people_employee_status_sqlite(table_names)
     from app.services.neoscorpion_continuation_schema import migrate_continuation_queue
     migrate_continuation_queue(db.session.connection())
@@ -792,6 +805,7 @@ def sync_database_schema(app):
     from app.services.neostaffing_employee_id_schema import sync_staffing_employee_id_schema
 
     sync_staffing_employee_id_schema()
+    _sync_spear_reconciliation_index(table_names)
     from app.services.mission_identity import sync_mission_identity_schema
     sync_mission_identity_schema(db.session.connection())
     _sync_neoermac_legacy_defaults_postgres(inspector, table_names)

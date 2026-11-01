@@ -11,6 +11,9 @@ class NeoScorpionSpearObservation(db.Model):
         db.Index('ix_spear_observation_delivery', 'gateway_id', 'delivered_at', 'retry_at'),
         db.Index('ix_spear_observation_identity', 'assignment_id', 'cycle_number', 'created_at'),
         db.Index('ix_spear_observation_operation', 'operation_id', 'kind', 'created_at'),
+        db.Index('ix_spear_decision_unresolved', 'gateway_id', 'reconcile_after', 'id',
+                 postgresql_where=db.text("kind = 'decision' AND reconciled_at IS NULL"),
+                 sqlite_where=db.text("kind = 'decision' AND reconciled_at IS NULL")),
     )
     id = db.Column(db.String(32), primary_key=True)
     event_key = db.Column(db.String(64), nullable=False)
@@ -25,6 +28,9 @@ class NeoScorpionSpearObservation(db.Model):
     attempts = db.Column(db.Integer, nullable=False, default=0)
     retry_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     reconcile_after = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    # Local reconciliation only; independent of provider acceptance/verification.
+    # NULL includes legacy decisions until their sealed physical outcome is read.
+    reconciled_at = db.Column(db.DateTime)
     delivered_at = db.Column(db.DateTime)
     verified_at = db.Column(db.DateTime)
     vault_key = db.Column(db.String(512))

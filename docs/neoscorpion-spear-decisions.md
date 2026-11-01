@@ -59,3 +59,70 @@ of the decision envelope (assignment/cycle are null when inapplicable). The orig
 rendered reference and canonical SPEAR audit are retained, along with the exact
 append-only TOP OFF SENT event ID. Reconciliation joins RETURN by that SENT identity,
 not truck/time guesses, and preserves the original prediction and measured outcome.
+
+## Final physical-outcome reconciliation (audit N10)
+
+`reconciled_at` is nullable local queue metadata, separate from `delivered_at`,
+`verified_at`, the immutable JSON envelope, and R2 retry state. The canonical
+bootstrap adds only that column and `ix_spear_decision_unresolved`, a partial
+index on `(gateway_id, reconcile_after, id)` for unresolved decisions. It does
+not rewrite old evidence or mark old archive receipts verified.
+
+The worker selects at most 40 due, unresolved decisions with PostgreSQL
+`FOR UPDATE SKIP LOCKED`. It also acquires nonblocking assignment locks before
+reading decision boundaries, physical visits, and transfer events. A busy live
+mutation is skipped without rescheduling writes. This prevents observing an
+event before canonical completion and its physical seal after completion as
+one inconsistent snapshot. Locks cover database work only; no provider I/O or
+archive delivery occurs inside this transaction.
+
+An outcome becomes final only for a sealed exact physical visit, or a completed/
+rolled-over cycle with matching events and all known original-tail visits sealed.
+An unsealed visit, missing physical evidence, or another open visit remains
+eligible for late evidence. The existing five-minute unresolved retry and all
+tail/resource/time-boundary matching and exclusion rules remain in place. A new
+cycle is independently captured, not attached to the old physical outcome.
+
+Outcome insertion/reuse and the parent's finalization metadata commit together.
+There is no independent savepoint commit. A failed/disconnected transaction rolls
+back both; another worker can retry. Parent row locks and the existing unique
+event key prevent competing workers from creating duplicate outcomes. Historical
+valid outcomes are reused without rewriting their content, even if unordered
+event/exclusion sets were serialized in another order. Their parents acquire the
+new marker once through ordinary bounded reconciliation. Provisional historical
+outcomes do not prevent capturing later final evidence.
+
+Once final, a decision is absent from the indexed reconciliation queue. Its
+`reconcile_after` stays unchanged. R2 outages still update necessary delivery retry
+metadata, but cannot reopen or reschedule reconciliation. Completed-fueling
+capture, archive formats, content verification and five-minute delivery crash
+leases are unchanged.
+
+### Reproducible SQL measurement
+
+One synthetic sealed decision was finalized, then reconciled ten more times with
+a deterministic clock advancing six minutes between calls. Counts include all
+SELECT/UPDATE statements inside those calls, with provider I/O absent. The
+original implementation was loaded from commit
+`ad48820810f93f22d4f2d625bce9c75ee2f82fb1` for the comparison.
+
+| Isolated backend | Original SELECTs | New SELECTs | Original observation UPDATEs | New observation UPDATEs |
+| --- | ---: | ---: | ---: | ---: |
+| SQLite | 60 | 10 | 10 | 0 |
+| PostgreSQL | 60 | 10 | 10 | 0 |
+
+No INSERTs occurred in either repeated-pass workload. Each new pass performs one
+indexed due-queue lookup; it does not hydrate assignment history. For unresolved
+work, indexed next-decision boundary lookups replace whole-cohort hydration and
+event retrieval is restricted to selected assignment/cycle identities. This is
+an isolated SQL comparison, not a measured Neon CU-hour saving or production load
+test. PostgreSQL tests also cover concurrent workers, a disconnected claim,
+operator-held assignment locks, partial-index selection, and additive bootstrap.
+
+Validation: 54 focused SQLite/Python tests, 18 reconciliation PostgreSQL tests,
+12 existing archive PostgreSQL tests, and 22 affected JavaScript tests pass.
+Fueler-to-Dispatcher completion passes in Chromium and WebKit. The separate
+existing SPEAR browser test passes its desktop assignment/reason workflow, but
+its mobile `button:visible` locator times out; this also reproduces with the
+starting release loaded in memory. No production UI, fueling or archive test
+writes are used to work around that pre-existing browser-test limitation.

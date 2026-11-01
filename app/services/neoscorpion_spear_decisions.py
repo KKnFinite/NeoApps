@@ -11,7 +11,8 @@ from uuid import uuid4
 from flask import current_app, has_request_context, request
 from flask_login import current_user
 from itsdangerous import BadSignature, URLSafeSerializer
-from sqlalchemy import select, func
+from sqlalchemy import select, func, tuple_, or_
+from sqlalchemy.orm import aliased
 
 from app.extensions import db
 from app.services.memory_diagnostics import observe_process_memory
@@ -370,37 +371,80 @@ def reconcile_fleet(gateway_id):
     db.session.commit()
 
 
+def _same_outcome(existing, decision, payload):
+    """Reuse valid legacy evidence, including harmless set-order differences."""
+    record = existing.payload
+    try:
+        validate_record(record)
+    except (ValueError, TypeError, KeyError):
+        return False
+    if record['id'] != existing.id or any(
+        record[key] != getattr(decision, attr) or getattr(existing, attr) != getattr(decision, attr) for key, attr in (
+        ('gateway_id', 'gateway_id'), ('operation_id', 'operation_id'), ('mission_id', 'mission_id'),
+        ('assignment_id', 'assignment_id'), ('cycle_number', 'cycle_number'))):
+        return False
+    original = record['payload']
+    return (record['record_type'] == 'outcome' and original['decision_id'] == decision.id
+        and original['qualified'] == payload['qualified']
+        and original['comparison_conclusion'] == payload['comparison_conclusion']
+        and sorted(original['event_ids']) == sorted(payload['event_ids'])
+        and sorted(original['exclusions']) == sorted(payload['exclusions']))
+
+
 def reconcile(gateway_id, *, limit=40):
     """Only captured decisions; exact cycle/tail/visit/resource event evidence, no invented history."""
     from app.models import NeoScorpionFuelAssignment, NeoScorpionFuelingEvent, NeoScorpionFuelWorkState
     from app.services.neoscorpion_prof import event_math
     now = datetime.utcnow()
     decisions = db.session.scalars(select(Observation).where(Observation.gateway_id == gateway_id,
-        Observation.kind == 'decision', Observation.reconcile_after <= now)
-        .order_by(Observation.reconcile_after, Observation.id).limit(limit)).all()
+        Observation.kind == 'decision', Observation.reconciled_at.is_(None), Observation.reconcile_after <= now)
+        .order_by(Observation.reconcile_after, Observation.id).limit(max(0, min(int(limit), 40)))
+        .with_for_update(skip_locked=True).execution_options(populate_existing=True)).all()
     ids = {item.assignment_id for item in decisions}
     if not ids:
         return
-    cohort = list(db.session.scalars(select(Observation).where(Observation.assignment_id.in_(ids),
-        Observation.kind == 'decision')))
-    assignments = {a.id:a for a in db.session.scalars(select(NeoScorpionFuelAssignment).where(NeoScorpionFuelAssignment.id.in_(ids)))}
-    events = list(db.session.scalars(select(NeoScorpionFuelingEvent).where(NeoScorpionFuelingEvent.fuel_assignment_id.in_(ids))))
-    work_ids = {e.fuel_work_state_id for e in events if e.fuel_work_state_id}
-    works = {w.id:w for w in db.session.scalars(select(NeoScorpionFuelWorkState).where(NeoScorpionFuelWorkState.id.in_(work_ids)))} if work_ids else {}
+    # Nonblocking canonical ownership fence: an operator finalizing/promoting a
+    # visit wins. Never observe an event before commit and its seal after commit
+    # as if they were one snapshot. No network work happens under these locks.
+    assignments = {a.id:a for a in db.session.scalars(select(NeoScorpionFuelAssignment)
+        .where(NeoScorpionFuelAssignment.id.in_(ids)).with_for_update(skip_locked=True)
+        .execution_options(populate_existing=True))}
+    decisions = [item for item in decisions if item.assignment_id in assignments]
+    ids = set(assignments)
+    if not decisions:
+        db.session.commit()
+        return
+    # Indexed next-boundary lookups, not hydration of all prior decisions for
+    # each assignment. Keep the original strict greater-than time contract.
+    later = aliased(Observation)
+    next_times = dict(db.session.execute(select(Observation.id, select(func.min(later.created_at))
+        .where(later.assignment_id == Observation.assignment_id, later.cycle_number == Observation.cycle_number,
+               later.kind == 'decision', later.created_at > Observation.created_at)
+        .correlate(Observation).scalar_subquery()).where(Observation.id.in_([item.id for item in decisions]))).all())
+    cycles = {(item.assignment_id, item.cycle_number) for item in decisions}
+    work_ids = {
+        item.payload['payload']['work_id'] for item in decisions if item.payload['payload']['work_id']}
+    works = {w.id:w for w in db.session.scalars(select(NeoScorpionFuelWorkState).where(or_(
+        NeoScorpionFuelWorkState.id.in_(work_ids),
+        tuple_(NeoScorpionFuelWorkState.fuel_assignment_id, NeoScorpionFuelWorkState.physical_cycle_number).in_(cycles),
+        (NeoScorpionFuelWorkState.fuel_assignment_id.in_(ids) & NeoScorpionFuelWorkState.physical_cycle_number.is_(None))
+    )).execution_options(populate_existing=True))}
+    events = list(db.session.scalars(select(NeoScorpionFuelingEvent).where(
+        tuple_(NeoScorpionFuelingEvent.fuel_assignment_id, NeoScorpionFuelingEvent.cycle_number).in_(cycles))))
+    previous = None
     for item in decisions:
-        item.reconcile_after = now + timedelta(minutes=5)
         assignment = assignments[item.assignment_id]
         payload = item.payload['payload']
         relevant = [e for e in events if e.fuel_assignment_id == item.assignment_id
             and int(e.cycle_number or 1) == item.cycle_number and e.tail_number == payload['tail']]
         terminal = assignment.review_status == 'complete' or int(assignment.current_cycle_number or 1) > item.cycle_number
-        next_at = min((other.created_at for other in cohort if other.assignment_id == item.assignment_id
-            and other.cycle_number == item.cycle_number and other.created_at > item.created_at), default=datetime.max)
+        next_at = next_times[item.id] or datetime.max
         selected = payload['selected']
         matching = [e for e in relevant if e.fueler_user_id == selected['fueler_id'] and e.fuel_truck_id == selected['truck_id']
             and (not payload['work_id'] or e.fuel_work_state_id == payload['work_id'])
             and e.started_at_utc and item.created_at <= e.started_at_utc < next_at]
         if not terminal and not matching:
+            item.reconcile_after = now + timedelta(minutes=5)
             continue
         exclusions = []
         if not matching:
@@ -413,14 +457,40 @@ def reconcile(gateway_id, *, limit=40):
             exclusions.extend([*math['fueler_reasons'], *math['truck_reasons']])
         # Nonterminal evidence can acquire its final physical event later.
         if not terminal and exclusions:
+            item.reconcile_after = now + timedelta(minutes=5)
             continue
         record = dict(decision_id=item.id, event_ids=[e.id for e in matching], qualified=not exclusions,
             exclusions=sorted(set(exclusions)), comparison_conclusion='observed_only')
-        with db.session.begin_nested():
-            # Preserve the original cycle even after rollover.
-            proxy = type('Identity', (), dict(id=item.assignment_id, sort_date_operation_id=item.operation_id,
-                sort_date_mission_id=item.mission_id, current_cycle_number=item.cycle_number))()
+        if previous is None:
+            previous = {}
+            for outcome in db.session.scalars(select(Observation).where(Observation.gateway_id == gateway_id,
+                    Observation.kind == 'outcome', tuple_(Observation.assignment_id, Observation.cycle_number).in_(cycles),
+                    Observation.payload['payload']['decision_id'].as_string().in_([item.id for item in decisions]))):
+                previous.setdefault(outcome.payload.get('payload', {}).get('decision_id'), []).append(outcome)
+        # This worker owns the transaction: insert/reuse the immutable outcome
+        # and finalize its parent together. No R2 I/O, intermediate commit or
+        # independent savepoint can publish one without the other.
+        proxy = type('Identity', (), dict(id=item.assignment_id, sort_date_operation_id=item.operation_id,
+            sort_date_mission_id=item.mission_id, current_cycle_number=item.cycle_number))()
+        if not any(_same_outcome(outcome, item, record) for outcome in previous.get(item.id, ())):
             _enqueue('outcome', proxy, gateway_id, record, _hash(['outcome', item.id, record]))
+        # A current assignment can accept late evidence. Only a sealed
+        # exact visit, or a closed cycle with every known visit sealed,
+        # proves that this physical result cannot gain another event.
+        work = works.get(payload['work_id'])
+        exact_sealed = bool(work and work.fuel_assignment_id == item.assignment_id
+            and work.tail_number == payload['tail'] and work.physical_cycle_number in (None, item.cycle_number)
+            and work.physical_finalized_at_utc)
+        cycle_works = [work for work in works.values() if work.fuel_assignment_id == item.assignment_id
+            and work.tail_number == payload['tail'] and work.physical_cycle_number in (None, item.cycle_number)]
+        sealed_events = bool(matching) and all(works.get(event.fuel_work_state_id)
+            and works[event.fuel_work_state_id].physical_finalized_at_utc for event in matching)
+        closed_cycle = terminal and sealed_events and bool(cycle_works) and all(
+            work.physical_finalized_at_utc for work in cycle_works)
+        if exact_sealed or closed_cycle:
+            item.reconciled_at = now
+        else:
+            item.reconcile_after = now + timedelta(minutes=5)
     db.session.commit()
 
 
