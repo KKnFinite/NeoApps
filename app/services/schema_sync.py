@@ -654,6 +654,17 @@ def _sync_spear_reconciliation_index(table_names):
                      if index.name == 'ix_spear_decision_unresolved')
         index.create(bind=db.session.connection(), checkfirst=True)
 
+
+def _sync_subzero_archive_indexes(table_names):
+    if 'sort_date_operations' in table_names:
+        from sqlalchemy.schema import CreateIndex
+        from app.models import SortDateOperation
+        for index in SortDateOperation.__table__.indexes:
+            if index.name in ('ix_subzero_archive_gateway_cursor', 'ix_subzero_archive_legacy_cursor'):
+                # SQLite reflection omits expression indexes; IF NOT EXISTS
+                # handles that and concurrent/repeated canonical bootstrap.
+                db.session.execute(CreateIndex(index, if_not_exists=True))
+
 # One SubZero contract feeds both canonical dialect registries.
 from app.services.neosubzero_schema import NEOSUBZERO_OPTIONAL_COLUMNS
 for _table, _columns in NEOSUBZERO_OPTIONAL_COLUMNS.items():
@@ -709,6 +720,7 @@ def sync_local_sqlite_schema(app):
             existing_columns.add(column_name)
 
     _sync_spear_reconciliation_index(table_names)
+    _sync_subzero_archive_indexes(table_names)
     _sync_staffing_people_employee_status_sqlite(table_names)
     from app.services.neoscorpion_continuation_schema import migrate_continuation_queue
     migrate_continuation_queue(db.session.connection())
@@ -806,6 +818,7 @@ def sync_database_schema(app):
 
     sync_staffing_employee_id_schema()
     _sync_spear_reconciliation_index(table_names)
+    _sync_subzero_archive_indexes(table_names)
     from app.services.mission_identity import sync_mission_identity_schema
     sync_mission_identity_schema(db.session.connection())
     _sync_neoermac_legacy_defaults_postgres(inspector, table_names)
@@ -1930,7 +1943,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoSubZeroSprayRecord,
         NeoSubZeroOperationContext,
         NeoSubZeroAuditEntry,
-        NeoSubZeroArchiveDelivery,
+        NeoSubZeroArchiveDelivery, NeoSubZeroArchiveCursor, NeoSubZeroArchiveCheckpoint,
         FrostDocument,
         FrostDocumentAudit,
         FrostHistoryTask,
@@ -2026,7 +2039,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoSubZeroSprayRecord,
         NeoSubZeroOperationContext,
         NeoSubZeroAuditEntry,
-        NeoSubZeroArchiveDelivery,
+        NeoSubZeroArchiveDelivery, NeoSubZeroArchiveCursor, NeoSubZeroArchiveCheckpoint,
         FrostDocument,
         FrostDocumentAudit,
         FrostHistoryTask,

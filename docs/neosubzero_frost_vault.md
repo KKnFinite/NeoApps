@@ -443,3 +443,83 @@ inference self-test used 0.76 MiB traced allocations. Neither is total process
 RSS. No model was approved/activated, and no historical result rows were
 published as part of this run. Model submission remains subject to live memory
 headroom, authentication and explicit review.
+
+## Audit N11: bounded historical reconciliation
+
+Baseline: `11290a850fa8e3dfc588770adde5c2a813b512b7`. The previous delivery heartbeat
+materialized every operation with spray, selected FROST audits or receipts and
+rebuilt all its payloads, even when nothing changed.
+
+The existing heartbeat now uses two metadata-only tables:
+`neosubzero_archive_cursors` (per-gateway operation/audit progress) and
+`neosubzero_archive_checkpoints` (per-operation source fingerprint and bounded
+failure retry). Existing source tables, receipt columns and immutable archive
+payload schemas are unchanged. Canonical bootstrap adds these tables and indexed
+gateway/legacy-code keyset access; no historical data rewrite/backfill runs at
+bootstrap.
+
+Each call examines at most **10 distinct operations**: four reserved historical
+sweep slots, two newest canonical operations, bounded recent/FIFO audit hints,
+and two failure-retry slots. Overlapping selections are deduplicated. Audit PK
+pages are bounded *before* gateway filtering, avoiding a history-wide join for
+change discovery. Recent own-gateway operations are independent of another
+gateway's audit traffic. There is no OFFSET, current-sort requirement, date cutoff,
+new worker, timer or heartbeat-cadence change.
+
+The sweep snapshots an upper operation ID for each round. New operations cannot
+move that round's finish line indefinitely; older operations get revisited even
+under continuing activity. Explicit gateway FKs take precedence; NULL-FK legacy
+operations retain case-insensitive gateway-code ownership. Restart resumes the
+durable cursor. An in-flight gateway batch holds a PostgreSQL row lock with
+SKIP LOCKED; a disconnected worker releases it, and cursor/checkpoint/receipt
+changes roll back together. Failures get 60/120/240/480/900-second backoff and do
+not stop sibling operations or cursor progress. A changed source can bypass its
+old failure cooldown.
+
+Normal departure, pretreat, gallons, participation, historical corrections,
+manual NOT SPRAYED and physical inspections already append audits inside their
+canonical transactions. Those audits are reused as durable change hints; no
+additional operational write or coordinator step is introduced. Safety sweeps
+also compare scalar source IDs/revision timestamps and receipt inventory, finding
+missed hints/enqueues, late/out-of-order audit commits, and missing receipts.
+Every source revision is fingerprinted individually rather than relying only on
+MAX(updated_at). Retry/verification timestamps do not invalidate the fingerprint.
+Future changes to payload dependencies must bump `FINGERPRINT_VERSION`.
+
+All payload/JSON work precedes the short receipt/checkpoint write phase. Source
+revisions are checked again before writes. PostgreSQL tests prove a canonical
+operation save can commit while later payloads are being reconstructed. No R2
+I/O runs inside discovery transactions. Exceptionally large individual operations
+retain the existing operation-level evidence granularity; the hard bound is on
+operations, not an absolute elapsed-time guarantee.
+
+Delivery remains independent of discovery selection: old pending receipts still
+retry when their operation is outside the current batch. Five-minute crash leases,
+checksums, independent read-back, partial spray/context recovery and `verified_at`
+semantics remain. Attempt fences are monotonic across corrections. The final
+receipt UPDATE additionally checks the canonical audit count/max ID atomically,
+rejecting corrections committed during upload even before discovery sees them.
+Legacy accepted receipts are never relabeled verified without read-back. Prior
+immutable R2 revisions are not overwritten or deleted.
+
+### Isolated before/after measurement
+
+240 synthetic historical operations, each with one actual-start pass, were tested
+sequentially on local SQLite and loopback PostgreSQL. The old implementation was
+loaded from the baseline commit. No provider calls were made. Counts are SQL
+statements inside reconciliation; setup and final catch-up calls are excluded.
+
+| Backend / phase | SELECT before → after | UPDATE before → after | INSERT before → after | Payloads before → after | Seconds before → after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SQLite / first discovery | 1922 → 78 | 0 → 1 | 240 → 13 | 240 → 6 | 0.367882 → 0.026972 |
+| SQLite / idle after catch-up | 1922 → 17 | 0 → 1 | 0 → 0 | 240 → 0 | 0.317562 → 0.003734 |
+| PostgreSQL / first discovery | 1922 → 78 | 0 → 1 | 240 → 13 | 240 → 6 | 1.321731 → 0.104991 |
+| PostgreSQL / idle after catch-up | 1922 → 17 | 0 → 1 | 0 → 0 | 240 → 0 | 0.790274 → 0.013329 |
+
+The first new call examined six operations (hard maximum ten). Its 13 INSERTs
+are six receipts, six checkpoints and one gateway cursor. Its one UPDATE is cursor
+progress. Idle sweeps perform only the necessary durable cursor UPDATE: **zero
+receipt UPDATE/INSERTs and zero payload reconstruction**. Single-operation/empty
+idle cases perform zero writes altogether. Repeated bounded cycles recovered all
+240 operations. These local timings are not measured production latency or Neon
+CU-hour savings. Heartbeat/Neon-idle optimization remains the separate Task 12.

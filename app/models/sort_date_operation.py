@@ -8,6 +8,9 @@ from app.extensions import db
 class SortDateOperation(db.Model):
     __tablename__ = "sort_date_operations"
     __table_args__ = (
+        db.Index('ix_subzero_archive_gateway_cursor', 'gateway_id', 'id'),
+        db.Index('ix_subzero_archive_legacy_cursor', db.text('upper(gateway_code)'), 'id',
+                 postgresql_where=db.text('gateway_id IS NULL'), sqlite_where=db.text('gateway_id IS NULL')),
         db.CheckConstraint(
             "window_minutes IS NULL OR window_minutes >= 0",
             name="ck_sort_date_operations_window_minutes_nonnegative",

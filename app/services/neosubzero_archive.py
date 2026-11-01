@@ -2,12 +2,12 @@
 from datetime import datetime, timedelta
 import hashlib
 import json
-from sqlalchemy import or_
+from sqlalchemy import or_, select, func
 from flask import current_app
 from app.extensions import db
-from app.models import (SortDateOperation, Gateway,NeoSubZeroArchiveDelivery as Delivery,
+from app.models import (SortDateOperation, NeoSubZeroAuditEntry, NeoSubZeroArchiveDelivery as Delivery,
                         NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState)
-from app.services.neosubzero_reporting import actual_passes, archive_payload,gateway_operations,operation_gateway_id
+from app.services.neosubzero_reporting import actual_passes, archive_payload,operation_gateway_id
 
 
 def checksum(payload):
@@ -44,27 +44,15 @@ def payloads_for_operation(op):
 
 
 def reconcile(gateway_id):
-    """Recover missed enqueues, including earlier sorts and audited corrections."""
-    departure=db.session.query(NeoSubZeroDepartureDeiceEvent.sort_date_operation_id).filter(
-        NeoSubZeroDepartureDeiceEvent.pass1_started_at_utc.is_not(None))
-    pretreat=db.session.query(NeoSubZeroPretreatState.sort_date_operation_id).filter(
-        NeoSubZeroPretreatState.pass1_started_at_utc.is_not(None))
-    from app.models import NeoSubZeroAuditEntry
-    outcomes=db.session.query(NeoSubZeroAuditEntry.sort_date_operation_id).filter(
-        NeoSubZeroAuditEntry.action.in_(('departure_manual_not_sprayed','frost_physical_inspection')))
-    for op in gateway_operations(db.session.get(Gateway,gateway_id)).filter(
-            or_(SortDateOperation.id.in_(departure.union(pretreat,outcomes)),SortDateOperation.id.in_(db.session.query(Delivery.operation_id)))).order_by(SortDateOperation.id).all():
-        for source_id,payload in payloads_for_operation(op).items():
-            digest = checksum(payload)
-            delivery = Delivery.query.filter_by(operation_id=op.id, source_id=source_id).with_for_update().one_or_none()
-            if delivery is None:
-                db.session.add(Delivery(gateway_id=gateway_id, operation_id=op.id, source_id=source_id, content_checksum=digest))
-            elif delivery.content_checksum != digest:
-                delivery.content_checksum = digest
-                delivery.retry_at = datetime.utcnow()
-                delivery.attempts = 0
-                delivery.last_error = None
-    db.session.commit()
+    """Recover changes and missed enqueues with durable bounded discovery."""
+    from app.services.neosubzero_archive_reconciliation import reconcile as discover
+    return discover(gateway_id, payloads_for_operation, checksum)
+
+
+def _audit_version(operation_id):
+    return tuple(db.session.execute(select(func.count(NeoSubZeroAuditEntry.id),
+        func.coalesce(func.max(NeoSubZeroAuditEntry.id), 0)).where(
+            NeoSubZeroAuditEntry.sort_date_operation_id == operation_id)).one())
 
 
 def drain(gateway_id, *, limit=3):
@@ -86,10 +74,12 @@ def drain(gateway_id, *, limit=3):
         item = db.session.get(Delivery, identifier)
         try:
             op = db.session.get(SortDateOperation, item.operation_id)
+            audit_version = _audit_version(op.id)
             payload = payloads_for_operation(op)[item.source_id]
-            if checksum(payload) != expected:
+            if checksum(payload) != expected or audit_version != _audit_version(op.id):
                 db.session.rollback()
                 continue  # A concurrent correction is reconciled on the next pass.
+            operation_id = op.id
             db.session.rollback()  # Release read snapshot before provider calls.
             if payload.get('schema_version') in ('frost-outcome-evidence-v1','frost-physical-inspection-v1'):
                 from app.services.frost_history import memory_allows_work
@@ -106,16 +96,18 @@ def drain(gateway_id, *, limit=3):
                 saved, learning = export_subzero_pair(payload)
             if saved.get('verified') is not True or learning.get('verified') is not True:
                 raise ValueError('Archive pair read-back is not verified.')
-            item = Delivery.query.filter_by(id=identifier).with_for_update().one()
-            # A newer correction must never be marked delivered by an older request.
-            if item.content_checksum == expected and item.attempts == attempt:
-                item.delivered_checksum = expected
-                item.vault_key = saved['key']
-                item.learning_key = learning['key']
-                item.delivered_at = datetime.utcnow()
-                item.verified_at = item.delivered_at
-                item.last_error = None
-                delivered += 1
+            # Check the append-only canonical audit fence in the UPDATE itself,
+            # even when the correction has not reached discovery yet. Count
+            # also catches an earlier sequence ID that committed out of order.
+            count = select(func.count(NeoSubZeroAuditEntry.id)).where(
+                NeoSubZeroAuditEntry.sort_date_operation_id == operation_id).scalar_subquery()
+            newest = select(func.coalesce(func.max(NeoSubZeroAuditEntry.id), 0)).where(
+                NeoSubZeroAuditEntry.sort_date_operation_id == operation_id).scalar_subquery()
+            verified_at = datetime.utcnow()
+            delivered += Delivery.query.filter(Delivery.id == identifier, Delivery.content_checksum == expected,
+                Delivery.attempts == attempt, count == audit_version[0], newest == audit_version[1]).update(dict(
+                    delivered_checksum=expected, vault_key=saved['key'], learning_key=learning['key'],
+                    delivered_at=verified_at, verified_at=verified_at, last_error=None), synchronize_session=False)
             db.session.commit()
         except Exception:
             db.session.rollback()
