@@ -54,6 +54,7 @@ class GoogleParkingBrowserTest(unittest.TestCase):
                         Fixture().login(page)
                         Fixture().ready(page, f'/motherbrain/parking-plan/{operation_id}')
                         root = page.locator('[data-parking-plan]')
+                        self.assertIn('-parking-sync-v2', page.locator('script[src*="parking_plan_live.js"]').get_attribute('src'))
                         expect(root).to_have_attribute('data-can-edit', '1')
                         expect(page.locator('[data-parking-slot-id="slot:A:A01:1"]')).to_have_attribute('data-occupied-tail', 'N401UP')
                         before = root.get_attribute('data-parking-revision')
