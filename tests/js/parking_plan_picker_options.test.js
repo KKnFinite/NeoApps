@@ -11,6 +11,33 @@ const source = fs.readFileSync(
     "utf8"
 );
 
+test('mutation preflights request full snapshots while idle polling remains revision-only', async () => {
+    const calls = [];
+    const context = vm.createContext({URL, stateUrl: '/motherbrain/parking-plan/1/live-state',
+        window: {location: {href: 'https://neoapps.test/'}}, currentRevision: 'same-placement',
+        controller: null, deferredPayload: null, applyParkingState() {},
+        fetch: async (url, options) => {
+            calls.push({url, options});
+            return {ok: true, json: async () => url.searchParams.has('revision')
+                ? {ok: true, changed: false}
+                : {ok: true, changed: true, tails: [{tail_number: 'N401UP'}], slots: [{id: 'slot:A:A01:1'}]}};
+        }});
+    const start = source.indexOf('    const fetchParkingState = ');
+    const end = source.indexOf('    const reconcileLatest = ', start);
+    assert.ok(start >= 0 && end > start);
+    vm.runInContext(source.slice(start, end).replace('const fetchParkingState =', 'globalThis.fetchParkingState ='), context);
+    const idle = await context.fetchParkingState();
+    assert.equal(idle.changed, false);
+    assert.equal(calls[0].url.searchParams.get('revision'), 'same-placement');
+    const preflight = await context.fetchParkingState({apply: false});
+    assert.equal(calls[1].url.searchParams.has('revision'), false);
+    assert.equal(preflight.tails[0].tail_number, 'N401UP');
+    assert.equal(preflight.slots[0].id, 'slot:A:A01:1');
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].options.cache, 'no-store');
+    assert.equal(calls[1].options.credentials, 'same-origin');
+});
+
 class FakeElement {
     constructor(tagName, documentRef) {
         this.tagName = tagName.toUpperCase();

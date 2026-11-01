@@ -592,6 +592,7 @@ def assign_tail_to_lane(
     bundle=None,
     source_assignment=None,
     target_assignment=None,
+    preserve_unchanged=False,
 ):
     tail_number = _normalize_tail(tail_number)
     ramp_code = _normalize_ramp_code(ramp_code)
@@ -652,6 +653,34 @@ def assign_tail_to_lane(
     )
     if conflict and not confirm_rule_override:
         raise ParkingRuleConflict(conflict.message)
+
+    # Synchronization must preserve attribution for an already effective placement.
+    # Explicit operator reassignments retain their existing timestamp semantics.
+    # A lone requested Slot 2 is effectively Slot 1 after native promotion.
+    effective_lane = lane_number
+    if preserve_unchanged and lane_number == 2:
+        primary = bundle.assignment_for_slot(ramp_code, position_code, 1)
+        if primary is None or primary is assignment:
+            effective_lane = 1
+    if (
+        preserve_unchanged
+        and is_hot is None
+        and note is None
+        and (occupied is None or occupied is assignment)
+        and bundle._slot_key(assignment) == (ramp_code, position_code, effective_lane)
+    ):
+        # Still repair a genuinely orphaned secondary elsewhere, but do not run
+        # the flushing promotion helper for an unchanged, consistent snapshot.
+        needs_promotion = any(
+            row.lane_number == 2
+            and row.position_code
+            and bundle.assignment_for_slot(row.ramp_code, row.position_code, 1) is None
+            for row in bundle.assignments
+        )
+        if needs_promotion:
+            promote_secondary_parking_slots(operation, user=user, assignments=bundle.assignments)
+            bundle.invalidate_derived()
+        return assignment
 
     assignment.ramp_code = ramp_code
     assignment.position_code = position_code
@@ -809,6 +838,7 @@ def set_tail_hot(
     *,
     bundle=None,
     mission_source="manual",
+    preserve_unchanged=False,
 ):
     tail_number = _normalize_tail(tail_number)
     bundle = bundle or ParkingPlanOperationalStateBundle.load(
@@ -826,6 +856,7 @@ def set_tail_hot(
             TAIL_STATUS_HOT if is_hot else TAIL_STATUS_NORMAL,
             user=user,
             bundle=bundle,
+            preserve_unchanged=preserve_unchanged,
         )
         if is_hot:
             ensure_hot_departure_mission(
@@ -836,10 +867,13 @@ def set_tail_hot(
             )
         if assignment:
             assignment.is_hot = False
+    note_changed = note is not None and (
+        assignment is None or assignment.note != str(note or "").strip()
+    )
     if note is not None:
         assignment = assignment or bundle.assignment_for_tail(tail_number, create=True)
         assignment.note = str(note or "").strip()
-    if assignment:
+    if assignment and (not preserve_unchanged or note_changed):
         assignment.assigned_by_user_id = getattr(user, "id", None)
         assignment.assigned_at = _utc_now()
     db.session.flush()
@@ -944,6 +978,7 @@ def set_tail_operational_status(
     user=None,
     *,
     bundle=None,
+    preserve_unchanged=False,
 ):
     tail_number = _normalize_tail(tail_number)
     bundle = bundle or ParkingPlanOperationalStateBundle.load(
@@ -962,10 +997,15 @@ def set_tail_operational_status(
         raise ParkingPlanError("A tail with a departure mission cannot be marked SPARE.")
 
     tail_state = bundle.tail_state_for_tail(tail_number, create=True)
+    assignment = bundle.assignment_for_tail(tail_number)
+    unchanged = (
+        tail_state.operational_status == normalized_status
+        and tail_state.is_out_of_service == (normalized_status == TAIL_STATUS_OOS)
+        and (assignment is None or not assignment.is_hot)
+    )
     tail_state.operational_status = normalized_status
     tail_state.is_out_of_service = tail_state.operational_status == TAIL_STATUS_OOS
-    assignment = bundle.assignment_for_tail(tail_number)
-    if assignment:
+    if assignment and (not preserve_unchanged or not unchanged):
         assignment.is_hot = False
         assignment.assigned_by_user_id = getattr(user, "id", None)
         assignment.assigned_at = _utc_now()
@@ -973,7 +1013,7 @@ def set_tail_operational_status(
     return tail_state
 
 
-def mark_arrival_tail_spare(operation, tail_number, user=None):
+def mark_arrival_tail_spare(operation, tail_number, user=None, *, preserve_unchanged=False):
     tail_number = _normalize_tail(tail_number)
     if not tail_number:
         raise ParkingPlanError("Tail is required to mark a Spare.")
@@ -987,6 +1027,7 @@ def mark_arrival_tail_spare(operation, tail_number, user=None):
         tail_number,
         TAIL_STATUS_SPARE,
         user=user,
+        preserve_unchanged=preserve_unchanged,
     )
 
 

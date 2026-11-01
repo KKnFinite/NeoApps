@@ -430,7 +430,7 @@ def _apply_spare_row(
         )
     arrivals = _missions_for_tail(operation, tail_number, "arrival")
     if arrivals:
-        mark_arrival_tail_spare(operation, tail_number, user=user)
+        mark_arrival_tail_spare(operation, tail_number, user=user, preserve_unchanged=True)
     else:
         _ensure_standalone_google_spare(operation, tail_number)
 
@@ -526,10 +526,11 @@ def _apply_inbound_state(
                 True,
                 user=user,
                 mission_source=GOOGLE_MOTHERBRAIN_MISSION_SOURCE,
+                preserve_unchanged=True,
             )
         elif raw_status == "SPARE":
             try:
-                mark_arrival_tail_spare(operation, row["effective_tail"], user=user)
+                mark_arrival_tail_spare(operation, row["effective_tail"], user=user, preserve_unchanged=True)
             except ParkingPlanError as error:
                 warnings.append(str(error))
         return warnings
@@ -573,7 +574,7 @@ def _apply_outbound_state(
     new_tail = row["effective_tail"]
     if old_tail and old_tail != new_tail:
         try:
-            set_tail_hot(operation, old_tail, False, user=user)
+            set_tail_hot(operation, old_tail, False, user=user, preserve_unchanged=True)
         except ParkingPlanError:
             pass
 
@@ -589,10 +590,11 @@ def _apply_outbound_state(
             True,
             user=user,
             mission_source=GOOGLE_MOTHERBRAIN_MISSION_SOURCE,
+            preserve_unchanged=True,
         )
     else:
         mission.destination = row["destination"] or mission.destination
-        set_tail_hot(operation, new_tail, False, user=user)
+        set_tail_hot(operation, new_tail, False, user=user, preserve_unchanged=True)
 
     if mission.departure_status is None:
         mission.departure_status = "scheduled"

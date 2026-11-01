@@ -497,7 +497,9 @@
             return null;
         }
         const url = new URL(stateUrl, window.location.href);
-        if (currentRevision) {
+        // Mutation preflights need the complete source/slot snapshot even when
+        // an idempotent Google poll left the revision unchanged.
+        if (currentRevision && apply) {
             url.searchParams.set("revision", currentRevision);
         }
         const response = await fetch(url, {

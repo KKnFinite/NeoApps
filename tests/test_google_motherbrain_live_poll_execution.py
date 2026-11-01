@@ -140,6 +140,62 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(self._state(operation).lease_token, '')
         self.assertEqual(self._state(operation).last_success_at_utc, self.NOW)
 
+    def test_lease_loss_rolls_back_real_parking_application(self):
+        from app.models import SortDateParkingAssignment
+        self._enable()
+        operation = self._ensure_operation()
+        row = self._inbound(4, '947', 'N947UP', origin='SDF')
+        row['S'] = 'A1'
+        rain = Mock()
+        with patch('app.services.google_motherbrain_live_poll_execution.stage_google_motherbrain_live_poll_success',
+                   return_value=False):
+            result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
+                reader=lambda: {'inbound_rows': [row]}, rain_reader=rain)
+        self.assertEqual(result['status'], 'lease_lost')
+        self.assertEqual(SortDateParkingAssignment.query.count(), 0)
+        self.assertEqual(SortDateMission.query.count(), 0)
+        rain.assert_not_called()
+
+    def test_ten_identical_complete_polls_do_not_update_parking_including_hot_and_spare(self):
+        from app.models import SortDateParkingAssignment
+        from tests.test_google_parking_idempotency import sql_counts
+        self._enable()
+        inbound, outbound = [], []
+        for index, position in enumerate(('A01', 'B01', 'C01', 'D01', 'E01', 'R01')):
+            row = (self._inbound(index+4, str(1400+index), f'N{400+index}UP', origin='SDF',
+                                status=('HOT', 'SPARE', '')[index]) if index < 3 else
+                   self._outbound(index+4, str(1400+index), f'N{400+index}UP', destination='SDF'))
+            row['S'] = position
+            (inbound if index < 3 else outbound).append(row)
+        def poll(index):
+            result = execute_google_motherbrain_live_poll(self.gateway,
+                now=self.NOW+timedelta(minutes=2*index),
+                reader=lambda: {'inbound_rows': inbound, 'outbound_rows': outbound}, rain_reader=lambda: {})
+            self.assertEqual(result['status'], 'success')
+        def state():
+            return {row.tail_number: (row.position_code, row.lane_number, row.assigned_at,
+                    row.assigned_by_user_id, row.updated_at)
+                    for row in SortDateParkingAssignment.query.all()}
+        poll(0)
+        before = state()
+        with sql_counts() as counts:
+            for index in range(1, 11):
+                poll(index)
+        self.assertEqual(counts['UPDATE', 'sort_date_parking_assignments'], 0)
+        self.assertEqual(counts['INSERT', 'sort_date_parking_assignments'], 0)
+        self.assertEqual(state(), before)
+        inbound[0]['S'] = 'A02'
+        with sql_counts() as counts:
+            poll(11)
+        self.assertEqual(counts['UPDATE', 'sort_date_parking_assignments'], 1)
+        moved = state()
+        self.assertEqual(moved['N400UP'][0], 'A02')
+        self.assertEqual(moved['N401UP'], before['N401UP'])
+        with sql_counts() as counts:
+            poll(12)
+        self.assertEqual(counts['UPDATE', 'sort_date_parking_assignments'], 0)
+        self.assertEqual(state(), moved)
+
     def test_durable_new_owner_rejects_staged_old_poll_and_preserves_new_lease(self):
         # Only this interleaving needs truly independent physical connections.
         self.tearDown()

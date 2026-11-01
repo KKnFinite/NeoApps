@@ -122,6 +122,7 @@ def apply_google_motherbrain_parking_batch(operation, rows, *, user=None):
                     user=user,
                     replace_occupied=True,
                     confirm_rule_override=True,
+                    preserve_unchanged=True,
                 )
                 db.session.flush()
         except (ParkingPlanError, SQLAlchemyError) as error:
