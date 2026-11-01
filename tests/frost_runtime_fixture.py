@@ -3,6 +3,7 @@ import json
 import os
 import runpy
 import threading
+from datetime import datetime,timedelta
 from unittest.mock import patch
 from app import create_app
 from app.extensions import db
@@ -17,11 +18,11 @@ app=create_app(type('Config',(),dict(TESTING=True,SECRET_KEY='isolated-lifecycle
 with app.app_context():db.create_all();db.session.remove();db.engine.dispose()
 app.testing=False
 checks=[]
-def expiry_check(**kwargs):
-    assert kwargs=={'isolated':True}
+def expiry_check():
     checks.append(os.getpid())
-    return 0
-recovery.purge_expired=expiry_check
+    return datetime.utcnow()+timedelta(seconds=600)
+from app.services import neostaffing_employee_recovery_worker as expiry_worker
+expiry_worker.recovery_cycle=expiry_check
 with patch('app.create_app',return_value=app):runpy.run_path('run.py')
 import_started_expiry='employee_recovery_worker' in app.extensions
 

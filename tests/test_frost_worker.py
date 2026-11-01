@@ -86,5 +86,5 @@ class WorkerTest(unittest.TestCase):
         app=MagicMock();app.config={'TESTING':False,'SQLALCHEMY_DATABASE_URI':'postgresql://fixture'};app.extensions={}
         with patch('app.services.neoscorpion_spear_decisions.threading.Timer') as timer:
             initialize_delivery_heartbeat(app);initialize_delivery_heartbeat(app)
-            self.assertEqual(timer.call_count,1);self.assertEqual(timer.call_args.args[0],10)
+            self.assertEqual(timer.call_count,1);self.assertAlmostEqual(timer.call_args.args[0],10,places=2)
             timer.return_value.start.assert_called_once()

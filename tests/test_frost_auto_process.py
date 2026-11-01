@@ -27,7 +27,12 @@ def capture_process(uri,schema,gateway_id,entered,release,results,heartbeat=Fals
     real_timer=threading.Timer;count=[0]
     def timer(seconds,callback):
         count[0]+=1
-        return real_timer(.05,callback) if count[0]==1 else Mock()
+        def initial_wake():
+            # Advance only the isolated startup deadline, not forecast times.
+            from app.services.background_deadlines import EXTENSION,utcnow
+            app.extensions[EXTENSION].deadline=utcnow()
+            callback()
+        return real_timer(.05,initial_wake) if count[0]==1 else Mock()
     with patch.object(auto,'acquire',side_effect=provider),patch.object(auto.jobs,'memory_allows_work',return_value=True),\
         patch('app.services.neoscorpion_learning_vault._require_r2_config',return_value={'bucket':'isolated'}),\
         patch('app.services.neoscorpion_learning_vault._r2_client',return_value=store):

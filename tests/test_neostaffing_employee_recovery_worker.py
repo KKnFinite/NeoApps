@@ -1,7 +1,7 @@
 """Expiry scheduling is independent of user traffic and survives process restart."""
 import unittest
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import patch
 from app.extensions import db
 from app.models.staffing_employee_recovery import StaffingEmployeeRecovery as Backup
@@ -49,10 +49,12 @@ class RecoveryWorkerTest(unittest.TestCase):
 
     def test_database_outage_rolls_back_removes_session_and_retries(self):
         targets=[];delays=[]
+        clock=[datetime(2026,11,1)]
         class Wake:
             def wait(self,delay):
                 delays.append(delay)
                 if len(delays)>2:raise StopIteration()
+                clock[0]+=timedelta(seconds=delay)
             def clear(self):pass
         class Thread:
             def __init__(self,**kwargs):targets.append(kwargs['target'])
@@ -60,12 +62,14 @@ class RecoveryWorkerTest(unittest.TestCase):
         self.app.testing=False
         try:
             with patch.object(worker,'Thread',Thread),patch.object(worker,'Event',Wake),\
-                patch.object(recovery,'purge_expired',side_effect=[OSError('isolated outage'),0]) as purge,\
+                patch.object(worker,'recovery_cycle',side_effect=lambda: (_ for _ in ()).throw(OSError('isolated outage'))
+                    if len(delays)==1 else clock[0]+timedelta(seconds=600)) as sweep,\
+                patch.object(recovery,'now_utc',side_effect=lambda:clock[0]),\
                 patch.object(db.session,'rollback',wraps=db.session.rollback) as rollback,\
                 patch.object(db.session,'remove',wraps=db.session.remove) as remove:
                 worker.start_recovery_worker(self.app)
                 with self.assertRaises(StopIteration):targets[0]()
-                self.assertEqual(delays,[10,30,60]);self.assertEqual(purge.call_count,2)
+                self.assertEqual(delays,[10,30,60]);self.assertEqual(sweep.call_count,2)
                 self.assertEqual(rollback.call_count,1);self.assertGreaterEqual(remove.call_count,2)
         finally:
             self.app.testing=True;self.app.extensions.pop('employee_recovery_worker',None)

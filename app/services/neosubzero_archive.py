@@ -55,9 +55,10 @@ def _audit_version(operation_id):
             NeoSubZeroAuditEntry.sort_date_operation_id == operation_id)).one())
 
 
-def drain(gateway_id, *, limit=3):
+def drain(gateway_id, *, limit=3, reconcile_first=True):
     from app.services.neoscorpion_learning_vault import export_subzero_pair
-    reconcile(gateway_id)
+    if reconcile_first:
+        reconcile(gateway_id)
     now = datetime.utcnow()
     pending = Delivery.query.filter(Delivery.gateway_id == gateway_id, Delivery.retry_at <= now,
         or_(Delivery.delivered_checksum.is_(None), Delivery.delivered_checksum != Delivery.content_checksum)).order_by(

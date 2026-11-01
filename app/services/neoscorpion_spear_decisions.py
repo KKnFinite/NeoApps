@@ -5,7 +5,6 @@ from decimal import Decimal
 import hashlib
 import json
 import threading
-import time
 from uuid import uuid4
 
 from flask import current_app, has_request_context, request
@@ -15,7 +14,6 @@ from sqlalchemy import select, func, tuple_, or_
 from sqlalchemy.orm import aliased
 
 from app.extensions import db
-from app.services.memory_diagnostics import observe_process_memory
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation as Observation
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearFleetObservation as FleetObservation
 from app.services.neoscorpion_learning_vault import learning_vault_status
@@ -25,7 +23,6 @@ VERSION = 'spear-decision/v1'
 MAX_REFERENCE_AGE_SECONDS = 1800
 MAX_RECORD_BYTES = 64000
 _worker_lock = threading.Lock()
-_last_worker = {}
 
 
 def _plain(value):
@@ -552,46 +549,12 @@ def drain(gateway_id, *, limit=3):
 
 
 def schedule_delivery(app, gateway_id):
-    if app.config.get('TESTING') or time.monotonic() - _last_worker.get(gateway_id, 0) < 30:
+    # Ordinary page/revision reads are not evidence notifications. Durable
+    # commits also notify independently, including uploads and mission changes.
+    if app.config.get('TESTING') or (has_request_context() and request.method in ('GET', 'HEAD', 'OPTIONS')):
         return
-    if not _worker_lock.acquire(blocking=False):
-        return
-    _last_worker[gateway_id] = time.monotonic()
-    def run():
-        try:
-            with app.app_context(),observe_process_memory('archive_delivery_cycle'):
-                try:
-                    try:
-                        drain(gateway_id)
-                    except Exception:
-                        db.session.rollback()
-                        app.logger.warning('SPEAR archive delivery deferred safely')
-                    from app.services.neosubzero_archive import drain as drain_subzero
-                    try:
-                        drain_subzero(gateway_id)
-                    except Exception:
-                        db.session.rollback()
-                        app.logger.warning('SubZero archive delivery deferred safely')
-                    from app.services.frost_documents import drain as drain_frost_documents
-                    drain_frost_documents(gateway_id)
-                    from app.services.frost_auto import tick as capture_frost
-                    capture_frost(gateway_id)
-                    from app.services.frost_resources import reason as research_deferred
-                    if research_deferred():
-                        return  # Existing next heartbeat retries optional correlation.
-                    from app.services.frost_xchange_links import drain as link_xchange
-                    link_xchange(gateway_id)
-                    from app.services.frost_departures import drain as reconcile_departures
-                    reconcile_departures(gateway_id)
-                    # Historical weather/features are workstation-only. The
-                    # live outbox retains original and operational archival work.
-                finally:
-                    db.session.remove()
-        except Exception:
-            app.logger.warning('SPEAR outbox reconciliation deferred safely')
-        finally:
-            _worker_lock.release()
-    threading.Thread(target=run, daemon=True, name='spear-learning-outbox').start()
+    from app.services.background_deadlines import notify_archive_worker
+    notify_archive_worker(app)
 
 
 def initialize_delivery_heartbeat(app):
@@ -602,22 +565,9 @@ def initialize_delivery_heartbeat(app):
     """
     if app.config.get('TESTING') or not app.config.get('SQLALCHEMY_DATABASE_URI') or app.extensions.get('archive_delivery_heartbeat'):
         return
+    from app.services.background_deadlines import ArchiveDeadlines, EXTENSION, install_commit_signals
+    install_commit_signals()
     app.extensions['archive_delivery_heartbeat'] = True
-    def wake():
-        try:
-            with app.app_context():
-                from app.models import FrostDocument,Gateway
-                gateways = sorted({item[0] for item in db.session.query(FrostDocument.gateway_id).distinct().all()} |
-                    {item[0] for item in db.session.query(Gateway.id).filter(func.upper(Gateway.code)=='RFD').all()})
-                db.session.remove()
-                for gateway_id in gateways:
-                    schedule_delivery(app,gateway_id)
-        except Exception:
-            app.logger.warning('Archive delivery wake-up deferred safely',exc_info=True)
-        finally:
-            timer = threading.Timer(60,wake)
-            timer.daemon = True
-            timer.start()
-    timer = threading.Timer(10,wake)
-    timer.daemon = True
-    timer.start()
+    app.extensions[EXTENSION] = ArchiveDeadlines(app, threading.Timer)
+    app.logger.info('Archive deadline scheduling initialized: safety_seconds=600 hourly_FROST=%s',
+        app.config.get('FROST_AUTO_COLLECTION',True) is True)
