@@ -3427,17 +3427,22 @@ def _board_assigned_counts():
 
 def _board_leadership_index():
     index = {}
-    assignments = (
-        StaffingLeadershipAssignment.query.join(StaffingPerson)
+    counts = (
+        db.session.query(
+            StaffingLeadershipAssignment.unit_id,
+            StaffingPerson.classification,
+            func.count(StaffingLeadershipAssignment.id),
+        )
+        .join(StaffingPerson, StaffingLeadershipAssignment.person_id == StaffingPerson.id)
         .filter(
             StaffingLeadershipAssignment.active.is_(True),
             StaffingPerson.active.is_(True),
         )
+        .group_by(StaffingLeadershipAssignment.unit_id, StaffingPerson.classification)
         .all()
     )
-    for assignment in assignments:
-        index.setdefault(assignment.unit_id, {}).setdefault(assignment.person.classification, 0)
-        index[assignment.unit_id][assignment.person.classification] += 1
+    for unit_id, classification, count in counts:
+        index.setdefault(unit_id, {})[classification] = int(count)
     return index
 
 
