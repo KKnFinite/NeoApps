@@ -5,7 +5,7 @@ import re
 from sqlalchemy import func
 
 from app.extensions import db
-from app.models import SortDateMission
+from app.models import SortDateMission, SortDateTailState
 from app.services.flight_api import _utc_to_local_naive as utc_to_local_naive
 from app.services.sort_date_operations import ensure_tail_state_for_mission
 
@@ -135,33 +135,73 @@ def apply_alp_paste(operation, mission_type, paste_text, user=None, timezone_nam
     )
     now_utc = datetime.utcnow()
     applied_rows = []
+    # Preserve the scoped ID-map contract: ignore foreign/missing/direction-
+    # mismatched rows, and lock repeated eligible IDs only once.
+    matched_ids = sorted({row['mission_id'] for row in preview['matched_rows']
+                          if row['mission_id'] in missions_by_id})
+    # Matching is read-only. Refresh and lock the exact matched identities before
+    # changing anything; an import begun before a native edit must see that edit.
+    expected = {mid: (missions_by_id[mid].flight_number, missions_by_id[mid].assigned_tail_number,
+                      missions_by_id[mid].origin, missions_by_id[mid].destination) for mid in matched_ids}
+    locked = _lock_matched_missions(operation, mission_type, matched_ids)
+    if len(locked) != len(matched_ids) or any(
+        expected[m.id] != (m.flight_number, m.assigned_tail_number, m.origin, m.destination) for m in locked
+    ):
+        raise ValueError('Mission identity changed during ALP import. Preview again before applying.')
+    tails = {row['tail_number'] for row in preview['matched_rows']
+             if row['mission_id'] in missions_by_id}
+    states = SortDateTailState.query.filter(
+        SortDateTailState.sort_date == operation.sort_date,
+        SortDateTailState.gateway_code == operation.gateway_code,
+        SortDateTailState.sort_name == operation.sort_name,
+        SortDateTailState.tail_number.in_(tails),
+    ).all() if tails else []
+    state_cache = {(s.sort_date, s.gateway_code, s.sort_name, s.tail_number): s for s in states}
 
-    for row in preview["matched_rows"]:
-        mission = missions_by_id.get(row["mission_id"])
-        if not mission or mission.sort_date_operation_id != operation.id:
-            continue
-        if mission.mission_type != preview["mission_type"]:
-            continue
+    # One flush invokes the existing sorted row-level authority locks for the
+    # entire batch. Do not replace them with an unlocked prefetch or skip them.
+    with db.session.no_autoflush:
+        for row in preview["matched_rows"]:
+            mission = missions_by_id.get(row["mission_id"])
+            if not mission or mission.sort_date_operation_id != operation.id:
+                continue
+            if mission.mission_type != preview["mission_type"]:
+                continue
 
-        mission.assigned_tail_number = row["tail_number"]
-        mission.tail_source = "alp"
-        mission.tail_updated_at = now_utc
+            mission.assigned_tail_number = row["tail_number"]
+            mission.tail_source = "alp"
+            mission.tail_updated_at = now_utc
 
-        if mission.mission_type == "arrival":
-            mission.eta_datetime_utc = row["utc_datetime"]
-            mission.eta_source = "alp"
-        else:
-            mission.actual_block_out_datetime_utc = row["utc_datetime"]
-            mission.actual_block_out_source = "alp"
+            if mission.mission_type == "arrival":
+                mission.eta_datetime_utc = row["utc_datetime"]
+                mission.eta_source = "alp"
+            else:
+                from app.services.google_motherbrain_live_missions import native_block_out_is_protected
+                protected = native_block_out_is_protected(mission, 'alp') or (
+                    mission.actual_block_out_datetime_utc is not None
+                    and mission.actual_block_out_source == 'google_motherbrain'
+                )
+                if not protected:
+                    mission.actual_block_out_datetime_utc = row["utc_datetime"]
+                    mission.actual_block_out_source = "alp"
 
-        ensure_tail_state_for_mission(mission)
-        applied_rows.append(row)
-
+            ensure_tail_state_for_mission(mission, state_cache=state_cache, flush=False)
+            applied_rows.append(row)
     db.session.commit()
     preview["applied_rows"] = applied_rows
     preview["applied_count"] = len(applied_rows)
     preview["applied_by"] = getattr(user, "username", None)
     return preview
+
+
+def _lock_matched_missions(operation, mission_type, matched_ids):
+    if not matched_ids:
+        return []
+    return SortDateMission.query.filter(
+        SortDateMission.id.in_(matched_ids),
+        SortDateMission.sort_date_operation_id == operation.id,
+        SortDateMission.mission_type == mission_type,
+    ).order_by(SortDateMission.id).populate_existing().with_for_update().all()
 
 
 def _validate_mission_type(mission_type):

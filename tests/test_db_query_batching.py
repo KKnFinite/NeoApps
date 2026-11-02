@@ -154,8 +154,10 @@ class QueryBatchingTest(unittest.TestCase):
             with sql_work() as metric:
                 result = apply_alp_paste(operation, "arrival", paste)
             self.assertEqual(result["applied_count"], count)
-            self.assertEqual(sum("from sort_date_missions" in sql for sql in metric.select_sql), 1)
-            self.assertLessEqual(metric["SELECT"], count + 1)  # canonical tail-state reads are retained
+            # Match, locked refresh and the existing authority listener are all
+            # required. Batch tail-state reads/one flush keep that floor constant.
+            self.assertEqual(sum("from sort_date_missions" in sql for sql in metric.select_sql), 3)
+            self.assertEqual(metric["SELECT"], 6)
             print(f"ALP_COUNTS_{count}=" + json.dumps(metric))
             operation.id
             rows = [{"flight_number": str(i+2000), "normalized_flight_number": f"UPS{i+2000}",

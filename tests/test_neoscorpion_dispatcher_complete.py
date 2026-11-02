@@ -30,6 +30,8 @@ from app.services.neoscorpion import (
     complete_fueled_assignment,
     fueler_context,
     mark_fueler_off,
+    confirm_fueler_truck_on,
+    submit_fueler_assignment,
     save_fueler_entry,
 )
 from app.services.password_policy import set_user_password
@@ -519,8 +521,9 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
         _mission, assignment = self._assignment(operation)
         self._ready_work(
             assignment,
-            movement="not_moved",
-            transfer_gallons=None,
+            movement="moved",
+            transfer_gallons=75,
+            complete_handoff=True,
         )
         self._login(self.dispatcher)
 
@@ -620,12 +623,19 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
             },
         )
 
-    def _ready_work(self, assignment, *, movement, transfer_gallons):
+    def _ready_work(self, assignment, *, movement, transfer_gallons, complete_handoff=False):
         off_transfer_gallons = (
             transfer_gallons
             if transfer_gallons is not None and transfer_gallons > 0
             else 1
         )
+        if complete_handoff:
+            self._assign_truck(assignment.sort_date_operation, assignment)
+            confirm_fueler_truck_on(self.gateway, self.fueler, assignment.id,
+                expected_cycle=1, expected_tail=assignment.sort_date_mission.assigned_tail_number,
+                expected_truck_id=assignment.assigned_truck_id,
+                now_utc=datetime(2026, 8, 18, 4, 0))
+            db.session.commit()
         self._save_tanks(
             assignment,
             movement=movement,
@@ -639,6 +649,11 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
             now_utc=datetime(2026, 8, 18, 5, 0),
         )
         db.session.commit()
+        if complete_handoff:
+            row = fueler_context(self.gateway, self.fueler, assignment_id=assignment.id)['rows'][0]
+            submit_fueler_assignment(self.gateway, self.fueler, assignment.id,
+                expected=row['edit_baseline'], now_utc=datetime(2026, 8, 18, 5, 1))
+            db.session.commit()
         if transfer_gallons != off_transfer_gallons:
             assignment.transfer_fuel_gallons = transfer_gallons
             db.session.commit()

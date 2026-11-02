@@ -35,6 +35,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                 "Outbound!M3:M50": [[""], ["2:22"]],
                 "Outbound!N3:N50": [[""], ["2:24"]],
                 "Outbound!O3:O50": [[""], ["2:29"]],
+                "Outbound!Q3:Q50": [["FALSE"], ["FALSE"]],
                 "Outbound!S3:S50": [["FALSE"], ["TRUE"]],
             }
         )
@@ -73,6 +74,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                 "ramp_load_complete": "2:22",
                 "crew_load_complete": "2:24",
                 "block": "2:29",
+                "removed": "FALSE",
                 "no_return": "TRUE",
             },
         )
@@ -104,6 +106,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                 "Outbound!M3:M50": [[], [], []],
                 "Outbound!N3:N50": [[], [], []],
                 "Outbound!O3:O50": [[], [], ["03:10"]],
+                "Outbound!Q3:Q50": [["FALSE"], ["FALSE"], ["FALSE"]],
                 "Outbound!S3:S50": [["FALSE"], ["TRUE"], ["FALSE"]],
             }
         )
@@ -128,6 +131,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                     "ramp_load_complete": "",
                     "crew_load_complete": "",
                     "block": "",
+                    "removed": "FALSE",
                     "no_return": "TRUE",
                 },
                 {
@@ -142,6 +146,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                     "ramp_load_complete": "",
                     "crew_load_complete": "",
                     "block": "03:10",
+                    "removed": "FALSE",
                     "no_return": "FALSE",
                 },
             ],

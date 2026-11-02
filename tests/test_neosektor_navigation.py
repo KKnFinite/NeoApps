@@ -1,4 +1,4 @@
-"""Exact pre-consolidation navigation contracts; no database fixture needed."""
+"""Explicit navigation/permission contracts, including the staffing Stats page."""
 
 import unittest
 from unittest.mock import patch
@@ -7,7 +7,7 @@ from flask import Flask
 from app.neonodes.neosektor import routes
 
 
-# Snapshot from cce03ed: labels/descriptions are intentionally presentation-specific.
+# Presentation-specific labels remain explicit rather than inferred from the implementation.
 EXPECTED = {'NEOSEKTOR_PAGES': (('TUNNEL CONDUCTOR',
                       'neosektor.tunnel_conductor',
                       'neosektor.conductor.view',
@@ -44,8 +44,10 @@ EXPECTED = {'NEOSEKTOR_PAGES': (('TUNNEL CONDUCTOR',
                              ('East Ballmat', 'neosektor.ebm', 'neosektor.ebm.view'),
                              ('West Ballmat', 'neosektor.wbm', 'neosektor.wbm.view'),
                              ('Driver Routing', 'neosektor.driver_routing', 'neosektor.driver_routing.view'),
-                             ('Discharge', 'neosektor.discharge', 'neosektor.discharge.view')),
- 'NEOSEKTOR_MOBILE_DASHBOARD': (('Live Counts',
+                             ('Discharge', 'neosektor.discharge', 'neosektor.discharge.view'),
+                             ('Stats', 'neosektor.staffing_stats', 'neosektor.dashboard.view')),
+ 'NEOSEKTOR_MOBILE_DASHBOARD': (('Stats', 'neosektor.staffing_stats', 'neosektor.dashboard.view',
+                                'stats', 'Shift staffing totals.'), ('Live Counts',
                                  'neosektor.live_counts',
                                  'neosektor.live_counts.view',
                                  'live-counts',
@@ -86,8 +88,8 @@ class NeoSektorNavigationTest(unittest.TestCase):
     def test_presentations_and_page_lookup_match_original_metadata(self):
         for name, expected in EXPECTED.items():
             self.assertEqual(tuple(row for row in getattr(routes, name) if row[1] != 'neosektor.manage_employees'), expected, name)
-        self.assertEqual(len(routes.NEOSEKTOR_PAGE_DEFINITIONS), 8)
-        self.assertEqual(len({p.endpoint for p in routes.NEOSEKTOR_PAGE_DEFINITIONS}), 8)
+        self.assertEqual(len(routes.NEOSEKTOR_PAGE_DEFINITIONS), 9)
+        self.assertEqual(len({p.endpoint for p in routes.NEOSEKTOR_PAGE_DEFINITIONS}), 9)
         for row in EXPECTED["NEOSEKTOR_PAGES"]:
             self.assertEqual(routes._page_by_title(row[0]), dict(zip(
                 ("label", "endpoint", "view_permission", "edit_permission", "description"), row,

@@ -35,6 +35,9 @@ class PageAssetsTest(unittest.TestCase):
         self.assertIn('if uses_live_update_controller', base)
         self.assertIn('if is_neostaffing_page', base)
         self.assertIn('script defer src="{{ url_for(\'static\', filename=\'js/interaction_states.js\'', base)
-        self.assertIn('headers.set("X-CSRF-Token", token)', base)
+        self.assertIn("filename='js/csrf.js'", base)
+        self.assertIn('<script src="{{ url_for(\'static\', filename=\'js/csrf.js\'', base)
+        csrf = (root / 'app/static/js/csrf.js').read_text(encoding='utf-8')
+        self.assertIn("headers.set('X-CSRF-Token', token())", csrf)
         for page in ('login_hub', 'portal'):
             self.assertIn('data-interaction-form', (root / f'app/templates/auth/{page}.html').read_text(encoding='utf-8'))

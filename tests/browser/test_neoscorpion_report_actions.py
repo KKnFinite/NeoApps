@@ -31,6 +31,7 @@ class ReportActionsBrowserTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         def file_app(config):
             return create_app(type('ReportBrowserConfig',(config,),{
+                'SESSION_COOKIE_SECURE':False,  # Isolated HTTP loopback server only.
                 'SQLALCHEMY_DATABASE_URI':'sqlite:///'+database_path.as_posix()}))
         case = cases.DetailsTest()
         with patch.object(fixtures,'create_app',file_app):case.setUp()

@@ -22,6 +22,7 @@ class NeoRainReportBrowserTest(TestCase):
         with TemporaryDirectory() as directory:
             config = type("BrowserConfig", (), {
                 "SECRET_KEY": "test", "TESTING": True,
+                "SESSION_COOKIE_SECURE": False,  # Isolated HTTP loopback server only.
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///" + directory.replace("\\", "/") + "/rain-report.db",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
                 "LIVE_SCREEN_REFRESH_INTERVAL_MS": 5000,

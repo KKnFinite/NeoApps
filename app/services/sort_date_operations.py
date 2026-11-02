@@ -199,17 +199,21 @@ def parse_active_days(active_days):
     }
 
 
-def ensure_tail_state_for_mission(mission, parking_position=None):
+def ensure_tail_state_for_mission(mission, parking_position=None, *, state_cache=None, flush=True):
     if not mission.assigned_tail_number:
         return None
 
     mission.assigned_tail_number = mission.assigned_tail_number.strip().upper()
-    tail_state = SortDateTailState.query.filter_by(
-        sort_date=mission.sort_date,
-        gateway_code=mission.gateway_code,
-        sort_name=mission.sort_name,
-        tail_number=mission.assigned_tail_number,
-    ).first()
+    key = (mission.sort_date, mission.gateway_code, mission.sort_name, mission.assigned_tail_number)
+    if state_cache is None:
+        tail_state = SortDateTailState.query.filter_by(
+            sort_date=mission.sort_date,
+            gateway_code=mission.gateway_code,
+            sort_name=mission.sort_name,
+            tail_number=mission.assigned_tail_number,
+        ).first()
+    else:
+        tail_state = state_cache.get(key)
 
     if not tail_state:
         tail_state = SortDateTailState(
@@ -220,6 +224,8 @@ def ensure_tail_state_for_mission(mission, parking_position=None):
             operational_status="normal",
         )
         db.session.add(tail_state)
+        if state_cache is not None:
+            state_cache[key] = tail_state
 
     if tail_state.aircraft_type_source != "manual":
         aircraft_type = derive_aircraft_type_from_tail_number(mission.assigned_tail_number)
@@ -235,7 +241,8 @@ def ensure_tail_state_for_mission(mission, parking_position=None):
     if parking_position and not tail_state.parking_position:
         tail_state.parking_position = parking_position.strip().upper()
 
-    db.session.flush()
+    if flush:
+        db.session.flush()
     return tail_state
 
 

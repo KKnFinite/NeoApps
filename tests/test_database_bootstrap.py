@@ -9,7 +9,7 @@ from app.config import resolve_database_uri
 from app.extensions import db
 from datetime import time
 
-from sqlalchemy import Column, MetaData, Table, inspect, text
+from sqlalchemy import Column, MetaData, Table, inspect, text, event
 
 from app.models import (
     Gateway,
@@ -212,8 +212,17 @@ class DatabaseBootstrapTest(unittest.TestCase):
         _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
         for model in models:
             self.assertTrue(inspect(db.engine).has_table(model.__tablename__))
-        with patch("sqlalchemy.sql.schema.Table.create", side_effect=AssertionError("Redundant CREATE")):
+        statements = []
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(' '.join(statement.upper().split()))
+        event.listen(db.engine, 'before_cursor_execute', capture)
+        try:
             _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', capture)
+        self.assertFalse([s for s in statements if s.startswith('CREATE TABLE')])
+        # Existing recovery guards are intentionally reinstalled, never removed.
+        self.assertEqual(sum(s.startswith('CREATE TRIGGER') and 'IMMUTABLE_DELETE' in s for s in statements), 2)
 
     def test_postgres_legacy_door_defaults_are_missing_only_and_non_destructive(self):
         inspector = Mock()
