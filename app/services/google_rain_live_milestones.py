@@ -16,6 +16,8 @@ from app.services.departure_progress import (
 from app.services.google_motherbrain_live_missions import (
     GoogleMotherBrainMissionError,
     _parse_optional_live_datetime,
+    lock_current_departure_for_google_import,
+    native_block_out_is_protected,
 )
 from app.services.neorain_fuel_authority import (
     RAIN_FUEL_SOURCE_GOOGLE,
@@ -114,6 +116,8 @@ def apply_google_rain_departure_milestones(
 
         try:
             with db.session.begin_nested():
+                if apply_milestones:
+                    lock_current_departure_for_google_import(operation, mission)
                 result = (
                     _apply_row(
                         operation,
@@ -139,7 +143,7 @@ def apply_google_rain_departure_milestones(
                         None if row["center_fuel"] is _MISSING else row["center_fuel"],
                     )
                 db.session.flush()
-        except SQLAlchemyError as error:
+        except (SQLAlchemyError, GoogleMotherBrainMissionError) as error:
             if authority_handoff is not None:
                 raise
             reason = type(error).__name__
@@ -301,6 +305,10 @@ def _apply_owned_timestamp(
 ):
     current_timestamp = getattr(mission, timestamp_attr)
     current_source = _normalized_source(getattr(mission, source_attr))
+    if timestamp_attr == "actual_block_out_datetime_utc" and native_block_out_is_protected(
+        mission, GOOGLE_RAIN_SOURCE, replace_neorain_owned=replace_neorain_owned,
+    ):
+        return "protected"
     # Explicit Neo presence was checked in _apply_row. Imported/displayed values
     # alone do not acquire permanent Neo authority over this Rain field.
     from app.services.neorain_overrides import FIELDS

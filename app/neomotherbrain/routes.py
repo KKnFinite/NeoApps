@@ -4868,7 +4868,7 @@ def _mission_or_404(operation, mission_id, for_update=False):
         sort_date_operation_id=operation.id,
     )
     if for_update:
-        query = query.with_for_update()
+        query = query.populate_existing().with_for_update()
     return query.first_or_404()
 
 

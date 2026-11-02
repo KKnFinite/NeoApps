@@ -83,6 +83,49 @@ class GoogleMotherBrainMissionError(ValueError):
     """A row-scoped live mission application error."""
 
 
+def lock_current_departure_for_google_import(operation, mission):
+    """Read current authority under the same row lock used by native edits.
+
+    A batch's identity-map entry can predate a committed manual correction.
+    Call before modifying the matched mission, inside the caller's savepoint;
+    refreshing after mutation would discard this transaction's own changes.
+    """
+    identity_fields = (
+        "flight_number", "assigned_tail_number", "destination",
+        "planned_datetime_local", "planned_datetime_utc",
+    )
+    identity = tuple(getattr(mission, field) for field in identity_fields)
+    current = (
+        SortDateMission.query.filter_by(
+            id=mission.id,
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+        )
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if current is None or identity != tuple(
+        getattr(current, field) for field in identity_fields
+    ):
+        raise GoogleMotherBrainMissionError(
+            "Departure identity changed during Google import; retry with fresh rows."
+        )
+
+
+def native_block_out_is_protected(
+    mission, importing_source, *, replace_neorain_owned=False,
+):
+    """An ordinary import cannot replace a valid higher-priority native time."""
+    source = str(mission.actual_block_out_source or "unknown").strip().lower()
+    return bool(
+        mission.actual_block_out_datetime_utc is not None
+        and source in GOOGLE_NATIVE_BLOCK_OUT_SOURCES
+        and source != importing_source
+        and not (replace_neorain_owned and source == "neorain")
+    )
+
+
 def apply_google_motherbrain_live_rows(
     operation,
     *,
@@ -337,6 +380,8 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
             planned_utc,
         )
     else:
+        if mission_type == "departure":
+            lock_current_departure_for_google_import(operation, mission)
         if is_hot_placeholder_mission(mission):
             mission.mission_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
         mission.flight_number = row["flight_number"]
@@ -612,12 +657,7 @@ def _apply_outbound_state(
         if operational_utc > applied_at:
             warnings.append("Future Google block-out ignored.")
         else:
-            source = str(mission.actual_block_out_source or "unknown").strip().lower()
-            has_native_authority = bool(
-                mission.actual_block_out_datetime_utc
-                and source in GOOGLE_NATIVE_BLOCK_OUT_SOURCES
-            )
-            if has_native_authority:
+            if native_block_out_is_protected(mission, GOOGLE_MOTHERBRAIN_MISSION_SOURCE):
                 warnings.append("Native Neo block-out preserved over Google block-out.")
             else:
                 mission.actual_block_out_datetime_utc = operational_utc
