@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const {ownedInlineScript} = require('./template_scripts.cjs');
 const repo = path.join(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(repo, file), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -45,8 +46,7 @@ function harness() {
     vm.createContext(context);
     vm.runInContext(read('app/static/js/neosektor_live.js'), context);
     vm.runInContext(read('app/static/js/neosektor_spotter_modes.js'), context);
-    const source = read('app/templates/neonodes/neosektor/tunnel_conductor.html')
-        .match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+    const source = ownedInlineScript(read('app/templates/neonodes/neosektor/tunnel_conductor.html'), '[data-tunnel-conductor]')
         .replace(/{{ state.refresh\|tojson }}/g, JSON.stringify(snapshot().refresh))
         .replace(/{{ state.refresh.live_screen_refresh_interval_ms }}/g, '5000')
         .replace(/{{ state\|tojson }}/g, JSON.stringify(snapshot()));

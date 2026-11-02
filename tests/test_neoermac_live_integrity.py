@@ -17,6 +17,9 @@ from app.services.neoermac_dashboard import upcoming_pulls_revision
 from app.services.neoermac_door_view import door_view_poll_revision, door_view_operational_state, _destination_cards_for_door
 from tests import test_neoermac_routes as fixtures
 from tests.neoermac_lineup_forms import lineup_form
+from app.services.neoermac_building_lineup import (
+    get_building_lineup_rows, save_building_lineup_destination, lineup_original, slot_flight_value,
+)
 
 
 class NeoErmacLiveIntegrityTest(unittest.TestCase):
@@ -33,7 +36,13 @@ class NeoErmacLiveIntegrityTest(unittest.TestCase):
         self._add_master_departure('UPS502', 'ONT')
         self._add_master_departure('UPS503', 'PHX')
         self.mission = self._add_operation_departure('UPS501', 'SDF', tail='N501UP')
-        self._assign_lineup_destination('green_runout', 'east_destination_1', 'SDF')
+        self.mission.master_flight_schedule_id = self.master.id
+        self.choices = {row.destination: str(row.id) for row in MasterFlightSchedule.query.all()}
+        self.field = 'lineup_green_runout_east_destination_1'
+        self.other = 'lineup_green_runout_west_destination_1'
+        row = get_building_lineup_rows(self.gateway)[0]
+        save_building_lineup_destination(self.gateway, self.field, self.choices['SDF'],
+            expected_original=lineup_original(self.gateway, self.field, slot_flight_value(row, 'east_destination_1')))
         db.session.commit()
         self._login_approved_user(role='simulator')
         self.client.get('/neoermac/building-lineup')
@@ -46,7 +55,8 @@ class NeoErmacLiveIntegrityTest(unittest.TestCase):
         return self.client.post('/neoermac/building-lineup/destination', data=form)
 
     def form(self, destination, field=None):
-        return lineup_form(self.gateway, {'field': field or self.field, 'destination': destination})
+        return lineup_form(self.gateway, {'field': field or self.field,
+            'destination': self.choices[destination] if destination else ''})
 
     def test_same_slot_conflict_clear_and_independent_slot(self):
         older, clear = self.form('PHX'), self.form('')
@@ -61,7 +71,7 @@ class NeoErmacLiveIntegrityTest(unittest.TestCase):
         self.assertIsNone(row.east_destination_1)
 
     def test_full_form_only_changed_slots_and_atomic_conflict(self):
-        old = lineup_form(self.gateway, {self.field: 'SDF', self.other: 'PHX'})
+        old = lineup_form(self.gateway, {self.field: self.choices['SDF'], self.other: self.choices['PHX']})
         self.assertEqual(self.post(self.form('ONT')).status_code, 200)
         self.assertEqual(self.client.post('/neoermac/building-lineup', data=old).status_code, 302)
         row = NeoErmacBuildingLineup.query.filter_by(runout_key='green_runout').one()
@@ -80,8 +90,8 @@ class NeoErmacLiveIntegrityTest(unittest.TestCase):
         self.master.active = False
         db.session.commit()
         response = self.client.get('/neoermac/building-lineup')
-        self.assertIn(b'<option value="SDF" selected>SDF</option>', response.data)
-        form = lineup_form(self.gateway, {self.field: 'SDF', self.other: 'ONT'})
+        self.assertIn(f'<option value="{self.master.id}" selected>UNAVAILABLE FLIGHT #{self.master.id}</option>', response.get_data(as_text=True))
+        form = lineup_form(self.gateway, {self.field: self.choices['SDF'], self.other: self.choices['ONT']})
         self.assertEqual(self.client.post('/neoermac/building-lineup', data=form).status_code, 302)
         row = NeoErmacBuildingLineup.query.filter_by(runout_key='green_runout').one()
         self.assertEqual((row.east_destination_1, row.west_destination_1), ('SDF', 'ONT'))
@@ -107,7 +117,7 @@ class NeoErmacLiveIntegrityTest(unittest.TestCase):
                     client = app.test_client(); client.set_cookie('session', cookie)
                     barrier.wait(timeout=10)
                     return client.post('/neoermac/building-lineup/destination', data=form).status_code
-                second = {**forms[0], 'destination': 'PHX'} if same_slot else forms[1]
+                second = {**forms[0], 'destination': self.choices['PHX']} if same_slot else forms[1]
                 try:
                     with ThreadPoolExecutor(max_workers=2) as workers:
                         statuses = list(workers.map(submit, [forms[0], second]))
@@ -130,8 +140,9 @@ class NeoErmacLiveIntegrityTest(unittest.TestCase):
         self.assertNotEqual(before, revision())
         response = self.client.get('/neoermac/building-lineup/state?revision=' + before).get_json()
         self.assertTrue(response['changed'])
-        self.assertIn('LAX', response['state']['destination_choices'])
-        self.assertNotIn('SDF', response['state']['destination_choices'])
+        choices = response['state']['destination_choices']
+        self.assertEqual(next(row['label'] for row in choices if row['value'] == str(self.master.id)), 'UPS501 — LAX')
+        self.assertFalse(any('SDF' in row['label'] for row in choices))
         current = revision()
         self._add_master_departure('UPS900', 'ORD')
         other = MasterFlightSchedule.query.filter_by(flight_number='UPS900').one()
@@ -176,7 +187,7 @@ class NeoErmacLiveIntegrityTest(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(payload['state']['slots']), 96)
-        self.assertEqual(payload['state']['slots'][self.field]['destination'], 'SDF')
+        self.assertEqual(payload['state']['slots'][self.field]['destination'], self.choices['SDF'])
         self.assertLess(len(response.data), 22000)
         self.assertFalse(any(s.lstrip().lower().startswith(('insert', 'update', 'delete')) for s in statements))
         self.assertLessEqual(sum(s.lstrip().lower().startswith('select') for s in statements), 20)

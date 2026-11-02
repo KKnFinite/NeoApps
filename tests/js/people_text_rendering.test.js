@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
+const {ownedInlineScript} = require('./template_scripts.cjs');
 const root = path.join(__dirname, "..", "..");
 
 // Minimal DOM seam, as in the existing live-updates tests. Only the old fixed
@@ -113,7 +114,7 @@ function bulkPreview() {
     const document = documentStub();
     document.querySelectorAll = (selector) => selector === ".neostaffing-people-bulk-create-form" ? [form] : [];
     const template = fs.readFileSync(path.join(root, "app/templates/neostaffing/people.html"), "utf8");
-    const script = template.match(/<script>([\s\S]*?)<\/script>/)[1];
+    const script = ownedInlineScript(template, '.neostaffing-people-bulk-create-form');
     vm.runInNewContext(script, {document});
     return elements;
 }

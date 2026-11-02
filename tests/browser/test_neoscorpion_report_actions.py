@@ -1,11 +1,11 @@
 """Authenticated before/after actions and event-owned HTML/downloaded PDF."""
 from datetime import timedelta
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import subprocess
 import threading
 import unittest
 from unittest.mock import patch
-from uuid import uuid4
 
 from jinja2 import ChoiceLoader, DictLoader
 from playwright.sync_api import sync_playwright, expect
@@ -26,7 +26,9 @@ class ReportActionsBrowserTest(unittest.TestCase):
     def exercise(self, engine):
         # Browser and fixture writes need distinct connections; a shared
         # in-memory StaticPool can let a GET roll back fixture setup.
-        database_path = (Path('instance') / ('scorpion-report-'+uuid4().hex+'.sqlite')).resolve()
+        temporary = TemporaryDirectory(prefix='scorpion-report-')
+        database_path = Path(temporary.name, 'fixture.sqlite')
+        self.addCleanup(temporary.cleanup)
         def file_app(config):
             return create_app(type('ReportBrowserConfig',(config,),{
                 'SQLALCHEMY_DATABASE_URI':'sqlite:///'+database_path.as_posix()}))
@@ -49,6 +51,8 @@ class ReportActionsBrowserTest(unittest.TestCase):
                 browser = getattr(pw,engine).launch()
                 try:
                     page = browser.new_page(viewport={'width':1920,'height':900},service_workers='block')
+                    page.set_default_timeout(15000)
+                    page.set_default_navigation_timeout(20000)
                     page.on('pageerror',lambda error:errors.append(str(error)))
                     page.goto(origin+'/login');page.locator('[name=email]').fill(case.dispatcher.email)
                     page.locator('[name=password]').fill('TestPassword123!')
@@ -142,6 +146,8 @@ class ReportActionsBrowserTest(unittest.TestCase):
                         self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'),width+1)
 
                     viewer=browser.new_page(viewport={'width':1920,'height':900},service_workers='block')
+                    viewer.set_default_timeout(15000)
+                    viewer.set_default_navigation_timeout(20000)
                     viewer.goto(origin+'/login');viewer.locator('[name=email]').fill(case.fueler.email)
                     viewer.locator('[name=password]').fill('TestPassword123!')
                     viewer.locator('button[type=submit]').click();viewer.wait_for_url(lambda u:'/login' not in u)
@@ -157,7 +163,7 @@ class ReportActionsBrowserTest(unittest.TestCase):
                     page.goto(origin+'/neoscorpion/reports/fuel')
                     expect(page.locator('.neoscorpion-report-table thead')).to_contain_text('FOB')
                     expect(page.locator('[data-fueling-event-id]')).to_have_count(1)
-                    response=page.request.get(origin+'/neoscorpion/reports/fuel?format=pdf')
+                    response=page.request.get(origin+'/neoscorpion/reports/fuel?format=pdf',timeout=20000)
                     self.assertEqual(response.status,200)
                     (EVIDENCE/f'{engine}-fuel-report.pdf').write_bytes(response.body())
                     for width in (1920,1366,768,320,375,390,430):

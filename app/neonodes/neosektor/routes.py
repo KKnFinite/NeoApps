@@ -808,7 +808,7 @@ def live_counts():
     )
     context["can_manage_employees"] = _can_manage_employees()
     context["manage_employees_default_area"] = (
-        next(key for key, ids in _employee_attendance_scope()[1].items() if ids)
+        next((key for key, ids in _employee_attendance_scope()[1].items() if ids), None)
         if context["can_manage_employees"] else None
     )
     # Read-only routing updates detached display values, not persistent state.

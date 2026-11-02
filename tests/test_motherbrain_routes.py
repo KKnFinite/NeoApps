@@ -14016,12 +14016,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.refresh(state)
         self.assertEqual(state.operational_status, "hot")
 
-        self.client.post(
+        response = self.client.post(
             f"/motherbrain/operations/{operation.id}/spares/mark",
             data={"tail_number": "N910UP"},
+            follow_redirects=True,
         )
         db.session.refresh(state)
-        self.assertEqual(state.operational_status, "spare")
+        # HOT creates a real departure mission. SPARE cannot discard or detach
+        # that mission merely to change a label, even for a Grandmaster.
+        self.assertEqual(state.operational_status, "hot")
+        self.assertIn(b'A tail with a departure mission cannot be marked SPARE.', response.data)
+        self.assertEqual(SortDateMission.query.filter_by(sort_date_operation_id=operation.id,
+            assigned_tail_number='N910UP', mission_type='departure').count(), 1)
 
     def test_creating_departure_clears_spare_tail_status(self):
         operation = self._parking_operation()

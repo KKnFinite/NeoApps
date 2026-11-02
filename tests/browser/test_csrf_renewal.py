@@ -90,7 +90,9 @@ class CsrfRenewalBrowserTest(unittest.TestCase):
                     with page.expect_response(lambda response:'/csrf-token' in response.url) as renewed:
                         page.evaluate("window.dispatchEvent(new Event('focus'))")
                     self.assertEqual(renewed.value.status,200)
-                    self.assertNotEqual(page.locator('meta[name=csrf-token]').get_attribute('content'),old)
+                    # A response event signals headers, before fetch().json()
+                    # necessarily updates the shared meta/hidden token fields.
+                    expect(page.locator('meta[name=csrf-token]')).not_to_have_attribute('content',old)
                     self.assertTrue(page.evaluate('window.originalDocument'))
                     page.locator('#ajax button').click();expect(page.locator('#result')).to_have_text('200')
                     expect(page.locator('#ajax [name=notes]')).to_have_value('Shift draft remains')

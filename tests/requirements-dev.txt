@@ -1,0 +1,6 @@
+# Application runtime plus isolated Python/browser regression and advisory tools.
+# These packages are never installed by Render's production requirements file.
+-r ../requirements.txt
+-r requirements-browser.txt
+pytest>=9.1.1,<10
+pip-audit==2.10.1

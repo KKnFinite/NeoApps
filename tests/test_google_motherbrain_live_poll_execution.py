@@ -1217,20 +1217,21 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
     def _assert_neo_authoritative_mode_skips_rain(self, mode):
         self._enable()
         set_rain_integration_mode(self.gateway, "night", mode)
-        # The operational bundle is Neo-authoritative and fuel is explicitly
-        # Neo-authoritative too, so no legacy Rain read is warranted.
+        # Neo-only suppresses reads; mirror mode still observes upstream values
+        # for explicit override/reset provenance without regaining Neo authority.
         from app.services.neorain_fuel_authority import set_rain_fuel_data_source
         set_rain_fuel_data_source(self.gateway, "night", "neo")
         db.session.commit()
         primary_reader = Mock(
             return_value={"inbound_rows": [], "outbound_rows": []}
         )
-        rain_reader = Mock()
-        rain_applier = Mock()
+        rain_reader = Mock(return_value=[])
+        rain_applier = Mock(return_value={'applied_count': 0, 'skipped_count': 0})
 
         with patch(
             "app.services.google_motherbrain_live_poll_execution."
-            "gate_google_rain_rollover_rows"
+            "gate_google_rain_rollover_rows",
+            return_value={'rows': [], 'status': 'empty', 'baseline_count': 0, 'released_count': 0},
         ) as rollover_gate:
             result = execute_google_motherbrain_live_poll(
                 self.gateway,
@@ -1241,12 +1242,18 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
             )
 
         self.assertEqual(result["status"], "success")
-        self.assertEqual(result["rain_status"], "skipped_neo_authoritative")
+        self.assertEqual(result["rain_status"], "skipped_neo_authoritative" if mode == NEO_ONLY else 'success')
         self.assertEqual(result["rain_mode"], mode)
         primary_reader.assert_called_once_with()
-        rain_reader.assert_not_called()
-        rain_applier.assert_not_called()
-        rollover_gate.assert_not_called()
+        if mode == NEO_ONLY:
+            rain_reader.assert_not_called()
+            rain_applier.assert_not_called()
+            rollover_gate.assert_not_called()
+        else:
+            rain_reader.assert_called_once_with()
+            rain_applier.assert_called_once()
+            self.assertTrue(rain_applier.call_args.kwargs['apply_milestones'])
+            rollover_gate.assert_called_once()
 
     def _state(self, operation):
         return MotherBrainGoogleLivePollState.query.filter_by(

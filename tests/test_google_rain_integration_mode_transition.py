@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import Gateway, SortDateMission, SortDateOperation
+from app.models import Gateway, SortDateMission, SortDateOperation, NeoRainMissionOverride, User
 from app.services.google_rain_integration_mode import (
     GOOGLE_PRIMARY,
     NEO_ONLY,
@@ -220,6 +220,20 @@ class GoogleRainIntegrationModeTransitionTest(unittest.TestCase):
         self.mission.actual_block_out_source = "manual"
         self.mission.departure_status = "departed"
         self.mission.departure_status_source = "manual"
+        # Current authority is an explicit operator override, not a legacy
+        # source-string label. Preserve that same intentional Neo ownership.
+        actor = User(username='handoff-fixture-operator', role='grandmaster', password_hash='fixture-no-login')
+        db.session.add(actor)
+        db.session.flush()
+        for field, timestamp_attr, source_attr in (
+            ('ramp_load_complete', 'ramp_load_completed_at_utc', 'ramp_load_completed_source'),
+            ('official_block_out', 'actual_block_out_datetime_utc', 'actual_block_out_source'),
+        ):
+            db.session.add(NeoRainMissionOverride(gateway_id=self.gateway.id,
+                sort_date_operation_id=self.operation.id, sort_date_mission_id=self.mission.id,
+                field=field, active=True, generation=1, modified_by_user_id=actor.id,
+                value={timestamp_attr: manual_time.isoformat(), source_attr: 'manual'},
+                upstream={}, sync_status='NEO_ONLY'))
         db.session.commit()
 
         with self._current_operation(), patch(

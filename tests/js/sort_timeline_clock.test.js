@@ -2,10 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const {ownedInlineScript} = require('./template_scripts.cjs');
 
 const page = fs.readFileSync('app/templates/neomotherbrain/sort_timeline.html', 'utf8');
-const begin = page.indexOf('<script>\n(() => {');
-const script = page.slice(begin + '<script>'.length, page.indexOf('</script>', begin));
+const script = ownedInlineScript(page, '[data-sort-timeline-autosave]');
 
 function setup() {
     const events = {}, calls = [], timers = [];

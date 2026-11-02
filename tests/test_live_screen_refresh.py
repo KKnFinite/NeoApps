@@ -208,7 +208,7 @@ class LiveScreenRefreshTest(unittest.TestCase):
         )
         for template_path in templates:
             with self.subTest(template=template_path):
-                source = Path(template_path).read_text(encoding="utf-8")
+                source = self._refresh_source(template_path)
                 self.assertIn("live_screen_refresh_interval_ms", source)
                 self.assertIn("NeoLiveUpdates", source)
                 self.assertNotIn("5000", source)
@@ -275,9 +275,23 @@ class LiveScreenRefreshTest(unittest.TestCase):
 
         for consumer_path in consumers:
             with self.subTest(consumer=consumer_path):
-                source = Path(consumer_path).read_text(encoding="utf-8")
+                source = self._refresh_source(consumer_path)
                 self.assertIn("NeoLiveUpdates.create", source)
                 self.assertNotIn("INACTIVITY_TIMEOUT_MS", source)
+
+    def _refresh_source(self, path):
+        source = Path(path).read_text(encoding='utf8')
+        external = {
+            'app/templates/neonodes/neoermac/upcoming_pulls.html': 'neoermac_upcoming_pulls.js',
+            'app/templates/neonodes/neoermac/door_view.html': 'neoermac_door_live.js',
+            'app/templates/neonodes/neoermac/view_outbound.html': 'neoermac_outbound_live.js',
+        }.get(path)
+        if external:
+            # Controller extraction must preserve both the template reference and
+            # the actual shared refresh/inactivity integration in its owned file.
+            self.assertIn(f"filename='js/{external}'", source)
+            source += '\n' + Path('app/static/js', external).read_text(encoding='utf8')
+        return source
 
 
 if __name__ == "__main__":

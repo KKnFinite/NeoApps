@@ -19,7 +19,7 @@ from app.models import (
 )
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.neoermac_building_lineup import (
-    _current_sort_destination_pull_times,
+    get_departure_destination_pull_times,
 )
 from app.services.neoermac_dashboard import current_upcoming_pulls_operation
 from app.services.neoermac_door_view import current_door_view_operation
@@ -685,7 +685,7 @@ class OperationLifecycleTest(unittest.TestCase):
                 return_value=datetime(2026, 6, 19, 5, 0),
             ),
         ):
-            self.assertEqual(_current_sort_destination_pull_times(self.gateway), {})
+            self.assertEqual(get_departure_destination_pull_times(self.gateway), {})
             self.assertEqual(
                 recompute_current_sort_door_pull_aggregates(self.gateway),
                 {},
@@ -737,12 +737,19 @@ class OperationLifecycleTest(unittest.TestCase):
         )
         self.assertLessEqual(
             sum(row.startswith("select") for row in statements),
-            6,
+            # Door View now resolves the ULD/current-operation authority through
+            # gateway_matrix as well as the three lifecycle-based resolvers.
+            # Its two bounded reads are required, not per-mission queries.
+            8,
         )
 
     def _resolve_ermac_operations(self, local_now):
         with (
             self.app.test_request_context("/neoermac/door-view"),
+            patch(
+                "app.services.gateway_matrix.current_gateway_local_datetime",
+                return_value=local_now,
+            ),
             patch(
                 "app.services.operation_lifecycle.current_gateway_local_datetime",
                 return_value=local_now,

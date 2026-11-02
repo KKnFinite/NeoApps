@@ -153,9 +153,20 @@ class FrostVaultTest(unittest.TestCase):
 
     def test_upload_download_permission_csrf_identity_and_duplicate_validation(self):
         client=self.client('master');g.pop('_login_user',None)
-        page=client.get('/neosubzero/frost-vault').get_data(as_text=True)
+        response=client.get('/neosubzero/frost-vault')
+        page=response.get_data(as_text=True)
         self.assertIn('aria-label="IMPORT CSV"',page)
-        self.assertEqual(page.count('-frost-auto-v1'),2)  # New collection assets must bypass the prior cached bundle.
+        from tests.html_contracts import document
+        from urllib.parse import urlsplit, parse_qs
+        root=document(response)
+        for tag, attr, path, suffix in (
+            ('link','href','/static/css/frost_vault.css','-frost-phase17'),
+            ('script','src','/static/js/frost_vault.js','-frost-auto-v1'),
+        ):
+            assets=[urlsplit(node.attrs[attr]) for node in root.findall(tag)
+                    if attr in node.attrs and urlsplit(node.attrs[attr]).path == path]
+            self.assertEqual(len(assets),1)
+            self.assertEqual(parse_qs(assets[0].query)['v'],[self.f.app.config['STATIC_ASSET_VERSION']+suffix])
         self.assertNotIn('-frost-history-v1',page)
         self.assertIn('application/vnd.ms-excel,text/plain',page)
         response=client.post('/neosubzero/frost-vault',data={'document':(io.BytesIO(sample()),'source.csv')},headers={'X-Requested-With':'XMLHttpRequest'})

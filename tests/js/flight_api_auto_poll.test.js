@@ -18,7 +18,8 @@ const template = fs.readFileSync(
     ),
     "utf8"
 );
-const source = template.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
+const {ownedInlineScript} = require('./template_scripts.cjs');
+const source = ownedInlineScript(template, 'flight-api-auto-poll');
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 const createHarness = (initialStatus, responsePayload = null) => {

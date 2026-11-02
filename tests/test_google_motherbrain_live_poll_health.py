@@ -106,16 +106,18 @@ class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
 
     def test_enabled_health_read_does_not_create_missing_operation(self):
         self._enable()
-        db.session.delete(self.operation)
-        db.session.commit()
+        # The bootstrap also preserves immutable Rain report children. Leave
+        # that history intact and inspect the same eligible window a week later,
+        # when no canonical operation exists, rather than deleting its parent.
+        before = SortDateOperation.query.count()
 
         health = google_motherbrain_live_poll_health(
             self.gateway,
-            now=self.NOW_UTC,
+            now=self.NOW_UTC + timedelta(days=7),
         )
 
         self.assertEqual(health["status"], "outside_window")
-        self.assertEqual(SortDateOperation.query.count(), 0)
+        self.assertEqual(SortDateOperation.query.count(), before)
 
     def test_recent_success_is_current(self):
         self._enable()

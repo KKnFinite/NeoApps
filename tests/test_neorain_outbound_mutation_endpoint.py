@@ -14,7 +14,8 @@ from app.services.google_rain_integration_mode import (
     NEO_PRIMARY_GOOGLE_MIRROR,
     set_rain_integration_mode,
 )
-from app.services.google_rain_sheets import GoogleRainWriterError
+from app.models import NeoRainMissionOverride, NeoRainOverrideAudit, SortDateGoogleMissionLink
+from app.services.google_rain_integration_mode import GOOGLE_PRIMARY
 from app.services.live_collaboration import entity_version
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -54,258 +55,189 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_google_primary_rejects_without_mutation_or_google_write(self):
-        with self._current_operation(), patch(
-            "app.neonodes.neorain.routes.mutate_neorain_departure_milestone"
-        ) as mutate, patch(
-            "app.neonodes.neorain.routes.write_google_rain_departure_milestone"
-        ) as writer:
-            response = self._post("ramp_load_complete", "0237")
-
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.get_json()["code"], "google_primary")
-        mutate.assert_not_called()
+    def test_google_primary_explicit_override_saves_without_uncertified_google_write(self):
+        with self._current_operation(), patch('app.services.neorain_google_overrides.certified_write') as writer:
+            response = self._post('ramp_load_complete', '0237')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json['active'])
+        self.assertEqual(response.json['sync_status'], 'NEO_ONLY')
         writer.assert_not_called()
-        self.assertIsNone(self.mission.ramp_load_completed_at_utc)
+        self.assertIsNotNone(self.mission.ramp_load_completed_at_utc)
+        self.assertEqual(NeoRainMissionOverride.query.one().field, 'ramp_load_complete')
 
     def test_edit_permission_and_current_sort_membership_are_required(self):
-        self.client.get("/logout")
-        watcher = self._user("rain_watcher", "watcher")
+        watcher = self._user('rain_watcher', 'watcher')
         self._login(watcher)
         with self._current_operation():
-            denied = self._post("ramp_load_complete", "0237")
+            denied = self._post('ramp_load_complete', '0237')
         self.assertEqual(denied.status_code, 403)
-
-        self.client.get("/logout")
+        self.assertEqual(denied.json['error'], 'Edit access denied.')
         self._login(self.simulator)
-        self._set_mode(NEO_ONLY)
-        other_operation = self._operation(date(2026, 6, 19))
-        other_mission = self._mission(other_operation, "UPS0999")
+        other = self._operation(date(2026, 6, 19))
+        mission = self._mission(other, 'UPS0999')
         db.session.commit()
         with self._current_operation():
-            wrong_sort = self._post(
-                "ramp_load_complete",
-                "0237",
-                mission_id=other_mission.id,
-            )
-        self.assertEqual(wrong_sort.status_code, 404)
-        self.assertEqual(wrong_sort.get_json()["code"], "mission_not_found")
-
+            wrong = self._post('ramp_load_complete', '0237', mission_id=mission.id)
+        self.assertEqual(wrong.status_code, 404)
+        self.assertEqual(wrong.json['error'], 'Mission is outside the current sort.')
         with self._current_operation(None):
-            no_sort = self._post("ramp_load_complete", "0237")
-        self.assertEqual(no_sort.status_code, 409)
-        self.assertEqual(no_sort.get_json()["code"], "no_current_sort")
+            absent = self._post('ramp_load_complete', '0237')
+        self.assertEqual(absent.status_code, 409)
+        self.assertEqual(absent.json['error'], 'No editable current sort.')
+        self.assertEqual(NeoRainMissionOverride.query.count(), 0)
 
-    def test_phase_two_writes_canonical_value_then_commits_neo(self):
+    def test_mirror_attempt_occurs_once_after_canonical_neo_commit(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
-        expected_version = entity_version(self.mission)
-        mirrored = []
-
-        def capture_write(mission, field, value, *, operation):
-            mirrored.append((field, value, operation.id))
-            self.assertEqual(value, mission.ramp_load_completed_at_utc)
-            return {"field": field}
-
-        with self._current_operation(), patch(
-            "app.neonodes.neorain.routes.write_google_rain_departure_milestone",
-            side_effect=capture_write,
-        ):
-            response = self._post(
-                "ramp_load_complete",
-                "0237",
-                expected_version=expected_version,
-            )
-
+        self._link()
+        before = entity_version(self.mission)
+        def write(mission, field, value):
+            # A separate connection observes the completed canonical transaction.
+            with db.engine.connect() as connection:
+                saved = connection.execute(db.select(SortDateMission.ramp_load_completed_at_utc)
+                    .where(SortDateMission.id == mission.id)).scalar_one()
+            self.assertEqual(saved, mission.ramp_load_completed_at_utc)
+            self.assertEqual(field, 'ramp_load_complete')
+            return 'isolated-certified-seam'
+        with self._current_operation(), patch('app.services.neorain_google_overrides.certified_write', side_effect=write) as writer:
+            response = self._post('ramp_load_complete', '0237', expected_version=before)
         self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["mode"], NEO_PRIMARY_GOOGLE_MIRROR)
-        self.assertEqual(payload["row"]["ramp_load_complete"], "02:37")
-        self.assertEqual(payload["row"]["departure_status"], "ramp_load_complete")
-        self.assertEqual(payload["version"], payload["row"]["version"])
-        self.assertNotEqual(payload["version"], expected_version)
-        self.assertEqual(len(mirrored), 1)
-        db.session.expire_all()
-        persisted = db.session.get(SortDateMission, self.mission.id)
-        self.assertIsNotNone(persisted.ramp_load_completed_at_utc)
-        self.assertEqual(persisted.ramp_load_completed_source, "neorain")
+        self.assertEqual(response.json['row']['ramp_load_complete'], '02:37')
+        self.assertEqual(response.json['sync_status'], 'SYNCED')
+        self.assertNotEqual(response.json['version'], before)
+        writer.assert_called_once()
+        self.assertEqual(NeoRainOverrideAudit.query.filter_by(action='EDIT').count(), 1)
 
-    def test_phase_two_google_failure_rolls_back_neo(self):
+    def test_mirror_failure_preserves_committed_neo_and_never_replays(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
-        with self._current_operation(), patch(
-            "app.neonodes.neorain.routes.write_google_rain_departure_milestone",
-            side_effect=GoogleRainWriterError("google_failure", "safe failure"),
-        ):
-            response = self._post("ramp_load_complete", "0237")
+        self._link()
+        from app.services.neorain_google_overrides import attempt_once
+        with self._current_operation(), patch('app.services.neorain_google_overrides.certified_write', side_effect=RuntimeError('isolated provider failure')) as writer:
+            response = self._post('ramp_load_complete', '0237')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json['sync_status'], 'FAILED')
+            row = NeoRainMissionOverride.query.one()
+            attempt_once(row.id, row.generation)
+        writer.assert_called_once()
+        db.session.refresh(self.mission)
+        self.assertIsNotNone(self.mission.ramp_load_completed_at_utc)
+        self.assertEqual(self.mission.ramp_load_completed_source, 'neorain')
 
-        self.assertEqual(response.status_code, 502)
-        self.assertEqual(response.get_json()["code"], "google_mirror_failed")
-        db.session.expire_all()
-        persisted = db.session.get(SortDateMission, self.mission.id)
-        self.assertIsNone(persisted.ramp_load_completed_at_utc)
-        self.assertEqual(persisted.departure_status, "scheduled")
-
-    def test_phase_three_commits_neo_without_google_calls(self):
+    def test_neo_only_commits_without_google_calls(self):
         self._set_mode(NEO_ONLY)
-        with self._current_operation(), patch(
-            "app.neonodes.neorain.routes.write_google_rain_departure_milestone"
-        ) as writer:
-            response = self._post("crew_load_complete", "0237")
-
+        self._link()
+        with self._current_operation(), patch('app.services.neorain_google_overrides.certified_write') as writer:
+            response = self._post('crew_load_complete', '0237')
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['sync_status'], 'NEO_ONLY')
         writer.assert_not_called()
-        db.session.expire_all()
-        persisted = db.session.get(SortDateMission, self.mission.id)
-        self.assertIsNotNone(persisted.crew_load_completed_at_utc)
-        self.assertEqual(persisted.crew_load_completed_source, "neorain")
+        self.assertIsNotNone(self.mission.crew_load_completed_at_utc)
+        self.assertEqual(self.mission.crew_load_completed_source, 'neorain')
 
-    def test_block_out_mutation_response_includes_derived_variance(self):
+    def test_block_out_row_and_canonical_summary_preserve_derived_variance(self):
+        from app.neonodes.neorain.services import neorain_outbound_late_summary
         self._set_mode(NEO_ONLY)
-        self.mission.wave = "1"
+        self.mission.wave = '1'
         self.mission.planned_datetime_utc = datetime(2026, 6, 19, 7, 30)
         db.session.commit()
-
         with self._current_operation():
-            response = self._post("official_block_out", "0237")
-
+            response = self._post('official_block_out', '0237')
         self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertEqual(payload["row"]["departure_variance"], "+7")
-        self.assertEqual(payload["late_summary"]["first_wave"]["late_minutes"], 7)
-        self.assertEqual(payload["late_summary"]["total"]["aircraft_late"], 1)
-
+        self.assertEqual(response.json['row']['departure_variance'], '+7')
+        summary = neorain_outbound_late_summary(self.operation)
+        self.assertEqual(summary['first_wave']['late_minutes'], 7)
+        self.assertEqual(summary['total']['aircraft_late'], 1)
         with self._current_operation():
-            inclusion = self._post_late_inclusion(False)
+            response = self._post_late_inclusion(False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(neorain_outbound_late_summary(self.operation)['total'],
+                         dict(aircraft_late=0, late_minutes=0, average='0'))
 
-        self.assertEqual(inclusion.status_code, 200)
-        self.assertEqual(inclusion.get_json()["late_summary"]["total"], {
-            "aircraft_late": 0,
-            "late_minutes": 0,
-            "average": "0",
-        })
-
-    def test_late_inclusion_is_neo_only_across_modes_and_after_no_return(self):
-        self.mission.wave = "1"
-        self.mission.departure_status = "departed"
-        self.mission.departure_status_source = "neorain"
+    def test_late_inclusion_without_verified_google_link_stays_neo_only(self):
+        self.mission.wave = '1'
+        self.mission.departure_status = 'departed'
+        self.mission.departure_status_source = 'neorain'
         db.session.commit()
-        for mode, included in (("google_primary", False), (NEO_PRIMARY_GOOGLE_MIRROR, True), (NEO_ONLY, False)):
+        for mode, included in ((GOOGLE_PRIMARY, False), (NEO_PRIMARY_GOOGLE_MIRROR, True), (NEO_ONLY, False)):
             with self.subTest(mode=mode):
                 self._set_mode(mode)
-                with self._current_operation(), patch(
-                    "app.neonodes.neorain.routes.write_google_rain_departure_milestone"
-                ) as writer:
+                with self._current_operation(), patch('app.services.neorain_google_overrides.certified_write') as writer:
                     response = self._post_late_inclusion(included)
-
                 self.assertEqual(response.status_code, 200)
-                payload = response.get_json()
-                self.assertEqual(payload["row"]["late_metrics_included"], included)
-                self.assertEqual(payload["row"]["late_metrics_inclusion_source"], "override")
-                self.assertEqual(payload["row"]["departure_status"], "departed")
+                self.assertEqual(response.json['row']['late_metrics_included'], included)
+                self.assertEqual(response.json['row']['departure_status'], 'departed')
+                self.assertEqual(response.json['sync_status'], 'NEO_ONLY')
                 writer.assert_not_called()
 
     def test_late_inclusion_stale_and_wrong_sort_missions_are_rejected(self):
-        self._set_mode(NEO_ONLY)
-        stale_version = entity_version(self.mission)
-        self.mission.destination = "ONT"
+        before = entity_version(self.mission)
+        self.mission.destination = 'ONT'
         db.session.commit()
         with self._current_operation():
-            stale = self._post_late_inclusion(True, expected_version=stale_version)
+            stale = self._post_late_inclusion(True, expected_version=before)
         self.assertEqual(stale.status_code, 409)
-        self.assertEqual(stale.get_json()["code"], "stale_version")
+        self.assertEqual(stale.json['code'], 'stale_version')
         self.assertIsNone(self.mission.late_metrics_included_override)
-
-        other_operation = self._operation(date(2026, 6, 19))
-        other_mission = self._mission(other_operation, "UPS0999")
+        other = self._operation(date(2026, 6, 19))
+        mission = self._mission(other, 'UPS0999')
         db.session.commit()
         with self._current_operation():
-            wrong_sort = self._post_late_inclusion(True, mission_id=other_mission.id)
-        self.assertEqual(wrong_sort.status_code, 404)
-        self.assertEqual(wrong_sort.get_json()["code"], "mission_not_found")
+            wrong = self._post_late_inclusion(True, mission_id=mission.id)
+        self.assertEqual(wrong.status_code, 404)
+        self.assertEqual(wrong.json['error'], 'Mission is outside the current sort.')
+        self.assertEqual(NeoRainMissionOverride.query.count(), 0)
 
-    def test_stale_version_returns_current_row_without_neo_or_google_changes(self):
-        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
-        expected_version = entity_version(self.mission)
-        self.mission.destination = "ONT"
+    def test_stale_version_rejects_without_neo_or_google_changes(self):
+        before = entity_version(self.mission)
+        self.mission.destination = 'ONT'
         db.session.commit()
-
-        with self._current_operation(), patch(
-            "app.neonodes.neorain.routes.mutate_neorain_departure_milestone"
-        ) as mutate, patch(
-            "app.neonodes.neorain.routes.write_google_rain_departure_milestone"
-        ) as writer:
-            response = self._post(
-                "ramp_load_complete",
-                "0237",
-                expected_version=expected_version,
-            )
-
+        with self._current_operation(), patch('app.neonodes.neorain.override_routes.edit_override') as mutate, patch('app.services.neorain_google_overrides.certified_write') as writer:
+            response = self._post('ramp_load_complete', '0237', expected_version=before)
         self.assertEqual(response.status_code, 409)
-        payload = response.get_json()
-        self.assertEqual(payload["code"], "stale_version")
-        self.assertEqual(payload["row"]["destination"], "ONT")
-        self.assertNotEqual(payload["row"]["version"], expected_version)
+        self.assertEqual(response.json['code'], 'stale_version')
         mutate.assert_not_called()
         writer.assert_not_called()
-        db.session.expire_all()
-        persisted = db.session.get(SortDateMission, self.mission.id)
-        self.assertIsNone(persisted.ramp_load_completed_at_utc)
+        db.session.refresh(self.mission)
+        self.assertEqual(self.mission.destination, 'ONT')
+        self.assertNotEqual(entity_version(self.mission), before)
+        self.assertIsNone(self.mission.ramp_load_completed_at_utc)
 
     def test_missing_expected_version_is_rejected(self):
-        self._set_mode(NEO_ONLY)
         with self._current_operation():
-            response = self.client.post(
-                "/neorain/outbound/milestone",
-                json={
-                    "mission_id": self.mission.id,
-                    "field": "ramp_load_complete",
-                    "value": "0237",
-                },
-            )
-
+            response = self.client.post('/neorain/outbound/milestone', json={
+                'mission_id': self.mission.id, 'field': 'ramp_load_complete', 'value': '0237'})
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.get_json()["code"], "invalid_request")
+        self.assertEqual(response.json['error'], 'Provide the current mission version.')
+        self.assertEqual(NeoRainMissionOverride.query.count(), 0)
 
-    def test_service_validation_and_elmac_rejection_are_safe(self):
-        self._set_mode(NEO_ONLY)
+    def test_invalid_time_and_unsupported_field_are_rejected_without_mutation(self):
         with self._current_operation():
-            invalid = self._post("official_block_out", "2560")
-            elmac = self._post("elmac", "0237")
-
+            invalid = self._post('official_block_out', '2560')
+            unsupported = self._post('not_a_milestone', '0237')
         self.assertEqual(invalid.status_code, 400)
-        self.assertEqual(invalid.get_json()["code"], "invalid_milestone")
-        self.assertEqual(elmac.status_code, 400)
-        self.assertEqual(elmac.get_json()["code"], "unsupported_field")
-        db.session.expire_all()
-        persisted = db.session.get(SortDateMission, self.mission.id)
-        self.assertIsNone(persisted.actual_block_out_datetime_utc)
-        self.assertIsNone(persisted.elmac_completed_at_utc)
+        self.assertIn('time', invalid.json['error'].lower())
+        self.assertEqual(unsupported.status_code, 400)
+        self.assertEqual(unsupported.json['error'], 'Choose a valid field.')
+        self.assertIsNone(self.mission.actual_block_out_datetime_utc)
+        self.assertIsNone(self.mission.elmac_completed_at_utc)
+        self.assertEqual(NeoRainMissionOverride.query.count(), 0)
 
-    def test_phase_two_commit_failure_attempts_google_compensation(self):
+    def test_canonical_commit_failure_never_attempts_google_or_compensation(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
-        mirrored_values = []
+        self._link()
+        with self._current_operation(), patch('app.neonodes.neorain.override_routes.db.session.commit', side_effect=RuntimeError('isolated commit failure')), patch('app.services.neorain_google_overrides.attempt_once') as attempt:
+            with self.assertRaisesRegex(RuntimeError, 'isolated commit failure'):
+                self._post('ramp_load_complete', '0237')
+            db.session.rollback()
+        attempt.assert_not_called()
+        db.session.refresh(self.mission)
+        self.assertIsNone(self.mission.ramp_load_completed_at_utc)
+        self.assertEqual(NeoRainMissionOverride.query.count(), 0)
+        self.assertEqual(NeoRainOverrideAudit.query.count(), 0)
 
-        def capture_write(_mission, _field, value, *, operation):
-            mirrored_values.append(value)
-            return {"operation_id": operation.id}
-
-        with self._current_operation(), patch(
-            "app.neonodes.neorain.routes.write_google_rain_departure_milestone",
-            side_effect=capture_write,
-        ), patch(
-            "app.neonodes.neorain.routes.db.session.commit",
-            side_effect=RuntimeError("commit failed"),
-        ):
-            response = self._post("ramp_load_complete", "0237")
-
-        self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.get_json()["code"], "save_failed")
-        self.assertEqual(len(mirrored_values), 2)
-        self.assertIsNotNone(mirrored_values[0])
-        self.assertIsNone(mirrored_values[1])
-        db.session.expire_all()
-        persisted = db.session.get(SortDateMission, self.mission.id)
-        self.assertIsNone(persisted.ramp_load_completed_at_utc)
+    def _link(self):
+        db.session.add(SortDateGoogleMissionLink(sort_date_operation_id=self.operation.id,
+            sort_date_mission_id=self.mission.id, mission_type='departure', source_sheet='Outbound', source_row=3))
+        db.session.commit()
 
     def _post(self, field, value, *, mission_id=None, expected_version=None):
         target_id = mission_id or self.mission.id

@@ -72,7 +72,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             finally:
                 self.context.push()
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(sum(s.startswith(("select", "with")) for s in sql), budget)
+            self._assert_read_budget(sql, budget)
             self.assertEqual(commits, 0)
             self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
             return response.json, sql
@@ -261,7 +261,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     self.assertEqual(len(candidates(uncached_sql)), 2)
                     self.assertEqual(candidates(uncached_sql)[0], candidates(uncached_sql)[1])
                     self.assertEqual(len(candidates(sql)), 1)
-                self.assertEqual((before_count, after_count), (before_budget, after_budget))
+                # Current shared shell adds vendor isolation and the joined
+                # authorization scope. Keep exact totals and all savings deltas.
+                self._assert_read_budget(sql, after_budget, shell_scope=True)
+                self.assertEqual((before_count, after_count), (before_budget + 2, after_budget + 2))
                 if revision.called:
                     self.assertEqual(revision.call_args.kwargs["sort_date"], sort_date)
                     self.assertEqual(revision.call_args.kwargs["sort_name"], "night")
@@ -340,7 +343,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         def measured(url, expected):
             response, sql, commits, _ = self._capture_get_metrics(url)
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(sum(s.startswith(("select", "with")) for s in sql), expected)
+            self._assert_read_budget(sql, expected)
             self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
             self.assertEqual(commits, 0)
             return response.get_json()
@@ -535,8 +538,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(after.status_code, 200)
                 self.assertEqual(after.get_json(), before.get_json())
                 self.assertEqual(after.get_json()["changed"], changed)
-                self.assertEqual(sum(s.startswith("select") for s in old_sql), budget + 1)
-                self.assertEqual(sum(s.startswith("select") for s in sql), budget)
+                self._assert_read_budget(old_sql, budget + 1)
+                self._assert_read_budget(sql, budget)
                 self.assertEqual((old_commits, commits), (0, 0))
                 self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
                 permissions.assert_any_call("neosektor.discharge.view")
@@ -600,17 +603,25 @@ class NeoSektorRoutesTest(unittest.TestCase):
             with self.subTest(can_manage_employees=allowed), patch(
                 'app.neonodes.neosektor.routes._can_manage_employees', return_value=allowed,
             ), patch(
-                'app.neonodes.neosektor.routes.staffing_service.neosektor_manage_default_area',
-                return_value='east',
+                'app.neonodes.neosektor.routes._employee_attendance_scope',
+                return_value=(None, {'ebm': [1], 'wbm': [], 'dis': []}),
             ) as resolve:
                 response = self.client.get('/neosektor/live-counts')
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(resolve.call_count, int(allowed))
                 if allowed:
                     self.assertIn(b'MANAGE EMPLOYEES</a>', response.data)
-                    self.assertIn(b'area=east', response.data)
+                    self.assertIn(b'area=ebm', response.data)
                 else:
                     self.assertNotIn(b'MANAGE EMPLOYEES</a>', response.data)
+
+    def test_grandmaster_live_counts_with_no_attendance_areas_remains_available(self):
+        self._login_approved_user(role='grandmaster')
+        with patch('app.neonodes.neosektor.routes._employee_attendance_scope',
+                   return_value=(None, {'ebm': [], 'wbm': [], 'dis': []})):
+            response = self.client.get('/neosektor/live-counts')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b'area=None', response.data)
 
     def test_live_counts_routing_uses_existing_state_request_and_revision(self):
         from app.neonodes.neosektor import routes
@@ -822,7 +833,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     self.assertEqual([link.attrs['href'] for link in menu.findall('a')],
                                      ['/neosektor', '/neosektor/live-counts', '/neosektor/settings', '/neosektor/tunnel-conductor',
                                       '/neosektor/ebm', '/neosektor/wbm', '/neosektor/driver-routing',
-                                      '/neosektor/discharge'])
+                                      '/neosektor/discharge', '/neosektor/stats'])
                     self.assertTrue(sidebar.findall(**{'data-operational-sidebar-toggle': None}))
                 if '?tv=1' in path:
                     self.assertEqual(root.one('html').attrs['id'], 'sektor-tv')
@@ -992,7 +1003,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-live-counts", response.data)
         self.assertIn(b"neosektor-count-screen-compact", response.data)
         self.assertIn(b"css/neosektor_live_counts.css", response.data)
-        self.assertIn(b"typography=20260907-gateway-v1", response.data)
+        self.assertIn(b"typography=20261006-open-zero-v1", response.data)
         self.assertNotIn(b"css/neosektor_live_counts.css", self.client.get('/neosektor').data)
         self.assertIn("font-size: clamp(1.3rem, 3.9vw, 1.9rem);", css)
         self.assertIn("font-size: clamp(1.9rem, 5.7vw, 2.95rem);", css)
@@ -4248,9 +4259,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertIn("ballmat_routing", response.get_json()["state"])
                 # WITH introduces a read-only CTE, still one SELECT round trip.
                 reads = [s for s in sql if s.startswith(("select", "with"))]
-                self.assertEqual(len(reads), select_budget)
-                self.assertEqual(sum(s.startswith(("select", "with")) for s in old_settings_sql), select_budget + 1)
-                self.assertEqual(sum(s.startswith(("select", "with")) for s in old_sort_sql), select_budget + 1)
+                self._assert_read_budget(reads, select_budget)
+                self._assert_read_budget(old_settings_sql, select_budget + 1)
+                self._assert_read_budget(old_sort_sql, select_budget + 1)
                 self.assertEqual(sum(s.startswith("with sektor_read_sort as") for s in reads), 1)
                 self.assertEqual(sum("from neosektor_operational_settings " in s for s in old_settings_sql), 2)
                 self.assertEqual(sum("from neosektor_operational_settings " in s for s in reads), 1)
@@ -4566,8 +4577,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertFalse(response.get_json()["changed"])
                 self.assertTrue(response.get_json()["refresh"]["auto_refresh_enabled"])
                 self.assertNotIn("state", response.get_json())
-                self.assertEqual(sum(s.startswith("select") for s in sql), budget)
-                self.assertEqual(sum(s.startswith("select") for s in separate_sql), budget + 1)
+                self._assert_read_budget(sql, budget)
+                self._assert_read_budget(separate_sql, budget + 1)
                 self.assertEqual(sum(s.startswith("select sort_date_operations.id as") for s in sql), 1)
                 self.assertFalse(any(s.startswith("select neosektor_wave_states.wave_name") for s in sql))
                 self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
@@ -5527,6 +5538,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_manage_employees_database_error_is_sanitized(self):
         from sqlalchemy.exc import IntegrityError
+        from types import SimpleNamespace
         self._login_approved_user(role="grandmaster")
         user = User.query.filter_by(username="sektor_grandmaster_user").one()
         user.management_level = "manager"
@@ -5536,6 +5548,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
         with patch("app.neonodes.neosektor.routes.staffing_service.save_operational_manage_attendance", side_effect=error), \
              patch("app.neonodes.neosektor.routes._employee_attendance_scope", return_value=(None, {"ebm": [1], "wbm": [], "dis": []})), \
+             patch("app.services.neostaffing_attendance_authority.node_attendance_authority", return_value=SimpleNamespace(work_area_ids=(1,))), \
              patch.object(db.session, "rollback", wraps=db.session.rollback) as rollback, \
              self.assertLogs(self.app.logger, level="ERROR") as logs:
             response = self.client.post("/neosektor/manage-employees?area=ebm", data={})
@@ -5596,7 +5609,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
             query_keys.append((normalized, repr(params)))
 
         def count_commit(_session):
-            commits[0] += 1
+            # after_commit also fires for released provisioning SAVEPOINTs.
+            # Count durable outer commits, not nested conflict-recovery scopes.
+            if not _session.in_nested_transaction():
+                commits[0] += 1
 
         event.listen(db.engine, "before_cursor_execute", capture_statement)
         event.listen(Session, "after_commit", count_commit)
@@ -5606,6 +5622,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture_statement)
             event.remove(Session, "after_commit", count_commit)
         return response, statements, commits[0], query_keys
+
+    def _assert_read_budget(self, statements, original_budget, *, shell_scope=False):
+        reads = [s for s in statements if s.startswith(('select', 'with'))]
+        # The deployed vendor-isolation gate performs exactly one extra read on
+        # every request. Do not remove/bypass it to reproduce a pre-vendor budget.
+        self.assertEqual(sum('from neoscorpion_vendor_accounts ' in s for s in reads), 1)
+        if shell_scope:
+            self.assertEqual(sum('from gateways ' in s and 'gateway_memberships' in s
+                                 and 'gateway_node_roles' in s for s in reads), 1)
+        self.assertEqual(len(reads), original_budget + 1 + int(shell_scope))
 
 
 if __name__ == "__main__":

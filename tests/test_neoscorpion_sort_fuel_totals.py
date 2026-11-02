@@ -233,11 +233,18 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
 
         statements = reads(lambda: _manual_fuel_dispatch_context(self.gateway))
         ledger_reads = [s for s in statements if "FROM neoscorpion_fueling_events" in s]
-        self.assertEqual(len(ledger_reads), 1)
-        self.assertIn("transfer_fuel_gallons", ledger_reads[0])
+        # Only the compact cycle-total projection must be reused once. Dispatch
+        # also reads finalized recency facts and immutable resource evidence;
+        # those are different, bounded contracts introduced after this test.
+        cycle_reads = [s for s in ledger_reads if 'transfer_fuel_gallons' in s
+                       and 'cycle_number' in s and 'fuel_assignment_id' not in s]
+        self.assertEqual(len(cycle_reads), 1)
+        self.assertEqual(len(ledger_reads), 3)
         small = len(reads(lambda: fuel_report_context(self.gateway)))
         for index in range(2, 12):
             mission = self.fixture._mission("UPS901", f"N49{index}UP", 25_400, index)
             self._event(self.fixture._assignment(mission, self.truck), 1, 500)
         db.session.commit()
         self.assertEqual(len(reads(lambda: fuel_report_context(self.gateway))), small)
+        larger = reads(lambda: _manual_fuel_dispatch_context(self.gateway))
+        self.assertEqual(sum('FROM neoscorpion_fueling_events' in s for s in larger), 3)

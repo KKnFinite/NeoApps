@@ -261,6 +261,8 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
                 "current_operation": True,
                 "operation_id": operation.id,
                 "revision": 6,
+                "tail_notes_revision": 0,
+                "tail_revision": "",
             },
         )
         combined_fingerprint_queries = [
@@ -342,7 +344,17 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertTrue(panel_payload["ok"])
         self.assertEqual(panel_payload["operation_id"], operation.id)
         self.assertEqual(panel_payload["revision"], 3)
-        self.assertIn('<section class="neoscorpion-panel" data-assignment-alert-threshold-minutes="30">', panel_payload["html"])
+        from html.parser import HTMLParser
+        class PanelParser(HTMLParser):
+            panels = None
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'section' and 'neoscorpion-panel' in attrs.get('class', '').split():
+                    self.panels = attrs
+        parsed = PanelParser()
+        parsed.feed(panel_payload['html'])
+        self.assertIsNotNone(parsed.panels)
+        self.assertEqual(parsed.panels['data-assignment-alert-threshold-minutes'], '30')
         self.assertNotIn("<html", panel_payload["html"])
 
         with open(

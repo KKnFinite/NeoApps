@@ -1109,9 +1109,14 @@ class AuthAccountFlowsTest(unittest.TestCase):
             )
 
         self.assertEqual(existing_login.status_code, missing_login.status_code)
-        self.assertEqual(existing_login.data, missing_login.data)
+        import re
+        # Fresh trusted CSP nonces deliberately differ; all account-existence
+        # observable response content must still be identical after that field.
+        normalize_nonce = lambda body: re.sub(rb'nonce="[^"]+"', b'nonce="NONCE"', body)
+        self.assertNotEqual(existing_login.data, missing_login.data)
+        self.assertEqual(normalize_nonce(existing_login.data), normalize_nonce(missing_login.data))
         self.assertEqual(existing_reset.status_code, missing_reset.status_code)
-        self.assertEqual(existing_reset.data, missing_reset.data)
+        self.assertEqual(normalize_nonce(existing_reset.data), normalize_nonce(missing_reset.data))
 
     def test_forwarded_client_ip_is_used_only_for_a_configured_trusted_proxy(self):
         self._configure_rate_limits(
@@ -1943,7 +1948,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertFalse(pending.findall('button'))
         self.assertNotIn('NeoBid', cards.text)
         for key in ('gateway','staffing'):
-            self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'], f'/static/images/icons/icon_{key}_small.png')
+            self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'],
+                f'/static/images/icons/neo{key}/inapp/neo{key}-inapp-128.png?v='+self.app.config['STATIC_ASSET_VERSION'])
         self.assertNotIn('portal-header-word', html)
         self.assertIn('data-drawer-nodes', html)
         # The third state now belongs to an existing launcher app, not retired NeoBid.
@@ -2022,7 +2028,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(cards.one('a').attrs['href'], '/rfd')
         self.assertEqual(cards.one('article').one(cls='portal-launch-action').text, 'PENDING REVIEW')
         for key in ('gateway', 'staffing'):
-            self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'], f'/static/images/icons/icon_{key}_small.png')
+            self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'],
+                f'/static/images/icons/neo{key}/inapp/neo{key}-inapp-128.png?v='+self.app.config['STATIC_ASSET_VERSION'])
         for retired in ('portal-install-section', 'portal-install-help', 'data-manifest-url=', 'data-install-button',
                         'Open in Safari.', 'Add to Home Screen.', 'Bid tools placeholder'):
             self.assertNotIn(retired, html)
