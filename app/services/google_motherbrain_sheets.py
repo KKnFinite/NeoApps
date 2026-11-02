@@ -345,8 +345,9 @@ def _create_gspread_client(credentials, config=None):
     return _create_gspread(credentials, GOOGLE_MOTHERBRAIN_READONLY_SCOPES, config)
 
 
-def _create_gspread_writer(credentials, config=None):
-    return _create_gspread(credentials, GOOGLE_MOTHERBRAIN_WRITE_SCOPES, config)
+def _create_gspread_writer(credentials, config=None, *, http_client=None):
+    return _create_gspread(credentials, GOOGLE_MOTHERBRAIN_WRITE_SCOPES, config,
+                           **({'http_client': http_client} if http_client is not None else {}))
 
 
 def _sheets_request_timeout(config=None):
@@ -358,23 +359,28 @@ def _sheets_request_timeout(config=None):
     return value if math.isfinite(value) and value > 0 else 5.0
 
 
-def _create_gspread(credentials, scopes, config):
+def _create_gspread(credentials, scopes, config, *, http_client=None):
     if gspread is None:
         kind = "writer" if scopes == GOOGLE_MOTHERBRAIN_WRITE_SCOPES else "reader"
         raise GoogleMotherBrainReaderError(
             f"{kind}_unavailable",
             f"The Google Sheets {kind} is unavailable.",
         )
+    client = None
     try:
         client = gspread.service_account_from_dict(
             credentials,
             scopes=scopes,
+            **({'http_client': http_client} if http_client is not None else {}),
         )
         # gspread's standard HTTPClient forwards this to session.request for
         # every API call (including open_by_key metadata). No retry client.
         client.set_timeout(_sheets_request_timeout(config))
         return client
     except Exception as exc:
+        if client is not None:
+            from app.services.google_diagnostic_transport import close_google_clients
+            close_google_clients([client])
         raise GoogleMotherBrainReaderError(
             "invalid_credentials",
             "Google service-account credentials are invalid.",

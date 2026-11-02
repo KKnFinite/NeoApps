@@ -8,6 +8,7 @@ from app.services.google_motherbrain_sheets import (
     _create_gspread, GOOGLE_MOTHERBRAIN_WRITE_SCOPES,
 )
 from app.services.neorain_google_overrides import APPROVED, MB, GoogleOverrideBlocked, cell_number
+from app.services.google_diagnostic_transport import diagnostic_http_client, close_google_clients
 
 DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.readonly'
 RACE_REASON = ('No verified Google-side flight/row/formula write fence. Sheets '
@@ -58,22 +59,39 @@ class RuntimeGoogleAdapter:
 
     def __init__(self, config):
         self.config=config
+        self._owned_clients=[]
         raw,self.credential_source=_credential_json(config)
         try:credentials=_parse_service_account_json(raw)
         except Exception:raise GoogleOverrideBlocked('Runtime Google credentials are unavailable or invalid.') from None
         self.account=credentials['client_email']
-        self.writer=_create_gspread_writer(credentials,config)
-        # Same service-account source, extra READ-ONLY Drive metadata scope solely
-        # to ask Google about this principal's effective canEdit capability.
-        self.metadata_client=_create_gspread(credentials,(*GOOGLE_MOTHERBRAIN_WRITE_SCOPES,DRIVE_METADATA_SCOPE),config)
-        self.write_scope_requested=set(GOOGLE_MOTHERBRAIN_WRITE_SCOPES).issubset(
-            set(self.writer.http_client.auth.scopes or ()))
+        try:
+            self.writer=_create_gspread_writer(credentials,config,http_client=diagnostic_http_client)
+            self._owned_clients.append(self.writer)
+            # Same account; extra READ-ONLY scope solely for effective capability.
+            self.metadata_client=_create_gspread(credentials,(*GOOGLE_MOTHERBRAIN_WRITE_SCOPES,DRIVE_METADATA_SCOPE),config,
+                                                 http_client=diagnostic_http_client)
+            self._owned_clients.append(self.metadata_client)
+            self.write_scope_requested=set(GOOGLE_MOTHERBRAIN_WRITE_SCOPES).issubset(
+                set(self.writer.http_client.auth.scopes or ()))
+        except Exception:
+            self.close()
+            raise
         self.fallback_matches=None
         import os
         raw_fallback=config.get('GOOGLE_SERVICE_ACCOUNT_JSON') or os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
         if raw_fallback:
             try:self.fallback_matches=_parse_service_account_json(raw_fallback)['client_email']==self.account
             except Exception:self.fallback_matches=False
+
+    def close(self):
+        clients, self._owned_clients = self._owned_clients, []
+        close_google_clients(clients)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_error):
+        self.close()
 
     def workbook(self, book):
         if book not in {v[0] for v in APPROVED.values()}:

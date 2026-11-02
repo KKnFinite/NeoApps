@@ -6,17 +6,20 @@ import hmac
 import logging
 import string
 import unicodedata
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from flask import current_app, has_app_context
 
 from app.services.auth_session_security import rotate_user_session_version
+from app.services.bounded_http import read_body
 
 
 MIN_PASSWORD_LENGTH = 12
 MAX_PASSWORD_LENGTH = 128
 HIBP_RANGE_API_URL = "https://api.pwnedpasswords.com/range/"
 HIBP_REQUEST_TIMEOUT_SECONDS = 3
+HIBP_MAX_RESPONSE_BYTES = 256 * 1024  # Padded SHA-1 suffix ranges, with ample headroom.
 PASSWORD_POLICY_GUIDANCE = (
     "Use 12–128 characters. Longer passphrases are recommended. "
     "Common or compromised passwords are not allowed."
@@ -140,9 +143,14 @@ def _password_is_breached(password):
         with urlopen(request, timeout=HIBP_REQUEST_TIMEOUT_SECONDS) as response:
             if getattr(response, "status", None) != 200:
                 raise ValueError("Unexpected HIBP response status.")
-            response_body = response.read().decode("ascii")
+            response_body = read_body(response, maximum=HIBP_MAX_RESPONSE_BYTES).decode("ascii")
         return _hibp_response_contains_suffix(response_body, suffix)
-    except Exception:
+    except Exception as error:
+        if isinstance(error, HTTPError):
+            try:
+                error.close()
+            except Exception:
+                pass
         # This check is advisory: local policy remains enforced during HIBP outages.
         # Keep this warning static so it never records password-derived material.
         logger.warning(
@@ -154,6 +162,7 @@ def _password_is_breached(password):
 def _hibp_response_contains_suffix(response_body, expected_suffix):
     """Return whether a valid HIBP range response includes ``expected_suffix``."""
     found_response_entry = False
+    breached = False
     for raw_line in response_body.splitlines():
         line = raw_line.strip()
         if not line:
@@ -168,11 +177,11 @@ def _hibp_response_contains_suffix(response_body, expected_suffix):
             raise ValueError("Unexpected HIBP range response.")
         found_response_entry = True
         if hmac.compare_digest(returned_suffix.upper(), expected_suffix):
-            return True
+            breached = breached or any(digit != "0" for digit in count)  # Padding has count zero.
 
     if not found_response_entry:
         raise ValueError("Unexpected empty HIBP range response.")
-    return False
+    return breached
 
 
 def _hibp_check_enabled():

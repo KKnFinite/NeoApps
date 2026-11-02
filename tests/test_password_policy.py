@@ -1,4 +1,5 @@
 import hashlib
+import io
 import unittest
 from unittest.mock import patch
 from urllib.error import URLError
@@ -17,14 +18,19 @@ class _HibpResponse:
     def __init__(self, body, status=200):
         self.body = body.encode("ascii")
         self.status = status
+        self.headers = {}
+        self.stream = io.BytesIO(self.body)
+        self.closed = False
 
-    def read(self):
-        return self.body
+    def read(self, size):
+        return self.stream.read(size)
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        self.closed = True
+        self.stream.close()
         return False
 
 

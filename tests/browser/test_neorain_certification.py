@@ -18,6 +18,7 @@ class CertificationBrowserTest(TestCase):
     def test_readonly_four_sizes(self):
         with TemporaryDirectory() as directory:
             config=type('Config',(),{'SECRET_KEY':'test','TESTING':True,
+                'SESSION_COOKIE_SECURE':False,'SECURITY_HEADERS_CSP_ALLOW_NON_PRODUCTION':True,
                 'SQLALCHEMY_DATABASE_URI':'sqlite:///'+directory.replace('\\','/')+'/cert.db',
                 'SQLALCHEMY_TRACK_MODIFICATIONS':False})
             app=create_app(config)
@@ -33,23 +34,27 @@ class CertificationBrowserTest(TestCase):
             try:
                 with patch('app.neonodes.neorain.certification_routes.RuntimeGoogleAdapter') as adapter,sync_playwright() as p:
                     adapter.return_value.diagnose.return_value={'field':'sta','status':'BLOCKED','authenticated_read_ok':True,'reason':'No Google-side race fence.'}
-                    browser=p.chromium.launch(headless=True)
-                    try:
-                        for width,height in ((1440,900),(1920,1080),(390,844),(375,568)):
-                            context=browser.new_context(viewport={'width':width,'height':height})
-                            page=context.new_page();errors=[];posts=[]
-                            page.on('pageerror',lambda error:errors.append(str(error)))
-                            base=f'http://127.0.0.1:{server.server_port}'
-                            page.goto(base+'/login');page.locator('[name="email"]').fill('cert_browser@example.test')
-                            page.locator('[name="password"]').fill('TestPassword123!');page.locator('button[type="submit"]').click()
-                            page.goto(base+'/neorain/google-certification')
-                            page.on('request',lambda request:posts.append(request.url) if request.method!='GET' else None)
-                            page.locator('[data-cert-field="sta"]').click()
-                            expect(page.locator('#cert-result')).to_contain_text('BLOCKED')
-                            self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
-                            self.assertEqual(posts,[]);self.assertEqual(errors,[])
-                            context.close()
-                    finally:browser.close()
+                    adapter.return_value.__enter__.return_value = adapter.return_value
+                    for engine in ('chromium','webkit'):
+                        browser=getattr(p,engine).launch(headless=True)
+                        try:
+                            for width,height in ((1920,900),(1920,1080),(390,844),(375,568)):
+                                context=browser.new_context(viewport={'width':width,'height':height})
+                                try:
+                                    page=context.new_page();errors=[];posts=[]
+                                    page.on('pageerror',lambda error:errors.append(str(error)))
+                                    base=f'http://127.0.0.1:{server.server_port}'
+                                    page.goto(base+'/login');page.locator('[name="email"]').fill('cert_browser@example.test')
+                                    page.locator('[name="password"]').fill('TestPassword123!');page.locator('button[type="submit"]').click()
+                                    page.wait_for_url(lambda url:'/login' not in url)
+                                    page.goto(base+'/neorain/google-certification')
+                                    page.on('request',lambda request:posts.append(request.url) if request.method!='GET' else None)
+                                    page.locator('[data-cert-field="sta"]').click()
+                                    expect(page.locator('#cert-result')).to_contain_text('BLOCKED')
+                                    self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+                                    self.assertEqual(posts,[]);self.assertEqual(errors,[])
+                                finally:context.close()
+                        finally:browser.close()
             finally:
                 server.shutdown();thread.join(timeout=5)
                 with app.app_context():db.session.remove();db.engine.dispose()

@@ -101,9 +101,14 @@ def certified_write(mission, field, values):
     adapter = current_app.config.get('NEORAIN_CERTIFIED_GOOGLE_ADAPTER')
     if adapter is None:
         from app.services.neorain_google_runtime import RuntimeGoogleAdapter, RACE_REASON
-        adapter = RuntimeGoogleAdapter(current_app.config)
-        if field not in adapter.certified_fields:
-            raise GoogleOverrideBlocked(RACE_REASON)
+        with RuntimeGoogleAdapter(current_app.config) as adapter:
+            if field not in adapter.certified_fields:
+                raise GoogleOverrideBlocked(RACE_REASON)
+            return _certified_write_with_adapter(mission, field, values, adapter)
+    return _certified_write_with_adapter(mission, field, values, adapter)
+
+
+def _certified_write_with_adapter(mission, field, values, adapter):
     if adapter is None or field not in getattr(adapter, 'certified_fields', ()):
         raise GoogleOverrideBlocked('Manual input protection, sort mapping and service-account write permission are not certified for this range.')
     book, tab, _col, _start, _end, _flight = APPROVED[field]

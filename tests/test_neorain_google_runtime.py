@@ -142,10 +142,12 @@ class DiagnosticRouteTest(unittest.TestCase):
             self.assertEqual(self.client.get('/neorain/google-certification?field=sta&url=evil').status_code,400)
             self.assertEqual(self.client.post('/neorain/google-certification').status_code,405)
             factory.return_value.diagnose.return_value={'status':'BLOCKED','field':'sta'}
+            factory.return_value.__enter__.return_value = factory.return_value
             for _ in range(2):
                 result=self.client.get('/neorain/google-certification?field=sta')
                 self.assertEqual(result.status_code,200);self.assertIn('no-store',result.headers['Cache-Control'])
             factory.assert_called_once()
+            factory.return_value.__exit__.assert_called_once()
             factory.side_effect=RuntimeError('PRIVATE-KEY-DO-NOT-RETURN')
             result=self.client.get('/neorain/google-certification?field=elmac')
             self.assertNotIn('PRIVATE-KEY',result.get_data(as_text=True))

@@ -19,8 +19,8 @@ class RevisionProbeTest(unittest.TestCase):
             item.start(); self.addCleanup(item.stop)
 
     def snapshot(self, **extra):
-        self.response.json.return_value = {'jsonrpc': '2.0', 'id': 1, 'result': {
-            'structuredContent': {'spreadsheetId': MB, **extra}}}
+        self.response.content = json.dumps({'jsonrpc': '2.0', 'id': 1, 'result': {
+            'structuredContent': {'spreadsheetId': MB, **extra}}}).encode()
 
     def test_fixed_read_only_request_and_revision_is_not_activation(self):
         self.snapshot(revisionId='snapshot-revision')
@@ -33,6 +33,7 @@ class RevisionProbeTest(unittest.TestCase):
             'spreadsheetId': MB, 'includeGridData': False, 'ranges': ['Inbound!AB4']})
         self.assertNotIn('snapshot-revision', json.dumps(result))
         self.client.http_client.request.assert_called_once()
+        self.client.http_client.session.close.assert_called_once()
 
     def test_etag_version_or_missing_revision_never_qualifies(self):
         for data in ({}, {'revisionId': ''}, {'revisionId': 12}, {'etag': '12', 'version': '12'}):
@@ -45,8 +46,9 @@ class RevisionProbeTest(unittest.TestCase):
         self.assertEqual(result['status'], 'BLOCKED')
         self.assertNotIn('PRIVATE', json.dumps(result))
         self.client.http_client.request.assert_called_once()
+        self.client.http_client.session.close.assert_called_once()
         self.client.http_client.request.side_effect = None
-        self.response.json.return_value = {'id': 1, 'result': {'isError': True, 'content': [{'text': 'PRIVATE'}]}}
+        self.response.content = json.dumps({'id': 1, 'result': {'isError': True, 'content': [{'text': 'PRIVATE'}]}}).encode()
         self.assertNotIn('PRIVATE', json.dumps(probe_revision_fence({})))
 
     def test_sse_snapshot_and_ambiguous_events(self):
@@ -57,4 +59,14 @@ class RevisionProbeTest(unittest.TestCase):
         self.assertEqual(_payload(self.response), value)
         self.assertEqual(probe_revision_fence({})['status'], 'BLOCKED')
         self.response.text *= 2
+        self.response.content = self.response.text.encode()
         with self.assertRaises(ValueError): _payload(self.response)
+
+    def test_incomplete_event_and_malformed_inner_snapshot_are_blocked(self):
+        self.response.headers = {'Content-Type': 'text/event-stream'}
+        self.response.content = b'data: {"id":1}'
+        with self.assertRaises(ValueError): _payload(self.response)
+        self.response.headers = {'Content-Type': 'application/json'}
+        self.response.content = json.dumps({'id':1,'result':{'content':[
+            {'type':'text','text':'{"spreadsheetId":"'+MB+'","revisionId":NaN}'}]}}).encode()
+        self.assertEqual(probe_revision_fence({})['status'],'BLOCKED')

@@ -23,7 +23,9 @@ def google_certification():
     if existing and monotonic()-existing[0]<30:
         payload=existing[1]
     else:
-        try:payload=RuntimeGoogleAdapter(current_app.config).diagnose(field)
+        try:
+            with RuntimeGoogleAdapter(current_app.config) as adapter:
+                payload=adapter.diagnose(field)
         except Exception:
             # Never return provider exception text: it can include tokens, URLs,
             # request bodies, raw credential parser input or private identifiers.
