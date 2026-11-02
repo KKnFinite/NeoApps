@@ -28,6 +28,6 @@
 <article class="sz-earlier"><header><strong>{{ record.tail_number_snapshot or (record.pretreat_state or record.departure_deice_event).tail_number }}</strong><span>{{ record.flight_number_snapshot or 'ORIGINAL FLIGHT NOT RECORDED' }} · {{ record.ramp_snapshot or 'LOCATION NOT RECORDED' }}</span></header>{{ gallons_entry(record) }}</article>
 {% endfor %}
 </section>
-<script src="{{ url_for('static',filename='js/neosubzero_departure.js',v='20261023-release3-v1') }}" defer></script>
+<script src="{{ url_for('static',live='20261101-poll-v1', filename='js/neosubzero_departure.js',v='20261023-release3-v1') }}" defer></script>
 <script src="{{ url_for('static',filename='js/neosubzero_evidence.js',v=STATIC_ASSET_VERSION,csrf='20261031-renewal-v1') }}" defer></script>
 {% endblock %}

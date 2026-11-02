@@ -44,7 +44,7 @@ class SpearDecisionTest(unittest.TestCase):
 
     def test_dispatch_has_only_spear_source_and_adapter_matches_exact_pair(self):
         source = Path('app/services/neoscorpion.py').read_text(encoding='utf-8')
-        template = Path('app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html').read_text(encoding='utf-8')
+        template = Path('app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html').read_text(encoding='utf-8') + Path('app/templates/neonodes/neoscorpion/_dispatch_mission_rows.html').read_text(encoding='utf-8')
         self.assertNotIn('recommend_assignment_resources', source)
         self.assertNotIn('SUGGESTED', template)
         self.assertIn('(SPEAR Recommended)', template)

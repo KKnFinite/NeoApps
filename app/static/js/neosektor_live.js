@@ -8,7 +8,7 @@
     }) => {
         const pollUrl = new URL(stateUrl, window.location.href);
         pollUrl.searchParams.set("revision", revision);
-        const response = await fetch(pollUrl, requestOptions);
+        const response = await (window.NeoLiveRevision?.fetch || fetch)(pollUrl, requestOptions);
         if (!response.ok) {
             throw new Error(errorMessage);
         }

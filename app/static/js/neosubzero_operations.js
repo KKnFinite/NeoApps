@@ -130,7 +130,7 @@
     };
     const fetchPage = async (mission = selected, saved = null) => {
         const requestEpoch = ++epoch;
-        const response = await fetch(currentUrl(mission), {cache:'no-store',signal:navigationAbort.signal});
+        const response = await (window.NeoLiveRevision?.fetch || fetch)(currentUrl(mission), {cache:'no-store',signal:navigationAbort.signal});
         if (!response.ok) throw new Error(`Unable to load current operations (${response.status}). Your draft is kept.`);
         const next = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('[data-ops-workspace]');
         if (!next) throw new Error('Session expired. Sign in in another tab before continuing; your draft is kept.');

@@ -208,7 +208,7 @@
         poll: async () => {
             const url = new URL(root.dataset.revisionUrl, window.location.origin);
             url.searchParams.set("revision", revision);
-            const response = await fetch(url, {cache: "no-store", credentials: "same-origin"});
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: "no-store", credentials: "same-origin"});
             if (!response.ok) throw new Error("NeoRain Inbound refresh failed.");
             const payload = await response.json();
             controller.setServerStatus(payload.refresh || {});

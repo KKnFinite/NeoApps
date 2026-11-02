@@ -86,7 +86,7 @@
             if (encoded && encodeURIComponent(encoded).length + url.href.length < 3500) {
                 url.searchParams.set('rows', encoded);
             }
-            const response = await fetch(url, {cache: 'no-store', credentials: 'same-origin',
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: 'no-store', credentials: 'same-origin',
                 headers: {'X-Requested-With': 'XMLHttpRequest'}});
             if (ticket !== issued) return;
             if (response.status === 428) { global.location.reload(); return; }

@@ -63,15 +63,15 @@
     };
 
     const poll = async (force = false) => {
-        const revisionResponse = await fetch(revisionUrl, {
+        const revisionResponse = await (window.NeoLiveRevision?.revision || fetch)(revisionUrl, {
             cache: "no-store", credentials: "same-origin", headers: {Accept: "application/json"},
-        });
+        }, intervalMs, operationId);
         const latest = await revisionResponse.json().catch(() => ({}));
         if (!revisionResponse.ok || latest.ok !== true) throw new Error("Fueling Board status unavailable.");
         const observed = fingerprint(latest);
         if (force !== true && observed.operationId === operationId && observed.revision === revision) return;
 
-        const panelResponse = await fetch(panelUrl, {
+        const panelResponse = await (window.NeoLiveRevision?.fetch || fetch)(panelUrl, {
             cache: "no-store", credentials: "same-origin", headers: {Accept: "application/json"},
         });
         const payload = await panelResponse.json().catch(() => ({}));

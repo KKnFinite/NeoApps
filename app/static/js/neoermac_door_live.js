@@ -486,7 +486,7 @@
         const ticket = responseOrder.beginPoll();
         const pollUrl = new URL(stateUrl, window.location.origin);
         if (currentRevision) pollUrl.searchParams.set("revision", currentRevision);
-        const response = await fetch(pollUrl, {cache: "no-store", credentials: "same-origin"});
+        const response = await (window.NeoLiveRevision?.fetch || fetch)(pollUrl, {cache: "no-store", credentials: "same-origin"});
         if (!response.ok) throw new Error("Door View refresh failed.");
         const payload = await response.json();
         if (!payload.ok) throw new Error("Door View refresh failed.");

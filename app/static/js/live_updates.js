@@ -37,6 +37,7 @@
             this.inactivityPaused = false;
             this.monitorMode = false;
             this.failures = 0;
+            this.retryAt = 0;
             this.serverStatus = options.serverStatus || {};
             this.destroyed = false;
             this.statusLabelElement = null;
@@ -107,6 +108,7 @@
             ) {
                 return Promise.resolve(false);
             }
+            if (this.retryAt > Date.now()) { this.schedule(); return Promise.resolve(false); }
             const elapsed = Date.now() - this.lastRefreshStartedAt;
             if (!options.force && this.lastRefreshStartedAt && elapsed < MINIMUM_REFRESH_INTERVAL_MS) {
                 this.clearTimer();
@@ -119,6 +121,7 @@
             this.clearTimer();
             this.running = true;
             this.lastRefreshStartedAt = Date.now();
+            if (options.force) window.NeoLiveRevision?.resume();
             return Promise.resolve()
                 .then(() => this.poll())
                 .then(() => {
@@ -128,9 +131,14 @@
                     }
                     return true;
                 })
-                .catch(() => {
+                .catch((error) => {
+                    if (error?.sessionChanged) this.renderStatus('session_changed', error.message);
+                    if (Number.isFinite(error?.retryAt)) {
+                        this.retryAt = error.retryAt;
+                        this.renderStatus("reconnecting", "Live updates cooling down - retrying automatically");
+                    }
                     this.failures += 1;
-                    if (!this.inactivityPaused && this.failures >= this.failureThreshold) {
+                    if (!error?.sessionChanged && !this.inactivityPaused && this.failures >= this.failureThreshold) {
                         this.renderStatus(
                             "reconnecting",
                             "Live updates paused - reconnecting..."
@@ -154,7 +162,8 @@
             ) {
                 return;
             }
-            this.timer = window.setTimeout(() => this.refreshNow(), this.intervalMs);
+            this.timer = window.setTimeout(() => this.refreshNow(),
+                Math.min(2147483647, Math.max(this.intervalMs, this.retryAt - Date.now())));
         }
 
         clearTimer() {

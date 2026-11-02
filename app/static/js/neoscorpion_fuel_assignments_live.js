@@ -221,7 +221,7 @@
         refreshing = true;
         const requestGeneration = stateGeneration;
         try {
-            const response = await fetch(panelUrl, {
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(panelUrl, {
                 cache: "no-store",
                 credentials: "same-origin",
                 headers: {"Accept": "application/json"},
@@ -258,11 +258,11 @@
     };
 
     const poll = async () => {
-        const response = await fetch(revisionUrl, {
+        const response = await (window.NeoLiveRevision?.revision || fetch)(revisionUrl, {
             cache: "no-store",
             credentials: "same-origin",
             headers: {"Accept": "application/json"},
-        });
+        }, pollIntervalMs, operationId);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.ok !== true) {
             throw new Error("Fuel Assignments live status is unavailable.");

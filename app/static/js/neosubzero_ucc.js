@@ -360,7 +360,7 @@
         loading = true;
         const requestEpoch = mutationEpoch;
         try {
-            const response = await fetch(window.location.href, {cache: "no-store", credentials: "same-origin"});
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(window.location.href, {cache: "no-store", credentials: "same-origin"});
             if (!response.ok) throw new Error("Unable to refresh UCC. Your displayed state may be stale.");
             const documentNext = new DOMParser().parseFromString(await response.text(), "text/html");
             const next = documentNext.querySelector("[data-subzero-ucc]");
@@ -484,7 +484,7 @@
         poll: async () => {
             const url = new URL(root.dataset.revisionUrl, window.location.origin);
             url.searchParams.set("revision", revision);
-            const response = await fetch(url, {cache: "no-store"});
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: "no-store"});
             const payload = await response.json();
             controller.setServerStatus(payload.refresh || {});
             if (!response.ok || payload.ok !== true) throw new Error(payload.error || "UCC refresh failed");

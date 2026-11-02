@@ -56,7 +56,7 @@
         const requestEpoch = ++epoch;
         const pollUrl = new URL(root.dataset.stateUrl, window.location.origin);
         pollUrl.searchParams.set("revision", currentRevision);
-        const response = await fetch(pollUrl, {
+        const response = await (window.NeoLiveRevision?.fetch || fetch)(pollUrl, {
             cache: "no-store",
             credentials: "same-origin",
             headers: {"Accept": "application/json"},

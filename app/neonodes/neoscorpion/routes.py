@@ -13,6 +13,8 @@ from app.extensions import db
 from app.models import NeoScorpionSettings, SortDateMission
 from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
+
+
 from app.services.neoscorpion_drivers import DRIVER_VIEW, DRIVER_EDIT, change_driver, driver_context, driver_roster
 from app.services.neoscorpion import (
     acknowledge_fueler_assignment_update,
@@ -105,6 +107,20 @@ from app.services.neoscorpion_spear_learning_capture import (
     capture_completed_learning_outcome,
     capture_current_sort_learning_outcomes,
 )
+
+
+@bp.after_request
+def revision_session_partition(response):
+    # A stale tab must never publish a new login's revision into its old channel.
+    # Gateway resolution is already request-cached by the protected route.
+    if response.status_code == 200 and request.endpoint in {
+        'neoscorpion.fuel_dispatch_revision', 'neoscorpion.fuel_assignments_revision',
+        'neoscorpion.fueling_board_revision', 'neoscorpion.truck_driver_revision',
+        'neoscorpion.hanzo_revision',
+    }:
+        from app.services.live_screen_refresh import live_poll_scope
+        response.headers['X-Neo-Live-Scope'] = live_poll_scope(get_current_gateway())
+    return response
 
 
 def _dispatch_tail_revision(operation_id):
@@ -308,6 +324,17 @@ def fuel_dispatch_live_panel():
     )
     operation = context["operation"]
     spear_plan = context["spear_plan"]
+    if request.args.get('operation_id') is not None and request.args['operation_id'] != str(operation.id if operation else 'none'):
+        return _json_no_store({'ok': False, 'error': 'Current sort changed. Refresh the current operation.'}, 409)
+    if request.args.get("completion_only") == "1" and request.args.get("delta") == "1":
+        from app.services.neoscorpion_dispatch_fragments import critical_fragments
+        return _json_no_store({"ok": True, "operation_id": operation.id if operation else None,
+            "revision": int(context.get("nightly_asset_revision") or 0),
+            "tail_revision": _dispatch_tail_revision(operation.id if operation else None),
+            "tail_notes_revision": notes_revision,
+            **critical_fragments(context, gateway, access,
+                request.headers.get('X-Neo-Dispatch-Fingerprints', request.args.get('fingerprints', '')),
+                settings_view=user_can(SETTINGS_VIEW_PERMISSION))})
     return _json_no_store(
         {
             "ok": True,

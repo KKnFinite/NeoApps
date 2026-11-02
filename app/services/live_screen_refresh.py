@@ -228,3 +228,18 @@ def _interval_label(interval_ms):
     seconds = interval_ms / 1000
     rendered = str(int(seconds)) if seconds.is_integer() else f"{seconds:g}"
     return f"{rendered} seconds"
+
+
+def live_poll_scope(gateway=None):
+    """Opaque browser-session/user/gateway partition; never an authorization grant."""
+    import hashlib
+    import hmac
+    from flask import session
+    from flask_login import current_user
+    from app.services.csrf import csrf_token, CSRF_SESSION_NONCE_KEY
+    if not current_user.is_authenticated:
+        return ''
+    csrf_token()  # Ensure the existing session nonce, without exposing it.
+    identity = '|'.join(map(str, (current_user.id, getattr(current_user, 'auth_session_version', 0),
+        session.get(CSRF_SESSION_NONCE_KEY, ''), getattr(gateway, 'id', ''), current_user.role)))
+    return hmac.new(str(current_app.secret_key).encode(), ('live-revision-v1|'+identity).encode(), hashlib.sha256).hexdigest()

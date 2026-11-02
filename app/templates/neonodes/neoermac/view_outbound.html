@@ -45,7 +45,7 @@
         {% include "neonodes/neoermac/_view_outbound_content.html" %}
     </div>
 </section>
-<script src="{{ url_for('static', filename='js/neoermac_outbound_live.js', v='ermac-transport-1') }}"></script>
+<script src="{{ url_for('static', live='20261101-poll-v1', filename='js/neoermac_outbound_live.js', v='ermac-transport-1') }}"></script>
 <script nonce="{{ csp_nonce() }}">
 NeoErmacOutboundLive.create(document.querySelector('[data-neoermac-outbound-refresh]'), {
     refresh: {{ refresh_status|tojson }}, manifest: {{ row_manifest|tojson }}

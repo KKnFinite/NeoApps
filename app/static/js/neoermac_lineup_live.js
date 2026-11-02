@@ -111,7 +111,7 @@
             const url = new URL(root.dataset.stateUrl, global.location.origin);
             url.searchParams.set('revision', appliedRevision);
             if (commonVersion) url.searchParams.set('common', commonVersion);
-            const response = await fetch(url, {cache: 'no-store', credentials: 'same-origin'});
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: 'no-store', credentials: 'same-origin'});
             const payload = await response.json();
             if (!response.ok || !payload.ok) throw new Error('Building Lineup refresh failed.');
             if (order.latestPoll(ticket)) controller.setServerStatus(payload.refresh);

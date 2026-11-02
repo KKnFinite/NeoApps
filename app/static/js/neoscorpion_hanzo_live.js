@@ -22,11 +22,11 @@
     };
 
     const poll = async () => {
-        const response = await fetch(revisionUrl, {
+        const response = await (window.NeoLiveRevision?.revision || fetch)(revisionUrl, {
             cache: "no-store",
             credentials: "same-origin",
             headers: {"Accept": "application/json"},
-        });
+        }, intervalMs, operationId);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
             throw new Error(payload.error || "Hanzo live status is unavailable.");

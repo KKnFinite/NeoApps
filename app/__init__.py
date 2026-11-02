@@ -167,6 +167,8 @@ def register_template_helpers(app):
 
     app.jinja_env.globals["csrf_token"] = csrf_token
     app.jinja_env.globals["csrf_field"] = csrf_field
+    from app.services.live_screen_refresh import live_poll_scope
+    app.jinja_env.globals["live_poll_scope"] = live_poll_scope
 
     def format_status_label(value):
         if not value:

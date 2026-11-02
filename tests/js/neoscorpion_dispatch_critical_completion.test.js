@@ -144,7 +144,7 @@ test('an adopted autosave revision still reconciles a missed critical GET while 
     const start=source.indexOf('    const poll = async () => {');
     const end=source.indexOf('    const autosaveField = async',start);
     let reconciled=0;
-    const context={revisionUrl:'/revision',operationId:'1',revision:8,tailRevision:'tail',tailNotesRevision:0,
+    const context={revisionUrl:'/revision',pollIntervalMs:5000,operationId:'1',revision:8,tailRevision:'tail',tailNotesRevision:0,
         pendingFuelDataRefresh:true,criticalRefreshKey:'1:7:tail',window:{},root:{dataset:{}},
         fetch:async()=>({ok:true,json:async()=>({operation_id:1,revision:8,tail_revision:'tail'})}),
         observeLiveState:()=>true,hasUnsavedControls:()=>true,

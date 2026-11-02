@@ -879,6 +879,7 @@
     let pendingFuelDataRefresh = false;
     let criticalRefreshKey = "";
     let criticalRefreshBusy = false;
+    let criticalFingerprints = {};
 
     const applyCriticalCompletion = (nextPanel) => {
         const scrollState = typeof dispatchScroll === 'undefined' ? null
@@ -1227,9 +1228,12 @@
         try {
             const criticalUrl = new URL(panelUrl, window.location.href);
             criticalUrl.searchParams.set("completion_only", "1");
-            const response = await fetch(criticalUrl, {
+            criticalUrl.searchParams.set("delta", "1");
+            criticalUrl.searchParams.set("operation_id", operationId);
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(criticalUrl, {
                 cache: "no-store", credentials: "same-origin",
-                headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+                headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest",
+                    "X-Neo-Dispatch-Fingerprints": JSON.stringify(criticalFingerprints)},
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true || !payload.html
@@ -1243,6 +1247,7 @@
             applyCriticalCompletion(nextPanel);
             stateGeneration += 1;
             criticalRefreshKey = key;
+            criticalFingerprints = payload.fingerprints || {};
             return true;
         } catch (error) {
             const status = root.querySelector("[data-spear-fleet-status]");
@@ -1268,7 +1273,7 @@
         reloading = true;
         const requestGeneration = stateGeneration;
         try {
-            const response = await fetch(panelUrl, {
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(panelUrl, {
                 cache: "no-store",
                 credentials: "same-origin",
                 headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
@@ -1322,6 +1327,7 @@
             updateTopOffAlerts(root);
             applyMissionSearch(root);
             adoptFingerprint(payload);
+            criticalFingerprints = {};
             root.dataset.spearPlanToken = payload.spear_plan_token || "";
             root.dataset.spearAutomaticReference = payload.spear_automatic_reference || "";
             root.dataset.spearAutomationEnabled = payload.spear_automation_enabled ? "true" : "false";
@@ -1361,11 +1367,11 @@
     };
 
     const poll = async () => {
-        const response = await fetch(revisionUrl, {
+        const response = await (window.NeoLiveRevision?.revision || fetch)(revisionUrl, {
             cache: "no-store",
             credentials: "same-origin",
             headers: {"Accept": "application/json"},
-        });
+        }, pollIntervalMs, operationId);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
             throw new Error("Fuel Dispatch live status is unavailable.");

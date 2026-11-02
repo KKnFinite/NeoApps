@@ -164,7 +164,7 @@
         poll: async () => {
             const url = new URL(root.dataset.revisionUrl, window.location.origin);
             url.searchParams.set("revision", revision);
-            const response = await fetch(url, {cache: "no-store"});
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: "no-store"});
             const payload = await response.json();
             controller.setServerStatus(payload.refresh || {});
             // Keep observing an unapplied revision while a draft/focus blocks reload.
