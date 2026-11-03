@@ -309,14 +309,17 @@ def _apply_owned_timestamp(
         mission, GOOGLE_RAIN_SOURCE, replace_neorain_owned=replace_neorain_owned,
     ):
         return "protected"
-    # Explicit Neo presence was checked in _apply_row. Imported/displayed values
-    # alone do not acquire permanent Neo authority over this Rain field.
+    # These Rain projections use explicit override presence, checked in _apply_row,
+    # rather than legacy source labels. Reset must resume upstream updates even
+    # when its saved snapshot has an UNKNOWN source. Block-Out's native exception
+    # is handled above; do not extend it to the load fields.
     from app.services.neorain_overrides import FIELDS
     covered = any(timestamp_attr == attrs[0] for direction, attrs in FIELDS.values() if direction == 'departure')
     if covered:
-        if current_timestamp != incoming_utc or current_source != GOOGLE_RAIN_SOURCE:
+        next_source = GOOGLE_RAIN_SOURCE if incoming_utc is not None else "unknown"
+        if current_timestamp != incoming_utc or current_source != next_source:
             setattr(mission, timestamp_attr, incoming_utc)
-            setattr(mission, source_attr, GOOGLE_RAIN_SOURCE if incoming_utc is not None else 'unknown')
+            setattr(mission, source_attr, next_source)
             return 'changed'
         return 'unchanged'
     rain_owned = _rain_handoff_owned_source(

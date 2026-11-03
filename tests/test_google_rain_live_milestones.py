@@ -355,7 +355,7 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertEqual(mission.departure_status, "departed")
         self.assertEqual(mission.actual_block_out_source, "manual")
 
-    def test_native_and_unattributed_milestones_are_protected(self):
+    def test_native_block_out_and_unattributed_load_projections_have_distinct_authority(self):
         native_time = datetime(2026, 8, 11, 7, 0)
         mission = self._mission("UPS0910", "LAX", status="crew_load_complete")
         mission.elmac_completed_at_utc = native_time
@@ -378,8 +378,12 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         )
 
         self.assertEqual(mission.elmac_completed_at_utc, native_time)
-        self.assertEqual(mission.ramp_load_completed_at_utc, native_time)
-        self.assertEqual(mission.crew_load_completed_at_utc, native_time)
+        # Load source labels do not create an explicit operator override. The
+        # supported editor/clear/reset contracts are covered by load-authority tests.
+        self.assertEqual(mission.ramp_load_completed_at_utc, datetime(2026, 8, 11, 7, 30))
+        self.assertEqual(mission.ramp_load_completed_source, GOOGLE_RAIN_SOURCE)
+        self.assertIsNone(mission.crew_load_completed_at_utc)
+        self.assertEqual(mission.crew_load_completed_source, "unknown")
         self.assertEqual(mission.actual_block_out_datetime_utc, native_time)
         self.assertEqual(mission.actual_block_out_source, "manual")
         self.assertTrue(result["results"][0]["warnings"])
