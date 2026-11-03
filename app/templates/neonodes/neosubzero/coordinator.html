@@ -7,7 +7,10 @@
     {% include "neonodes/neosubzero/_nav.html" %}
     {% if can_edit %}{{ application_context_form(application_context, 'coordinator') }}{% endif %}
 
-    <button class="neosubzero-script-toggle" type="button" data-subzero-script-toggle aria-expanded="false">AIR-TO-GROUND SCRIPT</button>
+    <div class="neosubzero-coordinator-tools">
+        <button class="neosubzero-script-toggle" type="button" data-subzero-script-toggle aria-expanded="false">AIR-TO-GROUND SCRIPT</button>
+        {% if user_can('neosubzero.ucc.view') or user_can('neosubzero.ucc.edit') %}<a class="neosubzero-mobile-ramp-link" href="{{ url_for('neosubzero.ucc', view='ramp', ramp=selected_ramp) }}">RAMP VIEW</a>{% endif %}
+    </div>
     <section class="neosubzero-radio-script" data-subzero-script-panel hidden>
         <p data-subzero-script-output>Select a Cleared departure-deice mission.</p>
     </section>

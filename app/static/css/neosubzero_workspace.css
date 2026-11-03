@@ -52,3 +52,37 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
 @media (min-width:901px) and (max-width:1250px) {
     .blueprint-neosubzero .neosubzero-deice-form { grid-template-columns:1fr; }
 }
+
+/* Mobile DUCC is a lens on the existing desktop diagram, not a second board. */
+.ucc-mobile-controls,.neosubzero-mobile-ramp-link { display:none; }
+.neosubzero-coordinator-tools { display:contents; }
+@media (max-width:900px) {
+    .neosubzero-ucc .ucc-mobile-controls { display:grid; gap:6px; margin:0 0 8px; }
+    .ucc-mobile-modes { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+    .ucc-mobile-ramp-selector { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; }
+    .ucc-mobile-controls button,.ucc-back-coordinator,.neosubzero-mobile-ramp-link {
+        box-sizing:border-box; min-width:0; min-height:34px; border:1px solid #456c86;
+        border-radius:3px; background:#102839; color:#c2eaff; padding:6px;
+        font:inherit; font-size:.7rem; line-height:1.2; text-align:center; text-decoration:none;
+    }
+    .ucc-mobile-controls button[aria-pressed="true"] { border-color:#97d8ff; background:#18374c; color:#fff; }
+    .ucc-mobile-controls button:focus-visible,.ucc-back-coordinator:focus-visible,.neosubzero-mobile-ramp-link:focus-visible { outline:2px solid #97d8ff; outline-offset:1px; }
+    .neosubzero-ucc[data-ucc-mobile-view="staffing"] :is(.ucc-mobile-ramp-selector,.ucc-back-coordinator) { display:none; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] :is(.neosubzero-weather,.neosubzero-ucc-upcoming,.neosubzero-ucc-fluid,.ucc-team,.ucc-board-heading,.neosubzero-ucc-tv-enter) { display:none; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp-board { grid-template-columns:minmax(0,1fr); }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp { display:none; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp.is-mobile-selected { display:block; grid-column:auto; grid-row:auto; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-treatment-layout { display:block; padding:6px 0 0; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp-diagram { display:flex; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-parking-grid { grid-template-rows:repeat(4,minmax(88px,auto)); }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-remote-parking { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-plane strong { font-size:.76rem; overflow-wrap:normal; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-plane > span:not(.ucc-plane-icon),
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-plane small { font-size:.63rem; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] :is(.ucc-queue-exception,.ucc-location-exceptions) { display:block; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-aircraft-panel:not([hidden]) { display:block; font-size:.75rem; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-aircraft-panel h2 { overflow-wrap:anywhere; }
+    .neosubzero-coordinator-tools { display:flex; align-items:stretch; gap:5px; margin-bottom:6px; }
+    .neosubzero-coordinator-tools .neosubzero-script-toggle { flex:1; min-width:0; margin:0; font-size:.7rem; }
+    .neosubzero-mobile-ramp-link { display:flex; align-items:center; justify-content:center; }
+}

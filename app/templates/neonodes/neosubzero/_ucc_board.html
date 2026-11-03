@@ -50,7 +50,7 @@
 {% if unlocated_aircraft %}<section class="ucc-location-exceptions ucc-desktop-label" data-ucc-location-exceptions><strong>LOCATION REVIEW</strong><p>Canonical parking does not identify a physical ramp. Records are preserved; confirm the actual location in MotherBrain.</p>{% for row in unlocated_aircraft %}<div>{{ aircraft(row, 'location review: ' ~ row.parking) }}<span>{{ row.parking }} · {{ row.parking_source }}</span></div>{% endfor %}</section>{% endif %}
 <div class="ucc-ramp-board {{ 'is-no-sort' if not operation else '' }}">
 {% for ramp in ramps %}
-<section class="ucc-ramp" data-ucc-ramp="{{ ramp.name }}">
+<section class="ucc-ramp{{ ' is-mobile-selected' if ramp.name == mobile_ramp|default('Alpha') else '' }}" data-ucc-ramp="{{ ramp.name }}">
     <header><h2>{{ ramp.name|upper }}</h2><span class="ucc-desktop-label">{{ ramp.aircraft|length }} aircraft</span></header>
     <div class="ucc-treatment-layout">
         {{ physical_ramp(ramp) }}

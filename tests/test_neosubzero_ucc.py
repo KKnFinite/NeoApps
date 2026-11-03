@@ -530,10 +530,10 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIn(b"28\xc2\xb0F", page.data)
         self.assertIn(b"CHANCE SNOW", page.data)
         self.assertNotIn(b"FUTURE_HOURLY_SHOULD_NOT_RENDER", page.data)
-        self.assertIn(b"data-weather-motion-toggle", page.data)
-        self.assertIn(b'data-weather-theme="snow"', page.data)
-        self.assertIn(b'data-weather-motion="on"', page.data)
-        self.assertIn(b"/neosubzero/ucc/weather-preference", page.data)
+        self.assertNotIn(b"data-weather-motion-toggle", page.data)
+        self.assertNotIn(b'neosubzero-weather-ambient', page.data)
+        self.assertNotIn(b'data-weather-theme=', page.data)
+        self.assertNotIn(b"/neosubzero/ucc/weather-preference", page.data)
         self.assertIn(b"THROAT", page.data)
         self.assertIn(b'data-ucc-deice-pad', page.data)
         self.assertNotIn(b"WAITING QUEUE", page.data)
@@ -590,14 +590,16 @@ class NeoSubZeroUccTest(unittest.TestCase):
             10,
         )
 
-    def test_weather_motion_preference_and_reduced_motion_contract(self):
+    def test_ambient_presentation_is_paused_with_restoration_support_preserved(self):
         root = Path(__file__).resolve().parents[1]
         javascript = (root / "app/static/js/neosubzero_ucc.js").read_text(encoding="utf-8")
         stylesheet = stylesheet_source()
         self.assertNotIn("weatherMotionStorage", javascript)
-        self.assertIn("weather.dataset.weatherPreferenceUrl", javascript)
-        self.assertIn("JSON.stringify({enabled: requested})", javascript)
-        self.assertIn('window.matchMedia?.("(prefers-reduced-motion: reduce)")', javascript)
+        self.assertNotIn("weather.dataset.weatherPreferenceUrl", javascript)
+        self.assertNotIn("applyWeatherMotion", javascript)
+        template = (root / "app/templates/neonodes/neosubzero/ucc.html").read_text(encoding="utf-8")
+        self.assertNotIn('data-weather-motion-toggle', template)
+        self.assertNotIn('class="neosubzero-weather-ambient"', template)
         self.assertIn("@media (prefers-reduced-motion: reduce)", stylesheet)
         self.assertIn("animation:none !important", stylesheet)
 
@@ -640,7 +642,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
             return_value=self._weather_context_fixture(),
         ):
             default_page = first_client.get("/neosubzero/ucc")
-        self.assertIn(b'data-weather-motion="on"', default_page.data)
+        self.assertNotIn(b'data-weather-motion=', default_page.data)
         self.assertEqual(NeoSubZeroUserPreference.query.count(), 0)
         saved = first_client.post(
             "/neosubzero/ucc/weather-preference",
@@ -659,7 +661,8 @@ class NeoSubZeroUccTest(unittest.TestCase):
             return_value=self._weather_context_fixture(),
         ):
             persisted_page = first_client.get("/neosubzero/ucc")
-        self.assertIn(b'data-weather-motion="off"', persisted_page.data)
+        self.assertNotIn(b'data-weather-motion=', persisted_page.data)
+        self.assertFalse(NeoSubZeroUserPreference.query.filter_by(user_id=watcher.id).one().weather_animations_enabled)
 
     def test_frost_why_preference_defaults_on_and_persists_per_user(self):
         watcher = self._user("frost_why_watcher", "watcher")

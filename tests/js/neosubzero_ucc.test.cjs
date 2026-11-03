@@ -14,7 +14,7 @@ function fixture() {
     const board = {replaceWith(){ replacements++; }};
     const upcoming = {replaceWith(){ forecastReplacements++; }};
     const root = {
-        dataset:{revision:'r1',revisionUrl:'/neosubzero/ucc/revision',refreshIntervalMs:'1000',refreshStatus:'{}'}, classList,
+        dataset:{revision:'r1',revisionUrl:'/neosubzero/ucc/revision',refreshIntervalMs:'1000',refreshStatus:'{}',uccMobileView:'ramp',uccSelectedRamp:'Bravo'}, classList,
         querySelectorAll(){return [];},
         querySelector(selector){
             return {'[data-ucc-feedback]':feedback,'[data-ucc-current-link]':currentLink,'[data-ucc-live-board]':board,'[data-ucc-upcoming]':upcoming}[selector] || null;
@@ -26,6 +26,7 @@ function fixture() {
     const window = {
         matchMedia(){return {matches:false};},localStorage:{getItem(){return null;}},
         setTimeout,clearTimeout,scrollY:100,scrollTo(){},location:{origin:'http://fixture.test',href:'http://fixture.test/neosubzero/ucc'},
+        history:{replaceState(_state,_title,url){window.location.href=String(url);}},
         NeoLiveUpdates:{create(options){poll=options.poll;return {setServerStatus(){}};}},
     };
     const calls=[];
@@ -47,11 +48,14 @@ function fixture() {
 
 (async () => {
     const f = fixture();
+    assert.equal(f.root.dataset.uccMobileView,'ramp');
+    assert.equal(f.root.dataset.uccSelectedRamp,'Bravo');
     f.root.dataset.dirty='true';
     await f.poll();
     assert.equal(f.root.dataset.revision,'r1','A deferred draft must not consume the server revision');
     assert.equal(f.replacements,0,'Staffing forms are not replaced during a draft');
     assert.equal(f.forecastReplacements,1,'Relocated forecasts stay live without replacing focused staffing forms');
+    assert.equal(f.root.dataset.uccSelectedRamp,'Bravo','Critical live refresh preserves selected ramp during drafts');
     delete f.root.dataset.dirty;
     await f.poll();
     assert.equal(f.root.dataset.revision,'r2','The same pending revision reconciles after editing');
@@ -67,5 +71,13 @@ function fixture() {
     assert.match(f.feedback.textContent,/Staffing changed/);
     assert.equal(f.currentLink.hidden,false,'Conflict recovery is visible');
     assert.equal(f.calls.filter(c=>c.options.method==='POST').length,1,'No silent conflict retries');
+    f.root.dataset.dirty='true';
+    const requests=f.calls.length;
+    f.listeners.click({target:{closest(selector){return selector==='[data-ucc-ramp-select]'?{dataset:{uccRampSelect:'Echo'}}:null;}}});
+    assert.equal(f.root.dataset.uccSelectedRamp,'Echo');
+    assert.equal(f.calls.length,requests,'Changing the ramp does not submit or fetch operational data');
+    f.listeners.click({target:{closest(selector){return selector==='[data-ucc-view]'?{dataset:{uccView:'staffing'}}:null;}}});
+    assert.equal(f.root.dataset.uccMobileView,'staffing');
+    assert.equal(f.root.dataset.dirty,'true','Changing the lens preserves an unsaved staffing draft');
     console.log('UCC live revision, draft preservation, visible conflict, and no-retry checks passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

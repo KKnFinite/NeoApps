@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}UCC | NeoSub-Zero{% endblock %}
 {% block content %}
-<section class="neosubzero-shell neosubzero-ucc" data-subzero-ucc data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.ucc_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
+{% set mobile_view = 'ramp' if request.args.get('view') == 'ramp' else 'staffing' %}
+{% set ramp_names = ramps|map(attribute='name')|list %}
+{% set requested_ramp = request.args.get('ramp', 'Alpha')|title %}
+{% set mobile_ramp = requested_ramp if requested_ramp in ramp_names else ramp_names|first|default('Alpha') %}
+<section class="neosubzero-shell neosubzero-ucc" data-subzero-ucc data-ucc-mobile-view="{{ mobile_view }}" data-ucc-selected-ramp="{{ mobile_ramp }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.ucc_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
     <header class="neosubzero-head">
         <div><p>NEOSUB-ZERO</p><h1>UCC</h1></div>
         <div class="neosubzero-ucc-head-actions">
@@ -12,18 +16,25 @@
     </header>
     {% include "neonodes/neosubzero/_nav.html" %}
 
-    <section class="neosubzero-weather theme-{{ weather.theme }}" aria-labelledby="subzero-weather-heading"
-             data-weather-theme="{{ weather.theme }}"
-             data-weather-motion="{{ 'on' if weather_animations_enabled else 'off' }}"
-             data-weather-preference-url="{{ url_for('neosubzero.ucc_weather_preference') }}"
+    <div class="ucc-mobile-controls">
+        <div class="ucc-mobile-modes" role="group" aria-label="Mobile DUCC view">
+            <button type="button" data-ucc-view="staffing" aria-pressed="{{ 'true' if mobile_view == 'staffing' else 'false' }}">STAFFING</button>
+            <button type="button" data-ucc-view="ramp" aria-pressed="{{ 'true' if mobile_view == 'ramp' else 'false' }}">RAMP VIEW</button>
+        </div>
+        <nav class="ucc-mobile-ramp-selector" aria-label="DUCC ramp selector">
+            {% for ramp in ramps %}<button type="button" data-ucc-ramp-select="{{ ramp.name }}" aria-pressed="{{ 'true' if ramp.name == mobile_ramp else 'false' }}">{{ ramp.name|upper }}</button>{% endfor %}
+        </nav>
+        {% if user_can('neosubzero.coordinator.view') or user_can('neosubzero.coordinator.edit') %}<a class="ucc-back-coordinator" data-ucc-back-coordinator href="{{ url_for('neosubzero.coordinator', ramp=mobile_ramp) }}">BACK TO COORDINATOR</a>{% endif %}
+    </div>
+
+    {# Ambient presentation is paused; observations, services and saved preferences remain intact. #}
+    <section class="neosubzero-weather" aria-labelledby="subzero-weather-heading"
              data-frost-explanations="{{ 'on' if frost_risk_explanations_enabled else 'off' }}"
              data-frost-explanation-preference-url="{{ url_for('neosubzero.ucc_frost_explanation_preference') }}">
-        <div class="neosubzero-weather-ambient" aria-hidden="true"><i></i><i></i></div>
         <header>
             <div><p>KRFD · ACTUAL OBSERVATION</p><h2 id="subzero-weather-heading">WEATHER OPERATIONS</h2></div>
             <div class="neosubzero-weather-source">
                 <span>{{ weather.sources.current }} · {{ weather.current.observed_at_label }}{% if weather.current.stale %} · STALE{% endif %}</span>
-                <button type="button" data-weather-motion-toggle aria-pressed="{{ 'true' if weather_animations_enabled else 'false' }}">AMBIENT MOTION {{ 'ON' if weather_animations_enabled else 'OFF' }}</button>
                 <button type="button" data-frost-explanation-toggle aria-pressed="{{ 'true' if frost_risk_explanations_enabled else 'false' }}">WHY {{ 'ON' if frost_risk_explanations_enabled else 'OFF' }}</button>
             </div>
         </header>
@@ -96,5 +107,5 @@
     </dialog>
     {% endif %}
 </section>
-<script src="{{ url_for('static', live='20261101-poll-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261022-pad-geometry-v3') }}" defer></script>
+<script src="{{ url_for('static', live='20261101-poll-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261103-mobile-ramp-v1') }}" defer></script>
 {% endblock %}

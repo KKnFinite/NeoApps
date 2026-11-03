@@ -1,0 +1,122 @@
+[
+  {
+    "width": 320,
+    "overflow": 0,
+    "labels": [
+      {
+        "text": "N440UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N441UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N442UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N9994UP",
+        "width": 53.640625,
+        "scroll": 54,
+        "font": 12.16
+      }
+    ]
+  },
+  {
+    "width": 375,
+    "overflow": 0,
+    "labels": [
+      {
+        "text": "N440UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N441UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N442UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N9994UP",
+        "width": 53.640625,
+        "scroll": 54,
+        "font": 12.16
+      }
+    ]
+  },
+  {
+    "width": 390,
+    "overflow": 0,
+    "labels": [
+      {
+        "text": "N440UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N441UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N442UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N9994UP",
+        "width": 53.640625,
+        "scroll": 54,
+        "font": 12.16
+      }
+    ]
+  },
+  {
+    "width": 430,
+    "overflow": 0,
+    "labels": [
+      {
+        "text": "N440UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N441UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N442UP",
+        "width": 46.09375,
+        "scroll": 46,
+        "font": 12.16
+      },
+      {
+        "text": "N9994UP",
+        "width": 53.640625,
+        "scroll": 54,
+        "font": 12.16
+      }
+    ]
+  }
+]

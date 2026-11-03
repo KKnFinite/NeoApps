@@ -8,49 +8,37 @@
     const dialog = root.querySelector("[data-ucc-move-dialog]");
     let pendingForm = null;
 
-    const weather = root.querySelector(".neosubzero-weather[data-weather-preference-url]");
-    const weatherMotionToggle = weather?.querySelector("[data-weather-motion-toggle]");
-    const deviceReducesMotion = Boolean(
-        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    );
-    const applyWeatherMotion = (enabled) => {
-        if (!weather || !weatherMotionToggle) return;
-        weather.dataset.weatherMotion = enabled ? "on" : "off";
-        weather.dataset.weatherReducedMotion = deviceReducesMotion ? "true" : "false";
-        weatherMotionToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
-        weatherMotionToggle.textContent = `AMBIENT MOTION ${enabled ? "ON" : "OFF"}${
-            enabled && deviceReducesMotion ? " · DEVICE REDUCED" : ""
-        }`;
-    };
-    let weatherMotionEnabled = weather?.dataset.weatherMotion !== "off";
-    applyWeatherMotion(weatherMotionEnabled);
-    weatherMotionToggle?.addEventListener("click", async () => {
-        const previous = weatherMotionEnabled;
-        const requested = !previous;
-        weatherMotionToggle.disabled = true;
-        delete weather.dataset.weatherMotionError;
-        weatherMotionToggle.removeAttribute("title");
-        applyWeatherMotion(requested);
-        try {
-            const response = await fetch(weather.dataset.weatherPreferenceUrl, {
-                method: "POST",
-                credentials: "same-origin",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({enabled: requested}),
-            });
-            const payload = await response.json();
-            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Save failed");
-            weatherMotionEnabled = payload.enabled === true;
-            applyWeatherMotion(weatherMotionEnabled);
-        } catch (_error) {
-            weatherMotionEnabled = previous;
-            applyWeatherMotion(previous);
-            weather.dataset.weatherMotionError = "true";
-            weatherMotionToggle.title = "Weather animation preference could not be saved.";
-        } finally {
-            weatherMotionToggle.disabled = false;
+    const weather = root.querySelector(".neosubzero-weather");
+
+    // Presentation only: the same server-rendered physical ramp is used at
+    // every width. Nothing here predicts movement or changes operational data.
+    let mobileView = root.dataset.uccMobileView === "ramp" ? "ramp" : "staffing";
+    let mobileRamp = root.dataset.uccSelectedRamp || "Alpha";
+    const applyMobileView = ({persist = false} = {}) => {
+        const ramps = Array.from(root.querySelectorAll("[data-ucc-ramp]"));
+        if (ramps.length && !ramps.some((ramp) => ramp.dataset.uccRamp === mobileRamp)) {
+            mobileRamp = ramps[0].dataset.uccRamp;
         }
-    });
+        root.dataset.uccMobileView = mobileView;
+        root.dataset.uccSelectedRamp = mobileRamp;
+        ramps.forEach((ramp) => ramp.classList.toggle("is-mobile-selected", ramp.dataset.uccRamp === mobileRamp));
+        root.querySelectorAll("[data-ucc-view]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.uccView === mobileView)));
+        root.querySelectorAll("[data-ucc-ramp-select]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.uccRampSelect === mobileRamp)));
+        const back = root.querySelector("[data-ucc-back-coordinator]");
+        if (back) {
+            const url = new URL(back.href, window.location.origin);
+            url.searchParams.set("ramp", mobileRamp);
+            back.href = url.href;
+        }
+        if (persist) {
+            // Only view selectors enter the URL; no personnel, payload or draft.
+            const url = new URL(window.location.href);
+            url.searchParams.set("view", mobileView);
+            url.searchParams.set("ramp", mobileRamp);
+            window.history.replaceState(null, "", url);
+        }
+    };
+    applyMobileView();
 
     const frostExplanationToggle = weather?.querySelector("[data-frost-explanation-toggle]");
     const applyFrostExplanations = (enabled) => {
@@ -339,6 +327,17 @@
         root.querySelectorAll("[data-ucc-aircraft]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.uccAircraft === selectedMission)));
     };
     root.addEventListener("click", (event) => {
+        const view = event.target.closest("[data-ucc-view]");
+        const ramp = event.target.closest("[data-ucc-ramp-select]");
+        if (view || ramp) {
+            if (view) mobileView = view.dataset.uccView;
+            if (ramp) {
+                mobileRamp = ramp.dataset.uccRampSelect;
+                showAircraft("");
+            }
+            applyMobileView({persist: true});
+            return;
+        }
         const plane = event.target.closest("[data-ucc-aircraft]");
         if (plane) showAircraft(plane.dataset.uccAircraft);
         if (event.target.closest("[data-ucc-info-close]")) showAircraft("");
@@ -416,12 +415,11 @@
                 Array.from(newWeather.children).filter((el) => !el.matches("header, .neosubzero-weather-ambient")).forEach((el) => weather.append(el));
                 const hourly = weather.querySelector(".neosubzero-weather-current-sort");
                 if (hourly) hourly.scrollLeft = hourlyScroll;
-                weather.className = newWeather.className;
-                weather.dataset.weatherTheme = newWeather.dataset.weatherTheme;
                 weather.querySelectorAll(".is-frost-reason").forEach((element) => { element.hidden = !frostExplanationsEnabled; });
                 const stamp = weather.querySelector(".neosubzero-weather-source > span");
                 if (stamp) stamp.textContent = newWeather.querySelector(".neosubzero-weather-source > span").textContent;
             }
+            applyMobileView();
             showAircraft(selectedMission);
             if (!deferred) root.dataset.revision = next.dataset.revision;
             window.scrollTo({top: scroll, behavior: "instant"});
