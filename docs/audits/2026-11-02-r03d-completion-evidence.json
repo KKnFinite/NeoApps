@@ -1,0 +1,248 @@
+{
+  "starting_sha": "867dd06e50d7d23e16943f6c4d91b4802f03dfc2",
+  "application_files_changed": [],
+  "new_application_defects": 0,
+  "scope": "Eight original Dispatcher completion cases only; original-ID inventory is not full application coverage.",
+  "case_register": [
+    {
+      "id": "tests.test_neoscorpion_dispatcher_complete.NeoScorpionDispatcherCompleteTest::test_active_fueler_filter_and_read_only_dispatch_render",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_dispatcher_complete.py:474",
+            "tests\\test_neoscorpion_dispatcher_complete.py:645",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated downstream expectation; no application defect established",
+      "correction": "Canonical test fixture and meaningful current-contract assertions only",
+      "verified_contract_and_assertions": "Canonical completed and OFF-only assignments reach active filtering; GET commits zero times and preserves event, inventory, work and revision. Read-only controls absent; Fueler direct completion POST denied in the isolation case.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatcher_complete.NeoScorpionDispatcherCompleteTest::test_existing_event_and_fuel_on_board_block_normal_complete",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_dispatcher_complete.py:401",
+            "tests\\test_neoscorpion_dispatcher_complete.py:645",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated downstream expectation; no application defect established",
+      "correction": "Canonical test fixture and meaningful current-contract assertions only",
+      "verified_contract_and_assertions": "Real completion creates the immutable event; repeated completion is a no-op with one unchanged event/deduction. Explicit truckless FOB is a separate canonical action; normal COMPLETE remains rejected afterward.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatcher_complete.NeoScorpionDispatcherCompleteTest::test_moved_completion_validates_truck_tf_and_gallons",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_dispatcher_complete.py:204",
+            "tests\\test_neoscorpion_dispatcher_complete.py:645",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated downstream expectation; no application defect established",
+      "correction": "Canonical test fixture and meaningful current-contract assertions only",
+      "verified_contract_and_assertions": "Missing truck rejects physical OFF. Missing/zero T/F rejects Fueler handoff and Dispatcher completion. Canonical roster removal after OFF blocks posting. Unknown/insufficient legacy stock preserves balance, becomes unverified with discrepancy audit, and never fabricates inventory.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatcher_complete.NeoScorpionDispatcherCompleteTest::test_moved_success_creates_event_deducts_once_and_preserves_master",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_dispatcher_complete.py:281",
+            "tests\\test_neoscorpion_dispatcher_complete.py:645",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated downstream expectation; no application defect established",
+      "correction": "Canonical test fixture and meaningful current-contract assertions only",
+      "verified_contract_and_assertions": "Canonical assignment, ON, readings, OFF and handoff yield one correctly owned immutable event, 400 to 325 gallons once, unchanged Master Schedule and mission identity. Repeated completion is no-op and later Fueler rewrite rejects.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatcher_complete.NeoScorpionDispatcherCompleteTest::test_not_moved_completes_without_event_or_truck_deduction",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_dispatcher_complete.py:343",
+            "tests\\test_neoscorpion_dispatcher_complete.py:645",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated downstream expectation; no application defect established",
+      "correction": "Canonical test fixture and meaningful current-contract assertions only",
+      "verified_contract_and_assertions": "Truckless explicit FOB uses fresh Actual/APU with no fabricated ON/OFF/event. A separate physical ON/OFF/handoff with equal measured fuel and zero T/F completes not_moved with no event or deduction.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatcher_complete.NeoScorpionDispatcherCompleteTest::test_stale_cross_sort_attempt_and_route_permission_do_not_complete",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_dispatcher_complete.py:451",
+            "tests\\test_neoscorpion_dispatcher_complete.py:645",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated downstream expectation; no application defect established",
+      "correction": "Canonical test fixture and meaningful current-contract assertions only",
+      "verified_contract_and_assertions": "Valid physical work reaches sort, gateway, Fueler-versus-Dispatcher, CSRF and optimistic Work ID guards. AJAX stale Work returns 409 using its actual X-Requested-With contract; failures leave completion, event, inventory and revision untouched.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatcher_complete.NeoScorpionDispatcherCompleteTest::test_topping_off_and_oos_nightly_trucks_may_complete_moved_work",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_dispatcher_complete.py:376",
+            "tests\\test_neoscorpion_dispatcher_complete.py:645",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated downstream expectation; no application defect established",
+      "correction": "Canonical test fixture and meaningful current-contract assertions only",
+      "verified_contract_and_assertions": "Truck is available for canonical ON/OFF and handoff. Subsequent authorized TOP OFF SENT/OOS changes preserve released physical work; Dispatcher completion posts 10 gallons once and retains asset status.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatcher_complete.NeoScorpionDispatcherCompleteTest::test_unknown_movement_blocks_completion",
+      "original_failure": [
+        {
+          "message": "AssertionError: \"cannot yet be determined\" does not match \"Fueler COMPLETE ASSIGNMENT required before dispatcher COMPLETE.\"",
+          "locations": [
+            "tests\\test_neoscorpion_dispatcher_complete.py:192"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated downstream expectation; no application defect established",
+      "correction": "Canonical test fixture and meaningful current-contract assertions only",
+      "verified_contract_and_assertions": "Real ON/OFF plus Remaining-only evidence classifies UNKNOWN. Absent Actual rejects handoff/completion before publication; no submitted receipt, completion, event, inventory or revision change. UNKNOWN is not promoted to physical movement.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    }
+  ],
+  "test_groups": {
+    "before": {
+      "methods": 11,
+      "status_counts": {
+        "failed": 8,
+        "passed": 3
+      },
+      "failure_events": 8,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "8 failed, 3 passed, 4022 warnings in 7.09s"
+    },
+    "final-module": {
+      "methods": 12,
+      "status_counts": {
+        "passed": 12
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "12 passed, 5139 warnings, 6 subtests passed in 9.30s"
+    },
+    "focused": {
+      "methods": 162,
+      "status_counts": {
+        "passed": 162
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "162 passed, 65404 warnings, 45 subtests passed in 120.39s (0:02:00)"
+    },
+    "postgres": {
+      "methods": 45,
+      "status_counts": {
+        "passed": 45
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "45 passed, 20385 warnings, 11 subtests passed in 142.64s (0:02:22)"
+    },
+    "postgres-final": {
+      "methods": 11,
+      "status_counts": {
+        "passed": 11
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "11 passed, 4843 warnings in 32.13s"
+    },
+    "browser": {
+      "methods": 3,
+      "status_counts": {
+        "passed": 3
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "3 passed, 3356 warnings in 149.38s (0:02:29)"
+    },
+    "original-register": {
+      "methods": 367,
+      "status_counts": {
+        "passed": 56,
+        "failed": 311
+      },
+      "failure_events": 600,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "600 failed, 88 passed, 134595 warnings, 356 subtests passed in 250.63s (0:04:10)"
+    }
+  },
+  "javascript_summary": [
+    "\u2139 tests 18",
+    "\u2139 suites 0",
+    "\u2139 pass 18",
+    "\u2139 fail 0",
+    "\u2139 cancelled 0",
+    "\u2139 skipped 0",
+    "\u2139 todo 0",
+    "\u2139 duration_ms 120.8446"
+  ],
+  "prior_r03c_counts": {
+    "passed": 48,
+    "failed": 319
+  },
+  "original_inventory_counts": {
+    "passed": 56,
+    "failed": 311
+  },
+  "limitations": [
+    "No production operational mutations or external provider test writes.",
+    "Inventory fault injection changes only adverse legacy balances, never physical facts or handoff authority.",
+    "Existing SQLAlchemy/datetime warnings remain visible; none were globally suppressed.",
+    "Full application suite not executed; remaining original failures are unresolved verification gaps."
+  ]
+}
