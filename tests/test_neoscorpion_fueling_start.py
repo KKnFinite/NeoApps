@@ -209,15 +209,34 @@ class FuelingStartHotfixTest(unittest.TestCase):
 
     def test_identified_truckless_fob_verification_is_preserved(self):
         self.prepare(truck=False); self.mission.planned_fuel_load = 20000; db.session.commit()
-        work = self.save(remaining_left="12", apu_running="no").fuel_work_state
-        self.assertEqual(work.on_at_utc, self.now)
+        work = self.save(**self.readings(), actual_left="10", actual_ctr="0", actual_right="10").fuel_work_state
+        self.assertIsNone(work.on_at_utc)
+        self.assertIsNone(work.manual_on_at_utc)
+        self.assertIsNone(work.confirmed_on_at_utc)
         row = self.row()
-        self.assertEqual(row["dispatch_status_key"], "fueling")
-        self.assertIn("FOB CHECK", row["fuel_status_warnings"])
+        self.assertFalse(row["fueling_on_trusted"])
+        self.assertNotEqual(row["dispatch_status_key"], "fueling")
+        self.assertTrue(row["fuel_on_board_ready"])
+        self.login(self.dispatcher)
+        response = self.client.post('/neoscorpion/fuel-dispatch/fuel-on-board',
+            data={'assignment_id':self.assignment.id}, headers={'Accept':'application/json'})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith('/neoscorpion/fuel-dispatch'))
+        db.session.refresh(work);db.session.refresh(self.assignment)
+        self.assertEqual(self.row()["dispatch_status_key"], "fob")
+        self.assertEqual(self.assignment.fuel_on_board_by_user_id, self.dispatcher.id)
+        self.assertEqual(work.physical_transfer_gallons, 0)
+        self.assertIsNone(work.off_at_utc)
+        self.assertIsNone(work.manual_on_at_utc)
+        self.assertIsNone(work.on_at_utc)
+        self.assertEqual(service.NeoScorpionFuelingEvent.query.count(), 0)
 
     def test_legacy_legitimate_and_completed_timestamps_are_not_rewritten(self):
         self.prepare()
         work = self.save(**self.readings()).fuel_work_state
+        # Controlled historical fixture: a recorded ON plus contemporaneous
+        # complete readings and resource provenance, not a save-created ON.
+        work.on_at_utc = self.now
         for tank in work.tank_states:
             tank.created_at = self.now-timedelta(seconds=1)
         work.confirmed_on_at_utc = None; db.session.commit()
@@ -225,11 +244,19 @@ class FuelingStartHotfixTest(unittest.TestCase):
         self.save(now=self.now+timedelta(minutes=10), remaining_left="13")
         self.assertEqual(work.on_at_utc, self.now)
         self.assertIsNone(work.confirmed_on_at_utc)
-        work.off_at_utc = self.now+timedelta(minutes=20)
-        self.assignment.completed_at_utc = self.now+timedelta(minutes=25)
-        self.assignment.review_status = "complete"; self.mission.fuel_status="complete"; db.session.commit()
+        # New physical/completion facts must use current canonical APIs.
+        self.confirm(now=self.now+timedelta(minutes=11))
+        self.save(now=self.now+timedelta(minutes=12), actual_left="13", actual_ctr="0",
+                  actual_right="0", transfer_fuel_gallons="0", apu_running="no")
+        service.mark_fueler_off(self.gateway,self.fueler,self.assignment.id,
+            now_utc=self.now+timedelta(minutes=20));db.session.commit()
+        from tests.neoscorpion_handoff_fixture import submit_fueler_only
+        submit_fueler_only(self.gateway,self.assignment.id,now_utc=self.now+timedelta(minutes=24));db.session.commit()
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+            now_utc=self.now+timedelta(minutes=25));db.session.commit()
         self.assertEqual(self.row(self.now+timedelta(minutes=30))["dispatch_status_key"], "complete")
         self.assertEqual(work.on_at_utc, self.now)
+        self.assertEqual(work.manual_on_at_utc, self.now+timedelta(minutes=11))
         self.assertEqual(work.off_at_utc, self.now+timedelta(minutes=20))
 
     def test_travel_math_unknown_location_and_nondefault_setting(self):
@@ -287,11 +314,25 @@ class FuelingStartHotfixTest(unittest.TestCase):
             tank.created_at = self.now-timedelta(seconds=1)
         work.tank_states[0].remaining_lbs = None; db.session.commit()
         row = self.row(self.now+timedelta(minutes=60))
-        self.assertEqual(row["dispatch_status_key"], "fueling")
+        self.assertEqual(row["dispatch_status_key"], "assigned")
         self.assertFalse(row["fueling_on_trusted"])
+        self.assertFalse(row["fueling_on_active"])
+        self.assertIsNone(row["fueling_effective_on_utc"])
         self.save(now=self.now+timedelta(minutes=60), **self.readings())
-        self.assertEqual(work.on_at_utc,self.now)
+        self.assertIsNone(work.on_at_utc)
         self.assertIsNone(work.confirmed_on_at_utc)
         row = self.row(self.now+timedelta(minutes=60))
         finish = service.active_fueler_off(row,self.operation,service.assignment_planning_settings(self.gateway,settings=self.settings))
-        self.assertLess(finish,self.now+timedelta(minutes=60))
+        self.assertIsNone(finish)
+        confirmed=self.now+timedelta(minutes=61)
+        self.confirm(now=confirmed)
+        self.save(now=self.now+timedelta(minutes=70), remaining_left="13")
+        self.assertEqual(work.manual_on_at_utc,confirmed)
+        self.assertIsNone(work.on_at_utc)
+        self.assertIsNone(work.confirmed_on_at_utc)
+        row=self.row(self.now+timedelta(minutes=70))
+        self.assertTrue(row["fueling_on_trusted"])
+        self.assertEqual(row["fueling_effective_on_utc"],confirmed)
+        self.assertEqual(row["dispatch_status_key"],"fueling")
+        self.assertIsNone(work.off_at_utc)
+        self.assertIsNone(self.assignment.completed_at_utc)

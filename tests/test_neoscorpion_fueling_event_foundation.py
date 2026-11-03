@@ -276,16 +276,38 @@ class NeoScorpionFuelingEventFoundationTest(unittest.TestCase):
         self.assertEqual(fuel._fuel_rollback_values(event),frozen)
 
     def test_fuel_on_board_without_transfer_creates_no_events(self):
-        _operation, _mission, assignment = self._assignment()
-        self._save_complete(assignment)
+        operation, mission, assignment = self._assignment()
+        work = self._save_complete(assignment).fuel_work_state
         db.session.commit()
+        # The old fixture supplied only 30,000 lb against a 50,000 lb target.
+        # Preparation is neither physical movement nor sufficient verified FOB.
+        with self.assertRaisesRegex(ValueError, "Insufficient verified fuel"):
+            complete_fuel_on_board(self.gateway, self.dispatcher, assignment.id)
+        db.session.rollback()
+        self.assertIsNone(assignment.fuel_on_board_at_utc)
+        self.assertEqual(mission.fuel_status, "waiting")
+        save_fueler_entry(self.gateway, self.fueler, dict(assignment_id=str(assignment.id),
+            actual_left="20", actual_ctr="10", actual_right="20", apu_running="no"))
+        db.session.commit()
+        before = off_workflow.revision(operation)
         completed = complete_fuel_on_board(
             self.gateway,
             self.dispatcher,
             assignment.id,
         )
         db.session.commit()
-        self.assertEqual(completed.revision, 2)
+        self.assertTrue(completed.changed)
+        self.assertEqual(completed.revision, before + 1)
+        self.assertEqual(assignment.fuel_on_board_by_user_id, self.dispatcher.id)
+        self.assertEqual((assignment.review_status, mission.fuel_status), ("complete", "complete"))
+        self.assertEqual(assignment.transfer_fuel_gallons, 0)
+        self.assertEqual(work.physical_transfer_gallons, 0)
+        self.assertEqual(sum(t.actual_lbs for t in work.tank_states), mission.planned_fuel_load)
+        self.assertEqual((work.on_at_utc, work.manual_on_at_utc, work.confirmed_on_at_utc,
+                          work.off_at_utc, assignment.assigned_truck_id), (None,) * 5)
+        self.assertFalse(complete_fuel_on_board(self.gateway, self.dispatcher, assignment.id).changed)
+        db.session.commit()
+        self.assertEqual(off_workflow.revision(operation), completed.revision)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
 
     def _assignment(self):
