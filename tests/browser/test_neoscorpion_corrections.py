@@ -103,8 +103,9 @@ class FuelCorrectionBrowserTest(unittest.TestCase):
                         correction=details(4)
                         correction.locator('[name="correct_actual_left"]').fill('12')
                         correction.locator('[name="correction_reason"]').fill('Verified gauge correction.')
-                        with dispatch.expect_response(lambda r:r.request.method=='POST' and r.url.endswith('/correct-actual')) as response:
-                            correction.get_by_role('button',name='APPLY CORRECTION',exact=True).click()
+                        with dispatch.expect_navigation(wait_until='domcontentloaded'):
+                            with dispatch.expect_response(lambda r:r.request.method=='POST' and r.url.endswith('/correct-actual')) as response:
+                                correction.get_by_role('button',name='APPLY CORRECTION',exact=True).click()
                         self.assertEqual(response.value.status,302)
                         with F.app.app_context():
                             work=db.session.get(NeoScorpionFuelWorkState,wid)
@@ -114,8 +115,9 @@ class FuelCorrectionBrowserTest(unittest.TestCase):
                             self.assertEqual(audit.changed_by_user_id,did)
                         reopen=details(5)
                         reopen.locator('[name="reopen_reason"]').fill('Resume physical fueling.')
-                        with dispatch.expect_response(lambda r:r.request.method=='POST' and r.url.endswith('/reopen-off')) as response:
-                            reopen.get_by_role('button',name='REOPEN OFF',exact=True).click()
+                        with dispatch.expect_navigation(wait_until='domcontentloaded'):
+                            with dispatch.expect_response(lambda r:r.request.method=='POST' and r.url.endswith('/reopen-off')) as response:
+                                reopen.get_by_role('button',name='REOPEN OFF',exact=True).click()
                         self.assertEqual(response.value.status,302)
                         with F.app.app_context():
                             work=db.session.get(NeoScorpionFuelWorkState,wid)

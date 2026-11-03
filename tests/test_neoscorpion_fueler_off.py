@@ -24,6 +24,9 @@ from app.models import (
     SortDateTailState,
     User,
 )
+from tests import neoscorpion_off_workflow as off_workflow
+from app.services import neoscorpion as fuel
+from app.models import NeoScorpionFuelingEvent
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import mark_fueler_off, save_fueler_entry, confirm_fueler_truck_on
 from app.services.password_policy import set_user_password
@@ -113,55 +116,39 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
         )
 
     def test_incomplete_actual_and_unconfirmed_apu_block_off(self):
-        operation, _mission, assignment = self._assignment()
-        partial = save_fueler_entry(
-            self.gateway,
-            self.user,
-            self._form(
-                assignment,
-                apu_running="no",
-                remaining_left="10.0",
-                actual_left="9.0",
-            ),
-        )
-        self.assertEqual(partial.revision, 1)
+        operation,mission,assignment=self._assignment()
+        dispatcher=self._add_user('off_dispatcher','simulator');db.session.commit()
+        truck,stock=off_workflow.assign_truck(self,assignment,self.user,dispatcher)
+        saved=save_fueler_entry(self.gateway,self.user,self._form(assignment,apu_running='not_confirmed',
+            remaining_left='10',actual_left='11'),now_utc=datetime(2026,8,18,3,45))
         db.session.commit()
-
-        with self.assertRaisesRegex(ValueError, "Complete Remaining fuel before OFF"):
-            mark_fueler_off(self.gateway, self.user, assignment.id)
-        db.session.rollback()
-
-        complete_unconfirmed = save_fueler_entry(
-            self.gateway,
-            self.user,
-            self._form(
-                assignment,
-                apu_running="not_confirmed",
-                remaining_ctr="20.0",
-                actual_ctr="18.0",
-                remaining_right="30.0",
-                actual_right="27.0",
-            ),
-        )
-        self.assertEqual(complete_unconfirmed.revision, 2)
-        db.session.commit()
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "Confirm APU Running before OFF",
-        ):
-            mark_fueler_off(self.gateway, self.user, assignment.id)
-        db.session.rollback()
-        work = NeoScorpionFuelWorkState.query.filter_by(
-            fuel_assignment_id=assignment.id
-        ).one()
-        self.assertIsNone(work.off_at_utc)
-        self.assertEqual(
-            NeoScorpionSortAssetState.query.filter_by(
-                sort_date_operation_id=operation.id
-            ).one().revision,
-            2,
-        )
+        work=saved.fuel_work_state
+        off=mark_fueler_off(self.gateway,self.user,assignment.id,now_utc=datetime(2026,8,18,4))
+        db.session.commit();self.assertTrue(off.changed)
+        physical=(work.id,work.visit_number,work.physical_sequence_number,work.off_at_utc,work.off_by_user_id)
+        for extra,error in (({},'Save Remaining:'),
+                ({'remaining_ctr':'20','remaining_right':'20'},'Save Actual:'),
+                ({'actual_ctr':'20','actual_right':'20','transfer_fuel_gallons':'150'},
+                 'Confirm APU status and valid source/allowance')):
+            if extra:
+                save_fueler_entry(self.gateway,self.user,dict(assignment_id=assignment.id,**extra),
+                    now_utc=datetime(2026,8,18,4,5));db.session.commit()
+            with self.assertRaisesRegex(ValueError,error):off_workflow.submit(self,assignment,self.user)
+            db.session.rollback()
+            self.assertEqual((work.id,work.visit_number,work.physical_sequence_number,work.off_at_utc,work.off_by_user_id),physical)
+            self.assertEqual(stock.current_gallons,1000)
+            self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        save_fueler_entry(self.gateway,self.user,dict(assignment_id=assignment.id,apu_running='no'),
+            now_utc=datetime(2026,8,18,4,10));db.session.commit()
+        self.assertTrue(off_workflow.submit(self,assignment,self.user).changed)
+        self.assertEqual((work.id,work.visit_number,work.physical_sequence_number,work.off_at_utc,work.off_by_user_id),physical)
+        self.assertIsNone(assignment.completed_at_utc)
+        before=off_workflow.revision(operation)
+        self.assertFalse(mark_fueler_off(self.gateway,self.user,assignment.id,
+            now_utc=datetime(2026,8,18,4,20)).changed)
+        self.assertEqual(off_workflow.revision(operation),before)
+        self.assertEqual(stock.current_gallons,1000)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
     def test_physical_off_does_not_require_final_tf_and_repeat_is_noop(self):
         operation, _mission, assignment = self._assignment()

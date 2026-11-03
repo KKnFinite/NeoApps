@@ -21,6 +21,9 @@ from app.models import (
     SortDateTailState,
     User,
 )
+from tests import neoscorpion_off_workflow as off_workflow
+from app.services import neoscorpion as fuel
+from app.models import NeoScorpionFuelingEvent
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import (
     _hanzo_fuel_short,
@@ -378,30 +381,38 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         self.assertIsNotNone(operation.id)
 
     def test_apu_yes_without_source_blocks_off(self):
-        _operation, _mission, assignment = self._assignment()
-        saved = save_fueler_entry(
-            self.gateway,
-            self.user,
-            self._form(
-                assignment,
-                apu_running="no",
-                remaining_left="10.0",
-                remaining_ctr="20.0",
-                remaining_right="20.0",
-                actual_left="10.0",
-                actual_ctr="20.0",
-                actual_right="20.0",
-                transfer_fuel_gallons="1",
-            ),
-        )
-        saved.fuel_work_state.apu_running = True
-        saved.fuel_work_state.apu_allowance_lbs = 400
-        saved.fuel_work_state.apu_source_tank_code = None
+        operation,mission,assignment=self._assignment()
+        truck,stock=off_workflow.assign_truck(self,assignment,self.user,self.user)
+        before=off_workflow.revision(operation)
+        # APU=yes without its source is rejected at entry, atomically. The
+        # physical OFF clock is separate from final APU/data verification.
+        with self.assertRaisesRegex(ValueError,'Select a valid APU source tank'):
+            save_fueler_entry(self.gateway,self.user,self._form(assignment,apu_running='yes',
+                apu_source_tank_code='',remaining_left='10',remaining_ctr='20',remaining_right='20',
+                actual_left='11',actual_ctr='20',actual_right='20',transfer_fuel_gallons='150'))
+        db.session.rollback()
+        work=fuel.current_work(assignment,mission.assigned_tail_number)
+        self.assertIsNone(work.apu_running);self.assertIsNone(work.apu_source_tank_code)
+        self.assertEqual(off_workflow.revision(operation),before)
+        saved=save_fueler_entry(self.gateway,self.user,self._form(assignment,apu_running='not_confirmed',
+            remaining_left='10',remaining_ctr='20',remaining_right='20',actual_left='11',actual_ctr='20',
+            actual_right='20',transfer_fuel_gallons='150'),now_utc=datetime(2026,8,18,3,45))
         db.session.commit()
-
-        with self.assertRaisesRegex(ValueError, "APU source tank before OFF"):
-            mark_fueler_off(self.gateway, self.user, assignment.id)
-        self.assertIsNone(saved.fuel_work_state.off_at_utc)
+        off=mark_fueler_off(self.gateway,self.user,assignment.id,now_utc=datetime(2026,8,18,4))
+        db.session.commit()
+        self.assertTrue(off.changed);self.assertIs(off.fuel_work_state,saved.fuel_work_state)
+        with self.assertRaisesRegex(ValueError,'Confirm APU status and valid source/allowance'):
+            off_workflow.submit(self,assignment,self.user)
+        db.session.rollback()
+        save_fueler_entry(self.gateway,self.user,dict(assignment_id=assignment.id,apu_running='yes',
+            apu_source_tank_code='left'),now_utc=datetime(2026,8,18,4,5))
+        db.session.commit()
+        self.assertTrue(off_workflow.submit(self,assignment,self.user).changed)
+        self.assertEqual(work.off_at_utc,datetime(2026,8,18,4))
+        self.assertEqual(work.off_by_user_id,self.user.id)
+        self.assertEqual(work.apu_source_tank_code,'left')
+        self.assertEqual(stock.current_gallons,1000)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
     def test_blank_and_explicit_zero_render_distinctly_with_planned_column(self):
         _operation, _mission, assignment = self._assignment()
@@ -593,36 +604,28 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         self.assertFalse(_hanzo_fuel_short(None, 50000))
 
     def test_source_aware_fueler_workflow_preserves_source_through_off(self):
-        _operation, _mission, assignment = self._assignment()
-        saved = save_fueler_entry(
-            self.gateway,
-            self.user,
-            self._form(
-                assignment,
-                apu_running="yes",
-                apu_source_tank_code="ctr",
-                remaining_left="10.0",
-                remaining_ctr="20.0",
-                remaining_right="20.0",
-                actual_left="9.6",
-                actual_ctr="20.0",
-                actual_right="20.0",
-                transfer_fuel_gallons="1",
-            ),
-            now_utc=datetime(2026, 8, 18, 3, 45),
-        )
-        self.assertEqual(saved.revision, 1)
-        db.session.commit()
-
-        off = mark_fueler_off(
-            self.gateway,
-            self.user,
-            assignment.id,
-            now_utc=datetime(2026, 8, 18, 4, 0),
-        )
-        self.assertEqual(off.revision, 2)
-        db.session.commit()
-        self.assertEqual(off.fuel_work_state.apu_source_tank_code, "ctr")
+        operation,mission,assignment=self._assignment()
+        truck,stock=off_workflow.assign_truck(self,assignment,self.user,self.user)
+        before=off_workflow.revision(operation)
+        saved=save_fueler_entry(self.gateway,self.user,self._form(assignment,apu_running='yes',
+            apu_source_tank_code='ctr',remaining_left='10.0',remaining_ctr='20.0',remaining_right='20.0',
+            actual_left='9.6',actual_ctr='20.0',actual_right='20.0',transfer_fuel_gallons='1'),
+            now_utc=datetime(2026,8,18,3,45))
+        self.assertEqual(saved.revision,before+1);db.session.commit()
+        work=saved.fuel_work_state
+        identity=(work.id,work.visit_number,work.physical_sequence_number,work.physical_truck_id,work.tail_number)
+        snapshot=(work.apu_source_tank_code,work.apu_confirmed_at_utc,work.apu_allowance_lbs)
+        self.assertEqual(snapshot,('ctr',datetime(2026,8,18,3,45),400))
+        off=mark_fueler_off(self.gateway,self.user,assignment.id,now_utc=datetime(2026,8,18,4))
+        self.assertEqual(off.revision,before+2);db.session.commit();db.session.refresh(work)
+        self.assertEqual((work.id,work.visit_number,work.physical_sequence_number,work.physical_truck_id,work.tail_number),identity)
+        self.assertEqual((work.apu_source_tank_code,work.apu_confirmed_at_utc,work.apu_allowance_lbs),snapshot)
+        self.assertEqual((work.off_at_utc,work.off_by_user_id),(datetime(2026,8,18,4),self.user.id))
+        self.assertEqual(work.physical_truck_id,truck.id)
+        self.assertFalse(mark_fueler_off(self.gateway,self.user,assignment.id,
+            now_utc=datetime(2026,8,18,4,1)).changed)
+        self.assertEqual(stock.current_gallons,1000)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
     def test_apu_source_schema_contract_is_additive(self):
         self.assertIn(

@@ -1,0 +1,250 @@
+{
+  "final_browser_counts": {
+    "passed": 5
+  },
+  "starting_sha": "419f9901a2e15eb4d8bf202123ee1565e1363a54",
+  "application_files_changed": [],
+  "new_application_defects": 0,
+  "case_register": [
+    {
+      "id": "tests.test_neoscorpion_fuel_planning.NeoScorpionFuelPlanningTest::test_apu_yes_without_source_blocks_off",
+      "original_failure": [
+        {
+          "message": "AssertionError: \"APU source tank before OFF\" does not match \"Assign the truck used for positive T/F before OFF.\"",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_planning.py:402"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated final-data or revision expectation",
+      "contract_and_correction": "Missing truck/ON and fabricated APU ORM state replaced with real authenticated assignment and ON. APU=yes without source rejects entry atomically. Physical OFF is allowed with pending confirmation; submission rejects the precise APU source/status requirement. Valid source restores submission without changing OFF or posting events/stock.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_planning.NeoScorpionFuelPlanningTest::test_source_aware_fueler_workflow_preserves_source_through_off",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_planning.py:617",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated final-data or revision expectation",
+      "contract_and_correction": "Missing physical prerequisites and fixed revision guesses replaced with real assignment/ON and revision deltas. CTR source, confirmation time, 400-pound allowance, work/visit/sequence/truck/tail and OFF actor/time survive OFF and duplicate OFF; no event or stock deduction.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fueler_off.NeoScorpionFuelerOffTest::test_incomplete_actual_and_unconfirmed_apu_block_off",
+      "original_failure": [
+        {
+          "message": "AssertionError: \"Complete Remaining fuel before OFF\" does not match \"No physical truck is assigned. Use Dispatcher Fuel On Board verification; do not record TRUCK OFF.\"",
+          "locations": [
+            "tests\\test_neoscorpion_fueler_off.py:130"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated final-data or revision expectation",
+      "contract_and_correction": "Obsolete final-data-before-OFF expectation replaced with canonical physical OFF before complete data. Submission specifically rejects Remaining, then Actual, then APU confirmation. Valid final data submits without reopening physical OFF, posting events or deducting stock.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_event_foundation.NeoScorpionFuelingEventFoundationTest::test_existing_save_and_off_create_no_events",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fueling_event_foundation.py:252",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated final-data or revision expectation",
+      "contract_and_correction": "Unassigned OFF and direct transfer projection mutation replaced with canonical assignment/ON/readings/T/F/OFF. Save, OFF and Fueler submission each preserve zero events and 1000 stock. Dispatcher completion alone creates the correctly owned event and 150-gallon deduction once; retry preserves immutable event.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    }
+  ],
+  "test_groups": {
+    "before": {
+      "methods": 33,
+      "status_counts": {
+        "passed": 25,
+        "failed": 8
+      },
+      "failure_events": 8,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "8 failed, 25 passed, 11584 warnings, 14 subtests passed in 16.07s"
+    },
+    "four-after": {
+      "methods": 4,
+      "status_counts": {
+        "passed": 4
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "4 passed, 1576 warnings in 3.88s"
+    },
+    "scope": {
+      "methods": 6,
+      "status_counts": {
+        "passed": 6
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "6 passed, 2368 warnings in 5.36s"
+    },
+    "focused": {
+      "methods": 211,
+      "status_counts": {
+        "passed": 207,
+        "failed": 4
+      },
+      "failure_events": 4,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "4 failed, 207 passed, 83547 warnings, 65 subtests passed in 148.61s (0:02:28)"
+    },
+    "postgres": {
+      "methods": 69,
+      "status_counts": {
+        "passed": 69
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "69 passed, 30030 warnings, 11 subtests passed in 225.95s (0:03:45)"
+    },
+    "browser-off": {
+      "methods": 1,
+      "status_counts": {
+        "passed": 1
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "1 passed, 762 warnings in 33.32s"
+    },
+    "browser-regression": {
+      "methods": 4,
+      "status_counts": {
+        "failed": 1,
+        "passed": 3
+      },
+      "failure_events": 1,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "1 failed, 3 passed, 3854 warnings in 197.14s (0:03:17)"
+    },
+    "browser-correction-final": {
+      "methods": 1,
+      "status_counts": {
+        "passed": 1
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "1 passed, 878 warnings in 49.99s"
+    },
+    "original-register": {
+      "methods": 367,
+      "status_counts": {
+        "passed": 67,
+        "failed": 300
+      },
+      "failure_events": 589,
+      "error_events": 0,
+      "skipped_events": 0,
+      "summary": "589 failed, 99 passed, 135061 warnings, 356 subtests passed in 252.09s (0:04:12)"
+    }
+  },
+  "parent_after_counts": {
+    "passed": 29,
+    "failed": 4
+  },
+  "unchanged_unrelated_parent_failures": {
+    "tests.test_neoscorpion_fuel_planning.NeoScorpionFuelPlanningTest::test_hanzo_fueling_identity_timing_and_required_warning": {
+      "failures": [
+        {
+          "message": "AssertionError: '\u2014' != '02:15'\n- \u2014\n+ 02:15",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_planning.py:576"
+          ]
+        }
+      ],
+      "errors": [],
+      "skips": [],
+      "status": "failed"
+    },
+    "tests.test_neoscorpion_fueler_off.NeoScorpionFuelerOffTest::test_get_never_marks_off_and_ready_card_offers_action": {
+      "failures": [
+        {
+          "message": "AssertionError: b'>TRUCK OFF</button>'",
+          "locations": [
+            "tests\\test_neoscorpion_fueler_off.py:283"
+          ]
+        }
+      ],
+      "errors": [],
+      "skips": [],
+      "status": "failed"
+    },
+    "tests.test_neoscorpion_fueler_off.NeoScorpionFuelerOffTest::test_physical_off_does_not_require_final_tf_and_repeat_is_noop": {
+      "failures": [
+        {
+          "message": "AssertionError: b'<dt>OFF</dt>'",
+          "locations": [
+            "tests\\test_neoscorpion_fueler_off.py:213"
+          ]
+        }
+      ],
+      "errors": [],
+      "skips": [],
+      "status": "failed"
+    },
+    "tests.test_neoscorpion_fueling_event_foundation.NeoScorpionFuelingEventFoundationTest::test_fuel_on_board_without_transfer_creates_no_events": {
+      "failures": [
+        {
+          "message": "ValueError: Insufficient verified fuel for Fuel On Board.",
+          "locations": [
+            "tests\\test_neoscorpion_fueling_event_foundation.py:261",
+            "app\\services\\neoscorpion.py:3462"
+          ]
+        }
+      ],
+      "errors": [],
+      "skips": [],
+      "status": "failed"
+    }
+  },
+  "previous_repaired_group_counts": {
+    "passed": 176
+  },
+  "javascript_summary": [
+    "\u2139 tests 18",
+    "\u2139 suites 0",
+    "\u2139 pass 18",
+    "\u2139 fail 0",
+    "\u2139 cancelled 0",
+    "\u2139 skipped 0",
+    "\u2139 todo 0",
+    "\u2139 duration_ms 132.6557"
+  ],
+  "inventory_counts": {
+    "passed": 67,
+    "failed": 300
+  },
+  "limitations": [
+    "Original test IDs retained; names implying a final-data-before-OFF rule are historical names, not the current policy.",
+    "Four unrelated parent failures remain unresolved, unchanged from baseline; no broad skip or expected-failure marking.",
+    "No production operational mutations, provider test writes or historical repair.",
+    "Full application suite not executed. Remaining original failures are unresolved verification gaps."
+  ]
+}

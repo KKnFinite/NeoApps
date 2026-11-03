@@ -24,6 +24,8 @@ from app.models import (
     SortDateTailState,
     User,
 )
+from tests import neoscorpion_off_workflow as off_workflow
+from app.services import neoscorpion as fuel
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import (
     classify_fuel_movement,
@@ -242,17 +244,36 @@ class NeoScorpionFuelingEventFoundationTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
 
     def test_existing_save_and_off_create_no_events(self):
-        _operation, _mission, assignment = self._assignment()
-        saved = self._save_complete(assignment)
-        assignment.transfer_fuel_gallons = 150
+        operation,mission,assignment=self._assignment()
+        truck,stock=off_workflow.assign_truck(self,assignment,self.fueler,self.dispatcher)
+        before=off_workflow.revision(operation)
+        saved=save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=assignment.id,apu_running='no',
+            remaining_left='10',remaining_ctr='10',remaining_right='10',actual_left='11',actual_ctr='10',
+            actual_right='10',transfer_fuel_gallons='150'),now_utc=datetime(2026,8,18,3,45))
         db.session.commit()
-        self.assertEqual(saved.revision, 1)
-        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
-
-        off = mark_fueler_off(self.gateway, self.fueler, assignment.id)
-        db.session.commit()
-        self.assertEqual(off.revision, 2)
-        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
+        self.assertEqual(saved.revision,before+1)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0);self.assertEqual(stock.current_gallons,1000)
+        work=saved.fuel_work_state
+        off=mark_fueler_off(self.gateway,self.fueler,assignment.id,now_utc=datetime(2026,8,18,4))
+        db.session.commit();self.assertEqual(off.revision,before+2)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0);self.assertEqual(stock.current_gallons,1000)
+        self.assertEqual((work.off_at_utc,work.off_by_user_id),(datetime(2026,8,18,4),self.fueler.id))
+        self.assertTrue(off_workflow.submit(self,assignment,self.fueler).changed)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0);self.assertEqual(stock.current_gallons,1000)
+        self.assertIsNone(assignment.completed_at_utc)
+        result=fuel.complete_fueled_assignment(self.gateway,self.dispatcher,assignment.id,
+            now_utc=datetime(2026,8,18,4,20));db.session.commit()
+        event=NeoScorpionFuelingEvent.query.one()
+        self.assertEqual((event.sort_date_operation_id,event.fuel_assignment_id,event.fuel_work_state_id,
+            event.tail_number,event.fuel_truck_id),(operation.id,assignment.id,work.id,mission.assigned_tail_number,truck.id))
+        self.assertEqual((event.started_at_utc,event.ended_at_utc,event.transfer_fuel_gallons),
+            (work.manual_on_at_utc,work.off_at_utc,150))
+        self.assertEqual(stock.current_gallons,850)
+        frozen=fuel._fuel_rollback_values(event)
+        self.assertFalse(fuel.complete_fueled_assignment(self.gateway,self.dispatcher,assignment.id).changed)
+        db.session.commit();self.assertEqual(stock.current_gallons,850)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
+        self.assertEqual(fuel._fuel_rollback_values(event),frozen)
 
     def test_fuel_on_board_without_transfer_creates_no_events(self):
         _operation, _mission, assignment = self._assignment()
