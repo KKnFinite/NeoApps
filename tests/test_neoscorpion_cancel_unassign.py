@@ -12,6 +12,7 @@ from app.models import (
     NeoScorpionSettings, SortDateMission, SortDateParkingAssignment,
 )
 from app.services import neoscorpion as service
+from app.services.neoscorpion_assets import update_nightly_truck
 
 
 class CancelUnassignTest(unittest.TestCase):
@@ -26,6 +27,13 @@ class CancelUnassignTest(unittest.TestCase):
     _reassign_cycle = fixture.NeoScorpionUpliftDefuelTest._reassign_cycle
     _revision = fixture.NeoScorpionUpliftDefuelTest._revision
     _login = fixture.NeoScorpionUpliftDefuelTest._login
+    _on = fixture.NeoScorpionUpliftDefuelTest._on
+    _submit = fixture.NeoScorpionUpliftDefuelTest._submit
+
+    def _off_and_submit(self, assignment):
+        service.mark_fueler_off(self.gateway, self.fueler, assignment.id)
+        db.session.commit()
+        self._submit(assignment)
 
     def _completed(self):
         operation = self._operation()
@@ -95,14 +103,10 @@ class CancelUnassignTest(unittest.TestCase):
             service.autosave_dispatch_field(self.gateway, mission.id, 'inbound_fuel', '18', expected_value='12')
         db.session.rollback()
 
-        work.on_at_utc = datetime(2026,8,18,6,10)
-        work.off_at_utc = datetime(2026,8,18,6,40)
-        work.apu_running = True
-        work.apu_allowance_lbs = 100
-        for tank in work.tank_states:
-            tank.planned_lbs = 9_000
-            tank.actual_lbs = 9_000
-        mission.planned_fuel_load = 57_000
+        # Setup belongs to the fresh follow-up visit, never the completed one.
+        self._on(assignment)
+        self._save_cycle(assignment, remaining=(11,10,10), actual=(11,10,10), transfer=0)
+        service.mark_fueler_off(self.gateway, self.fueler, assignment.id)
         db.session.commit()
         result = self._cancel_defuel(assignment)
         db.session.commit()
@@ -111,7 +115,7 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual(service._fuel_rollback_values(prior_event), event_before)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 1)
         self.assertEqual(nightly.current_gallons, 450)
-        audit = NeoScorpionFuelAuditEntry.query.one()
+        audit = NeoScorpionFuelAuditEntry.query.filter_by(action='cancel_defuel').one()
         self.assertEqual(audit.action, 'cancel_defuel')
         self.assertEqual(audit.changed_by_user_id, self.dispatcher.id)
         self.assertEqual(service.fuel_dispatch_context(self.gateway)['rows'][0]['history'], [])
@@ -119,23 +123,21 @@ class CancelUnassignTest(unittest.TestCase):
     def test_defuel_cancel_blocks_only_confirmed_current_cycle_transfer(self):
         operation, mission, assignment, work, truck, nightly = self._completed()
         self._start_defuel(assignment, truck)
-        assignment.transfer_fuel_gallons = -5
+        self._on(assignment)
+        self._save_cycle(assignment, remaining=(11,10,10), actual=(10,10,10), transfer=5)
         db.session.commit()
         with self.assertRaisesRegex(ValueError, 'Fuel movement occurred'):
             self._cancel_defuel(assignment)
         db.session.rollback()
-        assignment.transfer_fuel_gallons = None
-        db.session.add(NeoScorpionFuelingEvent(
-            sort_date_operation_id=operation.id, fuel_assignment_id=assignment.id,
-            fuel_work_state_id=work.id, tail_number=work.tail_number,
-            fuel_truck_id=truck.id, sequence_number=2, event_type='defuel',
-            cycle_number=assignment.current_cycle_number, transfer_fuel_gallons=5))
+        # Persist a real completed physical defuel, then reject cancellation.
+        self._off_and_submit(assignment)
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,assignment.id)
         db.session.commit()
         with self.assertRaisesRegex(ValueError, 'Fuel movement occurred'):
             self._cancel_defuel(assignment)
         db.session.rollback()
         self.assertEqual(assignment.current_cycle_type, 'defuel')
-        self.assertEqual(NeoScorpionFuelAuditEntry.query.count(), 0)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='cancel_defuel').count(), 0)
 
     def test_uplift_displays_original_inbound_but_estimates_from_carried_fob(self):
         operation, mission, assignment, work, truck, nightly = self._completed()
@@ -258,7 +260,7 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual([service._fuel_rollback_values(t) for t in event.tank_snapshots],tank_snapshots)
         self.assertEqual(nightly.current_gallons,450)
         self.assertEqual({k:v for k,v in history.snapshot.items() if not k.startswith('_')},display)
-        audit = NeoScorpionFuelAuditEntry.query.one()
+        audit = NeoScorpionFuelAuditEntry.query.filter_by(action='cancel_uplift').one()
         self.assertEqual(audit.action,'cancel_uplift')
         self.assertEqual(audit.reason,'Dispatcher cancelled uplift before fuel movement.')
         self.assertEqual(audit.changed_by_user_id,self.dispatcher.id)
@@ -279,17 +281,20 @@ class CancelUnassignTest(unittest.TestCase):
         before = self._snapshot(assignment,mission,work)
         self._start(assignment)
         self._reassign_cycle(assignment,truck.id)
-        work.on_at_utc = datetime(2026,8,18,6,10)
-        work.apu_running = True; work.apu_allowance_lbs = 100
-        work.automatic_apu_allowance_lbs = 100; work.apu_confirmed_at_utc = work.on_at_utc
-        work.apu_source_tank_code = 'left'
+        self._on(assignment)
+        service.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=assignment.id,
+            apu_running='yes',apu_source_tank_code='left',apu_override_present='1',
+            apu_override_enabled='1',apu_override_allowance='0.1'))
         db.session.commit()
         self._cancel(assignment); db.session.commit()
         self.assertEqual(self._snapshot(assignment,mission,work),before)
         # Explicit APU burn readings in a second cancellation attempt.
         self._start(assignment); self._reassign_cycle(assignment,truck.id)
-        work.on_at_utc=datetime(2026,8,18,6,10); work.apu_running=True; work.apu_allowance_lbs=100
-        for t in work.tank_states: t.actual_lbs=t.remaining_lbs-(100 if t.tank_code=='left' else 0)
+        self._on(assignment)
+        service.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=assignment.id,
+            apu_running='yes',apu_source_tank_code='left',apu_override_present='1',
+            apu_override_enabled='1',apu_override_allowance='0.1',actual_left='10.9',
+            actual_ctr='10',actual_right='10',transfer_fuel_gallons='0'))
         db.session.commit(); self._cancel(assignment); db.session.commit()
         self.assertEqual(self._snapshot(assignment,mission,work),before)
 
@@ -301,22 +306,21 @@ class CancelUnassignTest(unittest.TestCase):
         for values, message in [({'expected_cycle':1},'cycle changed'),({'expected_tail':'N999UP'},'tail changed')]:
             with self.assertRaisesRegex(ValueError,message): self._cancel(assignment,**values)
             db.session.rollback()
-        work.apu_running=False; work.apu_allowance_lbs=0
-        work.tank_states[0].actual_lbs=12000; db.session.commit()
-        self._cancel(assignment); db.session.commit()
-        self.assertEqual(self._snapshot(assignment,mission,work),completed)
-        self._start(assignment); self._reassign_cycle(assignment,truck.id)
-        for tank in work.tank_states: tank.actual_lbs=tank.remaining_lbs+1000
+        self._save_cycle(assignment,remaining=(11,10,10),actual=(12,'',''),transfer='')
         db.session.commit()
         self._cancel(assignment); db.session.commit()
         self.assertEqual(self._snapshot(assignment,mission,work),completed)
         self._start(assignment); self._reassign_cycle(assignment,truck.id)
-        assignment.transfer_fuel_gallons=10
-        for tank in work.tank_states: tank.actual_lbs=None
+        self._save_cycle(assignment,remaining=(11,10,10),actual=(12,11,11),transfer='')
+        db.session.commit()
+        self._cancel(assignment); db.session.commit()
+        self.assertEqual(self._snapshot(assignment,mission,work),completed)
+        self._start(assignment); self._reassign_cycle(assignment,truck.id)
+        self._save_cycle(assignment,remaining=(11,10,10),actual=('','',''),transfer=10)
         db.session.commit()
         with self.assertRaisesRegex(ValueError,'Fuel movement occurred'): self._cancel(assignment)
         db.session.rollback()
-        assignment.transfer_fuel_gallons=None
+        self._save_cycle(assignment,remaining=(11,10,10),actual=('','',''),transfer='')
         history=NeoScorpionFuelCycleHistory.query.one()
         history.snapshot={k:v for k,v in history.snapshot.items() if not k.startswith('_')}
         db.session.commit()
@@ -324,7 +328,7 @@ class CancelUnassignTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'rollback state is unavailable'): self._cancel(assignment)
         db.session.rollback()
         self.assertEqual(self._revision(operation),revision)
-        self.assertEqual(NeoScorpionFuelAuditEntry.query.count(),2)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='cancel_uplift').count(),2)
         self.assertEqual(nightly.current_gallons,450)
 
     def test_unassign_before_work_and_noop_stale_request(self):
@@ -342,7 +346,7 @@ class CancelUnassignTest(unittest.TestCase):
         result=self._unassign(assignment); db.session.commit()
         self.assertFalse(result.changed)
         self.assertEqual(self._revision(operation),revision+1)
-        self.assertEqual(NeoScorpionFuelAuditEntry.query.count(),1)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='unassign_truck').count(),1)
 
     def test_unassign_after_setup_preserves_readings_and_exposes_clean_assignment(self):
         operation=self._operation(); mission,assignment=self._assignment(operation)
@@ -357,9 +361,9 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual([service._fuel_rollback_values(t) for t in work.tank_states],tanks)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
         row=service.fuel_dispatch_context(self.gateway)['rows'][0]
-        self.assertTrue(row['initial_truck_assignment_available'])
-        self.assertEqual(row['dispatch_status_key'],'fueling')
-        self.assertEqual(row['dispatch_status_detail'],'')
+        self.assertFalse(row['resource_swap_required'])
+        self.assertFalse(row['fueling_on_trusted'])
+        self.assertIsNone(work.manual_on_at_utc)
         self._login(self.fueler)
         self.assertIn(b'TRUCK UNASSIGNED',self.client.get('/neoscorpion/fueler').data)
         revision=self.client.get('/neoscorpion/fuel-assignments/revision')
@@ -370,7 +374,7 @@ class CancelUnassignTest(unittest.TestCase):
         new,new_nightly=self._truck(operation,assignment,'SETUP-2',500)
         assignment.assigned_truck_id=None; db.session.commit()
         self._assign_new(assignment,new.id)
-        self.assertIsNotNone(work.truck_segment_started_at_utc)
+        self.assertIsNone(work.truck_segment_started_at_utc)
         self.assertIsNone(assignment.transfer_fuel_gallons)
 
     def _assign_new(self,assignment,truck_id):
@@ -383,15 +387,17 @@ class CancelUnassignTest(unittest.TestCase):
     def test_moved_unassign_closes_segment_and_reassignment_does_not_recount_old_movement(self):
         operation=self._operation(); mission,assignment=self._assignment(operation)
         truck,nightly=self._truck(operation,assignment,'MOVED-1',500)
+        self._on(assignment)
         self._save_cycle(assignment,remaining=(10,10,10),actual=(11,10,10),transfer=25)
         db.session.commit(); work=NeoScorpionFuelWorkState.query.one()
         before=[(t.tank_code,t.remaining_lbs,t.actual_lbs) for t in work.tank_states]
+        self._off_and_submit(assignment)
         result=self._unassign(assignment); db.session.commit()
         self.assertEqual(result.fueling_event.transfer_fuel_gallons,25)
         self.assertEqual(result.fueling_event.fuel_truck_id,truck.id)
         self.assertEqual(nightly.current_gallons,475)
         self.assertEqual([(t.tank_code,t.remaining_lbs,t.actual_lbs) for t in work.tank_states],before)
-        self.assertIsNone(work.truck_segment_started_at_utc)
+        self.assertIsNotNone(work.truck_segment_started_at_utc)
         self.assertIsNone(assignment.transfer_fuel_gallons)
         new,new_nightly=self._truck(operation,assignment,'MOVED-2',600)
         assignment.assigned_truck_id=None; db.session.commit()
@@ -400,31 +406,36 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
         self.assertEqual(new_nightly.current_gallons,600)
         self._assign_new(assignment,new.id)
+        self._on(assignment)
         self._save_cycle(assignment,remaining=(10,10,10),actual=(12,10,10),transfer=40)
         db.session.commit()
+        self._off_and_submit(assignment)
         self._unassign(assignment); db.session.commit()
         self.assertEqual(nightly.current_gallons,475)
         self.assertEqual(new_nightly.current_gallons,560)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),2)
-        audits=NeoScorpionFuelAuditEntry.query.order_by(NeoScorpionFuelAuditEntry.id).all()
+        audits=NeoScorpionFuelAuditEntry.query.filter_by(action='unassign_truck').order_by(NeoScorpionFuelAuditEntry.id).all()
+        self.assertEqual(len(audits),3)
         self.assertTrue(all(a.action=='unassign_truck' for a in audits))
-        self.assertTrue(all(a.reason=='Dispatcher unassigned the fuel truck.' for a in audits))
+        self.assertEqual([a.reason for a in audits], [
+            'Dispatcher unassigned the fuel truck.',
+            'Dispatcher cleared the truck before physical ON; preparation preserved.',
+            'Dispatcher unassigned the fuel truck.',
+        ])
 
     def test_unknown_movement_off_and_wrong_operation_are_atomic(self):
         operation=self._operation(); mission,assignment=self._assignment(operation)
         truck,nightly=self._truck(operation,assignment,'BLOCKED-1',500)
+        self._on(assignment)
         self._save_cycle(assignment,remaining=(10,10,10),actual=(11,'',''),transfer='')
         db.session.commit(); work=NeoScorpionFuelWorkState.query.one()
         revision=self._revision(operation)
-        with self.assertRaisesRegex(ValueError,'REVIEW REQUIRED'): self._unassign(assignment)
-        db.session.rollback()
-        work.off_at_utc=datetime(2026,8,18,6,10); db.session.commit()
-        with self.assertRaisesRegex(ValueError,'REOPEN OFF'): self._unassign(assignment)
+        with self.assertRaisesRegex(ValueError,'physical TRUCK OFF'): self._unassign(assignment)
         db.session.rollback()
         self.assertEqual(assignment.assigned_truck_id,truck.id)
         self.assertEqual(nightly.current_gallons,500)
         self.assertEqual(self._revision(operation),revision)
-        self.assertEqual(NeoScorpionFuelAuditEntry.query.count(),0)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='unassign_truck').count(),0)
         other=self._operation(day=operation.sort_date.replace(day=16))
         other_mission,other_assignment=self._assignment(other,flight='UPS902')
         with self.assertRaisesRegex(ValueError,'current sort operation'):
@@ -453,7 +464,7 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual(response.status_code,200)
         self.assertTrue(response.json['ok'])
         self.assertEqual(assignment.current_cycle_number,1)
-        self.assertEqual(NeoScorpionFuelAuditEntry.query.count(),1)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='cancel_uplift').count(),1)
 
     def test_cancel_defuel_http_uses_dispatch_permission_and_cycle_guard(self):
         operation, mission, assignment, work, truck, nightly = self._completed()
@@ -475,7 +486,7 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['revision'], revision + 1)
         self.assertEqual(assignment.current_cycle_number, 1)
-        self.assertEqual(NeoScorpionFuelAuditEntry.query.one().action, 'cancel_defuel')
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='cancel_defuel').one().changed_by_user_id, self.dispatcher.id)
 
     def test_unassign_http_success_revision_and_stale_truck_rejection(self):
         operation=self._operation(); mission,assignment=self._assignment(operation)
@@ -496,11 +507,13 @@ class CancelUnassignTest(unittest.TestCase):
     def test_cancel_rejects_movement_recorded_in_an_earlier_truck_segment(self):
         operation,mission,assignment,work,truck,nightly=self._completed()
         self._start(assignment); self._reassign_cycle(assignment,truck.id)
+        self._on(assignment)
         self._save_cycle(assignment,remaining=(11,10,10),actual=(12,10,10),transfer=20)
+        self._off_and_submit(assignment)
         db.session.commit(); self._unassign(assignment); db.session.commit()
-        # Even cleared T/F and blank live Actual cannot erase a persisted event.
-        for tank in work.tank_states: tank.actual_lbs=None
-        db.session.commit(); revision=self._revision(operation)
+        # A new live projection cannot erase the exact prior visit's event.
+        self.assertIsNone(assignment.transfer_fuel_gallons)
+        revision=self._revision(operation)
         with self.assertRaisesRegex(ValueError,'Fuel movement occurred'): self._cancel(assignment)
         db.session.rollback()
         self.assertEqual(self._revision(operation),revision)
@@ -534,36 +547,41 @@ class CancelUnassignTest(unittest.TestCase):
         self._start(assignment)
         other_mission,other=self._assignment(operation,flight='UPS903',tail='N413UP')
         other_mission.assigned_tail_number=work.tail_number
-        other.confirmed_tail_number=work.tail_number
-        other_work=NeoScorpionFuelWorkState(fuel_assignment_id=other.id,tail_number=work.tail_number)
-        db.session.add(other_work); db.session.flush()
-        db.session.add(NeoScorpionFuelingEvent(sort_date_operation_id=operation.id,
-            fuel_assignment_id=other.id,fuel_work_state_id=other_work.id,tail_number=work.tail_number,
-            fuel_truck_id=truck.id,sequence_number=1,event_type='fuel',cycle_number=1,
-            started_at_utc=datetime(2026,8,18,6,30),ended_at_utc=datetime(2026,8,18,6,40),transfer_fuel_gallons=10))
+        db.session.commit()
+        service.confirm_assignment_tail(self.gateway,self.dispatcher,other.id,
+            expected_cycle=1,expected_tail=work.tail_number)
+        other_truck,_=self._truck(operation,other,'OTHER-MISSION',500)
+        service.confirm_fueler_truck_on(self.gateway,self.fueler,other.id,
+            expected_cycle=1,expected_tail=work.tail_number,expected_truck_id=other_truck.id,
+            now_utc=datetime(2026,8,18,6,30))
+        db.session.commit()
+        self._save_cycle(other,remaining=(11,10,10),actual=(12,10,10),transfer=10)
+        service.mark_fueler_off(self.gateway,self.fueler,other.id,now_utc=datetime(2026,8,18,6,40))
+        db.session.commit()
+        self._submit(other)
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,other.id)
+        db.session.commit()
         tail=NeoScorpionTailFuelState.query.filter_by(tail_number=work.tail_number).one()
-        tail.actual_fuel_lbs=77000; db.session.commit()
+        self.assertEqual(tail.actual_fuel_lbs,32000)
         revision=self._revision(operation)
         with self.assertRaisesRegex(ValueError,'another mission updated'): self._cancel(assignment)
         db.session.rollback()
-        self.assertEqual(tail.actual_fuel_lbs,77000)
+        self.assertEqual(tail.actual_fuel_lbs,32000)
         self.assertEqual(assignment.current_cycle_type,'uplift')
         self.assertEqual(self._revision(operation),revision)
-        self.assertEqual(NeoScorpionFuelAuditEntry.query.count(),0)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='cancel_uplift').count(),0)
 
     def test_unassign_unavailable_truck_resolves_its_hold_without_stranding_started_work(self):
         operation=self._operation(); mission,assignment=self._assignment(operation)
         truck,nightly=self._truck(operation,assignment,'OOS-1',500)
         self._save_cycle(assignment,remaining=(10,10,10),actual=('','',''),transfer='')
-        assignment.operational_status='hold_review'; assignment.hold_reason='Assigned truck is unavailable'
-        truck.is_out_of_service=True; nightly.status='unavailable_oos'
+        update_nightly_truck(operation,truck,status='unavailable_oos',changed_by_user=self.dispatcher)
         db.session.commit()
         self._unassign(assignment); db.session.commit()
         self.assertEqual(assignment.operational_status,'active')
         row=service.fuel_dispatch_context(self.gateway)['rows'][0]
-        self.assertTrue(row['initial_truck_assignment_available'])
-        self.assertEqual(row['dispatch_status_key'],'fueling')
-        self.assertEqual(row['dispatch_status_detail'],'')
+        self.assertFalse(row['resource_swap_required'])
+        self.assertFalse(row['fueling_on_trusted'])
         new,new_nightly=self._truck(operation,assignment,'OOS-2',500)
         assignment.assigned_truck_id=None; db.session.commit()
         self._assign_new(assignment,new.id)

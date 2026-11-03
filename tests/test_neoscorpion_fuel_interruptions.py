@@ -7,6 +7,7 @@ from sqlalchemy import inspect, text
 
 from app import create_app
 from app.extensions import db
+from tests.neoscorpion_handoff_fixture import submit_fueler_only
 from app.models import (
     GatewayMembership,
     GatewayNodeRole,
@@ -349,6 +350,8 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         db.session.commit()
 
         swap_time = datetime(2026, 8, 19, 4, 0)
+        mark_fueler_off(self.gateway,self.fueler,assignment.id,now_utc=swap_time)
+        db.session.commit()
         result = swap_assignment_truck(
             self.gateway,
             self.dispatcher,
@@ -379,6 +382,9 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         db.session.commit()
 
         swap_time = datetime(2026, 8, 19, 4, 30)
+        mark_fueler_off(self.gateway,self.fueler,assignment.id,now_utc=swap_time)
+        db.session.commit()
+        submit_fueler_only(self.gateway,assignment.id,now_utc=swap_time)
         swapped = swap_assignment_truck(
             self.gateway,
             self.dispatcher,
@@ -408,19 +414,21 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             now_utc=datetime(2026, 8, 19, 5, 30),
         )
         db.session.commit()
+        submit_fueler_only(self.gateway,assignment.id,now_utc=datetime(2026,8,19,5,35))
         completed = complete_fueled_assignment(
             self.gateway,
             self.dispatcher,
             assignment.id,
             now_utc=datetime(2026, 8, 19, 5, 45),
         )
-        self.assertFalse(completed.changed)  # Routine OFF already completed it.
+        self.assertTrue(completed.changed)  # OFF and Fueler handoff precede Dispatcher COMPLETE.
         self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(
             fuel_work_state_id=assignment.active_work_state_id).one().sequence_number,2)
         db.session.commit()
         events = NeoScorpionFuelingEvent.query.order_by(
             NeoScorpionFuelingEvent.sequence_number
         ).all()
+        self.assertEqual(len({event.fuel_work_state_id for event in events}), 2)
         self.assertEqual([event.fuel_truck_id for event in events], [old_truck.id, new_truck.id])
         self.assertEqual([event.transfer_fuel_gallons for event in events], [10, 7])
         self.assertEqual(old_nightly.current_gallons, 90)
@@ -506,18 +514,20 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             fuel_assignment_id=assignment.id, tail_number="N413UP",
         ).one()
         self.assertIsNone(new_work.physical_transfer_gallons)
-        self.assertEqual(new_work.tank_states,[])
+        self.assertEqual({t.tank_code:t.remaining_lbs for t in new_work.tank_states},
+                         {"left":12000,"ctr":10000,"right":10000})
+        self.assertTrue(all(t.actual_lbs is None for t in new_work.tank_states))
         self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(
             fuel_assignment_id=assignment.id,
         ).count(), 0)
         self.assertEqual(source_event.tail_number, "N413UP")
         self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(
-            fuel_assignment_id=assignment.id, action="confirm_tail",
+            fuel_assignment_id=assignment.id, action="confirm_tail", field_name="confirmed_tail_number",
         ).count(), 1)
         row = next(row for row in fuel_dispatch_context(self.gateway)["rows"]
                    if row["mission"].id == mission.id)
         self.assertFalse(row["tail_mismatch"])
-        self.assertIsNone(row["tail_swap_inherited_event_id"])
+        self.assertEqual(row["tail_swap_inherited_event_id"], source_event.id)
         self.assertFalse(row["fuel_on_board_ready"])
         repeated = confirm_assignment_tail(
             self.gateway, self.dispatcher, assignment.id,
@@ -534,11 +544,11 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
 
         work = self._save_work(assignment)
         db.session.commit()
-        off = mark_fueler_off(self.gateway, self.fueler, assignment.id)
-        self.assertTrue(off.changed)
-        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "No physical truck"):
+            mark_fueler_off(self.gateway, self.fueler, assignment.id)
+        db.session.rollback()
         self.assertEqual(work.tail_number, "N413UP")
-        self.assertIsNotNone(work.off_at_utc)
+        self.assertIsNone(work.off_at_utc)
         self.assertTrue(fuel_dispatch_context(self.gateway)["rows"][0]["tail_mismatch"])
 
         complete = complete_fuel_on_board(
@@ -555,7 +565,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         self.assertTrue(confirmed.changed)
         db.session.commit()
         self.assertEqual(mission.fuel_status, "complete")
-        self.assertEqual(work.off_at_utc, off.fuel_work_state.off_at_utc)
+        self.assertIsNone(work.off_at_utc)  # A truckless FOB check never manufactures physical OFF.
         self.assertFalse(fuel_dispatch_context(self.gateway)["rows"][0]["tail_mismatch"])
 
     def test_unconfirmed_tail_does_not_block_dispatch_assignment_update(self):
@@ -594,11 +604,14 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         row = next(row for row in fuel_dispatch_context(self.gateway)["rows"]
                    if row["mission"].id == mission.id)
         self.assertFalse(row["fuel_on_board_ready"])
-        self.assertIsNone(row["tail_swap_inherited_event_id"])
+        self.assertEqual(row["tail_swap_inherited_event_id"], source_event.id)
         new_work=NeoScorpionFuelWorkState.query.filter_by(
             fuel_assignment_id=assignment.id, tail_number="N413UP",
         ).one()
-        self.assertEqual(new_work.tank_states,[])
+        self.assertEqual({t.tank_code:t.remaining_lbs for t in new_work.tank_states},
+                         {"left":20000,"ctr":17000,"right":16000})
+        self.assertTrue(all(t.actual_lbs is None for t in new_work.tank_states))
+        self.assertFalse(row["neo_fuel_available"])
         self.assertIsNone(new_work.physical_transfer_gallons)
         self.assertNotEqual(source_event.fuel_assignment_id, assignment.id)
 
@@ -769,7 +782,12 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
 
     def test_generic_save_cannot_bypass_swap_and_completed_paths_are_immutable(self):
         operation, mission, assignment = self._assignment()
-        self._save_work(assignment)
+        truck, _ = self._truck(operation, "IMMUTABLE", 100)
+        assignment.assigned_truck_id = truck.id
+        db.session.commit()
+        confirm_fueler_truck_on(self.gateway,self.fueler,assignment.id,expected_cycle=1,
+            expected_tail="N412UP",expected_truck_id=truck.id)
+        self._save_work(assignment,transfer_gallons="10")
         self._select_fueler(operation, self.replacement)
         db.session.commit()
         with self.assertRaisesRegex(ValueError, "dedicated FUELER SWAP"):
@@ -783,10 +801,10 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             )
         db.session.rollback()
 
-        assignment.completed_at_utc = datetime(2026, 8, 19, 6, 0)
-        assignment.completed_by_user_id = self.dispatcher.id
-        assignment.review_status = "complete"
-        mission.fuel_status = "complete"
+        mark_fueler_off(self.gateway,self.fueler,assignment.id)
+        db.session.commit()
+        submit_fueler_only(self.gateway,assignment.id)
+        complete_fueled_assignment(self.gateway,self.dispatcher,assignment.id)
         db.session.commit()
         revision = self._revision(operation)
         with self.assertRaisesRegex(ValueError, "Completed fuel assignments"):
@@ -863,18 +881,17 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         )
         db.session.add(assignment_1038)
         db.session.flush()
-        work_1038 = NeoScorpionFuelWorkState(
-            fuel_assignment_id=assignment_1038.id,
-            tail_number="N412UP",
-            on_at_utc=datetime(2026, 8, 19, 3, 20),
-        )
-        db.session.add(work_1038)
         truck, nightly = self._truck(operation, "UPS1038", 90)
         assignment_1038.assigned_truck_id = truck.id
         self._select_fueler(operation, self.fueler)
         self._select_fueler(operation, self.replacement)
         mission_1476.assigned_tail_number = "N413UP"
         db.session.commit()
+        confirm_fueler_truck_on(self.gateway,self.replacement,assignment_1038.id,
+            expected_cycle=1,expected_tail="N412UP",expected_truck_id=truck.id,
+            now_utc=datetime(2026,8,19,3,20))
+        db.session.commit()
+        work_1038 = db.session.get(NeoScorpionFuelWorkState,assignment_1038.active_work_state_id)
 
         rows = {row["mission"].flight_number: row
                 for row in fuel_dispatch_context(self.gateway)["rows"]}

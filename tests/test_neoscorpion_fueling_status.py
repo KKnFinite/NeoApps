@@ -17,6 +17,7 @@ from app.services.neoscorpion_call_dispatch import call_dispatch_alert
 from app.services.schema_sync import sync_local_sqlite_schema
 from tests import test_neoscorpion_dispatch_planning as fixture_module
 from tests import test_neoscorpion_fuel_interruptions as interruption_fixture
+from tests.neoscorpion_handoff_fixture import submit_fueler_only
 
 
 class FuelingStatusClassificationTest(unittest.TestCase):
@@ -227,16 +228,19 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
 
     def test_remaining_then_actual_correct_estimate_and_truckless_fob_completion(self):
         self.assignment.assigned_fueler_user_id = self.fueler.id
-        self.assertEqual(self.row()["dispatch_status_key"], "assigned")
-        work = self.work(remaining=24000, actual=None)
+        self.assertEqual(self.row()["dispatch_status_key"], "ready")
+        work = service.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,
+            apu_running='no',remaining_left='24',remaining_ctr='0',remaining_right='0')).fuel_work_state
+        db.session.commit()
         self.assertFalse(self.row()["fob_likely"])
-        for tank in work.tank_states:
-            tank.remaining_lbs = 30000 if tank.tank_code == "left" else 0
-        work.on_at_utc = datetime.utcnow()
+        service.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,remaining_left='30'))
+        db.session.commit()
         row = self.row()
-        self.assertEqual(row["dispatch_status_key"], "fueling")
+        self.assertEqual(row["dispatch_status_key"], "ready")
         self.assertIn("FOB CHECK", row["fuel_status_warnings"])
-        for tank in work.tank_states: tank.actual_lbs = tank.remaining_lbs
+        service.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,
+            actual_left='30',actual_ctr='0',actual_right='0'))
+        db.session.commit()
         row = self.row()
         self.assertEqual(row["dispatch_status_key"], "fob-ready")
         self.assertIsNone(work.off_at_utc)
@@ -245,6 +249,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.assertTrue(result.changed)
         self.assertEqual(self.row()["dispatch_status_key"], "fob")
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
+        self.assertIsNone(work.manual_on_at_utc)
 
     def test_insufficient_actual_blocks_fob_and_returns_normal_workflow(self):
         self.assignment.assigned_fueler_user_id = self.fueler.id
@@ -345,6 +350,9 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.assignment.assigned_truck_id = truck.id
         db.session.commit()
         self.assertEqual(self.row()["dispatch_status_key"],"assigned")
+        service.confirm_fueler_truck_on(self.gateway,self.fueler,self.assignment.id,
+            expected_cycle=1,expected_tail=self.mission.assigned_tail_number,expected_truck_id=truck.id)
+        db.session.commit()
         service.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,
             apu_running="no",remaining_left="6",remaining_ctr="0",remaining_right="6",
             actual_left="15",actual_ctr="0",actual_right="15",transfer_fuel_gallons="2687",notes=""))
@@ -353,7 +361,8 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.assertIsNone(self.row()["call_dispatch_alert"])
         service.mark_fueler_off(self.gateway,self.fueler,self.assignment.id)
         db.session.commit()
-        self.assertEqual(self.row()["dispatch_status_key"],"complete")
+        self.assertEqual(self.row()["dispatch_status_key"],"off")
+        submit_fueler_only(self.gateway,self.assignment.id)
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id)
         db.session.commit()
         self.assertEqual(self.row()["dispatch_status_key"],"complete")
@@ -367,6 +376,9 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.assignment.assigned_fueler_user_id = self.fueler.id
         self.assignment.assigned_truck_id = truck.id
         db.session.commit()
+        service.confirm_fueler_truck_on(self.gateway,self.fueler,self.assignment.id,
+            expected_cycle=1,expected_tail=self.mission.assigned_tail_number,expected_truck_id=truck.id)
+        db.session.commit()
         service.save_fueler_entry(self.gateway, self.fueler, dict(
             assignment_id=self.assignment.id, apu_running="no",
             remaining_left="6", remaining_ctr="0", remaining_right="6",
@@ -375,6 +387,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         db.session.commit()
         service.mark_fueler_off(self.gateway, self.fueler, self.assignment.id, defer_completion=True)
         db.session.commit()
+        submit_fueler_only(self.gateway,self.assignment.id)
         return NeoScorpionSortTruck.query.filter_by(fuel_truck_id=truck.id).one()
 
     def test_off_completion_accepts_insufficient_truck_reading_without_negative_inventory(self):
@@ -417,14 +430,23 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 1)
 
     def test_legacy_unconfirmed_on_is_not_fabricated_performance_start(self):
-        self._off_physical_transfer(2687)
-        work = NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=self.assignment.id).one()
-        self.assertIsNotNone(work.on_at_utc)
-        work.confirmed_on_at_utc = None
+        truck = self.fixture._nightly_truck()
+        self.assignment.assigned_fueler_user_id = self.fueler.id
+        self.assignment.assigned_truck_id = truck.id
+        # A legitimate legacy import can contain a display time without any
+        # physical-ON receipt. It cannot stand in for the canonical ON action.
+        work = self.work(remaining=12000,actual=30000)
+        work.on_at_utc = datetime.utcnow()
         db.session.commit()
-        service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id)
+        service.mark_fueler_off(self.gateway,self.fueler,self.assignment.id)
         db.session.commit()
-        self.assertIsNone(NeoScorpionFuelingEvent.query.one().started_at_utc)
+        with self.assertRaisesRegex(ValueError,'Fueler COMPLETE ASSIGNMENT'):
+            service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id)
+        db.session.rollback()
+        self.assertIsNone(work.manual_on_at_utc)
+        self.assertIsNone(work.confirmed_on_at_utc)
+        self.assertIsNotNone(work.off_at_utc)  # The explicit operator OFF remains a fact.
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
     def test_inventory_discrepancy_completion_rolls_back_with_event_failure(self):
         selection = self._off_physical_transfer(2687)
@@ -460,6 +482,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         service.mark_fueler_off(self.gateway, self.fueler, self.assignment.id,
                                 now_utc=start+timedelta(minutes=12))
         db.session.commit()
+        submit_fueler_only(self.gateway,self.assignment.id,now_utc=start+timedelta(minutes=12))
         service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id,
                                            now_utc=start+timedelta(minutes=13))
         db.session.commit()
@@ -495,6 +518,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         service.mark_fueler_off(self.gateway, self.fueler, assignment.id,
                                 now_utc=start+timedelta(minutes=10))
         db.session.commit()
+        submit_fueler_only(self.gateway,assignment.id,now_utc=start+timedelta(minutes=10))
         service.complete_fueled_assignment(self.gateway, self.dispatcher, assignment.id,
                                            now_utc=start+timedelta(minutes=11))
         db.session.commit()
@@ -524,7 +548,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.work(remaining=30000, actual=None)
         self.login(self.dispatcher)
         html = self.client.get('/neoscorpion/fuel-dispatch/live-panel').json["html"]
-        self.assertIn("CALL DISPATCH", html); self.assertIn('data-fuel-status="assigned"', html)
+        self.assertIn("CALL DISPATCH", html); self.assertIn('data-fuel-status="ready"', html)
         self.login(self.fueler)
         self.assertEqual(self.client.post('/neoscorpion/fuel-dispatch/call-dispatch/ack', data={}).status_code, 403)
         for url in ('/neoscorpion/fueler','/neoscorpion/fueling-board','/neoscorpion/fuel-dispatch'):

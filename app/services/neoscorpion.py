@@ -3612,12 +3612,29 @@ def _cancel_follow_up_cycle(gateway, user, assignment_id, cycle_type, *, expecte
     history, index, rollback = selected
     # Tail fuel is shared canonical state. A later physical event on another
     # mission must not be overwritten with this assignment's old measurements.
-    if NeoScorpionFuelingEvent.query.filter(
+    later_event = NeoScorpionFuelingEvent.query.filter(
         NeoScorpionFuelingEvent.sort_date_operation_id == operation.id,
         NeoScorpionFuelingEvent.tail_number == tail,
         NeoScorpionFuelingEvent.fuel_assignment_id != assignment.id,
         NeoScorpionFuelingEvent.ended_at_utc >= datetime.fromisoformat(rollback["started_at"]),
-    ).with_for_update().first() is not None:
+    ).with_for_update().first()
+    # Canonical Fueler saves update shared tail measurements before an Event
+    # exists. A completed-event-only check can erase another mission's fresh
+    # Actual/Remaining/notes when restoring this cycle's old tail snapshot.
+    # The operation lock serializes these saves and cancellation; their durable
+    # entry audit provides ownership without guessing from a tail-wide value.
+    later_entry = db.session.query(NeoScorpionFuelAuditEntry.id).join(
+        NeoScorpionFuelWorkState,
+        NeoScorpionFuelWorkState.id == NeoScorpionFuelAuditEntry.fuel_work_state_id,
+    ).filter(
+        NeoScorpionFuelAuditEntry.sort_date_operation_id == operation.id,
+        NeoScorpionFuelAuditEntry.fuel_assignment_id != assignment.id,
+        NeoScorpionFuelAuditEntry.action == "segment_transfer",
+        NeoScorpionFuelAuditEntry.field_name == "fuel_entry",
+        NeoScorpionFuelAuditEntry.created_at >= datetime.fromisoformat(rollback["started_at"]),
+        NeoScorpionFuelWorkState.tail_number == tail,
+    ).first() if later_event is None else None
+    if later_event is not None or later_entry is not None:
         raise ValueError("REVIEW REQUIRED: another mission updated this tail's physical fuel state.")
     if rollback["tail"] != tail:
         raise ValueError(f"REVIEW REQUIRED: {cycle_type} rollback tail does not match the current mission.")
@@ -4600,6 +4617,7 @@ def unassign_assignment_truck(gateway, user, assignment_id, *, expected_truck_id
         if work:
             work.physical_truck_id=None
             work.physical_transfer_gallons=None
+        _clear_hold_after_explicit_resolution(gateway, operation, assignment, mission, work)
         _new_fuel_audit(operation,assignment,user,"unassign_truck","assigned_truck_id",old_truck_id,None,
             "Dispatcher cleared the truck before physical ON; preparation preserved.",fuel_work_state=work,now_utc=now_utc)
         asset_state=record_nightly_operational_change(asset_state,operation.id)
@@ -6258,7 +6276,7 @@ def _fuel_rows(
     from app.services.neoscorpion_direct_entry import project as project_direct_entry, conflict_reason as direct_conflict, history_assignment_ids
     direct_entries = {record.sort_date_mission_id:record for record in NeoScorpionDirectEntry.query.filter_by(
         sort_date_operation_id=operation.id).all()}
-    direct_history_ids = history_assignment_ids(a for a in assignments_by_mission.values()
+    direct_history_ids = history_assignment_ids(a for a in assignments.values()
         if not a.assigned_fueler_user_id and not a.assigned_truck_id and not a.active_work_state_id)
 
     rows = []

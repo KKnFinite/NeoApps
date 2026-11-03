@@ -1,0 +1,373 @@
+{
+  "starting_sha": "cb7cf261a390ebc1de90505a4fb17d06c78b6c2f",
+  "baseline_unique_tests": 83,
+  "baseline_passing": 45,
+  "baseline_failed_ids": 38,
+  "fixed_ids": [
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_cancel_defuel_http_uses_dispatch_permission_and_cycle_guard",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_cancel_rejects_movement_recorded_in_an_earlier_truck_segment",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_cancel_restores_exact_state_and_preserves_events_accounting_history",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_defuel_cancel_blocks_only_confirmed_current_cycle_transfer",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_defuel_populated_setup_restores_exact_completed_state_and_preserves_history",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_dispatch_routes_permissions_csrf_and_no_internal_metadata",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_moved_unassign_closes_segment_and_reassignment_does_not_recount_old_movement",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_on_apu_remaining_setup_and_apu_burn_do_not_block_cancellation",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_other_mission_cannot_have_new_tail_measurements_erased_by_cancellation",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_setup_readings_cancel_but_transfer_identity_and_missing_rollback_block",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_unassign_after_setup_preserves_readings_and_exposes_clean_assignment",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_unassign_unavailable_truck_resolves_its_hold_without_stranding_started_work",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_unknown_movement_off_and_wrong_operation_are_atomic",
+    "tests.test_neoscorpion_cycle_lines.CycleLinesTest::test_new_tail_measurement_is_not_inherited_from_other_mission",
+    "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_confirm_tail_does_not_fabricate_fob_from_other_mission",
+    "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_confirm_tail_preserves_work_without_inheriting_another_mission",
+    "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_generic_save_cannot_bypass_swap_and_completed_paths_are_immutable",
+    "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_moved_truck_swap_and_later_complete_create_distinct_segments",
+    "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_truck_swap_before_movement_has_no_event_or_deduction",
+    "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_unconfirmed_tail_does_not_block_fueler_off_or_completion",
+    "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_ups1476_replacement_tail_is_independent_of_ups1038_fueling",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_dispatcher_only_warning_permissions_and_live_fragments",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_inventory_discrepancy_completion_rolls_back_with_event_failure",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_legacy_unconfirmed_on_is_not_fabricated_performance_start",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_manual_on_is_event_and_performance_start_without_remaining_first",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_off_completion_accepts_insufficient_truck_reading_without_negative_inventory",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_physical_save_on_off_complete_preserves_transfer_and_inventory",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_remaining_then_actual_correct_estimate_and_truckless_fob_completion",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_repeated_physical_jobs_on_unverified_truck_keep_all_events_without_balance_fiction",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_unknown_apu_recommended_and_manual_override_change_fob_only",
+    "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_unknown_truck_inventory_does_not_block_valid_aircraft_completion",
+    "tests.test_neoscorpion_tank_fuel.NeoScorpionTankFuelTest::test_schema_bootstrap_and_database_constraints"
+  ],
+  "remaining_ids": [
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_dispatch_visual_contract_reserves_fob_slot_through_live_refresh",
+    "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_ready_assignment_alert_threshold_refresh",
+    "tests.test_neoscorpion_fueling_status.TrustedFobInheritanceTest::test_explicit_trusted_lineage_uses_apu_adjusted_fuel_and_preserves_accounting",
+    "tests.test_neoscorpion_outstanding_work.OutstandingWorkTest::test_busy_truck_preparation_is_not_original_aircraft",
+    "tests.test_neoscorpion_outstanding_work.OutstandingWorkTest::test_genuine_earlier_tail_and_same_tail_physical_visits_keep_recovery",
+    "tests.test_neoscorpion_outstanding_work.OutstandingWorkTest::test_retained_same_tail_preparation_remains_reviewable_not_original"
+  ],
+  "newly_failing_ids": [],
+  "case_register": [
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_cancel_defuel_http_uses_dispatch_permission_and_cycle_guard",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_cancel_rejects_movement_recorded_in_an_earlier_truck_segment",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_cancel_restores_exact_state_and_preserves_events_accounting_history",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_defuel_cancel_blocks_only_confirmed_current_cycle_transfer",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_defuel_populated_setup_restores_exact_completed_state_and_preserves_history",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_dispatch_routes_permissions_csrf_and_no_internal_metadata",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_dispatch_visual_contract_reserves_fob_slot_through_live_refresh",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "failed",
+      "classification": "Unresolved presentation/fixture contract",
+      "evidence": "Reproduced unchanged; markup/status assertions need their own verified contract investigation. No production severity inferred from this failure alone."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_moved_unassign_closes_segment_and_reassignment_does_not_recount_old_movement",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_on_apu_remaining_setup_and_apu_burn_do_not_block_cancellation",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_other_mission_cannot_have_new_tail_measurements_erased_by_cancellation",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Outdated expectation",
+      "evidence": "Verified same-physical-tail event may seed Remaining with its audit identity. Actual and transfer stay NULL; FOB READY stays false."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_ready_assignment_alert_threshold_refresh",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "failed",
+      "classification": "Unresolved presentation/fixture contract",
+      "evidence": "Reproduced unchanged; markup/status assertions need their own verified contract investigation. No production severity inferred from this failure alone."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_setup_readings_cancel_but_transfer_identity_and_missing_rollback_block",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_unassign_after_setup_preserves_readings_and_exposes_clean_assignment",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_unassign_unavailable_truck_resolves_its_hold_without_stranding_started_work",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Application defect",
+      "evidence": "Pre-ON branch omitted the existing hold-resolution check; canonical OOS/unassign reproduction now passes."
+    },
+    {
+      "id": "tests.test_neoscorpion_cancel_unassign.CancelUnassignTest::test_unknown_movement_off_and_wrong_operation_are_atomic",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_cycle_lines.CycleLinesTest::test_new_tail_measurement_is_not_inherited_from_other_mission",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Outdated expectation",
+      "evidence": "Verified same-physical-tail event may seed Remaining with its audit identity. Actual and transfer stay NULL; FOB READY stays false."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_confirm_tail_does_not_fabricate_fob_from_other_mission",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Outdated expectation",
+      "evidence": "Verified same-physical-tail event may seed Remaining with its audit identity. Actual and transfer stay NULL; FOB READY stays false."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_confirm_tail_preserves_work_without_inheriting_another_mission",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Outdated expectation",
+      "evidence": "Verified same-physical-tail event may seed Remaining with its audit identity. Actual and transfer stay NULL; FOB READY stays false."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_generic_save_cannot_bypass_swap_and_completed_paths_are_immutable",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_moved_truck_swap_and_later_complete_create_distinct_segments",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_truck_swap_before_movement_has_no_event_or_deduction",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_unconfirmed_tail_does_not_block_fueler_off_or_completion",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_interruptions.NeoScorpionFuelInterruptionTest::test_ups1476_replacement_tail_is_independent_of_ups1038_fueling",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture",
+      "evidence": "An unattributed on_at timestamp was not trusted physical ON. Uses canonical ON and retains separate mission/tail/truck/work assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_dispatcher_only_warning_permissions_and_live_fragments",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Outdated expectation",
+      "evidence": "Partial resources (Fueler without truck) are READY, not ASSIGNED. CALL DISPATCH privacy/permission assertions remain and pass."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_inventory_discrepancy_completion_rolls_back_with_event_failure",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_legacy_unconfirmed_on_is_not_fabricated_performance_start",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_manual_on_is_event_and_performance_start_without_remaining_first",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_off_completion_accepts_insufficient_truck_reading_without_negative_inventory",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_physical_save_on_off_complete_preserves_transfer_and_inventory",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_remaining_then_actual_correct_estimate_and_truckless_fob_completion",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_repeated_physical_jobs_on_unverified_truck_keep_all_events_without_balance_fiction",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_unknown_apu_recommended_and_manual_override_change_fob_only",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Application defect",
+      "evidence": "Optional row-builder path dereferenced None instead of its already resolved assignment map."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.FuelingStatusIntegrationTest::test_unknown_truck_inventory_does_not_block_valid_aircraft_completion",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Invalid fixture / outdated lifecycle expectation",
+      "evidence": "Uses current visit, explicit ON/OFF/handoff and action-specific audit checks; retains rollback, history, inventory and permission assertions."
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_status.TrustedFobInheritanceTest::test_explicit_trusted_lineage_uses_apu_adjusted_fuel_and_preserves_accounting",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "failed",
+      "classification": "Outdated expectation; unrepaired",
+      "evidence": "Expects Remaining-only lineage without newly confirmed Actual/APU to establish FOB READY; current replacement contract requires fresh verification."
+    },
+    {
+      "id": "tests.test_neoscorpion_outstanding_work.OutstandingWorkTest::test_busy_truck_preparation_is_not_original_aircraft",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "failed",
+      "classification": "Unresolved presentation/fixture contract",
+      "evidence": "Reproduced unchanged; markup/status assertions need their own verified contract investigation. No production severity inferred from this failure alone."
+    },
+    {
+      "id": "tests.test_neoscorpion_outstanding_work.OutstandingWorkTest::test_genuine_earlier_tail_and_same_tail_physical_visits_keep_recovery",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "failed",
+      "classification": "Unresolved presentation/fixture contract",
+      "evidence": "Reproduced unchanged; markup/status assertions need their own verified contract investigation. No production severity inferred from this failure alone."
+    },
+    {
+      "id": "tests.test_neoscorpion_outstanding_work.OutstandingWorkTest::test_retained_same_tail_preparation_remains_reviewable_not_original",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "failed",
+      "classification": "Unresolved presentation/fixture contract",
+      "evidence": "Reproduced unchanged; markup/status assertions need their own verified contract investigation. No production severity inferred from this failure alone."
+    },
+    {
+      "id": "tests.test_neoscorpion_tank_fuel.NeoScorpionTankFuelTest::test_schema_bootstrap_and_database_constraints",
+      "in_original_r03_register": true,
+      "before": "failed",
+      "after": "passed",
+      "classification": "Outdated expectation",
+      "evidence": "Current identity is assignment/visit number, not assignment/tail. Retained duplicate-tank and negative-fuel rejection checks."
+    }
+  ],
+  "baseline_functions": "Exact starting Git blob loaded for canonical A/B reproductions; no production calls.",
+  "canonical_defects": [
+    "Other-mission saved shared-tail measurements overwritten on cancellation before a completed Event exists",
+    "Resolved pre-ON truck hold retained after authorized unassignment",
+    "Optional row-builder assignment map dereference"
+  ],
+  "test_summaries": {
+    "final-python.log": "6 failed, 144 passed, 59945 warnings, 39 subtests passed in 111.40s (0:01:51)",
+    "final-postgres.log": "25 passed, 11500 warnings, 11 subtests passed in 108.52s (0:01:48)",
+    "postgres-inventory.log": "4 passed, 1708 warnings in 11.62s",
+    "browser.log": "2 passed, 2147 warnings in 143.48s (0:02:23)"
+  },
+  "javascript": {
+    "passed": 18,
+    "failed": 0
+  },
+  "no_schema_changes": true,
+  "resource_limitations": "Focused isolated fixtures only; no load/stress testing, production mutations, provider traffic or CU savings claims."
+}

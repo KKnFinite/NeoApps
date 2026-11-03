@@ -66,12 +66,15 @@ class CycleLinesTest(unittest.TestCase):
         )
         db.session.commit()
         self.assertIsNotNone(result.fuel_work_state)
-        self.assertEqual(result.fuel_work_state.tank_states,[])
+        self.assertEqual({t.tank_code:t.remaining_lbs for t in result.fuel_work_state.tank_states},
+                         {"left":18000,"ctr":16000,"right":18000})
+        self.assertTrue(all(t.actual_lbs is None for t in result.fuel_work_state.tank_states))
         self.assertIsNone(result.fuel_work_state.physical_transfer_gallons)
         row = next(r for r in service.fuel_dispatch_context(self.gateway)["rows"]
                    if r["mission"].id == mission.id)
         self.assertFalse(row["fuel_on_board_ready"])
-        self.assertIsNone(row["tail_swap_inherited_event_id"])
+        self.assertEqual(row["tail_swap_inherited_event_id"], source.id)
+        self.assertFalse(row["neo_fuel_available"])
         self.assertNotEqual(source.fuel_assignment_id, assignment.id)
 
     def test_uplift_freezes_completed_line_with_blank_new_resources(self):

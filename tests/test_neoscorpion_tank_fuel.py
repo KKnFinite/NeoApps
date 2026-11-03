@@ -81,6 +81,7 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
         work = NeoScorpionFuelWorkState(
             fuel_assignment_id=assignment.id,
             tail_number=" n412up ",
+            visit_number=1,
         )
         db.session.add(work)
         db.session.flush()
@@ -95,10 +96,19 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
         )
         db.session.commit()
 
+        # Returning to the same aircraft creates a separate permanent visit.
+        # Legacy NULL visit numbers are not assignment/tail uniqueness claims.
+        second = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id,
+            tail_number="N412UP", visit_number=2)
+        db.session.add(second)
+        db.session.commit()
+        self.assertNotEqual(second.id, work.id)
+
         self._assert_rejected(
             NeoScorpionFuelWorkState(
                 fuel_assignment_id=assignment.id,
                 tail_number="N412UP",
+                visit_number=1,
             )
         )
         self._assert_rejected(
