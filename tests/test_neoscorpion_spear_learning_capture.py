@@ -142,6 +142,15 @@ class SpearLearningCaptureTest(unittest.TestCase):
         )
         db.session.add(event)
         db.session.flush()
+        # This serialization fixture represents a verified historical automatic
+        # start, including its matching canonical visit identity. Event fields
+        # alone no longer establish whole-cycle participation eligibility.
+        self.assignment.active_work_state_id=self.work.id
+        self.work.physical_cycle_number=1
+        self.work.physical_truck_id=truck.id
+        self.work.physical_fueler_user_id=self.user.id
+        self.work.confirmed_on_at_utc=event.started_at_utc
+        self.work.performance_context=dict(event.performance_snapshot)
         db.session.add(
             NeoScorpionFuelingEventTankSnapshot(
                 fueling_event_id=event.id,
@@ -175,6 +184,14 @@ class SpearLearningCaptureTest(unittest.TestCase):
         self.assertEqual(record["exclusion_reasons"], [])
         self.assertEqual(record["fuel_events"][0]["transfer_fuel_gallons"], 1200)
         self.assertEqual(record["work_states"][0]["off_at_utc"], "2026-09-03T05:20:00.000000Z")
+
+    def test_event_claim_alone_cannot_verify_missing_physical_participation(self):
+        self.work.performance_context=None
+        self.work.confirmed_on_at_utc=None
+        db.session.commit()
+        record=build_completed_learning_record(self.gateway,self.operation,self.assignment,self.mission)
+        self.assertFalse(record['training_eligible'])
+        self.assertIn('PARTICIPATION UNVERIFIED',record['operational_timelines'][0]['exclusions'])
 
     def test_audited_or_interrupted_work_is_archived_but_not_training_eligible(self):
         db.session.add(

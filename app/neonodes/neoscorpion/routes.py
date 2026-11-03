@@ -780,6 +780,7 @@ def fuel_dispatch_swap_fueler():
             current_user,
             request.form.get("assignment_id"),
             request.form.get("replacement_fueler_user_id"),
+            expected=request.form,
         ),
         "ASSIGNED FUELER CHANGED.",
         "FUELER ASSIGNMENT WAS UNCHANGED.",

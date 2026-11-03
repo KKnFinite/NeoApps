@@ -35,6 +35,8 @@ class ResourceProfPostgresTest(unittest.TestCase):
 
     def test_concurrent_complete_freezes_one_v4_snapshot_and_one_inventory_post(self):
         self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
+        from tests.neoscorpion_handoff_fixture import submit_fueler_only
+        submit_fueler_only(self.gateway,self.assignment.id);db.session.commit()
         assignment_id=self.assignment.id
         result=self.concurrent(lambda index,gateway,fueler,dispatcher:
             service.complete_fueled_assignment(gateway,dispatcher,assignment_id).changed)
@@ -52,6 +54,8 @@ class ResourceProfPostgresTest(unittest.TestCase):
         old={**self.work.performance_context,'version':3};old.pop('resource_timing',None)
         self.work.performance_context=old
         self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
+        from tests.neoscorpion_handoff_fixture import submit_fueler_only
+        submit_fueler_only(self.gateway,self.assignment.id);db.session.commit()
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         event=NeoScorpionFuelingEvent.query.one();original=copy.deepcopy(event.performance_snapshot)
         identity=(event.id,event.fuel_work_state_id,event.transfer_fuel_gallons,event.started_at_utc,event.ended_at_utc)

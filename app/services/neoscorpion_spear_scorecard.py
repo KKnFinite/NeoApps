@@ -18,11 +18,11 @@ from app.services.neoscorpion_spear_decisions import classify, validate_record
 LIMIT = 2000
 
 
-def off_result(event, *, identity_reasons=()):
+def off_result(event, *, identity_reasons=(), participation=None):
     facts = event.performance_snapshot if isinstance(event.performance_snapshot, dict) else {}
     reasons = list(identity_reasons)
     try:
-        reasons.extend(event_math(event)['fueler_reasons'])
+        reasons.extend(event_math(event,participation=participation)['fueler_reasons'])
     except (ValueError, TypeError, AttributeError):
         reasons.append('Malformed historical performance evidence')
     start, end = timestamp(event.started_at_utc), timestamp(event.ended_at_utc)
@@ -169,6 +169,8 @@ def report_context(gateway, operation, *, truck_id=None, fueler_id=None, archive
         NeoScorpionFuelWorkState.id.in_(work_ids)).all()} if work_ids else {}
     off = []
     events = {}
+    from app.services.neoscorpion_participation import cycles, key
+    participation = cycles(jobs)
     for e in jobs:
         w = works.get(e.fuel_work_state_id)
         reasons = []
@@ -178,7 +180,7 @@ def report_context(gateway, operation, *, truck_id=None, fueler_id=None, archive
                 or timestamp(w.off_at_utc) != timestamp(e.ended_at_utc)
                 or timestamp(w.manual_on_at_utc or w.confirmed_on_at_utc) != timestamp(e.started_at_utc)):
             reasons.append('Finalized physical visit identity/timing not verified')
-        row = off_result(e, identity_reasons=reasons)
+        row = off_result(e, identity_reasons=reasons,participation=participation[key(e)])
         off.append(row)
         if not row['physical_reasons']:
             events[e.id] = e
@@ -201,9 +203,14 @@ def report_context(gateway, operation, *, truck_id=None, fueler_id=None, archive
                 started_at_utc=timestamp(saved['started_at_utc']), ended_at_utc=timestamp(saved['ended_at_utc']),
                 event_type=saved['event_type'], transfer_fuel_gallons=saved['transfer_fuel_gallons'],
                 performance_snapshot=timeline.get('facts') or {})
-            reasons = list(archive.get('exclusion_reasons', [])) + list(timeline.get('exclusions', []))
-            if not archive.get('training_eligible'):
-                reasons.append('Archived record is not verified for learning')
+            reasons = list(timeline.get('exclusions', []))
+            if not (timeline.get('facts') or {}).get('prof_participation'):
+                # Legacy assignment-wide flags do not establish per-cycle proof.
+                # New captures carry the independently assessed cycle, so a bad
+                # later UPLIFT cannot discard a qualifying original FUEL cycle.
+                reasons.extend(archive.get('exclusion_reasons', []))
+                if not archive.get('training_eligible'):
+                    reasons.append('Archived record is not verified for learning')
             off.append(off_result(e, identity_reasons=reasons)); present.add(e.id); added += 1
         archive_note = f'Checksum-validated R2 record loaded: {added} additional events; canonical duplicates excluded.'
     top_rows = NeoScorpionTopOffEvent.query.filter_by(sort_date_operation_id=operation.id).order_by(

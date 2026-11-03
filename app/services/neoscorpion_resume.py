@@ -38,8 +38,8 @@ def resume_same_visit(gateway,user,operation,asset,assignment,mission,work,expec
             or work.ended_early_at_utc or work.fueler_submitted_at_utc
             or work.physical_transfer_review or work.continuation_review_reason
             or work.physical_truck_id != assignment.assigned_truck_id
-            or work.physical_fueler_user_id != assignment.assigned_fueler_user_id
-            or (not administrative and work.physical_fueler_user_id != user.id)
+            or work.id != assignment.active_work_state_id
+            or (not administrative and assignment.assigned_fueler_user_id != user.id)
             or work.manual_on_truck_id != assignment.assigned_truck_id
             or work.manual_on_cycle_number != int(assignment.current_cycle_number or 1)):
         raise ValueError("This visit cannot resume: verify its resource, submission or physical review with Dispatch.")

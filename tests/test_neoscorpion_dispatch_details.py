@@ -66,6 +66,9 @@ class DetailsTest(unittest.TestCase):
         guard_additions={('input','operation_id',None):2,
                          ('input','top_off_action_state',None):2}
         allowed.update(guard_additions)
+        # The existing Fueler swap is also available before physical ON.
+        allowed.update({('select','replacement_fueler_user_id',f'neoscorpion-dispatch-assignment-{self.assignment.id}'),
+                        ('button','/neoscorpion/fuel-dispatch/swap-fueler')})
         extra=current.controls-before.controls
         self.assertTrue(set(extra)<=allowed,extra)
         self.assertTrue(all(count==guard_additions.get(control,1)

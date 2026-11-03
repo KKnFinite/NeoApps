@@ -428,6 +428,8 @@ def reconcile(gateway_id, *, limit=40):
     )).execution_options(populate_existing=True))}
     events = list(db.session.scalars(select(NeoScorpionFuelingEvent).where(
         tuple_(NeoScorpionFuelingEvent.fuel_assignment_id, NeoScorpionFuelingEvent.cycle_number).in_(cycles))))
+    from app.services.neoscorpion_participation import cycles as participation_cycles, key as participation_key
+    participation = participation_cycles(events)
     previous = None
     for item in decisions:
         assignment = assignments[item.assignment_id]
@@ -450,7 +452,7 @@ def reconcile(gateway_id, *, limit=40):
             work = works.get(event.fuel_work_state_id)
             if not work or not work.physical_finalized_at_utc:
                 exclusions.append('physical_visit_not_finalized')
-            math = event_math(event)
+            math = event_math(event, participation=participation[participation_key(event)])
             exclusions.extend([*math['fueler_reasons'], *math['truck_reasons']])
         # Nonterminal evidence can acquire its final physical event later.
         if not terminal and exclusions:

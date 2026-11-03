@@ -1,0 +1,12 @@
+{
+  "engine": "webkit",
+  "after_off": true,
+  "work_rows": 1,
+  "event_rows": 1,
+  "original_on_preserved": true,
+  "old_actor_preserved": true,
+  "submitted_by_replacement": true,
+  "prof_reasons": [
+    "MULTIPLE FUELERS"
+  ]
+}

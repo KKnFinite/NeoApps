@@ -82,9 +82,23 @@ def policy_snapshot(assignment, settings, planning, aircraft_type, *, resources=
     }
 
 
-def event_math(event):
+def event_math(event, *, participation=None):
     facts = event.performance_snapshot or {}
     shared = list(facts.get("exclusions", ()))
+    from app.services.neoscorpion_participation import cycles, key, reasons
+    if participation is None:
+        if getattr(event, '_sa_instance_state', None) is not None and event.id is not None:
+            participation = cycles([event])[key(event)]
+        else:
+            participation = facts.get('prof_participation')
+    shared.extend(reasons(participation))
+    if isinstance(participation,dict) and 'assignment_id' in participation:
+        if (participation['assignment_id'] != getattr(event,'fuel_assignment_id',None)
+                or participation.get('cycle_number') != getattr(event,'cycle_number',None)
+                or getattr(event,'fuel_work_state_id',None) not in participation.get('work_ids',())
+                or event.fueler_user_id not in participation.get('fueler_ids',())
+                or event.fuel_truck_id not in participation.get('truck_ids',())):
+            shared.append('PARTICIPATION UNVERIFIED')
     if facts.get("version") not in {3,4}:
         shared.append("Historical settings/timestamp provenance unavailable")
     if facts.get("on_source") not in {"manual", "trusted automatic"}:
@@ -95,8 +109,8 @@ def event_math(event):
     rate, gallons = number(facts.get("pump_rate")), number(event.transfer_fuel_gallons)
     if rate is None or rate <= 0:
         shared.append("Pump rate unavailable")
-    if gallons is None or gallons <= 0 or event.event_type not in {"fuel", "uplift"}:
-        shared.append("No qualifying positive FUEL/UPLIFT transfer")
+    if gallons is None or gallons <= 0 or event.event_type not in {"fuel", "uplift", "defuel"}:
+        shared.append("No qualifying positive FUEL/UPLIFT/DEFUEL transfer")
     if facts.get("fueler_id") != event.fueler_user_id or facts.get("truck_id") != event.fuel_truck_id:
         shared.append("Resource identity uncertain")
     pump = gallons / rate if gallons is not None and rate is not None and rate > 0 else None
@@ -159,7 +173,10 @@ def load_jobs(gateway_id, *, operation_id=None, limit=2000, offset=0):
     else:
         query = query.filter(NeoScorpionFuelingEvent.ended_at_utc >= datetime.utcnow()-timedelta(days=90))
     rows = query.order_by(NeoScorpionFuelingEvent.ended_at_utc.desc(), NeoScorpionFuelingEvent.id.desc()).limit(limit).offset(offset).all()
-    return [dict(event=e, mission=m, operation=o, fueler=u, truck=t, **event_math(e)) for e,m,o,u,t in rows]
+    from app.services.neoscorpion_participation import cycles, key
+    participation = cycles(e for e,*_ in rows)
+    return [dict(event=e, mission=m, operation=o, fueler=u, truck=t,
+                 **event_math(e, participation=participation[key(e)])) for e,m,o,u,t in rows]
 
 
 def load_observation_jobs(gateway_id, *, operation_id=None, limit=2000):
@@ -169,7 +186,7 @@ def load_observation_jobs(gateway_id, *, operation_id=None, limit=2000):
             "fueler_assigned_at", "truck_assigned_at", "on_source", "exclusions", "resource_timing")
     columns = [model.id, model.sort_date_operation_id, model.fuel_assignment_id, model.cycle_number,
                model.fueler_user_id, model.fuel_truck_id, model.started_at_utc, model.ended_at_utc,
-               model.transfer_fuel_gallons, model.event_type,model.fuel_work_state_id]
+               model.transfer_fuel_gallons, model.event_type,model.fuel_work_state_id,model.tail_number]
     event_columns=tuple(columns)
     columns.extend((model.performance_snapshot[key].as_json() if key in {"exclusions","resource_timing"} else
                     model.performance_snapshot[key].as_integer() if key in {"version","fueler_id","truck_id"} else
@@ -181,13 +198,15 @@ def load_observation_jobs(gateway_id, *, operation_id=None, limit=2000):
     else:
         query = query.filter(model.ended_at_utc >= datetime.utcnow()-timedelta(days=90))
     rows = query.order_by(model.ended_at_utc.desc(),model.id.desc()).limit(limit).all()
-    result = []
+    events = []
     for row in rows:
         facts = {key:getattr(row,"fact_"+key) for key in keys}
         facts["exclusions"] = facts["exclusions"] or []
         e = SimpleNamespace(**{column.key:getattr(row,column.key) for column in event_columns}, performance_snapshot=facts)
-        result.append(dict(event=e,**event_math(e)))
-    return result
+        events.append(e)
+    from app.services.neoscorpion_participation import cycles, key
+    participation = cycles(events)
+    return [dict(event=e,**event_math(e,participation=participation[key(e)])) for e in events]
 
 
 def totals(jobs, resource, identifier=None):

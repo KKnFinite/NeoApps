@@ -216,10 +216,13 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
         if assignment.transfer_fuel_gallons and not events:
             exclusion_reasons.append("missing_fueling_event")
 
+    from app.services.neoscorpion_participation import cycles, key
+    participation = cycles(events)
+    math_by_event = {event.id:event_math(event,participation=participation[key(event)]) for event in events}
     for event in events:
-        if event_math(event)["fueler_reasons"]:
+        if math_by_event[event.id]["fueler_reasons"]:
             exclusion_reasons.append("unverified_operational_timeline")
-        if (event.performance_snapshot or {}).get('version') == 4 and event_math(event)['truck_reasons']:
+        if (event.performance_snapshot or {}).get('version') == 4 and math_by_event[event.id]['truck_reasons']:
             exclusion_reasons.append('unverified_resource_availability')
         if event.started_at_utc is None or event.ended_at_utc is None:
             exclusion_reasons.append("incomplete_event_timing")
@@ -244,10 +247,11 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
 
     return {
         "schema_version": "spear-learning/v3" if any((e.performance_snapshot or {}).get('version')==4 for e in events) else "spear-learning/v2",
-        "operational_timelines": [dict(event_id=event.id, facts=event.performance_snapshot or {},
-            fueler_prof=event_math(event)["fueler_prof"], truck_prof=event_math(event)["truck_prof"],
-            exclusions=list(dict.fromkeys([*event_math(event)["fueler_reasons"],
-                *(event_math(event)['truck_reasons'] if (event.performance_snapshot or {}).get('version')==4 else ())]))) for event in events],
+        "operational_timelines": [dict(event_id=event.id,
+            facts={**(event.performance_snapshot or {}),'prof_participation':participation[key(event)]},
+            fueler_prof=math_by_event[event.id]["fueler_prof"], truck_prof=math_by_event[event.id]["truck_prof"],
+            exclusions=list(dict.fromkeys([*math_by_event[event.id]["fueler_reasons"],
+                *(math_by_event[event.id]['truck_reasons'] if (event.performance_snapshot or {}).get('version')==4 else ())]))) for event in events],
         "record_type": "completed_fuel_outcome",
         "captured_at_utc": _iso(terminal_at),
         "training_eligible": not exclusion_reasons,

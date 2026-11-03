@@ -238,6 +238,8 @@ def _canonical_observations(operation_id, row_by_assignment_id):
         .limit(5000)
         .all()
     )
+    from app.services.neoscorpion_participation import cycles, key
+    participation = cycles(events)
     output = []
     for event in events:
         row = row_by_assignment_id.get(event.fuel_assignment_id)
@@ -246,7 +248,7 @@ def _canonical_observations(operation_id, row_by_assignment_id):
         assignment = event.fuel_assignment
         observed_at = _utc_naive(event.ended_at_utc)
         aircraft_type = row.get("detailed_aircraft_type") or "UNKNOWN"
-        math = event_math(event)
+        math = event_math(event, participation=participation[key(event)])
         exclusion = "; ".join(math["fueler_reasons"]) or None
         if math["actual_minutes"] is not None:
             output.append(CalibrationObservation(

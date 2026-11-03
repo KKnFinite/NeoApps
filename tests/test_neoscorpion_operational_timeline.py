@@ -652,7 +652,9 @@ class OperationalTimelineTest(unittest.TestCase):
         event.listen(db.engine,"before_cursor_execute",capture)
         try: load_jobs(self.gateway.id,operation_id=self.operation.id)
         finally: event.remove(db.engine,"before_cursor_execute",capture)
-        self.assertEqual(len(statements),1)
+        # One report query plus two constant, bounded whole-cycle evidence queries.
+        self.assertEqual(len(statements),3)
+        self.assertTrue(all(sql.lstrip().upper().startswith('SELECT') for sql in statements))
 
     def test_calibration_service_duration_does_not_train_mechanical_pump_or_setup_policy(self):
         self.prepare(lead=5); self.save(self.start+timedelta(minutes=10),**self.final_data()); self.off()
@@ -733,6 +735,7 @@ class ForecastMathTest(unittest.TestCase):
 
     def test_physical_seconds_across_midnight_and_dst_do_not_use_local_clock_subtraction(self):
         facts=dict(version=3,aircraft_type="B757",on_source="manual",fueler_id=1,truck_id=2,
+            prof_participation=dict(version=1,verified=True,fueler_ids=[1],truck_ids=[2]),
             pump_rate="300",setup_allowance="0",fueler_assigned_at="2026-11-01T06:00:00",truck_assigned_at="2026-11-01T06:30:00",
             actuals_received_at="2026-11-01T07:07:00",completed_at="2026-11-01T07:08:00",exclusions=[])
         e=SimpleNamespace(performance_snapshot=facts,started_at_utc=datetime(2026,11,1,6,55),ended_at_utc=datetime(2026,11,1,7,5),

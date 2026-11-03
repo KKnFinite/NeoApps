@@ -968,11 +968,12 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     fuel_work_states = _fuel_work_states_by_assignment_tail(assignments)
     by_assignment = {item.id: item for item in assignments}
     sources = []
+    from app.services.neoscorpion_participation import owner_id as work_owner_id
     for work in all_work(fuel_work_states):
         owner = by_assignment[work.fuel_assignment_id]
         if (work.physical_sequence_number is None or (work.physical_finalized_at_utc is not None and not include_completed)
                 or (work.id == owner.active_work_state_id and work.tail_number == _normalize_tail(owner.sort_date_mission.assigned_tail_number))
-                or (not dispatcher and work.physical_fueler_user_id != user.id)
+                or (not dispatcher and work_owner_id(work) != user.id)
                 or (assignment_id is not None and owner.id != assignment_id)):
             continue
         source_assignment, source_mission = _segment_views(owner, owner.sort_date_mission, work)
@@ -2032,6 +2033,9 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
     for audit in assignment_audits:
         audit.fuel_work_state = fuel_work_state
     if resource_change_requested and fuel_work_state and not _fuel_work_has_begun(fuel_work_state, assignment):
+        if current_fueler_id != requested_fueler_id and requested_fueler_id is not None:
+            from app.services.neoscorpion_participation import handoff
+            handoff(fuel_work_state,current_fueler_id,requested_fueler_id)
         fuel_work_state.physical_truck_id = requested_truck_id
         fuel_work_state.physical_fueler_user_id = requested_fueler_id
         if truck_change_requested:
@@ -2257,8 +2261,10 @@ def _check_fueler_expected(expected, current, requested):
 def _segment_views(assignment, mission, work):
     """Detached operational views: never write source-tail data to replacement."""
     values = {column.name: getattr(assignment, column.name) for column in assignment.__table__.columns}
+    from app.services.neoscorpion_participation import owner_id as work_owner_id
+    owner_id = work_owner_id(work)
     values.update(assigned_truck_id=work.physical_truck_id,
-        assigned_fueler_user_id=work.physical_fueler_user_id,
+        assigned_fueler_user_id=owner_id,
         current_cycle_number=work.physical_cycle_number,
         current_cycle_type=work.physical_cycle_type,
         transfer_fuel_gallons=work.physical_transfer_gallons,
@@ -2268,7 +2274,8 @@ def _segment_views(assignment, mission, work):
         confirmed_tail_number=work.tail_number)
     view = SimpleNamespace(**values)
     view.assigned_truck = work.physical_truck
-    view.assigned_fueler = work.physical_fueler
+    view.assigned_fueler = (work.physical_fueler if owner_id == work.physical_fueler_user_id
+                           else getattr(work,'_handoff_fueler',None) or (db.session.get(User,owner_id) if owner_id else None))
     view._source_work = work
     view._parent_assignment = assignment
     view._detached_segment = (work.id != assignment.active_work_state_id or work.tail_number != _normalize_tail(mission.assigned_tail_number)
@@ -2320,7 +2327,11 @@ def _locked_source_segment(assignment, mission, work_id, sequence, user, *, disp
     if work.physical_cycle_number is None:
         raise ValueError("REVIEW REQUIRED: legacy physical cycle identity is unknown; do not guess its transfer allocation.")
     is_current = work.id == assignment.active_work_state_id and work.tail_number == _normalize_tail(mission.assigned_tail_number)
-    owner_id = assignment.assigned_fueler_user_id if is_current else work.physical_fueler_user_id
+    from app.services.neoscorpion_participation import owner_id as work_owner_id
+    if not is_current:
+        from app.services.neoscorpion_participation import hydrate_legacy_owners
+        hydrate_legacy_owners([work])
+    owner_id = assignment.assigned_fueler_user_id if is_current else work_owner_id(work)
     if not dispatcher and owner_id != user.id:
         raise ValueError("This physical segment belongs to another Fueler.")
     return (*_segment_views(assignment, mission, work), work)
@@ -2343,7 +2354,8 @@ def _bind_physical_segment(assignment, mission, work, *, legacy=False):
     work.physical_cycle_number = int(assignment.current_cycle_number or 1)
     work.physical_cycle_type = _assignment_cycle_type(assignment)
     work.physical_truck_id = assignment.assigned_truck_id
-    work.physical_fueler_user_id = assignment.assigned_fueler_user_id
+    if not (work.performance_context or {}).get('on_at'):
+        work.physical_fueler_user_id = assignment.assigned_fueler_user_id
     if not work.target_frozen:
         work.physical_required_fuel_lbs = mission.planned_fuel_load
     work.physical_transfer_gallons = None if legacy else assignment.transfer_fuel_gallons
@@ -2704,6 +2716,9 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         if fuel_work_state is None:
             fuel_work_state = new_work(assignment, tail_number, user, now_utc)
             fuel_work_state.physical_required_fuel_lbs = mission.planned_fuel_load
+        if not dispatcher:
+            from app.services.neoscorpion_participation import record
+            record(fuel_work_state, user.id)
         for tank_code, (remaining_lbs, actual_lbs) in final_tank_values.items():
             tank_state = tank_states_by_code.get(tank_code)
             if tank_state is None:
@@ -3274,13 +3289,15 @@ def _snapshot_physical_start(gateway, assignment, mission, work, now, *, source,
                 truck_reasons=['Resource evidence capture unavailable'],fueler_reasons=['Resource evidence capture unavailable'])
         facts = policy_snapshot(assignment, settings, planning,
                                 detailed_aircraft_type_for_tail(mission.assigned_tail_number), resources=resources)
-    for key in ('preparation_evidence','fueler_data_ready'):
+    for key in ('preparation_evidence','fueler_data_ready','participation'):
         if key in previous:facts[key]=previous[key]
     facts.update(on_source=source, on_at=prof_iso(now), forecasts=previous.get("forecasts", []),
                  exclusions=previous.get("exclusions", []),
                  planned_departure_at=prof_iso(mission.planned_datetime_utc),
                  required_fuel_lbs=mission.planned_fuel_load)
     work.performance_context = facts
+    from app.services.neoscorpion_participation import record
+    record(work, assignment.assigned_fueler_user_id, truck_id=assignment.assigned_truck_id)
 
 
 def _lock_physical_truck_start(truck_id,work_id):
@@ -3903,7 +3920,9 @@ def start_follow_up_fuel_cycle(
     fuel_work_state.preparation_received_at_utc = None
     fuel_work_state.completion_ready_at_utc = None
     fuel_work_state.off_inventory_epoch = None
-    fuel_work_state.performance_context = None
+    # This is a newly allocated cycle, with no participants yet. Preserve its
+    # empty ledger so inherited Remaining is not mistaken for Fueler work.
+    fuel_work_state.performance_context = {'participation': {'version':1,'verified':True,'fueler_ids':[],'truck_ids':[]}}
     fuel_work_state.apu_running = None
     fuel_work_state.apu_confirmed_at_utc = None
     fuel_work_state.apu_allowance_lbs = None
@@ -4430,6 +4449,7 @@ def swap_assignment_fueler(
     replacement_user_id,
     *,
     now_utc=None,
+    expected=None,
 ):
     operation = current_sort_operation(gateway)
     if not operation:
@@ -4444,6 +4464,13 @@ def swap_assignment_fueler(
     from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
     spear_before = scope(operation, mission, assignment, int(asset_state.revision if asset_state else 0))
     _validate_precompletion_assignment(assignment, mission, "FUELER SWAP")
+    if expected is not None:
+        current = dict(expected_work_ref=assignment.active_work_state_id,
+            expected_assigned_fueler_user_id=assignment.assigned_fueler_user_id,
+            expected_assigned_truck_id=assignment.assigned_truck_id,
+            expected_cycle=assignment.current_cycle_number,expected_tail=mission.assigned_tail_number)
+        if any(name in expected and str(expected.get(name) or '') != str(value or '') for name,value in current.items()):
+            raise FuelerDataConflict()
     replacement_user_id = _int_or_none(replacement_user_id)
     if replacement_user_id is None:
         raise ValueError("Select a replacement fueler.")
@@ -4451,8 +4478,10 @@ def swap_assignment_fueler(
         assignment,
         _normalize_tail(mission.assigned_tail_number),
     )
-    if fuel_work_state is not None and fuel_work_state.off_at_utc is not None:
-        raise ValueError("REOPEN OFF before swapping the assigned fueler.")
+    if fuel_work_state is not None and fuel_work_state.fueler_submitted_at_utc is not None:
+        raise ValueError("FUELER SWAP is locked after COMPLETE ASSIGNMENT; Dispatcher verification is pending or complete.")
+    if fuel_work_state is not None and fuel_work_state.physical_finalized_at_utc is not None:
+        raise ValueError("FUELER SWAP cannot modify a completed physical visit.")
     if assignment.assigned_fueler_user_id == replacement_user_id:
         return FuelInterruptionResult(
             False,
@@ -4466,12 +4495,13 @@ def swap_assignment_fueler(
         replacement_user_id,
     )
     old_user_id = assignment.assigned_fueler_user_id
+    from app.services.neoscorpion_participation import handoff
+    handoff(fuel_work_state, old_user_id, replacement_user_id)
     assignment.assigned_fueler_user_id = replacement_user_id
     assignment.fueler_assigned_at_utc = now_utc
     assignment.resource_assignment_by_user_id = user.id
-    if fuel_work_state and fuel_work_state.performance_context:
-        fuel_work_state.performance_context = {**fuel_work_state.performance_context,
-            "exclusions": [*fuel_work_state.performance_context.get("exclusions", []), "Fueler changed during physical segment"]}
+    _record_assigned_fueler_update(assignment,
+        ("Fueler handoff: saved aircraft data and physical clocks retained.",),now_utc=now_utc)
     audit = _new_fuel_audit(
         operation,
         assignment,
@@ -6727,6 +6757,11 @@ def _fuel_rows(
                 "resource_swap_required": bool(
                     assignment and work_has_begun and not administratively_complete
                 ),
+                "fueler_swap_available": bool(assignment and assignment.assigned_fueler_user_id
+                    and not administratively_complete and not (fuel_work_state and
+                    (fuel_work_state.fueler_submitted_at_utc or fuel_work_state.physical_finalized_at_utc))),
+                "fueler_swap_reason": ("FUELER SWAP locked after COMPLETE ASSIGNMENT."
+                    if fuel_work_state and fuel_work_state.fueler_submitted_at_utc else ""),
                 "initial_truck_assignment_available": bool(
                     assignment
                     and work_has_begun
@@ -7175,6 +7210,15 @@ def _fuel_work_states_by_assignment_tail(assignments):
         .populate_existing()
         .all()
     )
+    from app.services.neoscorpion_participation import owner_id, hydrate_legacy_owners
+    by_assignment = {a.id:a for a in assignments}
+    hydrate_legacy_owners([w for w in work_states if w.physical_sequence_number is not None
+        and (w.id != by_assignment[w.fuel_assignment_id].active_work_state_id
+             or w.tail_number != _normalize_tail(by_assignment[w.fuel_assignment_id].sort_date_mission.assigned_tail_number))])
+    ids = {owner_id(w) for w in work_states if owner_id(w) != w.physical_fueler_user_id}
+    handoff_users = {u.id:u for u in User.query.filter(User.id.in_(ids)).all()} if ids else {}
+    for work in work_states:
+        if owner_id(work) in handoff_users: work._handoff_fueler = handoff_users[owner_id(work)]
     return WorkIndex(assignments, work_states)
 
 

@@ -520,7 +520,8 @@ def _validate_learning_record(record):
                      "assignment_actor_id", "advance_window", "setup_minutes", "setup_allowance", "lead_minutes", "setup_reason",
                      "pump_rate", "forecasts", "exclusions", "on_source", "on_at", "actuals_received_at", "inventory_epoch",
                      "completion_ready_at", "completed_at", "preparation_completed_at",
-                     "physical_work_id", "physical_sequence", "physical_tail", "planned_departure_at", "required_fuel_lbs"}
+                     "physical_work_id", "physical_sequence", "physical_tail", "planned_departure_at", "required_fuel_lbs",
+                     "participation", "prof_participation"}
         if version == 'spear-learning/v3':
             fact_keys |= {'resource_timing','preparation_evidence','fueler_data_ready','fueler_work_end_at'}
         for item in record["operational_timelines"]:
@@ -528,6 +529,34 @@ def _validate_learning_record(record):
             require(positive_id(item["event_id"]))
             require(isinstance(item["facts"], dict) and set(item["facts"]) <= fact_keys)
             facts = item["facts"]
+            for name in ('participation','prof_participation'):
+                if name not in facts: continue  # Legacy receipts remain valid, never retroactively verified.
+                evidence = facts[name]
+                allowed = {'version','verified','fueler_ids','truck_ids','handoff_fueler_id'}
+                if name == 'prof_participation':
+                    allowed |= {'assignment_id','cycle_number','work_ids','exclusions'}
+                require(isinstance(evidence,dict) and set(evidence) <= allowed)
+                require(evidence.get('version') == 1 and type(evidence.get('verified')) is bool)
+                require(optional_id(evidence.get('handoff_fueler_id')))
+                for field in ('fueler_ids','truck_ids') + (('work_ids',) if name == 'prof_participation' else ()):
+                    values=evidence.get(field)
+                    require(isinstance(values,list) and len(values)<=20000 and all(positive_id(v) for v in values)
+                            and len(values)==len(set(values)))
+                if name == 'prof_participation':
+                    require(isinstance(record['assignment'],dict) and isinstance(record['fuel_events'],list))
+                    require(positive_id(evidence.get('assignment_id')) and evidence['assignment_id'] == record['assignment']['id']
+                            and positive_id(evidence.get('cycle_number')))
+                    saved=next((e for e in record['fuel_events'] if isinstance(e,dict) and e.get('id')==item['event_id']),None)
+                    require(isinstance(saved,dict) and evidence['cycle_number']==saved.get('cycle_number'))
+                    if evidence['verified']:
+                        require(saved.get('work_state_id') in evidence['work_ids']
+                                and saved.get('fueler_user_id') in evidence['fueler_ids']
+                                and saved.get('truck_id') in evidence['truck_ids'])
+                    from app.services.neoscorpion_participation import reasons
+                    exclusions=reasons(evidence)
+                    require(evidence.get('exclusions') == exclusions)
+                    if exclusions:
+                        require(item['fueler_prof'] is None and item['truck_prof'] is None and not record['training_eligible'])
             if facts.get('version') == 4:
                 require(version == 'spear-learning/v3')
                 resources=facts.get('resource_timing')

@@ -37,6 +37,7 @@ def new_work(assignment, tail, user, now):
         physical_cycle_type=assignment.current_cycle_type or "fuel",
         physical_fueler_user_id=assignment.assigned_fueler_user_id,
         physical_truck_id=assignment.assigned_truck_id,
+        performance_context={'participation': {'version':1,'verified':True,'fueler_ids':[],'truck_ids':[]}},
         created_at=now, updated_at=now)
     db.session.add(work); db.session.flush()
     assignment.active_work_state_id = work.id

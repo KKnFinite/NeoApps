@@ -31,6 +31,7 @@ class ResourceProfMathTest(unittest.TestCase):
     def event(self,resources=None,**changes):
         resources=resources or self.evidence()
         facts=dict(version=4,resource_timing=resources,on_source='manual',fueler_id=2,truck_id=1,
+            prof_participation=dict(version=1,verified=True,fueler_ids=[2],truck_ids=[1]),
             fueler_assigned_at=at(5).isoformat(),truck_assigned_at=at(5).isoformat(),
             setup_allowance=resources['setup_allowance'],pump_rate='150',exclusions=[],aircraft_type='A300')
         values=dict(id=1,fuel_work_state_id=99,fuel_assignment_id=1,cycle_number=1,
@@ -147,7 +148,9 @@ class ResourceProfMathTest(unittest.TestCase):
         self.assertEqual(math['truck_actual_minutes'],Decimal('30.5'))
 
     def test_hold_defuel_and_resource_mismatch_keep_exclusions(self):
-        for change in (dict(event_type='defuel'),dict(fuel_truck_id=9),dict(transfer_fuel_gallons=0)):
+        # DEFUEL now follows the same single-resource eligibility contract.
+        self.assertIsNotNone(event_math(self.event(event_type='defuel'))['fueler_prof'])
+        for change in (dict(fuel_truck_id=9),dict(transfer_fuel_gallons=0)):
             math=event_math(self.event(**change));self.assertIsNone(math['truck_prof']);self.assertIsNone(math['fueler_prof'])
         e=self.event();e.performance_snapshot['exclusions']=['Hold/review affected this cycle']
         self.assertIsNone(event_math(e)['truck_prof'])
