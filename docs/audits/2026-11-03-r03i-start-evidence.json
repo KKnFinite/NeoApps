@@ -1,0 +1,274 @@
+{
+  "starting_sha": "9a863595bec3d5819fa59d93dc5f0ec537f937f6",
+  "application_files_changed": [],
+  "new_application_defects": 0,
+  "case_register": [
+    {
+      "id": "tests.test_neoscorpion_fueling_start.FuelingStartHotfixTest::test_legacy_premature_on_preserved_but_never_used_for_overdue_estimate",
+      "original_failure": [
+        {
+          "message": "AssertionError: 'review' != 'assigned'\n- review\n+ assigned",
+          "locations": [
+            "tests\\test_neoscorpion_fueling_start.py:194"
+          ]
+        }
+      ],
+      "root_cause": "Outdated status and automatic reauthentication/forecast expectations.",
+      "contract_and_correction": "Contradictory raw historical ON stays preserved in REVIEW without active/trusted physical time. Real prior ON/OFF is canonical. Saving data and elapsed travel cannot repair it. Manual ON authenticates actual arrival, while missing prior Fueler handoff keeps v4 performance timing unknown.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_start.FuelingStartHotfixTest::test_manual_on_overrides_inferred_on_and_predicted_travel_not_busy_truck",
+      "original_failure": [
+        {
+          "message": "AssertionError: None != datetime.datetime(2026, 11, 3, 20, 29, 11, 127218)",
+          "locations": [
+            "tests\\test_neoscorpion_fueling_start.py:72"
+          ]
+        }
+      ],
+      "root_cause": "Invalid fixture: a save was expected to create ON.",
+      "contract_and_correction": "Real prior occupation rejects start. Genuine OFF releases the truck. Controlled lower-confidence raw ON is preserved separately; explicit manual ON overrides travel projection and records actor/truck/cycle, remains stable on later saves and blocks another mission from using the truck.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_start.FuelingStartHotfixTest::test_partial_or_truckless_non_fob_does_not_start_and_complete_valid_save_does",
+      "original_failure": [
+        {
+          "message": "AssertionError: None != datetime.datetime(2026, 11, 3, 20, 30, 11, 800852)",
+          "locations": [
+            "tests\\test_neoscorpion_fueling_start.py:159"
+          ]
+        }
+      ],
+      "root_cause": "Obsolete automatic-start expectations after complete saved readings.",
+      "contract_and_correction": "Truckless/partial/complete data remain preparation. Authenticated resource assignment and canonical ON use the same Work. Actual OFF and committed Fueler submission precede Dispatcher verification; one 6000-gallon event changes 10000 stock to 4000 once.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fueling_start.FuelingStartHotfixTest::test_preassigned_truck_release_travel_and_expiry_never_auto_create_on",
+      "original_failure": [
+        {
+          "message": "AssertionError: 'WAITING FOR TRUCK \u00b7 TRUCK STILL FUELING' != 'TRUCK STILL FUELING'\n- WAITING FOR TRUCK \u00b7 TRUCK STILL FUELING\n+ TRUCK STILL FUELING",
+          "locations": [
+            "tests\\test_neoscorpion_fueling_start.py:171"
+          ]
+        }
+      ],
+      "root_cause": "Outdated busy-warning string and inferred ON after travel expiry.",
+      "contract_and_correction": "WAITING FOR TRUCK \u00b7 TRUCK STILL FUELING intentionally explains availability. Busy ON rejects. Real OFF exposes verified Alpha-to-Bravo travel, then TRUCK ON PENDING. Expiry and repeated saves never create physical ON; explicit confirmation does.",
+      "final_sqlite": "passed",
+      "final_postgres": "passed"
+    }
+  ],
+  "test_groups": {
+    "before": {
+      "methods": 4,
+      "status_counts": {
+        "failed": 4
+      },
+      "failure_events": 4,
+      "error_events": 0
+    },
+    "parent-first": {
+      "methods": 14,
+      "status_counts": {
+        "passed": 12,
+        "failed": 2
+      },
+      "failure_events": 2,
+      "error_events": 0
+    },
+    "parent-second": {
+      "methods": 14,
+      "status_counts": {
+        "passed": 13,
+        "failed": 1
+      },
+      "failure_events": 1,
+      "error_events": 0
+    },
+    "contracts-first": {
+      "methods": 20,
+      "status_counts": {
+        "passed": 19,
+        "failed": 1
+      },
+      "failure_events": 1,
+      "error_events": 0
+    },
+    "scope": {
+      "methods": 20,
+      "status_counts": {
+        "passed": 20
+      },
+      "failure_events": 0,
+      "error_events": 0
+    },
+    "postgres-scope": {
+      "methods": 12,
+      "status_counts": {
+        "passed": 12
+      },
+      "failure_events": 0,
+      "error_events": 0
+    },
+    "postgres-regression": {
+      "methods": 94,
+      "status_counts": {
+        "passed": 94
+      },
+      "failure_events": 0,
+      "error_events": 0
+    },
+    "browser": {
+      "methods": 1,
+      "status_counts": {
+        "failed": 1
+      },
+      "failure_events": 1,
+      "error_events": 0
+    },
+    "browser-final": {
+      "methods": 1,
+      "status_counts": {
+        "passed": 1
+      },
+      "failure_events": 0,
+      "error_events": 0
+    },
+    "browser-regression": {
+      "methods": 2,
+      "status_counts": {
+        "passed": 2
+      },
+      "failure_events": 0,
+      "error_events": 0
+    },
+    "regression": {
+      "methods": 290,
+      "status_counts": {
+        "passed": 286,
+        "failed": 4
+      },
+      "failure_events": 4,
+      "error_events": 0
+    },
+    "original-register": {
+      "methods": 367,
+      "status_counts": {
+        "passed": 76,
+        "failed": 291
+      },
+      "failure_events": 580,
+      "error_events": 0
+    }
+  },
+  "previous_r03h_passing_counts": {
+    "passed": 243
+  },
+  "original_inventory_counts": {
+    "passed": 76,
+    "failed": 291
+  },
+  "new_passed_ids": [
+    "tests.test_neoscorpion_fueling_start.FuelingStartHotfixTest::test_legacy_premature_on_preserved_but_never_used_for_overdue_estimate",
+    "tests.test_neoscorpion_fueling_start.FuelingStartHotfixTest::test_manual_on_overrides_inferred_on_and_predicted_travel_not_busy_truck",
+    "tests.test_neoscorpion_fueling_start.FuelingStartHotfixTest::test_partial_or_truckless_non_fob_does_not_start_and_complete_valid_save_does",
+    "tests.test_neoscorpion_fueling_start.FuelingStartHotfixTest::test_preassigned_truck_release_travel_and_expiry_never_auto_create_on"
+  ],
+  "regressed_from_r03h": [],
+  "original_parent_method_preservation": {
+    "deleted": [],
+    "added": [],
+    "changed": [
+      "FuelingStartHotfixTest::test_legacy_premature_on_preserved_but_never_used_for_overdue_estimate",
+      "FuelingStartHotfixTest::test_manual_on_overrides_inferred_on_and_predicted_travel_not_busy_truck",
+      "FuelingStartHotfixTest::test_partial_or_truckless_non_fob_does_not_start_and_complete_valid_save_does",
+      "FuelingStartHotfixTest::test_preassigned_truck_release_travel_and_expiry_never_auto_create_on"
+    ]
+  },
+  "regression_failures": {
+    "tests.test_neoscorpion_fuel_planning.NeoScorpionFuelPlanningTest::test_hanzo_fueling_identity_timing_and_required_warning": {
+      "failures": [
+        {
+          "message": "AssertionError: '\u2014' != '02:15'\n- \u2014\n+ 02:15",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_planning.py:587"
+          ]
+        }
+      ],
+      "errors": [],
+      "skips": [],
+      "status": "failed"
+    },
+    "tests.test_neoscorpion_fueler_off.NeoScorpionFuelerOffTest::test_get_never_marks_off_and_ready_card_offers_action": {
+      "failures": [
+        {
+          "message": "AssertionError: b'>TRUCK OFF</button>' unexpectedly found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta name=\"theme-color\" content=\"#d95a1f\">\\n    <meta name=\"application-name\" content=\"NeoApps\">\\n    <meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\\n    <meta name=\"apple-mobile-web-app-title\" content=\"NeoApps\">\\n    <meta name=\"",
+          "locations": [
+            "tests\\test_neoscorpion_fueler_off.py:270"
+          ]
+        }
+      ],
+      "errors": [],
+      "skips": [],
+      "status": "failed"
+    },
+    "tests.test_neoscorpion_fueler_off.NeoScorpionFuelerOffTest::test_physical_off_does_not_require_final_tf_and_repeat_is_noop": {
+      "failures": [
+        {
+          "message": "AssertionError: b'<dt>OFF</dt>' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta name=\"theme-color\" content=\"#d95a1f\">\\n    <meta name=\"application-name\" content=\"NeoApps\">\\n    <meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\\n    <meta name=\"apple-mobile-web-app-title\" content=\"NeoApps\">\\n    <meta name=\"apple-mobile-web",
+          "locations": [
+            "tests\\test_neoscorpion_fueler_off.py:200"
+          ]
+        }
+      ],
+      "errors": [],
+      "skips": [],
+      "status": "failed"
+    },
+    "tests.test_neoscorpion_dispatch_order.DispatchOrderTest::test_only_final_presentation_copies_rows_not_projection_or_plan": {
+      "failures": [
+        {
+          "message": "TypeError: 'object' object is not iterable",
+          "locations": [
+            "tests\\test_neoscorpion_dispatch_order.py:69",
+            "app\\neonodes\\neoscorpion\\routes.py:2104"
+          ]
+        }
+      ],
+      "errors": [],
+      "skips": [],
+      "status": "failed"
+    }
+  },
+  "javascript": {
+    "passed": 22,
+    "failed": 0,
+    "skipped": 0
+  },
+  "browser_engines": [
+    "Chromium",
+    "WebKit"
+  ],
+  "browser_widths": [
+    390,
+    1440
+  ],
+  "checks": {
+    "compiled_test_files": 5,
+    "javascript_syntax_files": 3,
+    "diff_check": "passed"
+  },
+  "limitations": [
+    "No full-system pass claimed. Every original ID is accounted for separately from failure/subtest events.",
+    "Known SubZero CSS asset metadata, older correction/visit browser autosave/receipt failures, Hanzo, NeoErmac and other presentation/query failures remain separate.",
+    "The new browser test reads a fresh projection after intentional blocked ON; it does not claim automatic retained-error recovery or close the excluded older browser investigations.",
+    "Historical raw/confirmed ON fixtures are explicitly distinguished from canonical new actions. No production historical evidence is rewritten.",
+    "An attempted synthetic OFF with contradictory raw ON correctly rejected; fixtures were ordered to preserve this guard, and a separate rollback test retains it. No database query cancellation or blocked cleanup retry was needed."
+  ]
+}
