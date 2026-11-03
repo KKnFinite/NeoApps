@@ -103,7 +103,9 @@
         rows.forEach(row => board.append(row));
         board.querySelectorAll('.ops-ramp-column').forEach(e => e.remove());
         const visual = root.dataset.layout === 'visual';
-        const ramp = visual && media.matches && root.dataset.ramp === 'All' ? 'Alpha' : root.dataset.ramp;
+        // Desktop always shows every ramp. Keep the stored mobile selection
+        // intact, including when live refresh or a viewport change reapplies it.
+        const ramp = !media.matches ? 'All' : visual && root.dataset.ramp === 'All' ? 'Alpha' : root.dataset.ramp;
         const selector = root.querySelector('[data-ops-ramp]');
         selector.querySelector('option[value="All"]').disabled = visual && media.matches;
         selector.value = ramp;
@@ -114,7 +116,7 @@
                 if (!primaryRamps.includes(name)) column.classList.add('is-extra');
                 column.hidden = media.matches && name !== ramp;
                 const heading = document.createElement('h2'); heading.textContent = name.toUpperCase(); column.append(heading);
-                rows.filter(row => row.dataset.ramp === name).forEach(row => { row.hidden = root.dataset.ramp !== 'All' && row.dataset.ramp !== root.dataset.ramp; column.append(row); });
+                rows.filter(row => row.dataset.ramp === name).forEach(row => { row.hidden = ramp !== 'All' && row.dataset.ramp !== ramp; column.append(row); });
                 if (!column.querySelector('[data-ops-row]:not([hidden])')) { const empty = document.createElement('p'); empty.textContent = 'No aircraft'; column.append(empty); }
                 board.append(column);
             });

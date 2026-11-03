@@ -31,11 +31,16 @@ class OperationsBrowserTest(unittest.TestCase):
         expect(page.locator(f'[data-ops-layout="{value}"]')).to_be_enabled()
 
     def ramp(self, page, value):
+        # Ramp selection is now mobile-only. Establish its real per-user
+        # preference through that UI, then restore the caller's desktop width.
+        viewport=page.viewport_size
+        if viewport['width']>900:page.set_viewport_size({'width':390,'height':viewport['height']})
         with page.expect_response(lambda r:r.url.endswith('/operations/preferences') and r.request.method=='POST') as pending:
             page.locator('[data-ops-ramp]').select_option(value)
         self.assertEqual(pending.value.status,200,pending.value.text())
         self.assertTrue(pending.value.json()['ok'])
         expect(page.locator('[data-ops-ramp]')).to_be_enabled()
+        if viewport['width']>900:page.set_viewport_size(viewport)
 
     @classmethod
     def setUpClass(cls):
