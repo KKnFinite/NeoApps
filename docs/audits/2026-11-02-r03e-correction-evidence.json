@@ -1,0 +1,264 @@
+{
+  "starting_sha": "8ee774d60a0497c136e799d6f7c2fbd728bfc6d3",
+  "application_files_changed": [
+    "app/services/neoscorpion.py",
+    "app/neonodes/neoscorpion/routes.py"
+  ],
+  "actual_new_integrity_defects": 1,
+  "case_register": [
+    {
+      "id": "tests.test_neoscorpion_fuel_corrections.NeoScorpionFuelCorrectionTest::test_reopen_requires_reason_and_audits_prior_off",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_corrections.py:112",
+            "tests\\test_neoscorpion_fuel_corrections.py:524",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated assertion; no application defect in original case established",
+      "verified_contract_and_correction": "Canonical fixture replaces missing truck/ON. Audit assertions now retain initial ON/data audits and select the exact reopen action. Missing reason preserves all facts; valid reopen records old OFF/actor/reason and same permanent visit, with no event or deduction; repeat is no-op.",
+      "final_result": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_corrections.NeoScorpionFuelCorrectionTest::test_reopened_work_can_be_edited_and_marked_off_again",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_corrections.py:162",
+            "tests\\test_neoscorpion_fuel_corrections.py:524",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated assertion; no application defect in original case established",
+      "verified_contract_and_correction": "Canonical fixture plus action-specific audit selection replaces a global one-row assumption. Audited reopen retains Work/visit/sequence/ON identity; permitted edit and a new physical OFF preserve prior OFF audit, stock and absence of event.",
+      "final_result": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_corrections.NeoScorpionFuelCorrectionTest::test_completed_assignments_cannot_reopen_or_be_corrected",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_corrections.py:197",
+            "tests\\test_neoscorpion_fuel_corrections.py:524",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated assertion; no application defect in original case established",
+      "verified_contract_and_correction": "Canonical OFF, Fueler receipt and Dispatcher completion replace direct ORM completion-field fabrication. Reopen/correction reject with unchanged immutable event/tanks/audits/stock. A separate genuine truckless FOB rejects both actions without clearing any completed fields.",
+      "final_result": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_corrections.NeoScorpionFuelCorrectionTest::test_fueler_save_is_frozen_after_off_and_ui_is_read_only",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_corrections.py:234",
+            "tests\\test_neoscorpion_fuel_corrections.py:524",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated assertion; no application defect in original case established",
+      "verified_contract_and_correction": "Old name retained for original-ID accounting. October 16 final-data editing after OFF is authoritative: material edits preserve physical OFF and invalidate submission version, retaining historical actor/time. After real Dispatcher completion, changed Fueler saves reject, active endpoint closes and authorized historical panel is read-only.",
+      "final_result": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_corrections.NeoScorpionFuelCorrectionTest::test_actual_correction_audits_each_change_once_and_preserves_off",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_corrections.py:254",
+            "tests\\test_neoscorpion_fuel_corrections.py:524",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated assertion; no application defect in original case established",
+      "verified_contract_and_correction": "Canonical setup creates legitimate earlier audits; only correct_actual delta rows are counted. Exact changed tanks/old/new/actor/reason and scope are asserted. OFF/T/F remain, total updates, identical retry produces no audit/revision, event or stock deduction.",
+      "final_result": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_corrections.NeoScorpionFuelCorrectionTest::test_clearing_actual_makes_completion_incomplete_without_clearing_off",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_corrections.py:316",
+            "tests\\test_neoscorpion_fuel_corrections.py:524",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated assertion; no application defect in original case established",
+      "verified_contract_and_correction": "Canonical OFF and real Fueler submission reach clearing correction. Actual total becomes unavailable; receipt validity/readiness is revoked without deleting historical submission time. OFF stays; Dispatcher completion rejects incomplete Actual; no event/deduction.",
+      "final_result": "passed",
+      "final_postgres": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_corrections.NeoScorpionFuelCorrectionTest::test_dispatcher_routes_commit_each_meaningful_action_once",
+      "original_failure": [
+        {
+          "message": "ValueError: Assign the truck used for positive T/F before OFF.",
+          "locations": [
+            "tests\\test_neoscorpion_fuel_corrections.py:423",
+            "tests\\test_neoscorpion_fuel_corrections.py:524",
+            "app\\services\\neoscorpion.py:3087"
+          ]
+        }
+      ],
+      "classification": "Invalid lifecycle fixture / outdated assertion; no application defect in original case established",
+      "verified_contract_and_correction": "Valid physical fixture lets real authorized POSTs reach meaningful actions. Correction and reopen each commit once; identical correction/repeated reopen commit zero times with no duplicate audits, events or deductions.",
+      "final_result": "passed",
+      "final_postgres": "passed"
+    }
+  ],
+  "test_groups": {
+    "before": {
+      "methods": 10,
+      "status_counts": {
+        "failed": 7,
+        "passed": 3
+      },
+      "failure_events": 7,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "7 failed, 3 passed, 3664 warnings in 6.85s"
+    },
+    "canonical-setup": {
+      "methods": 10,
+      "status_counts": {
+        "failed": 4,
+        "passed": 6
+      },
+      "failure_events": 4,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "4 failed, 6 passed, 3854 warnings in 6.89s"
+    },
+    "safety-before": {
+      "methods": 14,
+      "status_counts": {
+        "passed": 12,
+        "failed": 2
+      },
+      "failure_events": 4,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "4 failed, 14 passed, 5611 warnings, 2 subtests passed in 10.59s"
+    },
+    "after": {
+      "methods": 14,
+      "status_counts": {
+        "passed": 14
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "14 passed, 5623 warnings, 6 subtests passed in 10.81s"
+    },
+    "focused": {
+      "methods": 176,
+      "status_counts": {
+        "passed": 176
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "176 passed, 71023 warnings, 51 subtests passed in 131.22s (0:02:11)"
+    },
+    "postgres": {
+      "methods": 61,
+      "status_counts": {
+        "passed": 61
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "61 passed, 26859 warnings, 11 subtests passed in 199.02s (0:03:19)"
+    },
+    "postgres-races-final": {
+      "methods": 2,
+      "status_counts": {
+        "passed": 2
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "2 passed, 820 warnings in 7.96s"
+    },
+    "browser-corrections": {
+      "methods": 1,
+      "status_counts": {
+        "passed": 1
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "1 passed, 859 warnings in 39.59s"
+    },
+    "browser-regression": {
+      "methods": 3,
+      "status_counts": {
+        "passed": 3
+      },
+      "failure_events": 0,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "3 passed, 3328 warnings in 145.45s (0:02:25)"
+    },
+    "original-register": {
+      "methods": 367,
+      "status_counts": {
+        "passed": 63,
+        "failed": 304
+      },
+      "failure_events": 593,
+      "error_events": 0,
+      "skip_events": 0,
+      "summary": "593 failed, 95 passed, 134913 warnings, 356 subtests passed in 246.99s (0:04:06)"
+    }
+  },
+  "confirmed_defect": {
+    "name": "Current-work correction/reopen source-parameter guard bypass",
+    "before": "Authorized request with mismatched expected_work_ref plus physical_work_id returned 302, changed Actual 11000 to 12000, then cleared OFF in the reopen request.",
+    "cause": "Shared helper skipped current Work reference validation for source actions, but these two actions never resolved a source owner.",
+    "after": "Current-work-only actions reject source parameters and stale Work references with 409; snapshots, audits, revision, OFF and stock remain unchanged.",
+    "permission_escalation": false,
+    "production_records_repaired": false
+  },
+  "javascript_summary": [
+    "\u2139 tests 18",
+    "\u2139 suites 0",
+    "\u2139 pass 18",
+    "\u2139 fail 0",
+    "\u2139 cancelled 0",
+    "\u2139 skipped 0",
+    "\u2139 todo 0",
+    "\u2139 duration_ms 154.7206"
+  ],
+  "inventory_counts": {
+    "passed": 63,
+    "failed": 304
+  },
+  "limitations": [
+    "Full application suite not executed.",
+    "Existing post-OFF final-data edits remain permitted; reopening physical OFF remains explicit.",
+    "Historical submission actor/time/evidence is preserved; version/fingerprint determines current validity.",
+    "Remaining original failures are unresolved verification gaps, not automatically obsolete or confirmed production defects.",
+    "Production verification is read-only; no historical repair or provider test write."
+  ]
+}

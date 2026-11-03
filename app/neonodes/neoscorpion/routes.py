@@ -713,7 +713,7 @@ def fuel_dispatch_reopen_off():
             else "OFF state changed. Reload Fuel Dispatch and try again."
         )
         flash(message, "error")
-        return _dispatch_response(gateway, access, status_code=400)
+        return _dispatch_response(gateway, access, status_code=409 if isinstance(exc,FuelerDataConflict) else 400)
     if result.changed:
         db.session.commit()
         flash("FUELER OFF REOPENED.", "success")
@@ -748,7 +748,7 @@ def fuel_dispatch_correct_actual():
             else "Actual fuel changed. Reload Fuel Dispatch and try again."
         )
         flash(message, "error")
-        return _dispatch_response(gateway, access, status_code=400)
+        return _dispatch_response(gateway, access, status_code=409 if isinstance(exc,FuelerDataConflict) else 400)
     if result.changed:
         db.session.commit()
         flash("ACTUAL FUEL CORRECTED.", "success")

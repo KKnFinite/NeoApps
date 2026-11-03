@@ -4180,6 +4180,7 @@ def reopen_fueler_off(gateway, user, assignment_id, reason, *, now_utc=None):
         operation,
         assignment_id,
         action_label="REOPEN OFF",
+        current_work_only=True,
     )
     _validate_precompletion_assignment(assignment, mission, "REOPEN OFF")
     fuel_work_state = _locked_current_fuel_work_state(assignment, mission)
@@ -4237,6 +4238,7 @@ def correct_fuel_actuals(gateway, user, form, *, now_utc=None):
         operation,
         form.get("assignment_id"),
         action_label="Actual correction",
+        current_work_only=True,
     )
     _validate_precompletion_assignment(assignment, mission, "Actual correction")
     reason = _required_correction_reason(form.get("correction_reason"))
@@ -4907,7 +4909,7 @@ def end_fuel_work_early(
     )
 
 
-def _locked_current_fuel_assignment(operation, assignment_id, *, action_label):
+def _locked_current_fuel_assignment(operation, assignment_id, *, action_label, current_work_only=False):
     assignment_row = (
         db.session.query(NeoScorpionFuelAssignment, SortDateMission)
         .join(
@@ -4928,8 +4930,14 @@ def _locked_current_fuel_assignment(operation, assignment_id, *, action_label):
         raise ValueError(
             f"Fuel assignment was not found for the current sort operation during {action_label}."
         )
-    if has_request_context() and not request.form.get("physical_work_id"):
-        _check_dispatch_segment_reference(assignment_row[0],request.form)
+    if has_request_context():
+        # These legacy correction actions accept only the current visit. A
+        # source parameter must not skip its reference guard and then silently
+        # mutate current work. Supported source actions resolve their own owner.
+        if current_work_only and request.form.get("physical_work_id"):
+            raise FuelerDataConflict()
+        if not request.form.get("physical_work_id"):
+            _check_dispatch_segment_reference(assignment_row[0],request.form)
     return assignment_row
 
 
