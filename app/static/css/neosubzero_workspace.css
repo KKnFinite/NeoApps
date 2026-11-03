@@ -1,3 +1,44 @@
+/* One approved aircraft palette for Operations and the shared DUCC diagram. */
+.blueprint-neosubzero {
+    --subzero-planned:#D4A536; --subzero-planned-border:#e0be6e;
+    --subzero-configured:#278756; --subzero-configured-border:#63a984;
+    --subzero-deicing:#D9EDF0; --subzero-deicing-border:#a6c9d0;
+    --subzero-fin:#285DA8; --subzero-fin-border:#648ac0;
+    --subzero-radio-pending:#F02D9F; --subzero-radio-pending-border:#f468ba;
+    --subzero-negative:#C34854; --subzero-negative-border:#d47b84;
+    --subzero-gone:#687480; --subzero-gone-border:#929ba4;
+    --subzero-status-dark:#101b26; --subzero-status-light:#fff;
+}
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-planned,.state-deice-planned,.state-pretreat-planned) {
+    --aircraft-fill:var(--subzero-planned); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-planned-border);
+}
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-configured {
+    /* Black reaches 4.68:1 on the approved emerald; white is below 4.5:1. */
+    --aircraft-fill:var(--subzero-configured); --aircraft-ink:#000; --aircraft-edge:var(--subzero-configured-border);
+}
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-deicing {
+    --aircraft-fill:var(--subzero-deicing); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-deicing-border);
+}
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-fin,.state-finished) {
+    --aircraft-fill:var(--subzero-fin); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-fin-border);
+}
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-radio-pending {
+    --aircraft-fill:var(--subzero-radio-pending); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-radio-pending-border);
+}
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-negative {
+    --aircraft-fill:var(--subzero-negative); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-negative-border);
+}
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-gone,.state-cleared) {
+    --aircraft-fill:var(--subzero-gone); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-gone-border);
+}
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-planned,.state-deice-planned,.state-pretreat-planned,.state-configured,.state-deicing,.state-fin,.state-finished,.state-radio-pending,.state-negative,.state-gone,.state-cleared) {
+    background:var(--aircraft-fill); color:var(--aircraft-ink); border-color:var(--aircraft-edge);
+}
+.neosubzero-ucc .ucc-plane:is(.state-deice-planned,.state-pretreat-planned,.state-configured,.state-deicing,.state-finished,.state-radio-pending,.state-negative,.state-gone,.state-cleared) > :is(span,small) { color:inherit; }
+.neosubzero-ucc .ucc-plane .ucc-plane-icon { font-family:"Segoe UI Symbol","Apple Symbols",Arial,sans-serif; font-variant-emoji:text; }
+.neosubzero-ucc .ucc-plane:is(:hover,[aria-pressed="true"]) { box-shadow:inset 0 0 0 1px currentColor; }
+.neosubzero-ucc .ucc-plane:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+
 /* Navigation grouping only; collapsed links keep their accessible names. */
 .blueprint-neosubzero .subzero-nav-section {
     margin-top:4px; padding:8px 9px 2px; border-top:1px solid #334b5d;
@@ -56,14 +97,11 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
 /* Mobile DUCC is a lens on the existing desktop diagram, not a second board. */
 .ucc-mobile-controls,.neosubzero-mobile-ramp-link { display:none; }
 .neosubzero-coordinator-tools { display:contents; }
-.neosubzero-radio-pending { padding:10px; margin-bottom:8px; border:2px solid #ff88c8; background:#FF1493; color:#200516; }
+.neosubzero-radio-pending { padding:10px; margin-bottom:8px; border:2px solid var(--subzero-radio-pending-border); background:var(--subzero-radio-pending); color:var(--subzero-status-dark); }
 .neosubzero-radio-pending h2 { margin:0 0 6px; color:inherit; font-size:1rem; }
 .neosubzero-radio-pending [data-radio-script] { font-size:1rem; font-weight:700; }
 .neosubzero-radio-pending form { display:grid; gap:5px; }
-.neosubzero-radio-pending button { min-height:40px; background:#200516; color:#fff; border:1px solid #fff; padding:8px; }
-.neosubzero-ucc .ucc-plane.state-radio-pending { background:#FF1493; color:#200516; border-color:#ff88c8; }
-.neosubzero-ucc .ucc-plane.state-radio-pending :is(span,small) { color:inherit; }
-.neosubzero-ucc .ucc-plane.state-gone { background:#30363c; color:#f0f7fb; }
+.neosubzero-radio-pending button { min-height:40px; background:var(--subzero-status-dark); color:#fff; border:1px solid #fff; padding:8px; }
 @media (max-width:900px) {
     .neosubzero-ucc .ucc-mobile-controls { display:grid; gap:6px; margin:0 0 8px; }
     .ucc-mobile-modes { display:grid; grid-template-columns:1fr 1fr; gap:4px; }

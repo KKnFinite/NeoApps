@@ -13,21 +13,15 @@
 .neosubzero-operations .ops-mobile { display:none; }
 .neosubzero-operations .ops-aircraft-board { display:grid; gap:6px; min-width:0; }
 .neosubzero-operations .ops-aircraft { min-width:0; border:1px solid #57717f; border-radius:4px; color:#f0f7fb; background:#132431; }
-.neosubzero-operations .ops-aircraft.state-planned { background:#c3a135; color:#121a10; border-color:#e8ca69; }
-.neosubzero-operations .ops-aircraft.state-configured { background:#245c3d; border-color:#529567; }
-.neosubzero-operations .ops-aircraft.state-deicing { background:#1b7042; border-color:#74d298; }
-.neosubzero-operations .ops-aircraft.state-fin { background:#204d83; border-color:#6da2df; }
-.neosubzero-operations .ops-aircraft.state-negative { background:#591f2b; border-color:#a64e61; }
+/* Approved status colors are shared with DUCC in neosubzero_workspace.css. */
 .neosubzero-operations .ops-aircraft.state-not-sprayed { background:#352a30; }
-.neosubzero-operations .ops-aircraft.state-gone { background:#30363c; border-color:#64717c; }
-.neosubzero-operations .ops-aircraft.state-radio-pending { background:#FF1493; color:#200516; border-color:#ff88c8; }
 .neosubzero-operations .ops-aircraft.state-review { background:#603f20; border-color:#ffd18b; }
 .neosubzero-operations .ops-aircraft > a { display:grid; grid-template-columns:minmax(110px,1fr) minmax(110px,.9fr) repeat(2,minmax(150px,1.2fr)) minmax(125px,1fr); align-items:center; gap:8px 12px; padding:9px 12px; color:inherit; text-decoration:none; min-width:0; }
 .neosubzero-operations .ops-aircraft > a:focus-visible { outline:3px solid #d8efff; outline-offset:2px; }
 .neosubzero-operations .ops-identity,.neosubzero-operations .ops-location,.neosubzero-operations .ops-pass,.neosubzero-operations .ops-status { display:grid; gap:3px; min-width:0; overflow-wrap:anywhere; }
 .neosubzero-operations .ops-identity strong { font-size:1.1rem; }.neosubzero-operations .ops-identity span { font-size:.8rem; }
 .neosubzero-operations .ops-location { font-size:.72rem; }.neosubzero-operations .ops-location b { font-size:.85rem; }
-.neosubzero-operations .ops-pass { font-size:.7rem; }.neosubzero-operations .ops-pass > span:first-child { font-weight:800; opacity:.85; }.neosubzero-operations .ops-pass strong { font-size:.82rem; }
+.neosubzero-operations .ops-pass { font-size:.7rem; }.neosubzero-operations .ops-pass > span:first-child { font-weight:800; }.neosubzero-operations .ops-pass strong { font-size:.82rem; }
 .neosubzero-operations .ops-status strong { font-size:.8rem; }.neosubzero-operations .state-deicing .ops-status strong { font-size:1rem; font-weight:900; }
 .neosubzero-operations .ops-status > span { font-size:.68rem; }.neosubzero-operations .ops-pretreated { color:#c6ffce; background:#143b24; font-weight:800; padding:2px 4px; border-radius:3px; width:fit-content; }
 .neosubzero-operations .ops-ramp-column { display:grid; align-content:start; gap:7px; min-width:0; }

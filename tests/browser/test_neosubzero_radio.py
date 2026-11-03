@@ -54,7 +54,7 @@ class RadioBrowserTest(unittest.TestCase):
                 pad=p.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]')
                 expect(pad.locator('.state-radio-pending')).to_have_count(1,timeout=10000)
                 expect(pad.locator('[data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[0]))
-                self.assertEqual(pad.locator('.state-radio-pending').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(255, 20, 147)')
+                self.assertEqual(pad.locator('.state-radio-pending').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(240, 45, 159)')
                 p.screenshot(path=str(EVIDENCE/f'{engine}-ducc-{p.viewport_size["width"]}-pending.png'))
             board=page();ops.OperationsBrowserTest.ready(case,board,'/neosubzero/operations?mode=outbound')
             for width in (320,375,390,430,1366,1920):
@@ -63,7 +63,7 @@ class RadioBrowserTest(unittest.TestCase):
                     ops.OperationsBrowserTest.layout(case,board,layout)
                     row=board.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')
                     expect(row).to_be_visible();expect(row).to_have_attribute('data-status','radio-pending')
-                    self.assertEqual(row.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(255, 20, 147)')
+                    self.assertEqual(row.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(240, 45, 159)')
                     expect(board.locator(f'[data-mission-id="{gone_id}"]')).to_have_attribute('data-status','gone')
                     expect(board.locator(f'[data-mission-id="{neg_id}"]')).to_have_attribute('data-status','negative')
                     expect(board.locator(f'[data-mission-id="{case.missions[1]}"]')).to_have_attribute('data-status','planned')
