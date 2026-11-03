@@ -25,6 +25,7 @@ from app.models import (
     User,
 )
 from tests import neoscorpion_off_workflow as off_workflow
+from tests import neoscorpion_off_presentation as presentation
 from app.services import neoscorpion as fuel
 from app.models import NeoScorpionFuelingEvent
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -151,54 +152,45 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
     def test_physical_off_does_not_require_final_tf_and_repeat_is_noop(self):
-        operation, _mission, assignment = self._assignment()
-        saved = self._save_complete(assignment)
-        self.assertEqual(saved.revision, 1)
-        db.session.commit()
-        self.assertEqual(assignment.transfer_fuel_gallons, 1)
-        self._physical_truck(assignment)
-
-        assignment.transfer_fuel_gallons = None
-        db.session.commit()
-        mark_fueler_off(self.gateway, self.user, assignment.id)
-        db.session.commit()
-
+        operation, mission, assignment = self._assignment()
+        mission.planned_fuel_load=31000
+        dispatcher=self._add_user('presentation_dispatcher','simulator');db.session.commit()
+        truck,stock=off_workflow.assign_truck(self,assignment,self.user,dispatcher)
+        work=save_fueler_entry(self.gateway,self.user,self._form(assignment,apu_running='no',
+            remaining_left='10',remaining_ctr='10',remaining_right='10',actual_left='11',actual_ctr='10',actual_right='10'),
+            now_utc=datetime(2026,8,18,3,45)).fuel_work_state
+        db.session.commit();self.assertIsNone(assignment.transfer_fuel_gallons)
+        off_at=datetime(2026,8,18,4)
+        first=mark_fueler_off(self.gateway,self.user,assignment.id,now_utc=off_at);db.session.commit()
+        self.assertTrue(first.changed)
+        self.assertEqual((work.off_at_utc,work.off_by_user_id),(off_at,self.user.id))
         self._login(self.user)
+        before=presentation.snapshot();revision=off_workflow.revision(operation)
+        node=presentation.read_views(self,assignment)[0]
+        presentation.confirmed_off(self,node,'23:00')
+        expected=fuel.fueler_context(self.gateway,self.user,assignment_id=assignment.id,include_timing=False)['rows'][0]['edit_baseline']
+        import json
         with patch.object(db.session, "commit", wraps=db.session.commit) as commit:
-            response = self.client.post(
-                "/neoscorpion/fueler/off",
-                data={"assignment_id": str(assignment.id)},
-                follow_redirects=False,
-            )
+            response=self.client.post(f'/neoscorpion/fueler/assignments/{assignment.id}/off',
+                data={'expected':json.dumps(expected)},headers={'Accept':'application/json'})
             self.assertEqual(commit.call_count, 0)
-        self.assertEqual(response.status_code, 302)
-
-        work = NeoScorpionFuelWorkState.query.filter_by(
-            fuel_assignment_id=assignment.id
-        ).one()
-        original_off_at = work.off_at_utc
-        self.assertIsNotNone(original_off_at)
-        self.assertEqual(work.off_by_user_id, self.user.id)
-        state = NeoScorpionSortAssetState.query.filter_by(
-            sort_date_operation_id=operation.id
-        ).one()
-        self.assertEqual(state.revision, 3)
-
-        repeated = mark_fueler_off(
-            self.gateway,
-            self.user,
-            assignment.id,
-            now_utc=datetime(2026, 8, 18, 7, 30),
-        )
+        self.assertEqual(response.status_code,200);self.assertTrue(response.json['ok'])
+        self.assertEqual(presentation.snapshot(),before)
+        repeated=mark_fueler_off(self.gateway,self.user,assignment.id,now_utc=datetime(2026,8,18,7,30))
         self.assertFalse(repeated.changed)
-        self.assertEqual(repeated.revision, 3)
-        self.assertEqual(repeated.fuel_work_state.off_at_utc, original_off_at)
-
-        rendered = self.client.get("/neoscorpion/fueler")
-        self.assertEqual(rendered.status_code, 200)
-        self.assertIn(f'data-fuel-assignment-id="{assignment.id}"'.encode(), rendered.data)
-        self.assertIn(b"<dt>OFF</dt>", rendered.data)
-        self.assertNotIn(b">MARK OFF</button>", rendered.data)
+        self.assertEqual(repeated.revision,revision);self.assertEqual(presentation.snapshot(),before)
+        for node in presentation.read_views(self,assignment):presentation.confirmed_off(self,node,'23:00')
+        # Permitted final data remains separate from the physical clock.
+        save_fueler_entry(self.gateway,self.user,dict(assignment_id=assignment.id,transfer_fuel_gallons='150'),
+            now_utc=datetime(2026,8,18,4,5));db.session.commit()
+        self.assertEqual((work.off_at_utc,work.off_by_user_id),(off_at,self.user.id))
+        self.assertIsNone(work.fueler_submitted_at_utc);self.assertIsNone(assignment.completed_at_utc)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0);self.assertEqual(stock.current_gallons,1000)
+        self.assertTrue(off_workflow.submit(self,assignment,self.user,now=datetime(2026,8,18,4,10)).changed)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0);self.assertEqual(stock.current_gallons,1000)
+        fuel.complete_fueled_assignment(self.gateway,dispatcher,assignment.id,now_utc=datetime(2026,8,18,4,15));db.session.commit()
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),1);self.assertEqual(stock.current_gallons,850)
+        self.assertEqual((work.off_at_utc,work.off_by_user_id),(off_at,self.user.id))
 
     def test_spear_auto_complete_failure_does_not_rollback_valid_off(self):
         _operation, mission, assignment = self._assignment()
@@ -257,22 +249,40 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
         )
 
     def test_get_never_marks_off_and_ready_card_offers_action(self):
-        _operation, _mission, assignment = self._assignment()
-        self._save_complete(assignment)
+        operation, mission, assignment = self._assignment()
+        mission.planned_fuel_load=30000
+        work=save_fueler_entry(self.gateway,self.user,self._form(assignment,apu_running='no',
+            remaining_left='10',remaining_ctr='10',remaining_right='10',actual_left='10',actual_ctr='10',actual_right='10')).fuel_work_state
         db.session.commit()
         self._login(self.user)
-
         with patch.object(db.session, "commit", wraps=db.session.commit) as commit:
-            response = self.client.get("/neoscorpion/fueler")
+            nodes=presentation.read_views(self,assignment)
             self.assertEqual(commit.call_count, 0)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b">TRUCK OFF</button>", response.data)  # Truckless FOB has no physical truck action.
-        work = NeoScorpionFuelWorkState.query.filter_by(
-            fuel_assignment_id=assignment.id
-        ).one()
-        self.assertIsNone(work.off_at_utc)
-        self.assertIsNone(work.off_by_user_id)
+        row=fuel.fueler_context(self.gateway,self.user,assignment_id=assignment.id,include_timing=False)['rows'][0]
+        self.assertTrue(row['fuel_on_board_ready'])
+        before=presentation.snapshot()
+        for node in nodes:presentation.off_form(self,node,assignment,enabled=False,reason='No physical truck')
+        form=presentation.off_form(self,nodes[0],assignment,enabled=False)
+        # Disabling a button is presentation only: forging its real form still fails.
+        rejected=self.client.post(form.attrs['action'],data=form.values())
+        self.assertEqual(rejected.status_code,400);self.assertIn('No physical truck',rejected.json['error'])
+        self.assertEqual(presentation.snapshot(),before)
+        dispatcher=self._add_user('eligibility_dispatcher','simulator');db.session.commit()
+        truck,stock=off_workflow.assign_truck(self,assignment,self.user,dispatcher,start=False)
+        for node in presentation.read_views(self,assignment):
+            form=presentation.off_form(self,node,assignment,enabled=False,reason='Confirm physical TRUCK ON')
+        before=presentation.snapshot();rejected=self.client.post(form.attrs['action'],data=form.values())
+        self.assertEqual(rejected.status_code,400);self.assertIn('Confirm physical TRUCK ON',rejected.json['error'])
+        self.assertEqual(presentation.snapshot(),before)
+        confirm_fueler_truck_on(self.gateway,self.user,assignment.id,expected_cycle=1,
+            expected_tail=mission.assigned_tail_number,expected_truck_id=truck.id,
+            expected_work_ref=work.id,require_work_ref=True,now_utc=datetime(2026,8,18,3,30));db.session.commit()
+        for node in presentation.read_views(self,assignment):form=presentation.off_form(self,node,assignment,enabled=True)
+        accepted=self.client.post(form.attrs['action'],data=form.values())
+        self.assertEqual(accepted.status_code,200);self.assertTrue(accepted.json['ok'])
+        self.assertIsNotNone(work.off_at_utc);self.assertEqual(work.off_by_user_id,self.user.id)
+        self.assertIsNone(work.fueler_submitted_at_utc);self.assertIsNone(assignment.completed_at_utc)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0);self.assertEqual(stock.current_gallons,1000)
 
     def test_fueler_status_is_not_rendered_or_mutated(self):
         _operation, _mission, assignment = self._assignment()

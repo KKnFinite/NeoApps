@@ -2,6 +2,7 @@
 import unittest
 from datetime import date,datetime,timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 from unittest.mock import patch
 from playwright.sync_api import expect
 from app.extensions import db
@@ -75,7 +76,10 @@ class StartEvidenceBrowserTest(unittest.TestCase):
                         F().ready(dispatch,'/neoscorpion/fuel-dispatch')
                         expect(dispatch.locator(f'[data-dispatch-mission-id="{missions[0][0]}"] [data-fuel-status]').first).to_have_attribute('data-fuel-status','fueling')
                         dispatch.screenshot(path=str(evidence/f'{engine.name}-dispatch-busy.png'),full_page=True)
-                        first.locator('.neoscorpion-fueler-off-form button').click();expect(first).to_contain_text('TRUCK OFF')
+                        with page.expect_response(lambda r:r.request.method=='POST' and urlsplit(r.url).path==f'/neoscorpion/fueler/assignments/{aid}/off') as off_response:
+                            first.locator('.neoscorpion-fueler-off-form button').click()
+                        self.assertEqual(off_response.value.status,200)
+                        expect(first.locator('.scorpion-fueler-finish')).to_contain_text('CONFIRMED')
                         # The deliberately rejected ON retains its local error
                         # feedback. Read a fresh projection, preserving saved data.
                         F().ready(page,'/neoscorpion/fueler')

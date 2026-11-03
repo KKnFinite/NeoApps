@@ -6608,7 +6608,10 @@ def _fuel_rows(
             and not work_ended_early
         )
         off_reason = ("Dispatcher review required before TRUCK OFF." if effective_hold or work_ended_early else
-                      ("Complete Fuel On Board readings and APU before OFF." if assignment and assignment.assigned_truck_id is None
+                      (("Assign the truck used for positive T/F before OFF."
+                        if assignment.transfer_fuel_gallons not in (None, 0) else
+                        "No physical truck is assigned. Use Dispatcher Fuel On Board verification; do not record TRUCK OFF.")
+                       if assignment and assignment.assigned_truck_id is None
                        else "Confirm physical TRUCK ON before TRUCK OFF.") if not physical_off_ready else "")
         if fuel_on_board_complete:
             fuel_on_board_reason = "COMPLETE"
