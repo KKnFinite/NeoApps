@@ -1773,18 +1773,18 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > .neos
 .neoscorpion-fueler-card:is([data-screen-mode], [data-dispatcher-panel="false"]) :is(p,dl,h2) { margin: 0; }
 .neoscorpion-fueler-card:is([data-screen-mode], [data-dispatcher-panel="false"]) .neoscorpion-save-status:empty { display: none; }
 .neoscorpion-fueler-card:is([data-screen-mode], [data-dispatcher-panel="false"]) > .scorpion-fueler-mission {
-    display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 12px;
+    display: grid; grid-template-columns: minmax(0,1fr); gap: 6px;
     padding-bottom: 9px; border-bottom: 1px solid #244456;
 }
-.scorpion-fueler-flight { display: grid; gap: 1px; }
-.neoscorpion-fueler-card > .scorpion-fueler-mission .scorpion-fueler-flight strong { font-size: 24px; letter-spacing: 0; }
-.neoscorpion-fueler-card > .scorpion-fueler-mission .scorpion-fueler-flight span { font-size: 14px; color: #e9f2f6; }
-.scorpion-fueler-etd { text-align: right; display: grid; align-content: start; }
+.scorpion-fueler-route { --fuel-header-max-size: 36px; container-type: inline-size; min-width: 0; width: 100%; }
+.scorpion-fueler-route-line { display: inline-flex; align-items: baseline; gap: .2em; width: max-content; white-space: nowrap; font: 950 clamp(12px,4vw,36px)/1.15 NeoFontPlain,sans-serif; letter-spacing: 0; }
+.neoscorpion-fueler-card > .scorpion-fueler-mission .scorpion-fueler-route-line > span { flex: none; color: #eef4f9; font: inherit; }
+.neoscorpion-fueler-card > .scorpion-fueler-mission .scorpion-fueler-route-line > .scorpion-fueler-route-dot { color: #88a6b9; }
 .scorpion-fueler-mission > small { grid-column: 1 / -1; overflow-wrap: anywhere; font-size: 11px; }
 .scorpion-fueler-identity { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px 9px; }
 .scorpion-fueler-identity div { min-width: 0; }
 .scorpion-fueler-identity :is(dt,dd), .scorpion-fueler-calculated :is(dt,dd) { margin: 0; }
-.scorpion-fueler-identity dt, .scorpion-fueler-etd small, .scorpion-fueler-calculated dt { font-size: 10px; color: #88a6b9; text-transform: uppercase; }
+.scorpion-fueler-identity dt, .scorpion-fueler-calculated dt { font-size: 10px; color: #88a6b9; text-transform: uppercase; }
 .scorpion-fueler-identity dd { overflow-wrap: anywhere; color: #eef4f9; font-size: 13px; }
 .neoscorpion-fueler-card:is([data-screen-mode], [data-dispatcher-panel="false"]) .neoscorpion-truck-on-row { display: block; margin: 0; }
 .neoscorpion-fueler-card:is([data-screen-mode], [data-dispatcher-panel="false"]) .neoscorpion-truck-on-row button { width: 100%; background: #287c32; border-color: #70c875; color: #fff; min-height: 40px; }

@@ -44,11 +44,17 @@
                 </div>
                 {% endif %}
                 <header class="scorpion-fueler-mission">
-                    <div class="scorpion-fueler-flight"><strong>{{ row.mission.flight_number }}</strong><span>{{ row.destination }}</span></div>
-                    <div class="scorpion-fueler-etd"><small>ETD</small><strong>{{ row.departure_time or '—' }}</strong></div>
+                    <div class="scorpion-fueler-route" data-fuel-header>
+                        <div class="scorpion-fueler-route-line" data-fuel-header-line>
+                            <span data-fuel-header-value aria-label="Tail {{ row.tail_number }}">{{ row.tail_number }}</span><span class="scorpion-fueler-route-dot" aria-hidden="true">·</span>
+                            <span data-fuel-header-value aria-label="Flight {{ row.mission.flight_number }}">{{ row.mission.flight_number }}</span><span class="scorpion-fueler-route-dot" aria-hidden="true">·</span>
+                            <span data-fuel-header-value aria-label="Origin {{ row.gateway_code or '—' }}">{{ row.gateway_code or '—' }}</span><span class="scorpion-fueler-route-dot" aria-hidden="true">·</span>
+                            <span data-fuel-header-value aria-label="Destination {{ row.destination }}">{{ row.destination }}</span>
+                        </div>
+                    </div>
                     <dl class="scorpion-fueler-identity">
                         {% if not direct_entry %}<div><dt>Fueler</dt><dd>{{ row.fueler_display_name }}</dd></div>
-                        {% endif %}<div><dt>Tail</dt><dd>{{ row.tail_number }}</dd></div>
+                        {% endif %}<div><dt>ETD</dt><dd>{{ row.departure_time or '—' }}</dd></div>
                         <div><dt>Parking</dt><dd>{{ row.parking_position or '—' }}</dd></div>
                         {% if not direct_entry %}<div><dt>Truck</dt><dd aria-label="TRUCK {{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}">{{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}</dd></div>
                         <div><dt>ON</dt><dd>{{ row.on_time }}</dd></div>

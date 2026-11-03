@@ -6687,6 +6687,7 @@ def _fuel_rows(
         rows.append(
             {
                 "mission": mission,
+                "gateway_code": operation.gateway_code,
                 "assignment": assignment,
                 "arrival_mission": arrival,
                 "tail_number": tail_number or "-",
