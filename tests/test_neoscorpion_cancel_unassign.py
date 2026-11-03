@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
+from html.parser import HTMLParser
 from types import SimpleNamespace
 from sqlalchemy import text
 
@@ -13,6 +14,28 @@ from app.models import (
 )
 from app.services import neoscorpion as service
 from app.services.neoscorpion_assets import update_nightly_truck
+
+
+class DispatchMarkup(HTMLParser):
+    """Inspect semantic cells/controls without depending on class order."""
+    def __init__(self, html):
+        super().__init__(); self.tags=[]; self.cells=[]; self.current=None
+        self.feed(html)
+
+    def handle_starttag(self,tag,attrs):
+        attrs=dict(attrs); self.tags.append((tag,attrs))
+        if tag=='td': self.current=(attrs,[])
+
+    def handle_data(self,data):
+        if self.current is not None: self.current[1].append(data)
+
+    def handle_endtag(self,tag):
+        if tag=='td' and self.current is not None:
+            self.cells.append((self.current[0],' '.join(''.join(self.current[1]).split())))
+            self.current=None
+
+    def cell(self,css_class):
+        return [text for attrs,text in self.cells if css_class in attrs.get('class','').split()]
 
 
 class CancelUnassignTest(unittest.TestCase):
@@ -190,7 +213,7 @@ class CancelUnassignTest(unittest.TestCase):
         # Its former OFF value must not suppress the new always-on alert.
         db.session.execute(text(
             "ALTER TABLE neoscorpion_settings ADD COLUMN pulse_ready_assignments "
-            "BOOLEAN NOT NULL DEFAULT 0"
+            "BOOLEAN NOT NULL DEFAULT FALSE"
         ))
         db.session.commit()
         self.assertIn('is-ready-to-assign',
@@ -201,10 +224,19 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual(self._revision(operation), revision + 2)
         self.assertIn('data-assignment-alert-threshold-minutes="45"',
             self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html'])
-        for override in ({'arrival_status':'Scheduled'}, {'inbound_fuel_lbs':None},
+        # Arrival is context, not a third assignment prerequisite. The same
+        # READY contract is shared by the badge, alert and assignment controls.
+        self.assertTrue(service._ready_to_assign({**row,'arrival_status':'Scheduled'}))
+        for override in ({'inbound_fuel_lbs':None},
                          {'required_fuel_lbs':None}, {'parking_valid':False},
                          {'assignment':SimpleNamespace(assigned_fueler_user_id=1, assigned_truck_id=2)}):
             self.assertFalse(service._ready_to_assign({**row, **override}))
+        departure=mission.eta_datetime_utc or mission.planned_datetime_utc
+        now=departure-timedelta(minutes=30)
+        quiet=service.fueling_status(row,now=now,threshold=0)
+        urgent=service.fueling_status(row,now=now,threshold=45)
+        self.assertEqual((quiet['dispatch_status_key'],urgent['dispatch_status_key']),('ready','ready'))
+        self.assertEqual((quiet['fuel_status_color'],urgent['fuel_status_color']),('amber','red'))
         self._truck(operation, assignment, 'ALERT-1', 500)
         assignment.assigned_fueler_user_id = self.fueler.id
         db.session.commit()
@@ -222,18 +254,27 @@ class CancelUnassignTest(unittest.TestCase):
         before = self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html']
         self.assertIn('neoscorpion-dispatch-inbound', before)
         self.assertIn('neoscorpion-dispatch-required', before)
-        self.assertIn('neoscorpion-dispatch-size-small is-empty" aria-hidden="true">&nbsp;', before)
+        initial=DispatchMarkup(before)
+        self.assertEqual(initial.cell('neoscorpion-dispatch-inbound'),[''])
+        self.assertEqual(len(initial.cell('neoscorpion-dispatch-required')),1)
         self.assertIn('data-autosave-field="inbound_fuel"', before)
         self._save_cycle(assignment, remaining=(10, 10, 10), actual=(10, 10, 10), transfer=0)
         db.session.commit()
         after = self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html']
-        self.assertIn('>FOB 30.0</small>', after)
-        self.assertNotIn('neoscorpion-dispatch-size-small is-empty', after)
+        updated=DispatchMarkup(after)
+        self.assertEqual(updated.cell('neoscorpion-dispatch-inbound'),['FOB 30.0'])
+        self.assertEqual(len(updated.cell('neoscorpion-dispatch-required')),1)
+        for markup in (initial,updated):
+            self.assertEqual([a.get('value') for tag,a in markup.tags if a.get('data-autosave-field')=='inbound_fuel'],['12.0'])
+        row=service.fuel_dispatch_context(self.gateway)['rows'][0]
+        self.assertFalse(row['fuel_on_board_ready'])  # Measured FOB text is not operational readiness.
+        self.assertFalse(row['fueling_on_trusted'])
         css = (Path(__file__).resolve().parents[1] / 'app/static/css/26-neoscorpion.css').read_text(encoding='utf-8')
         self.assertIn('neoscorpion-assignment-accent-pulse 2.3s', css)
         self.assertIn('td:is(.neoscorpion-dispatch-flight, .neoscorpion-dispatch-etd-parking)::after', css)
         self.assertNotIn('color: var(--assignment-alert-color)', css)
         self.assertIn('prefers-reduced-motion: reduce', css)
+        self.assertIn('height: var(--dispatch-row-height)',css)
         self.assertNotIn('inset 0 0 0 1px', css)
 
     def _unassign(self, assignment, **overrides):

@@ -16,7 +16,6 @@ from app.services.neoscorpion_fueling_status import fueling_status, fob_assessme
 from app.services.neoscorpion_call_dispatch import call_dispatch_alert
 from app.services.schema_sync import sync_local_sqlite_schema
 from tests import test_neoscorpion_dispatch_planning as fixture_module
-from tests import test_neoscorpion_fuel_interruptions as interruption_fixture
 from tests.neoscorpion_handoff_fixture import submit_fueler_only
 
 
@@ -571,33 +570,62 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
 
 class TrustedFobInheritanceTest(unittest.TestCase):
     def test_explicit_trusted_lineage_uses_apu_adjusted_fuel_and_preserves_accounting(self):
-        fixture = interruption_fixture.NeoScorpionFuelInterruptionTest()
-        fixture.setUp(); self.addCleanup(fixture.tearDown)
-        operation, mission, assignment = fixture._assignment()
-        mission.planned_datetime_utc = datetime.utcnow()+timedelta(hours=2)
-        source = fixture._completed_tail_event(operation,"N412UP",(18000,16000,18000),"UPS999")
-        work = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id,tail_number="N412UP")
-        db.session.add(work); db.session.flush()
-        for code, lbs in zip(("left","ctr","right"),(18000,16000,18000)):
-            db.session.add(NeoScorpionFuelTankState(fuel_work_state_id=work.id,tank_code=code,remaining_lbs=lbs))
-        service._new_fuel_audit(operation,assignment,fixture.dispatcher,"confirm_tail",
-            service.TAIL_SWAP_INHERITED_EVENT_AUDIT_FIELD,"N412UP",str(source.id),"Existing trusted inheritance",
-            fuel_work_state=work,now_utc=datetime.utcnow())
+        # Create the source through ON, OFF, Fueler submission and Dispatcher
+        # verification; a fabricated audit link is not proof of completion.
+        from tests import test_neoscorpion_physical_evidence as canonical
+        fixture=canonical.PhysicalEvidenceTest()
+        fixture.setUp();self.addCleanup(fixture.doCleanups)
+        fixture.prepare();fixture.finish()
+        source=NeoScorpionFuelingEvent.query.one()
+        source_before=service._fuel_rollback_values(source)
+        snapshots=[service._fuel_rollback_values(t) for t in source.tank_snapshots]
+        inventory=fixture.selection.current_gallons
+        mission,assignment,work=fixture.replacement()
+        assignment.assigned_fueler_user_id=fixture.fueler.id
         db.session.commit()
         def row():
             db.session.commit()
             return next(r for r in service.fuel_dispatch_context(fixture.gateway)["rows"] if r["mission"].id==mission.id)
-        current = row()
-        self.assertTrue(current["fuel_on_board_ready"])
-        self.assertEqual(current["dispatch_status_key"],"fob-ready")
-        self.assertLess(current["fob_projected_neo_lbs"],52000)
-        mission.planned_fuel_load=52000
-        self.assertFalse(row()["fuel_on_board_ready"])
-        mission.planned_fuel_load=50000
-        work.tank_states[0].remaining_lbs -= 1
-        self.assertIsNone(row()["tail_swap_inherited_event_id"])
-        work.tank_states[0].remaining_lbs += 1
+        self.assertEqual(row()['tail_swap_inherited_event_id'],source.id)
+        self.assertFalse(row()['fuel_on_board_ready'])
+        self.assertTrue(all(t.actual_lbs is None for t in work.tank_states))
+        self.assertIsNone(work.apu_running);self.assertIsNone(work.apu_confirmed_at_utc)
+        self.assertIsNone(work.physical_transfer_gallons)
+        with self.assertRaisesRegex(ValueError,'Complete Actual fuel and confirm APU'):
+            service.complete_fuel_on_board(fixture.gateway,fixture.dispatcher,assignment.id)
+        db.session.rollback()
+
+        # Altered Remaining loses the exact lineage proof; restoring it does
+        # not supply fresh APU/Actual evidence or grant completion authority.
+        service.save_fueler_entry(fixture.gateway,fixture.fueler,dict(assignment_id=assignment.id,remaining_left='14.99'))
         db.session.commit()
+        self.assertIsNone(row()['tail_swap_inherited_event_id'])
+        self.assertFalse(row()["fuel_on_board_ready"])
+        service.save_fueler_entry(fixture.gateway,fixture.fueler,dict(assignment_id=assignment.id,remaining_left='15'))
+        db.session.commit()
+        self.assertEqual(row()['tail_swap_inherited_event_id'],source.id)
+        self.assertFalse(row()['fuel_on_board_ready'])
+
+        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','30',
+            expected_value='25',user=fixture.dispatcher)
+        db.session.commit()
+
+        # Fresh explicit readings and an operator-confirmed APU override are
+        # independent new evidence; historical Remaining never fills them.
+        service.save_fueler_entry(fixture.gateway,fixture.fueler,dict(assignment_id=assignment.id,
+            actual_left='15',actual_ctr='0',actual_right='15',apu_running='yes',
+            apu_source_tank_code='left',apu_override_present='1',apu_override_enabled='1',apu_override_allowance='0.5'))
+        db.session.commit()
+        self.assertEqual(row()['fob_projected_neo_lbs'],29500)
+        self.assertIsNotNone(work.apu_confirmed_at_utc)
+        self.assertFalse(row()['fuel_on_board_ready'])
+        with self.assertRaisesRegex(ValueError,'Insufficient verified'):
+            service.complete_fuel_on_board(fixture.gateway,fixture.dispatcher,assignment.id)
+        db.session.rollback()
+        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','25',
+            expected_value='30',user=fixture.dispatcher)
+        db.session.commit()
+        self.assertTrue(row()['fuel_on_board_ready'])
         before = NeoScorpionFuelingEvent.query.count()
         result = service.complete_fuel_on_board(fixture.gateway,fixture.dispatcher,assignment.id)
         db.session.commit()
@@ -605,3 +633,8 @@ class TrustedFobInheritanceTest(unittest.TestCase):
         self.assertEqual(row()["dispatch_status_key"],"fob")
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),before)
         self.assertIsNone(work.off_at_utc)
+        self.assertIsNone(work.manual_on_at_utc)
+        self.assertEqual(fixture.selection.current_gallons,inventory)
+        self.assertEqual(service._fuel_rollback_values(source),source_before)
+        self.assertEqual([service._fuel_rollback_values(t) for t in source.tank_snapshots],snapshots)
+        self.assertFalse(service.complete_fuel_on_board(fixture.gateway,fixture.dispatcher,assignment.id).changed)
