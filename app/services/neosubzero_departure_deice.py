@@ -35,6 +35,7 @@ from app.services.parking_plan import (
 )
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.time_display import format_local_hhmm
+from app.services.neosubzero_radio import radio_pending, radio_complete
 
 
 OUTBOUND_REFRESH_KEY = "neosubzero.outbound"
@@ -160,6 +161,9 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
         events.setdefault(_tail(event.tail_number), []).append(event)
     for tail, candidates in events.items():
         events[tail], reviews[tail] = select_tail_event(candidates)
+    current_tails={_tail(mission.assigned_tail_number) for mission in missions}
+    detached_radio=tuple(event for tail,event in events.items() if event and radio_pending(event) and tail not in current_tails)
+    detached_source_ids={event.sort_date_mission_id for event in detached_radio}
     now_utc = now_utc or datetime.utcnow()
     rows = [
         _departure_row(
@@ -174,8 +178,18 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
         )
         for mission in missions
     ]
+    sprayed_tails={_tail(tail) for (tail,) in db.session.query(NeoSubZeroSprayRecord.tail_number_snapshot).filter(
+        NeoSubZeroSprayRecord.sort_date_operation_id==operation.id,
+        NeoSubZeroSprayRecord.departure_deice_event_id.is_not(None),
+        or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).distinct() if tail}
     for row in rows:
         row['ownership_review'] = reviews.get(row['tail'])
+        if row['mission_id'] in detached_source_ids:
+            row['ownership_review']='A former physical tail is still RADIO PENDING. Resolve the canonical mission/tail identity before continuing.'
+        if row['gone_without_deice'] and row['tail'] in sprayed_tails:
+            row['ownership_review']='Recorded departure spray requires physical-tail evidence review.'
+        if row['ownership_review']:
+            row.update(gone_without_deice=False,terminal=False,collapse_state='active')
     rows.sort(
         key=lambda row: (
             row["sort_time"] is None,
@@ -189,7 +203,7 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
     decorate_departure_rows_with_spray(operation, rows)
     from app.services.frost_inspections import decorate as decorate_inspections
     decorate_inspections(operation, rows)
-    return {"operation": operation, "rows": rows, "fluid_settings": settings}
+    return {"operation": operation, "rows": rows, "fluid_settings": settings,"detached_radio":detached_radio}
 
 
 def mutate_departure_deice(operation, mission, action, values, *, event=None, actor_id=None):
@@ -197,12 +211,18 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
     from app.services.neosubzero_evidence import audit_change, evidence_values, departure_event_for_tail
     from app.models import SortDateOperation
     SortDateOperation.query.filter_by(id=operation.id).with_for_update().one()
-    event = event or departure_event_for_tail(operation,mission,lock=True)
+    if event is not None and event.id is not None:
+        event = NeoSubZeroDepartureDeiceEvent.query.filter_by(id=event.id,
+            sort_date_operation_id=operation.id).populate_existing().with_for_update().one()
+    else:
+        event = departure_event_for_tail(operation,mission,lock=True)
     if event and _tail(event.tail_number) != _tail(mission.assigned_tail_number):
         raise NeoSubZeroDepartureDeiceError('Treatment belongs to another physical tail. Reload current aircraft.')
     before=evidence_values(event)
     action = str(action or "").strip().lower()
-    if event and event.status=='cleared' and action not in {'initial_contact','move_to_planned','clear','save_treatment'}:
+    if radio_pending(event) and action in {'initial_contact','move_to_planned'}:
+        raise NeoSubZeroDepartureDeiceError('RADIO PENDING: complete the pilot readback before starting another departure event.')
+    if event and event.status=='cleared' and action not in {'initial_contact','move_to_planned','clear','save_treatment','radio_complete'}:
         raise NeoSubZeroDepartureDeiceError('CLEARED evidence cannot be reset. Start an explicit new event or use audited corrections.')
     from app.models import NeoSubZeroSprayRecord
     has_actual=bool(event and (event.pass1_started_at_utc or NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id).filter(NeoSubZeroSprayRecord.ended_at_utc.is_not(None)).first()))
@@ -226,6 +246,22 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
         _clear_treatment(event)
         event.configured_at_utc = None
         event.status = "not_sprayed"
+    elif action == 'radio_complete':
+        if event and radio_complete(event): return event
+        if not radio_pending(event) or not actor_id:
+            raise NeoSubZeroDepartureDeiceError('Only a current sprayed, CLEARED · RADIO PENDING event can be radio-confirmed.')
+        # An explicit confirmation never invents a missing or retracted pass.
+        final_pass=len(PLAN_PASS_TYPES.get(event.treatment_plan,()))
+        if (not final_pass or not getattr(event,f'pass{final_pass}_started_at_utc')
+                or not getattr(event,f'pass{final_pass}_ended_at_utc')):
+            raise NeoSubZeroDepartureDeiceError('Recorded final spray evidence must be verified before RADIO COMPLETE.')
+        gateway=db.session.get(Gateway,operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
+        readback=_departure_row(mission,operation,None,None,None,event,neosubzero_fluid_settings(gateway),datetime.utcnow())['script']
+        if not readback:
+            raise NeoSubZeroDepartureDeiceError('Final fluid/concentration evidence is unavailable. Resolve the audited readback evidence before RADIO COMPLETE.')
+        event.radio_state='complete'
+        event.radio_completed_at_utc=datetime.utcnow()
+        event.radio_completed_by_user_id=actor_id
     elif action == 'clear':
         event=event or _new_event(operation,mission)
         if event.status == 'cleared': return event
@@ -237,6 +273,7 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
             state=SortDateTailState.query.filter_by(sort_date=operation.sort_date,gateway_code=operation.gateway_code,sort_name=operation.sort_name,tail_number=event.tail_number).first()
             if state and state.pretreat_status: event.clear_outcome='pretreated'
         event.status='cleared';event.cleared_at_utc=datetime.utcnow()
+        event.radio_state='pending' if has_actual else None
     else:
         if event is None:
             raise NeoSubZeroDepartureDeiceError(
@@ -362,26 +399,6 @@ def departure_deice_revision(gateway, operation):
         (row.source, int(row.row_count or 0), int(row.max_id or 0), str(row.latest or ""))
         for row in values
     ]
-    threshold_states = db.session.execute(
-        select(
-            SortDateMission.id,
-            SortDateMission.actual_block_out_datetime_utc,
-        ).where(
-            SortDateMission.sort_date_operation_id == operation_id,
-            SortDateMission.mission_type == "departure",
-            SortDateMission.actual_block_out_datetime_utc.is_not(None),
-        )
-    ).all()
-    now_utc = datetime.utcnow()
-    payload.append(
-        (
-            "not_sprayed_clock",
-            tuple(
-                (row.id, now_utc >= row.actual_block_out_datetime_utc + timedelta(minutes=5))
-                for row in threshold_states
-            ),
-        )
-    )
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
@@ -487,7 +504,8 @@ def _departure_row(
         ),
         "pretreat_status": pretreat_status,
         "pretreat_reference": pretreat_reference,
-        "deice_status": _status_label(event, collapse_state, tail_state),
+        "deice_status": ('CLEARED · RADIO PENDING' if radio_pending(event) else
+            'GONE · RADIO COMPLETE' if radio_complete(event) else _status_label(event, collapse_state, tail_state)),
         "event": event,
         "event_version": entity_version(event),
         "configured": format_local_hhmm(
@@ -508,7 +526,11 @@ def _departure_row(
         "final_fluid": fluid,
         "final_start": format_local_hhmm(final_start, mission.timezone or None),
         "collapse_state": collapse_state,
-        "terminal": bool(event and event.status == 'cleared'),
+        "terminal": bool(event and event.status == 'cleared' and not radio_pending(event)) or collapse_state=='gone',
+        "radio_pending": radio_pending(event),
+        "radio_complete": radio_complete(event),
+        "gone_without_deice": collapse_state=='gone',
+        "canonical_departure_required": bool(tail_state and tail_state.deice_status in {'required','configured'}),
         "script": script,
         "sort_time": mission.planned_datetime_utc,
     }
@@ -521,6 +543,8 @@ def _validate_throat_start(operation, mission):
     from app.services.neosubzero_ucc import neosubzero_ucc_context
     gateway = db.session.get(Gateway, operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
     context = neosubzero_ucc_context(gateway, operation)
+    if any(radio_pending(row.get('event')) for row in context['unlocated_aircraft']):
+        raise NeoSubZeroDepartureDeiceError('RADIO PENDING aircraft location requires canonical identity/parking review before another throat START.')
     for ramp in context['ramps']:
         if ramp['name'] == 'Remote':
             continue
@@ -528,12 +552,12 @@ def _validate_throat_start(operation, mission):
             if any(str(row['parking']).upper().endswith('10') for row in ramp['parking_exceptions']):
                 raise NeoSubZeroDepartureDeiceError(
                     'Position 10 also has a parked aircraft recorded. Resolve its MotherBrain parking before START.')
-            if any(row['mission_id'] != mission.id and
+            if any((row['mission_id'] != mission.id or row['tail'] != _tail(mission.assigned_tail_number)) and
                    getattr(row.get('event'), 'pass1_started_at_utc', None)
                    for row in ramp['queue']):
                 raise NeoSubZeroDepartureDeiceError(
-                    'Another aircraft has recorded treatment in this throat. Complete and CLEAR it before START.')
-            if ramp['queue'][0]['mission_id'] != mission.id:
+                    'Another aircraft occupies this throat. Complete its treatment, CLEAR and RADIO COMPLETE before START.')
+            if ramp['queue'][0]['mission_id'] != mission.id or ramp['queue'][0]['tail'] != _tail(mission.assigned_tail_number):
                 raise NeoSubZeroDepartureDeiceError(
                     'Only the aircraft at throat Position 10 may START. Clear the aircraft ahead or correct the waiting queue first.')
             return
@@ -632,12 +656,11 @@ def _sync_tail_deice_status(operation, mission, event):
 
 
 def _collapse_state(mission, event, *, tail_state, pretreat_complete, now_utc):
+    if radio_pending(event): return 'radio_pending'
     if event and event.status in {"cleared", "negative", "not_sprayed"}:
         return event.status
     if event:
         return "active"
-    if pretreat_complete:
-        return "pretreated"
     canonical_deice = str(
         getattr(tail_state, "deice_status", "unknown") or "unknown"
     ).strip().lower()
@@ -646,8 +669,10 @@ def _collapse_state(mission, event, *, tail_state, pretreat_complete, now_utc):
     if canonical_deice in {"required", "configured", "cleared"}:
         return "active"
     block_out = mission.actual_block_out_datetime_utc
-    if block_out and now_utc >= block_out + timedelta(minutes=5):
-        return "not_sprayed"
+    if block_out:
+        return "gone"  # Display only: no spray event or negative evidence is made.
+    if pretreat_complete:
+        return "pretreated"
     return "active"
 
 
@@ -756,7 +781,8 @@ def _validate_ramp_configuration_available(operation, mission, event):
             NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == operation.id,
             or_(NeoSubZeroDepartureDeiceEvent.status.in_(("configured", "finished")),
                 NeoSubZeroDepartureDeiceEvent.pass1_started_at_utc.is_not(None)),
-            NeoSubZeroDepartureDeiceEvent.status != 'cleared',
+            or_(NeoSubZeroDepartureDeiceEvent.status != 'cleared',
+                NeoSubZeroDepartureDeiceEvent.radio_state == 'pending'),
             SortDateMission.mission_type == "departure",
             or_(
                 SortDateMission.departure_status.is_(None),
@@ -822,6 +848,7 @@ def _format_local_time_value(value, timezone_name):
 
 
 def _status_label(event, collapse_state, tail_state):
+    if collapse_state == 'gone': return 'GONE · NO DEICE PLANNED'
     if collapse_state == "pretreated":
         return "PRETREATED"
     if collapse_state == "not_sprayed":

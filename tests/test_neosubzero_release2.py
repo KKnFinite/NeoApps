@@ -125,7 +125,7 @@ class Release2Test(unittest.TestCase):
             self.assertEqual(event.clear_outcome,outcome);self.assertIsNone(event.pass1_started_at_utc)
         from app.services.neosubzero_operations import operations_context
         rows=operations_context(f.gateway,f.operation,'outbound')['rows']
-        self.assertEqual([r['visual_state'] for r in rows][-3:],['cleared']*3)
+        self.assertEqual([r['visual_state'] for r in rows][-3:],['gone']*3)
         self.assertEqual([r['flight'] for r in rows][-3:],['5X-CLEAR-not_sprayed','5X-CLEAR-negative','5X-CLEAR-no_deice'])
         self.assertEqual(NeoSubZeroSprayRecord.query.count(),0)
 

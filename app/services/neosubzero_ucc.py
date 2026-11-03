@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
+from app.services.neosubzero_radio import radio_pending
 from app.models import (
     NeoSubZeroCalloutAssignment,
     NeoSubZeroPretreatState,
@@ -113,7 +114,7 @@ def neosubzero_ucc_context(gateway, operation):
         for queue_position, row in enumerate(waiting_rows, start=1):
             row["queue_position"] = queue_position
         waiting_queue = tuple(waiting_rows)
-        parked = [row for row in aircraft if row.get("block_out_at_utc") is None]
+        parked = [row for row in aircraft if row.get("block_out_at_utc") is None and not row.get('retained_radio_throat')]
         prefix = 'ABCDE'[UCC_RAMP_ORDER.index(ramp)] if ramp in UCC_RAMP_ORDER else ''
         occupied = ({prefix+'10'} if throat else set()) | ({prefix+'09'} if len(waiting_queue) == 2 else set())
         parking = _parking_projection(ramp, [row for row in parked if row['parking'] not in occupied], parking_9_10_enabled)
@@ -229,6 +230,25 @@ def _physical_aircraft_rows(operation, departure_context):
             arrivals[tail] = max(arrivals.get(tail, datetime.min), mission.actual_block_in_datetime_utc)
     states = {str(row.tail_number).strip().upper(): row for row in SortDateTailState.query.filter_by(sort_date=operation.sort_date, gateway_code=operation.gateway_code, sort_name=operation.sort_name).all()}
     pretreat = {str(row.tail_number).strip().upper(): row for row in NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id).all()}
+    # A tail reassignment cannot release an unconfirmed physical aircraft. Keep
+    # its existing event at its canonical stand/throat with an identity warning;
+    # do not transfer its spray evidence or radio authority to the new tail.
+    detached=departure_context.get('detached_radio',())
+    sources={mission.id:mission for mission in SortDateMission.query.filter(
+        SortDateMission.sort_date_operation_id==operation.id,
+        SortDateMission.id.in_([event.sort_date_mission_id for event in detached])).all()} if detached else {}
+    for event in detached:
+        mission=sources.get(event.sort_date_mission_id)
+        if mission is None: continue
+        tail=str(event.tail_number).strip().upper()
+        row=_departure_row(mission,operation,parking.get(tail),states.get(tail),pretreat.get(tail),event,departure_context['fluid_settings'],datetime.utcnow())
+        row.update(tail=tail,flight=event.flight_number_snapshot or '',identity_key=f'radio-{event.id}',script=None,
+            identity_note='RADIO PENDING · Mission/tail identity changed. Confirm the physical aircraft and resolve canonical identity before radio confirmation.')
+        recorded_ramps={evidence.get('ramp') for evidence in (event.pass_evidence or {}).values()
+                        if evidence.get('parking')=='DEICE PAD' and evidence.get('ramp') in UCC_RAMP_ORDER}
+        if len(recorded_ramps)==1:
+            row.update(ramp=recorded_ramps.pop(),retained_radio_throat=True)
+        rows.append(row);departure_tails.add(tail)
     for mission in arrival_missions:
         tail = str(mission.assigned_tail_number or "").strip().upper()
         if not tail or tail in departure_tails or (tail not in parking and not _tail_parking_location(states.get(tail))) or getattr(mission, "arrival_status", None) == "cancelled":
@@ -279,7 +299,7 @@ def _physical_aircraft_rows(operation, departure_context):
             if location:
                 item["parking"], code = location
                 item["parking_source"] = "MotherBrain tail parking"
-        item["ramp"] = _ramp_name(code) or "Unlocated"
+        item["ramp"] = row['ramp'] if row.get('retained_radio_throat') else _ramp_name(code) or "Unlocated"
         item["lane"] = getattr(assignment, "lane_number", None)
         item["canonical_departure_required"] = bool(state and state.deice_status in {"required", "configured"})
         # Treatment evidence belonging to a former tail must never move aircraft.
@@ -288,7 +308,7 @@ def _physical_aircraft_rows(operation, departure_context):
             item["identity_note"] = "Departure deice evidence belongs to a different tail. Coordinator review required."
             item["event"] = None
             item["deice_status"] = "TAIL IDENTITY REVIEW"
-        if item.get("block_out_at_utc") and _departure_event_status(item) not in {"deice_planned", "configured", "finished"}:
+        if item.get("block_out_at_utc") and _departure_event_status(item) not in {"deice_planned", "configured", "finished"} and not radio_pending(item.get('event')):
             continue
         unique[tail] = item
     return list(unique.values())
@@ -314,7 +334,8 @@ def _physical_queue(rows):
         rank = getattr(row["event"], "ucc_queue_order", None)
         return (1, (rank is None, rank or 0, _queue_sort_key(row)))
 
-    return sorted((row for row in rows if row.get("block_out_at_utc") and _departure_event_status(row) in {"deice_planned", "configured", "finished"}), key=order)
+    return sorted((row for row in rows if (row.get("block_out_at_utc") or row.get('retained_radio_throat')) and
+        (_departure_event_status(row) in {"deice_planned", "configured", "finished"} or radio_pending(row.get('event')))), key=order)
 
 
 def _queue_version(rows):
@@ -668,8 +689,9 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
 def _visual_state(row):
     event = row.get("event")
     status = _departure_event_status(row)
+    if radio_pending(event): return 'radio-pending'
     if status == "cleared":
-        return "cleared"
+        return "gone"
     if status == "negative" or row.get("collapse_state") == "negative":
         return "negative"
     if status == "finished":
@@ -698,7 +720,8 @@ def _visual_label(state):
         "deicing": "DEICING",
         "finished": "FINISHED / AWAITING CLEARANCE",
         "negative": "NEGATIVE DEICE",
-        "cleared": "CLEARED",
+        "gone": "GONE / COMPLETED",
+        "radio-pending": "CLEARED · RADIO PENDING",
     }.get(state, "NO DEICE RECORDED")
 
 
@@ -716,7 +739,7 @@ def _departure_event_status(row):
 def _is_active_throat(row):
     event = row.get("event")
     status = _departure_event_status(row)
-    return row.get("block_out_at_utc") is not None and (getattr(event, "pass1_started_at_utc", None) is not None or status == "finished" or (
+    return (row.get("block_out_at_utc") is not None or row.get('retained_radio_throat')) and (radio_pending(event) or getattr(event, "pass1_started_at_utc", None) is not None or status == "finished" or (
         status == "configured"
         and getattr(event, "configured_at_utc", None) is not None
     ))
@@ -738,7 +761,7 @@ def _throat_sort_key(row):
         or row.get("sort_time")
     )
     return (
-        0 if status == "finished" else 1,
+        0 if radio_pending(event) else 1 if status == "finished" else 2,
         active_at is None,
         active_at or datetime.max,
         row.get("sort_time") or datetime.max,

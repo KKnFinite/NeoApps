@@ -37,6 +37,9 @@ NEOSUBZERO_OPTIONAL_COLUMNS = {
         "flight_number_snapshot": "VARCHAR(32)",
         "cleared_at_utc": "TIMESTAMP",
         "clear_outcome": "VARCHAR(32)",
+        "radio_state": "VARCHAR(16)",
+        "radio_completed_at_utc": "TIMESTAMP",
+        "radio_completed_by_user_id": "INTEGER REFERENCES users(id)",
         "pass_evidence": "JSON",
     },
     NeoSubZeroPretreatState.__tablename__: {

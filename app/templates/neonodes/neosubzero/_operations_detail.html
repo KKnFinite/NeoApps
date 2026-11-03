@@ -20,7 +20,7 @@
         {{ spray_position_forms(selected,can_edit,board) }}
         {{ team_controls(selected,board) }}
     {% else %}
-        {% if selected.script %}<section class="ops-readback"><h2>PILOT READBACK · FINAL PASS START</h2><p>{{ selected.script.text }}</p></section>{% endif %}
+        {% if selected.script and not selected.radio_pending %}<section class="ops-readback"><h2>PILOT READBACK · FINAL PASS START</h2><p>{{ selected.script.text }}</p></section>{% endif %}
         <p class="ops-fluids">TYPE I · {{ fluid_settings.type_i_concentration_percent }}% {{ fluid_settings.type_i_fluid_name }} · TYPE IV · 100% {{ fluid_settings.type_iv_fluid_name }}</p>
         <article data-subzero-mission data-terminal="false">{{ mission_workspace(selected, can_edit, board, selected.ramp, true) }}</article>
         {{ team_controls(selected,board) }}

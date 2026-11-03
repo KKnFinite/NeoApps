@@ -301,7 +301,9 @@ class NeoSubZeroOutboundCoordinatorTest(unittest.TestCase):
             self.gateway, self.operation, now_utc=datetime(2026, 9, 1, 1, 6)
         )["rows"]
         self.assertEqual(rows[0]["collapse_state"], "pretreated")
-        self.assertEqual(rows[1]["collapse_state"], "not_sprayed")
+        self.assertEqual(rows[1]["collapse_state"], "gone")
+        self.assertTrue(rows[1]['gone_without_deice'])
+        self.assertIsNone(rows[1]['event'])  # Automatic sorting is not spray evidence.
         event = mutate_departure_deice(
             self.operation, self.second, "set_negative", {}, event=None
         )

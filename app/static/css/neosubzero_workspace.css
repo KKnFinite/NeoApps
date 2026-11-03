@@ -56,6 +56,14 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
 /* Mobile DUCC is a lens on the existing desktop diagram, not a second board. */
 .ucc-mobile-controls,.neosubzero-mobile-ramp-link { display:none; }
 .neosubzero-coordinator-tools { display:contents; }
+.neosubzero-radio-pending { padding:10px; margin-bottom:8px; border:2px solid #ff88c8; background:#FF1493; color:#200516; }
+.neosubzero-radio-pending h2 { margin:0 0 6px; color:inherit; font-size:1rem; }
+.neosubzero-radio-pending [data-radio-script] { font-size:1rem; font-weight:700; }
+.neosubzero-radio-pending form { display:grid; gap:5px; }
+.neosubzero-radio-pending button { min-height:40px; background:#200516; color:#fff; border:1px solid #fff; padding:8px; }
+.neosubzero-ucc .ucc-plane.state-radio-pending { background:#FF1493; color:#200516; border-color:#ff88c8; }
+.neosubzero-ucc .ucc-plane.state-radio-pending :is(span,small) { color:inherit; }
+.neosubzero-ucc .ucc-plane.state-gone { background:#30363c; color:#f0f7fb; }
 @media (max-width:900px) {
     .neosubzero-ucc .ucc-mobile-controls { display:grid; gap:6px; margin:0 0 8px; }
     .ucc-mobile-modes { display:grid; grid-template-columns:1fr 1fr; gap:4px; }

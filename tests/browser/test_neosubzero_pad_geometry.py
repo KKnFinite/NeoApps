@@ -48,6 +48,7 @@ class UccPadGeometryBrowserTest(unittest.TestCase):
         event.status='finished';event.configured_at_utc=datetime(2026,10,23,5,1)
         event.treatment_plan='one_type_i';event.pass1_surface_area='wings_only'
         event.pass1_started_at_utc=datetime(2026,10,23,5,1);event.pass1_ended_at_utc=datetime(2026,10,23,5,3)
+        event.pass_evidence={'1':{'fluid':'Type I','concentration':50}}
 
     def test_geometry_settings_live_queue_forecast_and_clear(self):
         evidence=Path('instance/browser-evidence/subzero-pad');evidence.mkdir(parents=True,exist_ok=True)
@@ -138,6 +139,8 @@ class UccPadGeometryBrowserTest(unittest.TestCase):
                     with self.app.app_context():self.finish_fixture(self.queue_ids[index]);db.session.commit()
                 self.ready(coordinator,f'/neosubzero/coordinator?ramp=Alpha&mission={self.queue_ids[index]}')
                 coordinator.locator('button[name="action"][value="clear"]').click()
+                expect(alpha.locator('[data-ucc-deice-pad] .state-radio-pending')).to_have_count(1,timeout=10000)
+                coordinator.locator('button[name="action"][value="radio_complete"]').click()
                 expect(alpha.locator('[data-ucc-aircraft="%s"]'%self.queue_ids[index])).to_have_count(0,timeout=10000)
                 expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(self.queue_ids[index+1]),timeout=10000)
             expect(alpha.locator('[data-ucc-queue-position="3"]')).to_have_count(0)

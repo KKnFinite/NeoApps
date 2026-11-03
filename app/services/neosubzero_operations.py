@@ -16,7 +16,9 @@ def departure_presentation(row, tail_state):
     if event and event.tail_number.strip().upper() != row['tail']:
         return 'review', 'TAIL IDENTITY REVIEW'
     status = getattr(event, 'status', None)
-    if status == 'cleared': return 'cleared', 'CLEARED'
+    if row.get('radio_pending'): return 'radio-pending', 'CLEARED · RADIO PENDING'
+    if row.get('radio_complete'): return 'gone', 'GONE · RADIO COMPLETE'
+    if status == 'cleared': return 'gone', 'GONE · CLEARED'
     if status == 'finished': return 'fin', 'FIN'
     if status == 'negative': return 'negative', 'NEGATIVE DEICE'
     if status == 'not_sprayed': return 'not-sprayed', 'NOT SPRAYED'
@@ -24,11 +26,11 @@ def departure_presentation(row, tail_state):
     if event and event.configured_at_utc: return 'configured', 'CONFIGURED'
     if event: return 'planned', 'PLANNED'
     canonical = str(getattr(tail_state, 'deice_status', '') or '').lower()
-    if canonical == 'cleared': return 'cleared', 'CLEARED'
+    if canonical == 'cleared': return 'gone', 'GONE · CLEARED'
     if canonical == 'negative': return 'negative', 'NEGATIVE DEICE'
     if canonical == 'configured': return 'configured', 'CONFIGURED'
     if canonical == 'required': return 'planned', 'PLANNED'
-    if row.get('deice_status') == 'NOT SPRAYED': return 'not-sprayed', 'NOT SPRAYED'
+    if row.get('gone_without_deice'): return 'gone', 'GONE · NO DEICE PLANNED'
     # Pretreat completion is not a departure-deice state.
     return 'untreated', 'UNTREATED'
 
@@ -75,9 +77,10 @@ def operations_context(gateway, operation, mode):
                 'surface': SURFACE_LABELS.get(surfaces[number-1]) if len(types) >= number else None})
         row['detail_key'] = f"{mode}:{mission.id}:{row['tail']}:{getattr(event if mode == 'outbound' else row.get('state'), 'id', 0)}"
     def order(row):
-        cleared=mode=='outbound' and row['visual_state']=='cleared'
-        timestamp=getattr(row.get('event'),'cleared_at_utc',None)
-        return (cleared, datetime.max-(timestamp or datetime.min) if cleared else timedelta(0),
+        group=(2 if row['visual_state']=='gone' else 1 if row['visual_state']=='radio-pending' else 0) if mode=='outbound' else 0
+        event=row.get('event')
+        timestamp=getattr(event,'radio_completed_at_utc',None) or getattr(event,'cleared_at_utc',None) or row.get('block_out_at_utc')
+        return (group, datetime.max-(timestamp or datetime.min) if group==2 else timedelta(0),
                 row['sort_time'] is None,row['sort_time'] or datetime.max,row['flight'],row['mission_id'])
     rows.sort(key=order)
     if mode=='pretreat':

@@ -995,6 +995,8 @@ def qualifications():
 @bp.route("/departure-deice/mutate", methods=["POST"])
 @gateway_node_required("subzero")
 def departure_deice_mutate():
+    if request.form.get('action') == 'radio_complete' and not user_can('neosubzero.coordinator.edit'):
+        return 'Access denied.',403
     board = str(request.form.get("board") or "").strip().lower()
     endpoint, permission = {
         "outbound": ("neosubzero.outbound", "neosubzero.outbound.edit"),
@@ -1037,7 +1039,8 @@ def departure_deice_mutate():
         db.session.commit()
         flash("DEPARTURE DEICE SAVED.", "success")
         if board == "coordinator":
-            coordinator_return_to_list = event.status == 'cleared'
+            from app.services.neosubzero_radio import radio_pending
+            coordinator_return_to_list = event.status == 'cleared' and not radio_pending(event)
             _remember_coordinator_mission(
                 operation,
                 None if coordinator_return_to_list else mission.id,

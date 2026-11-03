@@ -131,10 +131,10 @@ class OperationsBrowserTest(unittest.TestCase):
             page.reload();expect(root).to_have_attribute('data-ready','true');expect(root).to_have_attribute('data-ramp','Bravo')
             self.ramp(page,'All');expect(root).to_have_attribute('data-ramp','All')
             # Every required color covers the card, not just an accent.
-            for status in ('planned','configured','deicing','fin','negative','cleared'):
+            for status in ('planned','configured','deicing','fin','negative','gone'):
                 card=page.locator('[data-ops-row][data-status="'+status+'"]').first
                 self.assertNotEqual(card.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgba(0, 0, 0, 0)')
-            self.assertEqual(page.locator('[data-ops-row]').last.get_attribute('data-status'),'cleared')
+            self.assertEqual(page.locator('[data-ops-row]').last.get_attribute('data-status'),'gone')
             expect(page.locator(f'[data-mission-id="{self.missions[0]}"] .ops-pretreated')).to_be_visible()
             expect(page.locator(f'[data-mission-id="{self.missions[1]}"] .ops-pretreated')).to_have_count(0)
             # Canonical coordinator-capable workflow, with no gallon gate on FIN/CLEAR.
@@ -149,7 +149,9 @@ class OperationsBrowserTest(unittest.TestCase):
             form.locator('[name="pass1_surface_area"]').select_option('wings_tail');form.locator('[name="pass2_surface_area"]').select_option('wings_only')
             for name,value in (('pass1_start','22:00'),('pass1_end','22:02'),('pass2_start','22:04'),('pass2_end','22:08')):form.locator('[name="'+name+'"]').fill(value)
             self.submit(page,form.locator('button[type="submit"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','fin')
-            self.submit(page,pane.locator('button[value="clear"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','cleared')
+            self.submit(page,pane.locator('button[value="clear"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','radio-pending')
+            expect(pane.locator('[data-radio-script]')).to_contain_text('2204')
+            self.submit(page,pane.locator('button[value="radio_complete"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','gone')
             expect(pane.locator('.ops-readback')).to_contain_text('2204')
             page.screenshot(path=str(evidence/f'{engine}-completed-detail.png'))
             pane.locator('[data-ops-close]').click()
@@ -164,7 +166,7 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
             with self.app.app_context():
                 mission=db.session.get(SortDateMission,self.missions[0]);mission.assigned_tail_number='N-REPLACED';db.session.commit()
-            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"]')).to_have_attribute('data-status','not-sprayed',timeout=10000)
+            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"]')).to_have_attribute('data-status','gone',timeout=10000)
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
             pane.locator('[data-subzero-deice-form] button[type="submit"]').click();expect(page.locator('[data-ops-feedback]')).to_contain_text('identity changed')
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')

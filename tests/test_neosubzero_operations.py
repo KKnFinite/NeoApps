@@ -83,7 +83,7 @@ class OperationsTest(unittest.TestCase):
         rows=operations_context(self.f.gateway,self.f.operation,'outbound')['rows']
         self.assertLess([r['mission_id'] for r in rows].index(self.f.remote.id),[r['mission_id'] for r in rows].index(self.f.alpha.id))
         self.assertEqual(rows[-1]['mission_id'],self.f.bravo.id)
-        self.assertEqual(rows[-1]['visual_label'],'CLEARED')
+        self.assertEqual(rows[-1]['visual_label'],'GONE · CLEARED')
         self.assertEqual(event.status,'cleared')
 
     def test_pretreat_eta_order_and_primary_fixed_pass_contract(self):
@@ -101,7 +101,7 @@ class OperationsTest(unittest.TestCase):
         self.assertEqual(state(),'planned')
         event.configured_at_utc=datetime(2026,9,1,1);event.status='configured';db.session.commit();self.assertEqual(state(),'configured')
         event.pass1_started_at_utc=datetime(2026,9,1,1,1);db.session.commit();self.assertEqual(state(),'deicing')
-        for persisted, expected in (('finished','fin'),('negative','negative'),('not_sprayed','not-sprayed'),('cleared','cleared')):
+        for persisted, expected in (('finished','fin'),('negative','negative'),('not_sprayed','not-sprayed'),('cleared','gone')):
             event.status=persisted;db.session.commit();self.assertEqual(state(),expected)
 
     def test_actual_pretreat_indicator_only(self):

@@ -116,6 +116,9 @@ class MobileRampBrowserTest(unittest.TestCase):
             with coordinator.expect_navigation():treatment.locator('button[type="submit"]').click()
             expect(alpha.locator('[data-ucc-deice-pad] .state-finished')).to_have_count(1,timeout=10000)
             with coordinator.expect_navigation():coordinator.locator('button[name="action"][value="clear"]').click()
+            expect(alpha.locator('[data-ucc-deice-pad] .state-radio-pending')).to_have_count(1,timeout=10000)
+            expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[0]))
+            with coordinator.expect_navigation():coordinator.locator('button[name="action"][value="radio_complete"]').click()
             expect(alpha.locator('[data-ucc-aircraft="%s"]'%case.missions[0])).to_have_count(0,timeout=10000)
             expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))
             expect(alpha.locator('[data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[2]))
@@ -143,6 +146,7 @@ class MobileRampBrowserTest(unittest.TestCase):
                 event=NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=case.missions[0]).one()
                 self.assertEqual(event.status,'cleared');self.assertIsNotNone(event.pass1_started_at_utc)
                 self.assertIsNotNone(event.pass1_ended_at_utc)
+                self.assertIsNotNone(event.radio_completed_at_utc)
             self.assertFalse(errors,errors)
         finally:
             (EVIDENCE/f'{engine}-measurements.json').write_text(json.dumps(measurements,indent=2))

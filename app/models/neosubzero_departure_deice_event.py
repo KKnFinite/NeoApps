@@ -36,6 +36,10 @@ class NeoSubZeroDepartureDeiceEvent(db.Model):
     flight_number_snapshot = db.Column(db.String(32), nullable=True)
     cleared_at_utc = db.Column(db.DateTime, nullable=True)
     clear_outcome = db.Column(db.String(32), nullable=True)
+    # NULL is legacy/no-radio evidence, never a claimed historical confirmation.
+    radio_state = db.Column(db.String(16), nullable=True)
+    radio_completed_at_utc = db.Column(db.DateTime, nullable=True)
+    radio_completed_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     pass_evidence = db.Column(db.JSON, nullable=True)
     status = db.Column(db.String(24), nullable=False, default="deice_planned")
     configured_at_utc = db.Column(db.DateTime, nullable=True)

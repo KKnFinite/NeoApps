@@ -16,7 +16,8 @@ def normalized_tail(value):
 
 
 def select_tail_event(events):
-    active=[event for event in events if event.status != 'cleared']
+    from app.services.neosubzero_radio import radio_pending
+    active=[event for event in events if event.status != 'cleared' or radio_pending(event)]
     if len(active)>1:
         return None,'Multiple active departure records belong to this tail. Explicit coordinator reconciliation is required.'
     if active: return active[0],None
@@ -28,7 +29,7 @@ def departure_event_for_tail(operation, mission, *, lock=False):
     query=NeoSubZeroDepartureDeiceEvent.query.filter(
         NeoSubZeroDepartureDeiceEvent.sort_date_operation_id==operation.id,
         func.upper(func.trim(NeoSubZeroDepartureDeiceEvent.tail_number))==normalized_tail(mission.assigned_tail_number))
-    if lock: query=query.with_for_update()
+    if lock: query=query.populate_existing().with_for_update()
     event,review=select_tail_event(query.all())
     if review: raise NeoSubZeroEvidenceError(review)
     return event

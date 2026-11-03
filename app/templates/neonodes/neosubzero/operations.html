@@ -2,7 +2,7 @@
 {% from 'neonodes/neosubzero/_departure_deice.html' import application_context_form with context %}
 {% block title %}Deice Operations | NeoSub-Zero{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261103-desktop-all-ramps-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261103-radio-v1') }}">
 <section class="neosubzero-shell neosubzero-operations" data-ops-workspace data-mode="{{ mode }}" data-layout="{{ preferences.layout }}" data-ramp="{{ preferences.ramp }}" data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}" data-timezone="{{ gateway_timezone }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.operations_revision_endpoint') }}" data-workspace-url="{{ url_for('neosubzero.operations') }}" data-preference-url="{{ url_for('neosubzero.operations_preferences_mutate') }}" data-mutate-url="{{ url_for('neosubzero.operations_mutate') }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}">
     <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE OPERATIONS</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
     {% include 'neonodes/neosubzero/_nav.html' %}
@@ -21,7 +21,7 @@
                 <div class="ops-identity"><span>{{ row.flight }}</span><strong>{{ row.tail }}</strong></div>
                 <div class="ops-location"><span>PARKING <b>{{ row.parking }}</b></span><span>ETD <b>{{ row.etd }}</b></span>{% if mode == 'pretreat' %}<span>ETA <b>{{ row.inbound_eta or '—' }}</b></span>{% endif %}</div>
                 {% for pass in row.primary_passes %}<div class="ops-pass" data-ops-primary-pass="{{ pass.number }}"><span>PASS {{ pass.number }}</span><strong>{{ pass.type|upper if pass.type else '—' }}</strong><span>{{ pass.surface|upper if pass.surface else '—' }}</span></div>{% endfor %}
-                <div class="ops-status"><strong>{{ row.visual_label }}</strong>{% if mode == 'pretreat' %}<span>DEPARTURE · {{ row.departure_status }}</span>{% elif row.pretreat_complete %}<span class="ops-pretreated">PRETREATED</span>{% endif %}</div>
+                <div class="ops-status"><strong>{{ row.visual_label }}</strong>{% if row.radio_pending and mode == 'outbound' %}<span>OPEN PILOT READBACK · RADIO COMPLETE</span>{% endif %}{% if mode == 'pretreat' %}<span>DEPARTURE · {{ row.departure_status }}</span>{% elif row.pretreat_complete %}<span class="ops-pretreated">PRETREATED</span>{% endif %}</div>
             </a>
         </article>
         {% else %}<p class="neosubzero-empty">No applicable aircraft in the current sort.</p>{% endfor %}
