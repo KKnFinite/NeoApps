@@ -15,7 +15,8 @@ from tests import test_neoscorpion_operational_timeline as timeline
 class TruckDriverTest(unittest.TestCase):
     def prepare(self, lead=15):
         if not hasattr(self,'work'):
-            timeline.OperationalTimelineTest.prepare(self,lead)
+            from tests.neoscorpion_reactivation_workflow import prepare
+            prepare(self,lead)
     save=timeline.OperationalTimelineTest.save
     off=timeline.OperationalTimelineTest.off
     final_data=timeline.OperationalTimelineTest.final_data
@@ -93,10 +94,12 @@ class TruckDriverTest(unittest.TestCase):
             self.assertEqual(self.client.get('/neoscorpion/truck-driver').status_code,403)
 
     def test_current_upcoming_off_and_completed_readings_are_canonical(self):
+        from tests.neoscorpion_reactivation_workflow import assign_resources,event_snapshot
         self.claim()
         for flight,hours in [('UPS902',4),('UPS903',3)]:
             mission=self.fixture._mission(flight,'N492UP',25000,hours)
-            assignment=self.fixture._assignment(mission); assignment.assigned_truck_id=self.truck.id
+            assignment=self.fixture._assignment(mission)
+            assign_resources(self,assignment,self.truck)
         db.session.commit()
         context=driver_context(self.gateway,self.driver)
         self.assertEqual([i['row']['mission'].id for i in context['driver_groups']['current']],[self.mission.id])
@@ -107,10 +110,30 @@ class TruckDriverTest(unittest.TestCase):
         self.assertEqual(context['driver_groups']['current'],[])
         row=context['driver_groups']['previous'][0]['row']
         self.assertEqual(row['physical_work_id'],self.work.id)
+        self.assertEqual([t['remaining_lbs'] for t in row['tank_rows']],[6000,0,6000])
         self.assertEqual([t['actual_lbs'] for t in row['tank_rows']],[15000,0,15000])
+        self.assertNotIn(next(t for t in row['tank_rows'] if t['code']=='ctr')['actual_display'],('', '-',None))
+        off=(self.work.off_at_utc,self.work.off_by_user_id,self.work.visit_number)
         self.assertIsNone(self.assignment.completed_at_utc)
+        self.assertFalse(row['administratively_complete'])
+        self.assertEqual((NeoScorpionFuelingEvent.query.count(),self.selection.current_gallons),(0,10000))
+        from tests.neoscorpion_handoff_fixture import submit_fueler_only
+        submit_fueler_only(self.gateway,self.assignment.id,now_utc=self.start+timedelta(minutes=13));db.session.commit()
+        self.assertEqual((NeoScorpionFuelingEvent.query.count(),self.selection.current_gallons),(0,10000))
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id); db.session.commit()
-        self.assertTrue(driver_context(self.gateway,self.driver)['driver_groups']['previous'][0]['row']['administratively_complete'])
+        event=NeoScorpionFuelingEvent.query.one();original=event_snapshot(event)
+        self.assertFalse(service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id).changed);db.session.commit()
+        context=driver_context(self.gateway,self.driver)
+        row=context['driver_groups']['previous'][0]['row']
+        self.assertTrue(row['administratively_complete'])
+        self.assertEqual(row['physical_work_id'],self.work.id)
+        self.assertEqual([t['actual_lbs'] for t in row['tank_rows']],[15000,0,15000])
+        self.assertEqual((self.work.off_at_utc,self.work.off_by_user_id,self.work.visit_number),off)
+        self.assertEqual(context['driver_groups']['current'],[])
+        self.assertEqual([i['row']['mission'].flight_number for i in context['driver_groups']['upcoming']],['UPS903','UPS902'])
+        self.assertEqual((event.fuel_work_state_id,event.fueler_user_id,event.fuel_truck_id),(self.work.id,self.fueler.id,self.truck.id))
+        self.assertEqual(event_snapshot(event),original)
+        self.assertEqual(self.selection.current_gallons,7000)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
 
     def test_repeated_tail_visits_use_independent_reading_and_event_owners(self):

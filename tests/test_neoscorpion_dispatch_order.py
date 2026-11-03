@@ -95,15 +95,32 @@ class DispatchOrderTest(unittest.TestCase):
 
 class DispatchReactivationTest(unittest.TestCase):
     setUp=timeline.OperationalTimelineTest.setUp
-    prepare=timeline.OperationalTimelineTest.prepare
+    from tests.neoscorpion_reactivation_workflow import prepare
     save=timeline.OperationalTimelineTest.save
     off=timeline.OperationalTimelineTest.off
     final_data=timeline.OperationalTimelineTest.final_data
 
     def test_valid_followup_returns_completed_mission_to_unfinished(self):
         self.prepare(); self.save(self.start+timedelta(minutes=10),**self.final_data()); self.off()
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id)
+        from tests.neoscorpion_handoff_fixture import submit_fueler_only
+        from tests.neoscorpion_reactivation_workflow import event_snapshot
+        from app.models import NeoScorpionFuelingEvent,NeoScorpionFuelWorkState
+        self.assertIsNone(self.assignment.completed_at_utc)
+        self.assertEqual((NeoScorpionFuelingEvent.query.count(),self.selection.current_gallons),(0,10000))
+        submit_fueler_only(self.gateway,self.assignment.id,now_utc=self.start+timedelta(minutes=13))
         db.session.commit()
+        self.assertEqual(self.work.fueler_submitted_by_user_id,self.fueler.id)
+        self.assertIsNone(self.assignment.completed_at_utc)
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=14))
+        db.session.commit()
+        event=NeoScorpionFuelingEvent.query.one();original=event_snapshot(event)
+        identity=(self.mission.id,self.mission.assigned_tail_number,self.work.id,self.work.visit_number)
+        finalized=self.work.physical_finalized_at_utc
+        self.assertEqual(self.selection.current_gallons,7000)
+        self.assertFalse(service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id).changed)
+        db.session.commit()
+        self.assertEqual(event_snapshot(event),original)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
         other=self.fixture._mission("UPS902","N492UP",25000,2)
         db.session.commit()
         finished=_dispatch_presentation_context(self.gateway)["rows"]
@@ -111,6 +128,19 @@ class DispatchReactivationTest(unittest.TestCase):
         service.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,"uplift","35",None,None,
             now_utc=self.start+timedelta(minutes=20),expected_cycle=1,expected_tail="N491UP")
         db.session.commit()
+        fresh=db.session.get(NeoScorpionFuelWorkState,self.assignment.active_work_state_id)
+        self.assertNotEqual(fresh.id,self.work.id)
+        self.assertEqual((self.assignment.current_cycle_number,fresh.physical_cycle_number),(2,2))
+        self.assertIsNone(fresh.on_at_utc);self.assertIsNone(fresh.off_at_utc)
+        self.assertIsNone(fresh.fueler_submitted_at_utc)
+        self.assertTrue(all(tank.actual_lbs is None for tank in fresh.tank_states))
+        self.assertEqual([tank.remaining_lbs for tank in sorted(fresh.tank_states,key=lambda t:t.id)],[15000,0,15000])
+        self.assertIsNone(self.assignment.transfer_fuel_gallons)
+        self.assertIsNone(self.assignment.completed_at_utc)
+        self.assertEqual(self.work.physical_finalized_at_utc,finalized)
+        self.assertEqual((self.mission.id,self.mission.assigned_tail_number,self.work.id,self.work.visit_number),identity)
+        self.assertEqual(event_snapshot(event),original)
+        self.assertEqual((NeoScorpionFuelingEvent.query.count(),self.selection.current_gallons),(1,7000))
         self.arrival.actual_block_in_datetime_utc=self.start-timedelta(hours=1)
         db.session.commit()
         active=_dispatch_presentation_context(self.gateway)["rows"]
