@@ -1,4 +1,6 @@
+from tests import neoermac_html_contracts as html_contracts
 from tests.neoermac_pull_forms import pull_form
+from tests import neoermac_flight_fixture as flights
 from tests.css_contracts import stylesheet_source
 import unittest
 from datetime import date, datetime, time
@@ -51,8 +53,6 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         )
         db.session.add(self.operation)
         db.session.flush()
-        self._assign("green_runout", "east_destination_1", "SDF")
-        self._assign("green_runout", "west_destination_1", "SDF")
         self.mission = SortDateMission(
             sort_date=self.operation.sort_date,
             gateway_code=self.gateway.code,
@@ -71,6 +71,9 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
             mix_pull_time_local=time(2, 0),
         )
         db.session.add(self.mission)
+        flights.bind(self.mission,self.gateway)
+        self._assign("green_runout", "east_destination_1", "SDF")
+        self._assign("green_runout", "west_destination_1", "SDF")
         self.user = self._add_user()
         self.operation.generated_by_user_id = self.user.id
         db.session.commit()
@@ -365,7 +368,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         page = self.client.get("/neoermac/door-view?door=D1")
 
         self.assertEqual(payload["door_tab_alerts"]["D4"]["state"], "due_now")
-        self.assertIn(b"neoermac_door_live.js?v=ermac-transport-1", page.data)
+        html_contracts.owned_script(self, page, "neoermac_door_live.js")
         self.assertIn("applyDoorTabAlerts(state.door_tab_alerts", Path("app/static/js/neoermac_door_live.js").read_text())
         self.assertIn("window.neoErmacApplyDoorTabAlerts", Path("app/static/js/neoermac_door_live.js").read_text())
 
@@ -403,6 +406,10 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
             mix_pull_time_local=time(23, 30),
         )
         db.session.add(second)
+        db.session.flush()
+        flights.bind(second, self.gateway)
+        for field in ("east_destination_1", "west_destination_1"):
+            flights.select(self.gateway, "green_runout", field, second.master_flight_schedule_id)
         db.session.add(NeoErmacDoorPull(
             gateway_id=self.gateway.id, sort_date_operation_id=self.operation.id,
             sort_date_mission_id=self.mission.id, door="D4", destination="SDF",
@@ -435,13 +442,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         )
 
     def _assign(self, runout_key, field_name, destination):
-        row = next(
-            row
-            for row in get_building_lineup_rows(self.gateway)
-            if row.runout_key == runout_key
-        )
-        setattr(row, field_name, destination)
-        db.session.flush()
+        return flights.select(self.gateway,runout_key,field_name,flights.flight_id(self.gateway,destination) if destination else '')
 
     def _supervise(self, *doors):
         response = self.client.post(

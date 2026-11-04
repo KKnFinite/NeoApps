@@ -1,5 +1,6 @@
 import unittest
-from tests.neoermac_lineup_forms import lineup_form
+from tests.neoermac_flight_fixture import lineup_form
+from tests import neoermac_flight_fixture as flights
 from tests.neoermac_pull_forms import pull_cards
 from datetime import date, datetime, time
 
@@ -83,9 +84,9 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         )
         db.session.add(self.operation)
         db.session.flush()
+        self.mission = self._add_departure()
         self._assign_destination("runout_10", "east_destination_1", "SDF")
         self._assign_destination("runout_10", "west_destination_1", "SDF")
-        self.mission = self._add_departure()
         db.session.commit()
 
     def tearDown(self):
@@ -105,6 +106,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
 
     def test_no_values_account_for_requirements_without_contributing_timestamp(self):
         self.mission.mix_pull_time_local = None
+        db.session.get(MasterFlightSchedule, self.mission.master_flight_schedule_id).mix_pull_time_local = None
         db.session.commit()
 
         first_card = self._save("D32", "pure", no_pull=True)
@@ -124,6 +126,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
 
     def test_unplanned_pull_type_is_not_listed_as_incomplete(self):
         self.mission.mix_pull_time_local = None
+        db.session.get(MasterFlightSchedule, self.mission.master_flight_schedule_id).mix_pull_time_local = None
         db.session.commit()
 
         context = neoermac_dashboard_context(self.gateway)
@@ -144,6 +147,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
 
     def test_changing_and_clearing_pull_recomputes_aggregate_and_derived_status(self):
         self.mission.mix_pull_time_local = None
+        db.session.get(MasterFlightSchedule, self.mission.master_flight_schedule_id).mix_pull_time_local = None
         db.session.commit()
 
         self._save("D32", "pure", "23:40")
@@ -188,6 +192,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
 
     def test_stronger_operational_progress_prevents_regression(self):
         self.mission.mix_pull_time_local = None
+        db.session.get(MasterFlightSchedule, self.mission.master_flight_schedule_id).mix_pull_time_local = None
         db.session.commit()
         cases = (
             ("ramp_load_complete", "ramp_load_completed_at_utc"),
@@ -231,6 +236,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
 
     def test_lineup_changes_recompute_current_doors_and_preserve_old_records(self):
         self.mission.mix_pull_time_local = None
+        db.session.get(MasterFlightSchedule, self.mission.master_flight_schedule_id).mix_pull_time_local = None
         self._add_master_departure()
         db.session.commit()
         self._save("D32", "pure", "23:40")
@@ -252,7 +258,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         save_building_lineup_destination(
             self.gateway,
             "lineup_runout_11_west_destination_1",
-            "SDF",
+            flights.flight_id(self.gateway, "SDF"),
             expected_original=lineup_form(self.gateway, {'field': 'lineup_runout_11_west_destination_1'})['original'],
         )
         db.session.commit()
@@ -267,8 +273,6 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         self.assertEqual(NeoErmacDoorPull.query.count(), 3)
 
     def test_same_destination_departures_keep_pull_state_and_aggregates_separate(self):
-        self._assign_destination("runout_10", "east_destination_1", "OAK")
-        self._assign_destination("runout_10", "west_destination_1", "OAK")
         first = self._add_departure(
             destination="OAK",
             flight_number="OAK1",
@@ -281,17 +285,23 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
             planned_hour=3,
             mix_pull_time_local=None,
         )
+        for field in ("east_destination_1", "west_destination_1"):
+            flights.select(self.gateway, "runout_10", field, first.master_flight_schedule_id)
         db.session.commit()
 
-        # The first chronological OAK mission receives its own two door pulls.
+        # The explicitly selected OAK1 receives its own two door pulls.
         self._save_destination("D32", "OAK", "pure", "01:40")
         next_card = self._save_destination("D34", "OAK", "pure", "01:45")
         first = db.session.get(SortDateMission, first.id)
         self.assertEqual(first.actual_pure_pull_time_local, time(1, 45))
         self.assertEqual(first.departure_status, "last_uld_enroute")
-        self.assertEqual(next_card["flight_number"], "OAK2")
+        self.assertEqual(next_card["flight_number"], "OAK1")
+        self.assertIsNone(second.actual_pure_pull_time_local)
+        for field in ("east_destination_1", "west_destination_1"):
+            flights.select(self.gateway, "runout_10", field, second.master_flight_schedule_id)
+        db.session.commit()
 
-        # The next OAK card advances to OAK2.  Its update neither reuses the
+        # Only explicit reassignment selects OAK2. Its update neither reuses the
         # earlier pull rows nor overwrites OAK1's aggregate.
         self._save_destination("D32", "OAK", "pure", "02:35")
         second = db.session.get(SortDateMission, second.id)
@@ -306,13 +316,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         )
 
     def _assign_destination(self, runout_key, field_name, destination):
-        row = next(
-            row
-            for row in get_building_lineup_rows(self.gateway)
-            if row.runout_key == runout_key
-        )
-        setattr(row, field_name, destination)
-        db.session.flush()
+        return flights.select(self.gateway,runout_key,field_name,flights.flight_id(self.gateway,destination) if destination else '')
 
     def _add_departure(
         self,
@@ -351,25 +355,11 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         )
         db.session.add(mission)
         db.session.flush()
+        flights.bind(mission,self.gateway)
         return mission
 
     def _add_master_departure(self):
-        db.session.add(
-            MasterFlightSchedule(
-                gateway_id=self.gateway.id,
-                gateway_code=self.gateway.code,
-                sort_name="night",
-                mission_type="departure",
-                flight_number="UPS302",
-                origin=self.gateway.code,
-                destination="SDF",
-                active=True,
-                active_days="monday,tuesday,wednesday,thursday,friday,saturday,sunday",
-                planned_time_local=time(2, 30),
-                timezone="America/Chicago",
-                pure_pull_time_local=time(23, 30),
-            )
-        )
+        return flights.master(self.gateway,'UPS302','SDF',pure=time(23,30))
 
     def _save(self, door, pull_key, actual_value="", no_pull=False):
         return self._save_destination(door, "SDF", pull_key, actual_value, no_pull)

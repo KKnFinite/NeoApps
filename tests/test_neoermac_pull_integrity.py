@@ -1,3 +1,4 @@
+from tests import neoermac_flight_fixture as flights
 import unittest
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -27,9 +28,9 @@ class NeoErmacPullIntegrityTest(unittest.TestCase):
 
     def setUp(self):
         fixtures.NeoErmacRoutesTest.setUp(self)
+        self.mission = self._add_operation_departure('UPS501', 'SDF', tail='N501UP')
         self._assign_lineup_destination('green_runout', 'east_destination_1', 'SDF')
         self._assign_lineup_destination('green_runout', 'west_destination_1', 'SDF')
-        self.mission = self._add_operation_departure('UPS501', 'SDF', tail='N501UP')
         self.operation = db.session.get(SortDateOperation, self.mission.sort_date_operation_id)
         db.session.commit()
         self._login_approved_user(role='operator')
@@ -50,6 +51,10 @@ class NeoErmacPullIntegrityTest(unittest.TestCase):
         db.session.commit()
         old = self.form()
         self.mission.departure_status = 'departed'
+        db.session.commit()
+        self.assertEqual(self.form()['mission_id'], self.mission.id)
+        for field in ('east_destination_1', 'west_destination_1'):
+            flights.select(self.gateway, 'green_runout', field, second.master_flight_schedule_id)
         db.session.commit()
         self.assertEqual(self.post(old).status_code, 409)
         self.assertEqual(NeoErmacDoorPull.query.count(), 0)

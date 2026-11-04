@@ -1,7 +1,9 @@
+from tests import neoermac_html_contracts as html_contracts
 from datetime import date, datetime, time
 import unittest
 
 from app import create_app
+from tests import neoermac_flight_fixture as flights
 from app.extensions import db
 from app.models import (
     GatewayMembership,
@@ -68,14 +70,6 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
         )
         db.session.add(self.operation)
         db.session.flush()
-        db.session.add(
-            NeoErmacBuildingLineup(
-                gateway_id=self.gateway.id,
-                runout_key="runout_10",
-                runout_name="D32-D34 Belts",
-                west_destination_1="SDF",
-            )
-        )
         db.session.commit()
         self.client = self.app.test_client()
 
@@ -345,7 +339,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
         )
         return_arrival.planned_datetime_utc = datetime(2026, 8, 12, 7, 0)
 
-        second_departure = self._departure(tail="N123UP")
+        second_departure = self._departure(tail="N123UP", flight_number="UPS103")
         second_departure.flight_number = "UPS103"
         second_departure.planned_datetime_utc = datetime(2026, 8, 12, 8, 0)
         db.session.commit()
@@ -403,10 +397,10 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(b'data-tail-presence="not_arrived"', page.data)
-        self.assertIn(b"card.dataset.tailPresence", page.data)
-        self.assertIn(b"tail.textContent = cardData.tail", page.data)
-        self.assertIn(b"parking.textContent = cardData.parking", page.data)
-        self.assertIn(b"status.textContent = cardData.status", page.data)
+        self.assertIn("card.dataset.tailPresence", html_contracts.owned_script(self, page, "neoermac_door_live.js"))
+        self.assertIn("tail.textContent = cardData.tail", html_contracts.owned_script(self, page, "neoermac_door_live.js"))
+        self.assertIn("parking.textContent = cardData.parking", html_contracts.owned_script(self, page, "neoermac_door_live.js"))
+        self.assertIn("status.textContent = cardData.status", html_contracts.owned_script(self, page, "neoermac_door_live.js"))
         self.assertNotIn(b"window.location.reload", page.data)
         self.assertEqual(payload["status"], "TAIL NOT ARRIVED")
         self.assertEqual(payload["parking"], "-")
@@ -432,7 +426,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
     def _outbound_row(self):
         return view_outbound_context(self.gateway)["rows"][0]
 
-    def _departure(self, *, tail, departure_status="scheduled"):
+    def _departure(self, *, tail, departure_status="scheduled", flight_number="UPS101"):
         mission = SortDateMission(
             sort_date=self.operation.sort_date,
             gateway_code=self.gateway.code,
@@ -441,7 +435,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
             mission_type="departure",
             mission_source="master",
             wave="1",
-            flight_number="UPS101",
+            flight_number=flight_number,
             origin=self.gateway.code,
             destination="SDF",
             timezone="America/Chicago",
@@ -455,6 +449,8 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
         )
         db.session.add(mission)
         db.session.flush()
+        schedule=flights.bind(mission,self.gateway)
+        flights.select(self.gateway,'runout_10','west_destination_1',schedule.id)
         return mission
 
     def _arrival(

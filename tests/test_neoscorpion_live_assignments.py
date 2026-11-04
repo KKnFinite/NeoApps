@@ -129,7 +129,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         first = self.client.get("/neoscorpion/fuel-dispatch/live-panel").get_json()
         self.assertIn("data-fueling-performance", first["html"])
         self.assertIn("1 job · PROF 100", first["html"])
-        self.assertIn("0 jobs · PROF —", first["html"])
+        self.assertIn("0 jobs · PROF â€”", first["html"])
         self.assertIn("Falcon", first["html"])
         self._performance_event(operation, assignment, work, fueler, trucks[0], 2,
                                 datetime(2026, 8, 18, 2, 2), datetime(2026, 8, 18, 2, 4),
@@ -343,7 +343,8 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
                 "current_operation": False,
                 "operation_id": None,
                 "revision": 0,
-            },
+                "tail_notes_revision": 0,
+                },
         )
         self.assertEqual(response.headers["Cache-Control"], "no-store")
 
@@ -351,7 +352,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         response = self.client.get("/neoscorpion/fuel-assignments/revision")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"ok": True, "current_operation": False,
-                                              "operation_id": None, "revision": 0})
+                                              "operation_id": None, "revision": 0, "tail_notes_revision": 0})
 
     def test_revision_endpoint_is_one_fingerprint_query_and_never_writes(self):
         operator = self._add_user("query_operator", "operator")
@@ -412,6 +413,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
                 "current_operation": False,
                 "operation_id": None,
                 "revision": 0,
+                "tail_notes_revision": 0, "tail_revision": "",
             },
         )
         self.assertEqual(response.headers["Cache-Control"], "no-store")
@@ -420,7 +422,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         response = self.client.get("/neoscorpion/fuel-dispatch/revision")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"current_operation": False,
-                                              "operation_id": None, "revision": 0})
+                                              "operation_id": None, "revision": 0, "tail_notes_revision": 0, "tail_revision": ""})
 
     def test_fuel_dispatch_revision_active_operation_is_read_only_and_bounded(self):
         operator = self._add_user("dispatch_query_operator", "operator")
@@ -450,13 +452,10 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
                 for statement in statements
             )
         )
-        self.assertLessEqual(
-            sum(
-                statement.lstrip().upper().startswith("SELECT")
-                for statement in statements
-            ),
-            8,
-        )
+        selects = [statement for statement in statements if statement.upper().startswith("SELECT")]
+        self.assertEqual(sum("FROM neoscorpion_vendor_accounts" in q for q in selects), 1)
+        self.assertEqual(sum("max(sort_date_missions.tail_updated_at)" in q for q in selects), 1)
+        self.assertEqual(len(selects), 10)  # Eight original reads + vendor guard + tail fingerprint.
 
     def test_revision_and_assignment_identifiers_render_for_current_fueler(self):
         operator = self._add_user("assigned_operator", "operator")
@@ -497,7 +496,8 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         self.assertIn('data-fuel-assignments-panel', body)
         self.assertIn(f'data-fuel-assignment-id="{assignment.id}"', body)
         self.assertNotIn("NEW ASSIGNMENT", body)
-        self.assertIn("data-fueler-status-chip", body)
+        self.assertIn("data-fueler-operational-warning", body)
+        self.assertIn("data-fueler-submission-status", body)
         self.assertNotIn("data-fueler-cycle-chip", body)
         self.assertIn("neoscorpion_fuel_assignments_live.js", body)
         self.assertIn(mission.flight_number, body)

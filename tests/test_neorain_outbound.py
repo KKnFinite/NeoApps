@@ -902,6 +902,8 @@ class NeoRainOutboundTest(unittest.TestCase):
         self._login(editor)
         db.session.commit()
 
+        from app.models import NeoRainMissionOverride, NeoRainOverrideAudit
+        original = (entity_version(mission), mission.actual_block_in_source, mission.updated_at)
         with patch(
             "app.neonodes.neorain.routes.current_neorain_outbound_operation",
             return_value=operation,
@@ -916,8 +918,11 @@ class NeoRainOutboundTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.get_json()["code"], "invalid_block_in")
+        self.assertEqual(response.get_json(), {"ok": False, "error": "BLOCK_IN is not a valid time."})
         self.assertIsNone(mission.actual_block_in_datetime_utc)
+        self.assertEqual((entity_version(mission), mission.actual_block_in_source, mission.updated_at), original)
+        self.assertEqual(NeoRainMissionOverride.query.count(), 0)
+        self.assertEqual(NeoRainOverrideAudit.query.count(), 0)
 
     def _operation(self):
         operation = SortDateOperation(

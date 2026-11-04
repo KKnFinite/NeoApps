@@ -6788,6 +6788,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "reason": "No current operation mission match.",
         }
 
+        # Legacy method name predates the normalized cross-direction invariant.
+        # The October 20 HOT contract explicitly preserves one flight per Sort.
+        arrival_snapshot = (arrival.flight_number, arrival.assigned_tail_number, arrival.eta_datetime_utc)
+        for _ in range(2):
+            denied = self.client.post(
+                f"/motherbrain/operations/{operation.id}/planning/departure/alp/hot",
+                data=form, follow_redirects=False)
+            self.assertEqual(denied.status_code, 302)
+            self.assertEqual(SortDateMission.query.filter_by(sort_date_operation_id=operation.id).count(), 1)
+            self.assertEqual(SortDateTailState.query.count(), 0)
+            self.assertEqual(SortDateParkingAssignment.query.count(), 0)
+            self.assertEqual((arrival.flight_number, arrival.assigned_tail_number, arrival.eta_datetime_utc), arrival_snapshot)
+        with self.client.session_transaction() as session:
+            self.assertTrue(any("flight number already exists" in text for _, text in session['_flashes']))
+        # An independent flight identity is legitimate and retains the positive
+        # HOT, tail, parking, presentation and repeated-request assertions.
+        form['flight_number'] = 'UPS1000'
         first = self.client.post(
             f"/motherbrain/operations/{operation.id}/planning/departure/alp/hot",
             data=form,
@@ -6804,7 +6821,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         departures = SortDateMission.query.filter_by(
             sort_date_operation_id=operation.id,
             mission_type="departure",
-            flight_number="UPS0999",
+            flight_number="UPS1000",
         ).all()
         arrival_missions = SortDateMission.query.filter_by(
             sort_date_operation_id=operation.id,
@@ -6837,7 +6854,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             sort_date_operation_id=operation.id,
             tail_number="N999UP",
         ).count(), 0)
-        self.assertIn("UPS0999", mission_section)
+        self.assertIn("UPS1000", mission_section)
         self.assertIn("N999UP", mission_section)
         self.assertIn("SDF", mission_section)
         self.assertIn("NOT PARKED", mission_section)

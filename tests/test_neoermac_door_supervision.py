@@ -1,3 +1,6 @@
+from tests import neoermac_flight_fixture as flights
+from tests.html_contracts import document
+from urllib.parse import urlparse
 from tests.neoermac_pull_forms import pull_form
 from tests.css_contracts import stylesheet_source
 import json
@@ -173,7 +176,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
             additional = self.client.get("/neoermac/door-view")
 
         self.assertIn(b"EMPLOYEES", selected.data)
-        self.assertIn(b'href="/neoermac/door-view/manage-employees"', selected.data)
+        self.assertTrue(any(urlparse(a.attrs.get("href", "")).path == "/neoermac/door-view/manage-employees" for a in document(selected).findall("a")))
         self.assertIn(b"EMPLOYEES", additional.data)
         self.assertNotIn(b"MANAGE EMPLOYEES", additional.data)
         self.assertEqual(
@@ -225,7 +228,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
             self.assertIn(b'data-door-tab="D9"', page.data)
             self.assertIn(b'>EDIT DOORS</button>', page.data)
             self.assertIn(b'>EMPLOYEES</a>', page.data)
-            self.assertIn(b'href="/neoermac/door-view/manage-employees"', page.data)
+            self.assertTrue(any(urlparse(a.attrs.get("href", "")).path == "/neoermac/door-view/manage-employees" for a in document(page).findall("a")))
             saved = self.client.post("/neoermac/door-view/supervision", data={
                 "doors": ["D6", "D13", "D999"], "active_door": "D13",
             })
@@ -366,6 +369,10 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
                 departure_status="scheduled",
             )
         )
+        db.session.flush()
+        mission = SortDateMission.query.filter_by(flight_number="UPS123").one()
+        flights.bind(mission, self.gateway)
+        flights.select(self.gateway, "runout_10", "west_destination_1", mission.master_flight_schedule_id)
         db.session.commit()
         self.client.get("/neoermac/door-view?door=D34")
 

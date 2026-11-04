@@ -16,8 +16,8 @@ class ErmacWorkspacePresentationTest(unittest.TestCase):
         ])
         app.add_url_rule('/neostaffing/shift-flow', 'neostaffing.shift_flow', lambda: '')
         person = Row(id=41, full_name='Fixture Employee')
-        row = Row(person=person, status='working', status_label='Working',
-                  status_writable=True, flow='Door 13')
+        row = dict(person=person, status='working', status_label='Working',
+                   status_writable=True, authorized=True, original_snapshot='signed-fixture', flow='Door 13')
         counts = dict.fromkeys(['called_in', 'no_call', 'scheduled_off', 'anniversary_day',
             'vacation', 'opt_day', 'disability', 'work_comp', 'funeral', 'jury', 'fmla',
             'military', 'personal_leave', 'cleared'], 0)
@@ -30,7 +30,7 @@ class ErmacWorkspacePresentationTest(unittest.TestCase):
                 attendance=Row(operation=Row(id=7), counts=counts, here=[row], coming=[row],
                                status_choices=[('working', 'Working')]))
         for value in ['ATTENDANCE HERE', 'COMING TO THESE DOORS', 'Selected Doors: D13 · D17',
-                      'name="status_41"', 'value="working" selected', 'SAVE ATTENDANCE',
+                      'name="status_41"', 'value="working" selected', 'data-attendance-autosave', 'data-attendance-save-status',
                       'name="sort_date_operation_id" value="7"', 'data-operational-manage-employees']:
             self.assertIn(value, html)
 

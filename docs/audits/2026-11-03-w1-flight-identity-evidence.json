@@ -1,0 +1,2485 @@
+{
+  "package": "W1",
+  "starting_sha": "c296669262d63eacbd656a96fa2002d6bfd153ef",
+  "application_code_changed": false,
+  "original_ids": 141,
+  "before": {
+    "fail": 140,
+    "pass": 1
+  },
+  "after": {
+    "pass": 141
+  },
+  "case_classification_counts": {
+    "outdated authority assertion": 1,
+    "invalid identity fixture": 115,
+    "outdated CSP/live assertion": 7,
+    "outdated automatic-selection assertion": 3,
+    "incomplete provisioning fixture": 2,
+    "invalid current-authority fixture": 1,
+    "broken isolated migration harness": 1,
+    "outdated transport/identity fixture": 4,
+    "already passing at W1 start": 1,
+    "broken presentation fixture": 1,
+    "outdated response assertion": 1,
+    "outdated revision/UI/query assertion": 4
+  },
+  "full_367_inventory_rerun": false,
+  "cases": [
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_hot_alp_departure_creates_mission_when_arrival_has_same_flight",
+      "nodeid": "tests/test_motherbrain_routes.py::MotherBrainRoutesTest::test_hot_alp_departure_creates_mission_when_arrival_has_same_flight",
+      "owner": "W1",
+      "classification": "outdated authority assertion",
+      "verified_cause_and_repair": "Documented October cross-direction normalized flight uniqueness rejects this duplicate; test now proves atomic denial and legitimate distinct HOT creation.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "sqlalchemy.exc.NoResultFound: No row was found when one was required"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_building_lineup_geometry.NeoErmacBuildingLineupGeometryTest::test_d6_collects_neighboring_runouts_and_deduplicates_destinations",
+      "nodeid": "tests/test_neoermac_building_lineup_geometry.py::NeoErmacBuildingLineupGeometryTest::test_d6_collects_neighboring_runouts_and_deduplicates_destinations",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "ValueError: Select an available Master Schedule departure flight."
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_building_lineup_geometry.NeoErmacBuildingLineupGeometryTest::test_destination_on_opposite_sides_requires_both_doors",
+      "nodeid": "tests/test_neoermac_building_lineup_geometry.py::NeoErmacBuildingLineupGeometryTest::test_destination_on_opposite_sides_requires_both_doors",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "ValueError: Select an available Master Schedule departure flight."
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_building_lineup_geometry.NeoErmacBuildingLineupGeometryTest::test_distinct_operational_destinations_share_one_belt_side",
+      "nodeid": "tests/test_neoermac_building_lineup_geometry.py::NeoErmacBuildingLineupGeometryTest::test_distinct_operational_destinations_share_one_belt_side",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "ValueError: Select an available Master Schedule departure flight."
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_building_lineup_geometry.NeoErmacBuildingLineupGeometryTest::test_duplicate_is_allowed_within_one_physical_belt_side",
+      "nodeid": "tests/test_neoermac_building_lineup_geometry.py::NeoErmacBuildingLineupGeometryTest::test_duplicate_is_allowed_within_one_physical_belt_side",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "ValueError: Select an available Master Schedule departure flight."
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_building_lineup_geometry.NeoErmacBuildingLineupGeometryTest::test_east_and_west_face_only_the_physical_endpoint_doors",
+      "nodeid": "tests/test_neoermac_building_lineup_geometry.py::NeoErmacBuildingLineupGeometryTest::test_east_and_west_face_only_the_physical_endpoint_doors",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "ValueError: Select an available Master Schedule departure flight."
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_building_lineup_geometry.NeoErmacBuildingLineupGeometryTest::test_repeated_destination_on_one_door_is_one_requirement",
+      "nodeid": "tests/test_neoermac_building_lineup_geometry.py::NeoErmacBuildingLineupGeometryTest::test_repeated_destination_on_one_door_is_one_requirement",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "ValueError: Select an available Master Schedule departure flight."
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_door_supervision.NeoErmacDoorSupervisionTest::test_employee_attendance_action_follows_supervised_door_selection",
+      "nodeid": "tests/test_neoermac_door_supervision.py::NeoErmacDoorSupervisionTest::test_employee_attendance_action_follows_supervised_door_selection",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'href=\"/neoermac/door-view/manage-employees\"' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initia"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_door_supervision.NeoErmacDoorSupervisionTest::test_existing_single_door_pull_autosave_still_works_with_tabs",
+      "nodeid": "tests/test_neoermac_door_supervision.py::NeoErmacDoorSupervisionTest::test_existing_single_door_pull_autosave_still_works_with_tabs",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_door_supervision.NeoErmacDoorSupervisionTest::test_saved_tabs_and_employees_survive_without_an_operation",
+      "nodeid": "tests/test_neoermac_door_supervision.py::NeoErmacDoorSupervisionTest::test_saved_tabs_and_employees_survive_without_an_operation",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'href=\"/neoermac/door-view/manage-employees\"' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initia"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_aggregation_still_uses_latest_pure_and_mix_independently",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_aggregation_still_uses_latest_pure_and_mix_independently",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: None != datetime.time(1, 55)"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_clearing_respects_the_current_scope",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_clearing_respects_the_current_scope",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "KeyError: 'D1'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_due_soon_pull_does_not_animate_an_inactive_tab",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_due_soon_pull_does_not_animate_an_inactive_tab",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_editing_respects_the_current_scope_without_retroactive_sync",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_editing_respects_the_current_scope_without_retroactive_sync",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "KeyError: 'D1'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_existing_single_door_behavior_is_unchanged_without_link_selection",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_existing_single_door_behavior_is_unchanged_without_link_selection",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_explicit_both_sides_mix_writes_linked_supervised_doors",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_explicit_both_sides_mix_writes_linked_supervised_doors",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_inactive_tab_is_green_during_pull_now_period",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_inactive_tab_is_green_during_pull_now_period",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '' != 'due_now'\n+ due_now"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_inactive_tab_is_red_and_red_overrides_green",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_inactive_tab_is_red_and_red_overrides_green",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '' != 'late'\n+ late"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_linked_pull_save_immediately_clears_counterpart_tab_alert",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_linked_pull_save_immediately_clears_counterpart_tab_alert",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '' != 'late'\n+ late"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_linked_pure_defaults_to_this_door_only",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_linked_pure_defaults_to_this_door_only",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_live_state_recomputes_inactive_tab_without_page_reload",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_live_state_recomputes_inactive_tab_without_page_reload",
+      "owner": "W1",
+      "classification": "outdated CSP/live assertion",
+      "verified_cause_and_repair": "Verify current owned/versioned external controller, real refresh configuration and revision/draft behavior instead of retired inline JavaScript/version literals.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '' != 'due_now'\n+ due_now"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_malformed_scope_safely_defaults_to_this_door",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_malformed_scope_safely_defaults_to_this_door",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_no_pure_and_no_mix_respect_explicit_scope",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_no_pure_and_no_mix_respect_explicit_scope",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "KeyError: 'D1'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_normal_bulk_save_respects_explicit_both_sides_scope",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_normal_bulk_save_respects_explicit_both_sides_scope",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 302"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_same_destination_at_an_unrelated_belt_is_not_changed",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_same_destination_at_an_unrelated_belt_is_not_changed",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: Items in the second set but not the first:\n'D4'\n'D1'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_scope_control_only_renders_for_a_linked_supervised_door",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_scope_control_only_renders_for_a_linked_supervised_door",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'data-pull-scope aria' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scal"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_tab_alert_does_not_reuse_completed_pull_from_another_sdf_mission",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_tab_alert_does_not_reuse_completed_pull_from_another_sdf_mission",
+      "owner": "W1",
+      "classification": "outdated automatic-selection assertion",
+      "verified_cause_and_repair": "Completed same-destination flights do not auto-advance a slot. Explicit signed reassignment selects the next flight; old identities conflict and prior pulls remain immutable.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '' != 'late'\n+ late"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_linked_door_pulls.NeoErmacLinkedDoorPullsTest::test_unselected_counterpart_remains_independent",
+      "nodeid": "tests/test_neoermac_linked_door_pulls.py::NeoErmacLinkedDoorPullsTest::test_unselected_counterpart_remains_independent",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: Items in the second set but not the first:\n'D1'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_all_no_pull_requirements_complete_without_synthetic_event_time",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_all_no_pull_requirements_complete_without_synthetic_event_time",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "StopIteration"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_changing_and_clearing_pull_recomputes_aggregate_and_derived_status",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_changing_and_clearing_pull_recomputes_aggregate_and_derived_status",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "StopIteration"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_last_uld_waits_for_every_door_and_uses_latest_real_pull",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_last_uld_waits_for_every_door_and_uses_latest_real_pull",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "StopIteration"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_latest_pure_and_mix_are_aggregated_independently",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_latest_pure_and_mix_are_aggregated_independently",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "StopIteration"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_lineup_changes_recompute_current_doors_and_preserve_old_records",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_lineup_changes_recompute_current_doors_and_preserve_old_records",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "StopIteration"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_no_values_account_for_requirements_without_contributing_timestamp",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_no_values_account_for_requirements_without_contributing_timestamp",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "StopIteration"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_same_destination_departures_keep_pull_state_and_aggregates_separate",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_same_destination_departures_keep_pull_state_and_aggregates_separate",
+      "owner": "W1",
+      "classification": "outdated automatic-selection assertion",
+      "verified_cause_and_repair": "Completed same-destination flights do not auto-advance a slot. Explicit signed reassignment selects the next flight; old identities conflict and prior pulls remain immutable.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "StopIteration"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_stronger_operational_progress_prevents_regression",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_stronger_operational_progress_prevents_regression",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 6,
+        "first_failure": "StopIteration"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_aggregation.NeoErmacPullAggregationTest::test_unplanned_pull_type_is_not_listed_as_incomplete",
+      "nodeid": "tests/test_neoermac_pull_aggregation.py::NeoErmacPullAggregationTest::test_unplanned_pull_type_is_not_listed_as_incomplete",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: Lists differ: [] != ['Pure']\n\nSecond list contains 1 additional elements.\nFirst extra element 0:\n'Pure'\n\n- []\n+ ['Pure']"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_ambiguous_legacy_is_excluded_even_when_only_active_mission_is_recomputed",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_ambiguous_legacy_is_excluded_even_when_only_active_mission_is_recomputed",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_both_sides_bind_same_mission_and_conflict_is_atomic",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_both_sides_bind_same_mission_and_conflict_is_atomic",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_canonical_wins_even_when_legacy_timestamp_is_newer",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_canonical_wins_even_when_legacy_timestamp_is_newer",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_full_form_stale_clear_rolls_back_other_fields",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_full_form_stale_clear_rolls_back_other_fields",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_full_form_unchanged_blank_does_not_clear_newer_other_field",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_full_form_unchanged_blank_does_not_clear_newer_other_field",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_prior_sort_and_forged_identity_are_rejected",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_prior_sort_and_forged_identity_are_rejected",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 5,
+        "first_failure": "AssertionError: 400 != 409"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_refresh_has_no_writes_and_supplies_same_signed_field_snapshot",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_refresh_has_no_writes_and_supplies_same_signed_field_snapshot",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_repeated_destination_advances_rejects_old_identity_and_other_tail",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_repeated_destination_advances_rejects_old_identity_and_other_tail",
+      "owner": "W1",
+      "classification": "outdated automatic-selection assertion",
+      "verified_cause_and_repair": "Completed same-destination flights do not auto-advance a slot. Explicit signed reassignment selects the next flight; old identities conflict and prior pulls remain immutable.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 409"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_same_snapshot_independent_pure_mix_edits_survive_in_both_orders",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_same_snapshot_independent_pure_mix_edits_survive_in_both_orders",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_stale_same_field_and_stale_blank_rejected_intentional_clear_works",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_stale_same_field_and_stale_blank_rejected_intentional_clear_works",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_two_connections_serialize_first_creation_and_preserve_independent_fields",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_two_connections_serialize_first_creation_and_preserve_independent_fields",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 2,
+        "first_failure": "AssertionError: Lists differ: [400, 400] != [200, 200]\n\nFirst differing element 0:\n400\n200\n\n- [400, 400]\n?  ^    ^\n\n+ [200, 200]\n?  ^    ^"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_pull_integrity.NeoErmacPullIntegrityTest::test_unambiguous_legacy_contributes_and_promotion_preserves_other_field",
+      "nodeid": "tests/test_neoermac_pull_integrity.py::NeoErmacPullIntegrityTest::test_unambiguous_legacy_contributes_and_promotion_preserves_other_field",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_autosave_accepts_repeated_same_side_destination",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_autosave_accepts_repeated_same_side_destination",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_destination_autosave_saves_one_field_and_returns_pull_times",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_destination_autosave_saves_one_field_and_returns_pull_times",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_destination_options_come_from_master_departures",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_destination_options_come_from_master_departures",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'<option value=\"SDF\"' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_displays_current_sort_mission_pull_times",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_displays_current_sort_mission_pull_times",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'00:55' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-f"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_displays_effective_window_adjusted_pull_times",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_displays_effective_window_adjusted_pull_times",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'01:05' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-f"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_excludes_standalone_spare_tail",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_excludes_standalone_spare_tail",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'<option value=\"SDF\"' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_full_save_repeats_but_door_cards_remain_unique",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_full_save_repeats_but_door_cards_remain_unique",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 302"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_mobile_preserves_physical_orientation_and_stacks",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_mobile_preserves_physical_orientation_and_stacks",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '00:45' not found in ' data-lineup-destination-select data-lineup-field=\"lineup_green_runout_east_destination_1\" disabled>\\n        <option value=\"\">DEST 1</option>\\n        \\n        \\n        <option va"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_renders_pull_times_for_each_destination_side",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_renders_pull_times_for_each_destination_side",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '00:55' not found in ' data-lineup-destination-select data-lineup-field=\"lineup_green_runout_east_destination_2\" disabled>\\n        <option value=\"\">DEST 1</option>\\n        \\n        \\n        <option va"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_building_lineup_renders_pure_and_mix_pull_cards_inside_belts",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_building_lineup_renders_pure_and_mix_pull_cards_inside_belts",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '00:45' not found in ' data-lineup-destination-select data-lineup-field=\"lineup_green_runout_east_destination_1\" disabled>\\n        <option value=\"\">DEST 1</option>\\n        \\n        \\n        <option va"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_changed_state_bulk_loads_door_pulls_once",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_changed_state_bulk_loads_door_pulls_once",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 0 != 2"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_completed_pull_card_collapses_with_summary",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_completed_pull_card_collapses_with_summary",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'is-pulls-complete is-pulls-collapsed' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_completion_autosave_moves_card_to_completed_bottom",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_completion_autosave_moves_card_to_completed_bottom",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_displays_window_adjusted_planned_pull_times",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_displays_window_adjusted_planned_pull_times",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'PLANNED Pure' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, vie"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_distinguishes_tbd_zero_and_positive_windows",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_distinguishes_tbd_zero_and_positive_windows",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'WINDOW TBD' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewp"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_does_not_alert_for_pull_time_outside_operation_window",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_does_not_alert_for_pull_time_outside_operation_window",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_edit_user_can_save_actual_pull_and_no_pull_states",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_edit_user_can_save_actual_pull_and_no_pull_states",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "sqlalchemy.exc.NoResultFound: No row was found when one was required"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_get_commits_only_when_navigation_changes_supervision",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_get_commits_only_when_navigation_changes_supervision",
+      "owner": "W1",
+      "classification": "incomplete provisioning fixture",
+      "verified_cause_and_repair": "Perform explicit access setup before measuring established/navigation reads; only a real preference change commits, and established reads do not change operational records.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 2 != 1"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_global_zero_overrides_stored_wave_window",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_global_zero_overrides_stored_wave_window",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_initial_render_shows_parking_plan_assignment",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_initial_render_shows_parking_plan_assignment",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'N316UP' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_marks_late_pull_critical_until_resolved",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_marks_late_pull_critical_until_resolved",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'is-pull-late' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, vie"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_orders_unfinished_by_effective_pure_then_tbd_and_completed",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_orders_unfinished_by_effective_pure_then_tbd_and_completed",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: Lists differ: [] != ['ONT', 'SDF', 'LAX', 'MEM']\n\nSecond list contains 4 additional elements.\nFirst extra element 0:\n'ONT'\n\n- []\n+ ['ONT', 'SDF', 'LAX', 'MEM']"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_outbound_destination_cards_have_prominent_scan_markup",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_outbound_destination_cards_have_prominent_scan_markup",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 0 not greater than or equal to 2"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_parking_assignment_does_not_mutate_master_schedule",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_parking_assignment_does_not_mutate_master_schedule",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'A01' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_parking_is_current_sort_operation_only",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_parking_is_current_sort_operation_only",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'N316UP' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_parking_returns_to_dash_after_unassign",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_parking_returns_to_dash_after_unassign",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'<strong data-door-parking>A01</strong>' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-sca"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_alerts_include_gateway_epoch_thresholds",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_alerts_include_gateway_epoch_thresholds",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_autosave_creates_and_updates_pure_and_mix_records",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_autosave_creates_and_updates_pure_and_mix_records",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: False is not true"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_autosave_rejects_invalid_hhmm_without_overwriting_saved_value",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_autosave_rejects_invalid_hhmm_without_overwriting_saved_value",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "sqlalchemy.exc.NoResultFound: No row was found when one was required"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_autosave_reuses_one_operational_bundle",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_autosave_reuses_one_operational_bundle",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_autosave_saves_no_checkbox_state",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_autosave_saves_no_checkbox_state",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "sqlalchemy.exc.NoResultFound: No row was found when one was required"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_autosave_saves_no_pure_and_no_mix",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_autosave_saves_no_pure_and_no_mix",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 200"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_autosave_saves_valid_hhmm_actual_pull",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_autosave_saves_valid_hhmm_actual_pull",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "sqlalchemy.exc.NoResultFound: No row was found when one was required"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_autosave_succeeds_outside_ops_with_departed_mission",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_autosave_succeeds_outside_ops_with_departed_mission",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "sqlalchemy.exc.NoResultFound: No row was found when one was required"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_entries_render_autosave_without_manual_save_button",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_entries_render_autosave_without_manual_save_button",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'data-hhmm-input' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, "
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_urgency_handles_cross_midnight_planned_times",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_urgency_handles_cross_midnight_planned_times",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_urgency_is_independent_and_resolves_per_pull",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_urgency_is_independent_and_resolves_per_pull",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_pull_urgency_uses_exact_yellow_green_red_boundaries",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_pull_urgency_uses_exact_yellow_green_red_boundaries",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 7,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_renders_actual_flight_status",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_renders_actual_flight_status",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'Blocked Out' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, view"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_request_form_renders_clean_mobile_markup",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_request_form_renders_clean_mobile_markup",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'class=\"neoermac-label-mobile\">PURE</span>' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_revision_is_stable_across_pull_alert_minute_boundaries",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_revision_is_stable_across_pull_alert_minute_boundaries",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_selected_door_shows_building_lineup_destinations",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_selected_door_shows_building_lineup_destinations",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'SDF' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_shared_position_slots_both_display_position_only",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_shared_position_slots_both_display_position_only",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 0 != 2"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_state_revision_change_runs_full_payload",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_state_revision_change_runs_full_payload",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_state_short_circuits_an_unchanged_revision",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_state_short_circuits_an_unchanged_revision",
+      "owner": "W1",
+      "classification": "outdated CSP/live assertion",
+      "verified_cause_and_repair": "Verify current owned/versioned external controller, real refresh configuration and revision/draft behavior instead of retired inline JavaScript/version literals.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'neoermac_door_live.js?v=ermac-transport-1' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_state_shows_parking_plan_assignment",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_state_shows_parking_plan_assignment",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_state_supports_selective_live_card_reconciliation",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_state_supports_selective_live_card_reconciliation",
+      "owner": "W1",
+      "classification": "outdated CSP/live assertion",
+      "verified_cause_and_repair": "Verify current owned/versioned external controller, real refresh configuration and revision/draft behavior instead of retired inline JavaScript/version literals.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_uses_destination_as_stable_tie_breaker",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_uses_destination_as_stable_tie_breaker",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: Lists differ: [] != ['ATL', 'SDF']\n\nSecond list contains 2 additional elements.\nFirst extra element 0:\n'ATL'\n\n- []\n+ ['ATL', 'SDF']"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_uses_independent_wave_windows_when_global_is_blank",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_uses_independent_wave_windows_when_global_is_blank",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "KeyError: 'SDF'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_door_view_warns_for_pull_due_within_five_minutes",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_door_view_warns_for_pull_due_within_five_minutes",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'is-pull-due-soon' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1,"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_established_neoermac_get_commits_access_initialization_once",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_established_neoermac_get_commits_access_initialization_once",
+      "owner": "W1",
+      "classification": "incomplete provisioning fixture",
+      "verified_cause_and_repair": "Perform explicit access setup before measuring established/navigation reads; only a real preference change commits, and established reads do not change operational records.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 9 != 1"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_individual_neoermac_refresh_setting_controls_only_its_live_page",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_individual_neoermac_refresh_setting_controls_only_its_live_page",
+      "owner": "W1",
+      "classification": "outdated CSP/live assertion",
+      "verified_cause_and_repair": "Verify current owned/versioned external controller, real refresh configuration and revision/draft behavior instead of retired inline JavaScript/version literals.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 'intervalMs: 10000' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, "
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_manage_employees_database_error_is_sanitized",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_manage_employees_database_error_is_sanitized",
+      "owner": "W1",
+      "classification": "invalid current-authority fixture",
+      "verified_cause_and_repair": "Create real linked employee/leadership and selected Door scope before injecting the database error; prove rollback and sanitized diagnostics rather than bypassing a valid W4 guard.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: no logs of level ERROR or higher triggered on app"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_neoermac_auto_refresh_is_limited_to_live_operation_pages",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_neoermac_auto_refresh_is_limited_to_live_operation_pages",
+      "owner": "W1",
+      "classification": "outdated CSP/live assertion",
+      "verified_cause_and_repair": "Verify current owned/versioned external controller, real refresh configuration and revision/draft behavior instead of retired inline JavaScript/version literals.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'window.NeoLiveUpdates.create' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maxi"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_neoermac_menu_keeps_multi_door_pull_until_all_required_doors_addressed",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_neoermac_menu_keeps_multi_door_pull_until_all_required_doors_addressed",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 302"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_neoermac_menu_sorts_upcoming_pulls_and_limits_each_side",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_neoermac_menu_sorts_upcoming_pulls_and_limits_each_side",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 0 != 5"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_neoermac_upcoming_pulls_combines_duplicate_belt_side_entries",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_neoermac_upcoming_pulls_combines_duplicate_belt_side_entries",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 0 != 2"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_neoermac_upcoming_pulls_keeps_different_destinations_on_same_belt",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_neoermac_upcoming_pulls_keeps_different_destinations_on_same_belt",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'DEN / - / -' not found in b'aria-label=\"East upcoming pulls\" data-upcoming-side=\"east\" hidden>\\n            <div class=\"neoermac-upcoming-side-header\">\\n                <span>EAST</span>\\n              "
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_neoermac_upcoming_pulls_removes_actual_and_no_pull_items",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_neoermac_upcoming_pulls_removes_actual_and_no_pull_items",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 302"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_neoermac_upcoming_pulls_shows_west_and_east_pull_lists",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_neoermac_upcoming_pulls_shows_west_and_east_pull_lists",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'SDF / N702UP / D32' not found in b'aria-label=\"West upcoming pulls\" data-upcoming-side=\"west\" >\\n            <div class=\"neoermac-upcoming-side-header\">\\n                <span>WEST</span>\\n             "
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_upcoming_pulls_changed_state_returns_only_board_fragment",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_upcoming_pulls_changed_state_returns_only_board_fragment",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: '01:33' not found in '<section\\n    class=\"neoermac-upcoming-board\"\\n    aria-label=\"Upcoming outbound pulls\"\\n    data-upcoming-pulls-board\\n>\\n    <h3>UPCOMING OUTBOUND PULLS</h3>\\n    \\n    <div class="
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_user_with_building_lineup_edit_can_save_destinations",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_user_with_building_lineup_edit_can_save_destinations",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "sqlalchemy.exc.NoResultFound: No row was found when one was required"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_view_outbound_renders_summary_and_door_actuals",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_view_outbound_renders_summary_and_door_actuals",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 400 != 302"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_view_outbound_short_circuits_unchanged_revision",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_view_outbound_short_circuits_unchanged_revision",
+      "owner": "W1",
+      "classification": "outdated CSP/live assertion",
+      "verified_cause_and_repair": "Verify current owned/versioned external controller, real refresh configuration and revision/draft behavior instead of retired inline JavaScript/version literals.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: b'neoermac_outbound_live.js?v=ermac-transport-1' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, init"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_view_outbound_sorts_by_planned_pull_time_and_handles_missing_data",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_view_outbound_sorts_by_planned_pull_time_and_handles_missing_data",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "ValueError: subsection not found"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_routes.NeoErmacRoutesTest::test_view_outbound_state_is_read_only_and_bounded",
+      "nodeid": "tests/test_neoermac_routes.py::NeoErmacRoutesTest::test_view_outbound_state_is_read_only_and_bounded",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 14 != 13"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_schema_sync.NeoErmacDoorPullSchemaSyncTest::test_postgres_sync_adds_and_migrates_missing_mix_pull_columns",
+      "nodeid": "tests/test_neoermac_schema_sync.py::NeoErmacDoorPullSchemaSyncTest::test_postgres_sync_adds_and_migrates_missing_mix_pull_columns",
+      "owner": "W1",
+      "classification": "broken isolated migration harness",
+      "verified_cause_and_repair": "Mock unrelated subsequent Staffing/SubZero migrations; retain actual Ermac additive ALTER/default/legacy-copy SQL assertions and real PostgreSQL upgrade coverage.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "sqlalchemy.exc.NoSuchTableError: staffing_shift_flow_plans"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_api_assumed_arrived_is_present_without_fake_block_in",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_api_assumed_arrived_is_present_without_fake_block_in",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_cancelled_arrival_with_block_in_is_treated_as_here",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_cancelled_arrival_with_block_in_is_treated_as_here",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_cancelled_arrival_with_google_here_is_present",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_cancelled_arrival_with_google_here_is_present",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_cancelled_arrival_without_block_in_remains_not_arrived",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_cancelled_arrival_without_block_in_remains_not_arrived",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_current_operation_here_link_survives_arrival_row_reconciliation",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_current_operation_here_link_survives_arrival_row_reconciliation",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_google_block_in_and_normalized_tail_match_are_authoritative",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_google_block_in_and_normalized_tail_match_are_authoritative",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_google_here_is_present_without_fake_block_in",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_google_here_is_present_without_fake_block_in",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_live_page_and_payload_include_selective_presence_reconciliation",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_live_page_and_payload_include_selective_presence_reconciliation",
+      "owner": "W1",
+      "classification": "outdated CSP/live assertion",
+      "verified_cause_and_repair": "Verify current owned/versioned external controller, real refresh configuration and revision/draft behavior instead of retired inline JavaScript/version literals.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_matching_arrival_without_block_in_hides_parking_only_in_door_view",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_matching_arrival_without_block_in_hides_parking_only_in_door_view",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_meaningful_departure_statuses_are_never_masked",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_meaningful_departure_statuses_are_never_masked",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_mid_sort_tail_swap_recalculates_presence_from_new_tail_live",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_mid_sort_tail_swap_recalculates_presence_from_new_tail_live",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_no_matching_arrival_assumes_tail_is_already_here",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_no_matching_arrival_assumes_tail_is_already_here",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_no_tail_displays_tail_tbd_and_hides_door_parking",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_no_tail_displays_tail_tbd_and_hides_door_parking",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_tail_presence.NeoErmacTailPresenceTest::test_stale_google_here_for_different_tail_is_ignored",
+      "nodeid": "tests/test_neoermac_tail_presence.py::NeoErmacTailPresenceTest::test_stale_google_here_for_different_tail_is_ignored",
+      "owner": "W1",
+      "classification": "invalid identity fixture",
+      "verified_cause_and_repair": "Bind the actual Master ID to the current mission before selecting the signed lineup slot; keep scoped mission/tail and physical door assertions.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "IndexError: list index out of range"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_transport.NeoErmacTransportTest::test_door_controller_is_cacheable_with_explicit_escaped_config",
+      "nodeid": "tests/test_neoermac_transport.py::NeoErmacTransportTest::test_door_controller_is_cacheable_with_explicit_escaped_config",
+      "owner": "W1",
+      "classification": "outdated transport/identity fixture",
+      "verified_cause_and_repair": "Use current ID-valued choice objects, deliberately missing mission rather than W2 real PHX fixture, no duplicate ONT, measured unchanged/delta/read-only/cache contracts.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 'neoermac_door_live.js?v=ermac-transport-1' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-sc"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_transport.NeoErmacTransportTest::test_lineup_common_snapshot_omission_and_master_change",
+      "nodeid": "tests/test_neoermac_transport.py::NeoErmacTransportTest::test_lineup_common_snapshot_omission_and_master_change",
+      "owner": "W1",
+      "classification": "outdated transport/identity fixture",
+      "verified_cause_and_repair": "Use current ID-valued choice objects, deliberately missing mission rather than W2 real PHX fixture, no duplicate ONT, measured unchanged/delta/read-only/cache contracts.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 'BOS' not found in [{'label': 'UPS503 — BOS', 'value': '3'}, {'label': 'UPS502 — ONT', 'value': '2'}, {'label': 'UPS501 — SDF', 'value': '1'}]"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_transport.NeoErmacTransportTest::test_outbound_deltas_reconcile_to_full_snapshot_and_preserve_identity_order",
+      "nodeid": "tests/test_neoermac_transport.py::NeoErmacTransportTest::test_outbound_deltas_reconcile_to_full_snapshot_and_preserve_identity_order",
+      "owner": "W1",
+      "classification": "outdated transport/identity fixture",
+      "verified_cause_and_repair": "Use current ID-valued choice objects, deliberately missing mission rather than W2 real PHX fixture, no duplicate ONT, measured unchanged/delta/read-only/cache contracts.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 'missing:PHX' not found in {'m1': '1bd960fbd4cb8c2f70b06fde', 'm2': 'e9c7fe81f2d1f28d8f4e2ab5', 'm3': '9de03182a76924911909f260', 'm4': '09758f38b575e7812fd2f69d'}"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_transport.NeoErmacTransportTest::test_outbound_fallbacks_and_unchanged_remain_read_only",
+      "nodeid": "tests/test_neoermac_transport.py::NeoErmacTransportTest::test_outbound_fallbacks_and_unchanged_remain_read_only",
+      "owner": "W1",
+      "classification": "already passing at W1 start",
+      "verified_cause_and_repair": "Retained passing behavior after W2/shared setup updates; no speculative application change.",
+      "before": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_transport.NeoErmacTransportTest::test_transport_budgets",
+      "nodeid": "tests/test_neoermac_transport.py::NeoErmacTransportTest::test_transport_budgets",
+      "owner": "W1",
+      "classification": "outdated transport/identity fixture",
+      "verified_cause_and_repair": "Use current ID-valued choice objects, deliberately missing mission rather than W2 real PHX fixture, no duplicate ONT, measured unchanged/delta/read-only/cache contracts.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 3642 not less than 3300"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoermac_workspace_presentation.ErmacWorkspacePresentationTest::test_attendance_fields_and_real_sections_remain_intact",
+      "nodeid": "tests/test_neoermac_workspace_presentation.py::ErmacWorkspacePresentationTest::test_attendance_fields_and_real_sections_remain_intact",
+      "owner": "W1",
+      "classification": "broken presentation fixture",
+      "verified_cause_and_repair": "Use the actual authorized attendance-row mapping/snapshot and current autosave controls, not a namespace lacking get() or retired manual save button.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "jinja2.exceptions.UndefinedError: 'types.SimpleNamespace object' has no attribute 'get'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neorain_outbound.NeoRainOutboundTest::test_mobile_inbound_block_in_rejects_invalid_time_without_mutation",
+      "nodeid": "tests/test_neorain_outbound.py::NeoRainOutboundTest::test_mobile_inbound_block_in_rejects_invalid_time_without_mutation",
+      "owner": "W1",
+      "classification": "outdated response assertion",
+      "verified_cause_and_repair": "Current override route returns a specific error string for invalid time; retain HTTP 400 and assert unchanged version/source/time and zero override/audit rows.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "KeyError: 'code'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoscorpion_live_assignments.NeoScorpionLiveAssignmentsTest::test_fuel_dispatch_revision_active_operation_is_read_only_and_bounded",
+      "nodeid": "tests/test_neoscorpion_live_assignments.py::NeoScorpionLiveAssignmentsTest::test_fuel_dispatch_revision_active_operation_is_read_only_and_bounded",
+      "owner": "W1",
+      "classification": "outdated revision/UI/query assertion",
+      "verified_cause_and_repair": "Keep current no-sort tail fingerprints, explicit read/action policy, canonical Fueler warnings and attributed vendor/tail-revision SQL reads.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 10 not less than or equal to 8"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoscorpion_live_assignments.NeoScorpionLiveAssignmentsTest::test_fuel_dispatch_revision_authorization_and_no_current_sort",
+      "nodeid": "tests/test_neoscorpion_live_assignments.py::NeoScorpionLiveAssignmentsTest::test_fuel_dispatch_revision_authorization_and_no_current_sort",
+      "owner": "W1",
+      "classification": "outdated revision/UI/query assertion",
+      "verified_cause_and_repair": "Keep current no-sort tail fingerprints, explicit read/action policy, canonical Fueler warnings and attributed vendor/tail-revision SQL reads.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: {'cur[44 chars], 'revision': 0, 'tail_notes_revision': 0, 'tail_revision': ''} != {'cur[44 chars], 'revision': 0}\n+ {'current_operation': False, 'operation_id': None, 'revision': 0}\n- {'current_operation'"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoscorpion_live_assignments.NeoScorpionLiveAssignmentsTest::test_revision_and_assignment_identifiers_render_for_current_fueler",
+      "nodeid": "tests/test_neoscorpion_live_assignments.py::NeoScorpionLiveAssignmentsTest::test_revision_and_assignment_identifiers_render_for_current_fueler",
+      "owner": "W1",
+      "classification": "outdated revision/UI/query assertion",
+      "verified_cause_and_repair": "Keep current no-sort tail fingerprints, explicit read/action policy, canonical Fueler warnings and attributed vendor/tail-revision SQL reads.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: 'data-fueler-status-chip' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-sca"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    },
+    {
+      "id": "tests.test_neoscorpion_live_assignments.NeoScorpionLiveAssignmentsTest::test_revision_endpoint_authorization_and_no_current_sort",
+      "nodeid": "tests/test_neoscorpion_live_assignments.py::NeoScorpionLiveAssignmentsTest::test_revision_endpoint_authorization_and_no_current_sort",
+      "owner": "W1",
+      "classification": "outdated revision/UI/query assertion",
+      "verified_cause_and_repair": "Keep current no-sort tail fingerprints, explicit read/action policy, canonical Fueler warnings and attributed vendor/tail-revision SQL reads.",
+      "before": {
+        "result": "fail",
+        "failure_events": 1,
+        "first_failure": "AssertionError: {'current_operation': False, 'ok': True, 'o[55 chars]': 0} != {'ok': True, 'current_operation': False, 'o[29 chars]': 0}\n+ {'current_operation': False, 'ok': True, 'operation_id': None, 'revision': 0}\n- {"
+      },
+      "after": {
+        "result": "pass",
+        "failure_events": 0,
+        "first_failure": null
+      }
+    }
+  ],
+  "runs": {
+    "original": {
+      "passed_methods": 141,
+      "failed_original_ids": 0,
+      "passing_subtests": 54,
+      "seconds": 79.17
+    },
+    "broader_parent_security_w2_w4": {
+      "passed_methods": 347,
+      "failed_ids": 4,
+      "passing_subtests": 382,
+      "seconds": 183.15
+    },
+    "postgres": {
+      "passed_methods": 28,
+      "passing_subtests": 8,
+      "seconds": 73.08
+    },
+    "javascript": {
+      "passed": 68,
+      "failed": 0,
+      "skipped": 0
+    },
+    "browser": {
+      "methods": 3,
+      "engines": [
+        "chromium",
+        "webkit"
+      ],
+      "engine_workflows": 6
+    },
+    "final_strengthened_authority_and_rain": {
+      "passed_methods": 5,
+      "seconds": 4.42
+    }
+  },
+  "outside_w1_remaining": [
+    {
+      "id": "tests.test_neoscorpion_live_assignments.NeoScorpionLiveAssignmentsTest::test_dispatch_performance_aggregates_events_and_refreshes_with_dispatch",
+      "owner": "W3",
+      "first_failure": "AssertionError: Tuples differ: ('Falcon', 0, None) != ('Falcon', 1, 100)\n\nFirst differing element 1:\n0\n1\n\n- ('Falcon', 0, None)\n+ ('Falcon', 1, 100)"
+    },
+    {
+      "id": "tests.test_neoscorpion_live_assignments.NeoScorpionLiveAssignmentsTest::test_dispatch_performance_excludes_unreliable_events_and_other_sorts",
+      "owner": "W3",
+      "first_failure": "AssertionError: 0 != 1"
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_current_cleanup_mobile_and_time_only_contracts",
+      "owner": "W5",
+      "first_failure": "AssertionError: 'type=\"time\"' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta name=\"theme-color\" content=\"#d95a1f\">\\n    <meta name="
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_dashboard_order_and_normal_half_width_live_counts",
+      "owner": "W5",
+      "first_failure": "AssertionError: Lists differ: ['ebm[36 chars], 'discharge', 'stats', 'live-counts', 'employees', 'settings'] != ['ebm[36 chars], 'discharge', 'settings', 'live-counts', 'employees']\n\nFirst differing element 5:\n'stats'\n'settings'\n\nFirst list contains 1 additional elements.\nFirst extra element 8:\n'set"
+    }
+  ]
+}

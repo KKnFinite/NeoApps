@@ -1,3 +1,4 @@
+from tests import neoermac_html_contracts as html_contracts
 """Transport measurements use isolated SQLite fixtures and fresh requests."""
 import json
 import unittest
@@ -33,11 +34,11 @@ class NeoErmacTransportTest(unittest.TestCase):
         result['lineup_unchanged'] = dict(metrics, bytes=len(response.data))
         response, _ = self.measure('/neoermac/door-view?door=D1')
         result['door_html_bytes'] = len(response.data)
-        self._add_operation_departure('UPS502', 'ONT', tail='N502UP')
+        db.session.delete(SortDateMission.query.filter_by(flight_number='UPS503').one())
         for count in (2, 50):
             if count == 50:
                 for i in range(3, 51):
-                    self._add_operation_departure(f'UPS{500+i}', f'D{i:02}', tail=f'N{500+i}UP')
+                    self._add_operation_departure(f'UPS{600+i}', f'D{i:02}', tail=f'N{600+i}UP')
             db.session.commit()
             response, metrics = self.measure('/neoermac/view-outbound/state?revision=old')
             result[f'outbound_{count}'] = dict(metrics, bytes=len(response.data))
@@ -60,10 +61,11 @@ class NeoErmacTransportTest(unittest.TestCase):
         self.assertEqual(result['lineup_changed']['SELECT'], 11)
         self.assertLess(result['lineup_incremental_bytes'], 16404)
         self.assertLess(result['door_html_bytes'], 53000)  # was 90,429
-        for count, byte_budget in ((2, 3300), (50, 5200)):
+        for count, byte_budget in ((2, 3800), (50, 5800)):
             metric = result[f'outbound_delta_{count}']
             self.assertEqual(metric['SELECT'], 14)  # No extra DB reads for transport.
             self.assertLess(metric['bytes'], byte_budget)
+            self.assertLess(metric['bytes'], result[f'outbound_{count}']['bytes'] / 2)
             self.assertLess(metric['request_query_bytes'], 3500)
             self.assertEqual(metric['replaced_rows'], 2)  # One desktop + one mobile.
         for value in result.values():
@@ -71,7 +73,8 @@ class NeoErmacTransportTest(unittest.TestCase):
                 self.assertEqual([value[k] for k in ('INSERT','UPDATE','DELETE','commits')], [0]*4)
 
     def test_outbound_deltas_reconcile_to_full_snapshot_and_preserve_identity_order(self):
-        second = self._add_operation_departure('UPS502', 'SDF', tail='N502UP')
+        db.session.delete(SortDateMission.query.filter_by(flight_number='UPS503').one())
+        second = self._add_operation_departure('UPS504', 'SDF', tail='N504UP')
         second_id = second.id
         db.session.commit()
         initial, _ = self.measure('/neoermac/view-outbound/state?revision=old')
@@ -87,7 +90,7 @@ class NeoErmacTransportTest(unittest.TestCase):
         changed = delta.json['row_delta']['rows'][f'm{second_id}']
         self.assertIn('02:45', changed['desktop'])
         self.assertIn('02:45', changed['mobile'])
-        self.assertIn('N502UP', changed['desktop'])
+        self.assertIn('N504UP', changed['desktop'])
         full, _ = self.measure('/neoermac/view-outbound/state?revision=old')
         self.assertEqual(delta.json['row_manifest'], full.json['row_manifest'])
         for html in changed.values():
@@ -136,7 +139,7 @@ class NeoErmacTransportTest(unittest.TestCase):
         db.session.commit()
         updated, _ = self.measure('/neoermac/building-lineup/state?'+urlencode({'revision':first.json['revision'], 'common':common}))
         self.assertTrue(updated.json['changed'])
-        self.assertIn('BOS', updated.json['state']['destination_choices'])
+        self.assertIn({'label': 'UPS503 \u2014 BOS', 'value': str(self.flight_ids['PHX'])}, updated.json['state']['destination_choices'])
         self.assertNotEqual(updated.json['common_version'], common)
 
     def test_door_controller_is_cacheable_with_explicit_escaped_config(self):
@@ -146,7 +149,7 @@ class NeoErmacTransportTest(unittest.TestCase):
         config = json.loads(re.search(r'id="neoermac-door-config">(.*?)</script>', html, re.S).group(1))
         self.assertEqual(set(config), {'refresh','canEdit','doorViewUrl','doorTabAlerts'})
         self.assertTrue(config['canEdit'])
-        self.assertIn('neoermac_door_live.js?v=ermac-transport-1', html)
+        html_contracts.owned_script(self, response, "neoermac_door_live.js")
         self.assertNotIn('const refreshState =', html)
         source = Path('app/static/js/neoermac_door_live.js').read_text()
         self.assertNotIn('{{', source)

@@ -267,6 +267,8 @@ class NeoErmacDoorPullSchemaSyncTest(unittest.TestCase):
                 {"SQLALCHEMY_DATABASE_URI": "postgresql://example.test/neoapps"},
             ),
             patch("app.services.schema_sync.db.create_all"),
+            patch("app.services.neostaffing_assignment_schema.sync_staffing_assignment_schema"),
+            patch("app.services.neosubzero_release2_schema.sync_release2_schema"),
             patch("app.services.schema_sync.inspect", return_value=inspector),
             patch("app.services.schema_sync.db.session.execute") as execute,
             patch("app.services.schema_sync.db.session.flush"),
