@@ -5,6 +5,7 @@ from app.extensions import db
 
 STAFFING_WRITABLE_CLASSIFICATIONS = (
     "seasonal",
+    "pre_seniority",
     "part_time",
     "full_time_combo",
     "part_time_supervisor",
@@ -50,7 +51,7 @@ class StaffingPerson(db.Model):
             "'full_time_supervisor', 'twenty_c_full_time_supervisor', "
             "'full_time_specialist', 'manager', 'division_manager', "
             "'seasonal', 'domiciled_full_time_combo', "
-            "'non_domiciled_full_time_combo')",
+            "'non_domiciled_full_time_combo', 'pre_seniority')",
             name="ck_staffing_people_classification",
         ),
         db.CheckConstraint(

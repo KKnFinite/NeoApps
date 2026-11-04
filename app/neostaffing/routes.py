@@ -515,6 +515,7 @@ def staffing_groups():
 @bp.route("/shift-flow")
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def shift_flow():
+    from app.services.neostaffing_sheet_sync import status as sheet_sync_status
     context = staffing_service.shift_flow_context(
         request.args.get("phase", "final_door"), request.args.get("side", "east")
     )
@@ -526,6 +527,7 @@ def shift_flow():
     return render_template(
         "neostaffing/shift_flow.html",
         shift_flow=context,
+        sheet_sync=sheet_sync_status(),
         selected=selected,
         shift_flow_areas=staffing_service.shift_flow_area_options(selected_area),
         shift_work_area_type=staffing_service.shift_work_area_type,

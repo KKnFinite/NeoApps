@@ -49,6 +49,7 @@ CLASSIFICATION_LABELS = {
     "manager": "Manager",
     "division_manager": "Division Manager",
     "seasonal": "Seasonal",
+    "pre_seniority": "Pre-Seniority",
     "domiciled_full_time_combo": "Domiciled FT Combo",
     "non_domiciled_full_time_combo": "Non-Domiciled FT Combo",
 }
@@ -142,7 +143,7 @@ FT_UNION_CLASSIFICATIONS = frozenset(
 )
 UNION_CLASSIFICATIONS = frozenset(PT_UNION_CLASSIFICATIONS | FT_UNION_CLASSIFICATIONS)
 NON_MANAGEMENT_CLASSIFICATIONS = frozenset(
-    UNION_CLASSIFICATIONS | {SEASONAL_CLASSIFICATION}
+    UNION_CLASSIFICATIONS | {SEASONAL_CLASSIFICATION, "pre_seniority"}
 )
 WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS = frozenset(
     set(STAFFING_CLASSIFICATIONS) & NON_MANAGEMENT_CLASSIFICATIONS
@@ -6603,6 +6604,8 @@ def _normalize_phone_number(value):
 
 def _normalize_choice(value, allowed, label):
     normalized = str(value or "").strip().lower()
+    if label == "classification" and normalized in {"pre-seniority", "pre seniority"}:
+        normalized = "pre_seniority"
     if normalized not in allowed:
         raise ValueError(f"Unsupported {label}.")
     return normalized

@@ -1911,6 +1911,8 @@ def _sync_uld_request_unique_constraint_postgres(table_names):
 
 
 def _create_missing_application_tables(existing_table_names):
+    from app.models.staffing_sheet_sync import StaffingSheetSync
+    StaffingSheetSync.__table__.create(bind=db.session.connection(), checkfirst=True)
     from app.models import NeoRainMissionOverride, NeoRainOverrideAudit
     NeoRainMissionOverride.__table__.create(bind=db.session.connection(), checkfirst=True)
     NeoRainOverrideAudit.__table__.create(bind=db.session.connection(), checkfirst=True)

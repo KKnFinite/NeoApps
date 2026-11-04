@@ -87,6 +87,8 @@ def create_app(config_class=Config, auto_bootstrap=False):
     # Register transaction-local compact evidence after canonical field-authority
     # listeners. This performs no network I/O, schema work or startup scan.
     from app.services import frost_departures
+    from app.services.neostaffing_sheet_sync import install as install_staffing_sheet_sync
+    install_staffing_sheet_sync(app)
     register_template_helpers(app)
     register_request_guards(app)
     register_security_headers(app)

@@ -24,6 +24,10 @@ def sync_seniority_schema():
     inspector = inspect(connection)
     if not inspector.has_table('staffing_people'):
         return
+    from app.services.neostaffing_classification_schema import _ensure_classification_constraint
+    connection.execute(text("SET LOCAL lock_timeout='5s'"))
+    connection.execute(text('SELECT pg_advisory_xact_lock(7483327341909)'))
+    _ensure_classification_constraint(connection, 'staffing_people')
     nullable = next(c['nullable'] for c in inspector.get_columns('staffing_people') if c['name']=='seniority_date')
     checks = {c['name'] for c in inspector.get_check_constraints('staffing_people')}
     if nullable and CONSTRAINT in checks:
@@ -44,7 +48,9 @@ def _sqlite_needs_upgrade(connection):
     if not inspector.has_table('staffing_people'):
         return False
     nullable = next(c['nullable'] for c in inspector.get_columns('staffing_people') if c['name']=='seniority_date')
-    return not nullable or CONSTRAINT not in {c['name'] for c in inspector.get_check_constraints('staffing_people')}
+    checks = inspector.get_check_constraints('staffing_people')
+    return (not nullable or CONSTRAINT not in {c['name'] for c in checks}
+            or not any(c['name']=='ck_staffing_people_classification' and "'pre_seniority'" in c['sqltext'] for c in checks))
 
 
 def _upgrade_sqlite():

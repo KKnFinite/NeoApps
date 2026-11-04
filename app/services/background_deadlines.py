@@ -54,6 +54,9 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
     def minimum(column, *where):
         return db.session.scalar(select(func.min(column)).where(*where))
     for gateway_id, code in gateways:
+        if code.upper() == 'RFD':
+            from app.services.neostaffing_sheet_sync import next_deadline
+            add(gateway_id, 'staffing_sheet', next_deadline(at))
         spear = db.session.scalar(select(NeoScorpionSettings.spear_learning_capture_enabled)
             .where(NeoScorpionSettings.gateway_id == gateway_id))
         if spear:
@@ -130,8 +133,9 @@ def perform(gateway_id, kinds):
     """Existing bounded drains retain all fencing, formats and verification."""
     from app.services import frost_auto, frost_documents, frost_departures, frost_xchange_links
     from app.services import neoscorpion_spear_decisions as spear, neosubzero_archive as subzero
+    from app.services.neostaffing_sheet_sync import drain as staffing_sheet_drain
     jobs = [('auto', frost_auto.tick), ('spear', spear.drain),
-        ('documents', frost_documents.drain)]
+        ('documents', frost_documents.drain), ('staffing_sheet', staffing_sheet_drain)]
     progress = False
     def subzero_job(gateway):
         nonlocal progress

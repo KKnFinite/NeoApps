@@ -1722,6 +1722,8 @@ def _optional_text(value):
 
 def _choice(value, choices, label):
     normalized = str(value or "").strip().lower()
+    if label == "classification" and normalized in {"pre-seniority", "pre seniority"}:
+        normalized = "pre_seniority"
     if normalized not in choices:
         raise ValueError(f"Choose a valid {label}.")
     return normalized
