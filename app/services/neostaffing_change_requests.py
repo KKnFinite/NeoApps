@@ -446,7 +446,7 @@ def submit_change_request(values, user):
     current_values = {
         "first_name": person.first_name,
         "last_name": person.last_name,
-        "seniority_date": person.seniority_date.isoformat(),
+        "seniority_date": (person.seniority_date.isoformat() if person.seniority_date else None),
         "employee_status": person.employee_status,
         "classification": person.classification,
         "work_area_unit_id": assignment.work_area_unit_id if assignment else None,
@@ -664,7 +664,7 @@ def submit_bulk_change_requests(packages, user):
         current_values = {
             "first_name": person.first_name,
             "last_name": person.last_name,
-            "seniority_date": person.seniority_date.isoformat(),
+            "seniority_date": (person.seniority_date.isoformat() if person.seniority_date else None),
             "employee_status": person.employee_status,
             "classification": person.classification,
             "work_area_unit_id": assignment.work_area_unit_id if assignment else None,
@@ -1247,6 +1247,8 @@ def _apply_field_value(person, assignment, field_name, value):
     elif field_name == "classification":
         if value not in WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS:
             raise ValueError("Only non-management classification changes are supported.")
+        if value != "seasonal" and person.seniority_date is None:
+            raise ValueError("A valid seniority date is required before leaving Seasonal classification.")
         person.classification = value
     elif field_name == "work_area_unit_id":
         if value is None:

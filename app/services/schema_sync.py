@@ -679,6 +679,9 @@ def sync_local_sqlite_schema(app):
     if not database_uri.startswith("sqlite:"):
         return
 
+    from app.services.neostaffing_seniority_schema import sync_seniority_schema
+    sync_seniority_schema()
+
     inspector = inspect(db.engine)
     table_names = set(inspector.get_table_names())
     _create_missing_application_tables(table_names)
@@ -847,6 +850,8 @@ def sync_database_schema(app):
     if "neoermac_building_lineups" in table_names:
         from app.services.neoermac_building_lineup import backfill_lineup_flight_identities
         backfill_lineup_flight_identities()
+    from app.services.neostaffing_seniority_schema import sync_seniority_schema
+    sync_seniority_schema()
     from app.services.neostaffing_assignment_schema import sync_staffing_assignment_schema
     sync_staffing_assignment_schema()
     from app.services.neosubzero_release2_schema import sync_release2_schema

@@ -59,7 +59,7 @@
             <header class="neostaffing-reports-results-head"><div><h2>SENIORITY REPORT</h2><span>OPERATIONS ROSTER</span></div>{{ count_chip("ROWS", reports.seniority.rows|length) }}</header>
             <div class="neostaffing-reports-table-wrap">
                 <table class="neostaffing-reports-table neostaffing-reports-seniority-table"><thead><tr><th>Rank</th><th>Employee</th><th>Classification</th><th>Seniority</th><th>Scope</th></tr></thead>
-                    <tbody>{% for row in reports.seniority.rows %}<tr><td><strong>{{ row.rank }}</strong></td><td><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td><td>{{ classification_labels[row.person.classification] }}</td><td>{{ row.person.seniority_date.isoformat() }}</td><td>{{ row.scope_path }}</td></tr>{% else %}<tr><td colspan="5" class="neostaffing-reports-empty">Select an Operation to run the seniority report.</td></tr>{% endfor %}</tbody>
+                    <tbody>{% for row in reports.seniority.rows %}<tr><td><strong>{{ row.rank }}</strong></td><td><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td><td>{{ classification_labels[row.person.classification] }}</td><td>{{ (row.person.seniority_date.isoformat() if row.person.seniority_date else '') }}</td><td>{{ row.scope_path }}</td></tr>{% else %}<tr><td colspan="5" class="neostaffing-reports-empty">Select an Operation to run the seniority report.</td></tr>{% endfor %}</tbody>
                 </table>
             </div>
             {% elif reports.report_type == "attendance" %}
@@ -78,7 +78,7 @@
             </div>
             <div class="neostaffing-reports-table-wrap">
                 <table class="neostaffing-reports-table"><thead><tr><th>Employee</th><th>Classification</th><th>Status</th><th>Seniority</th><th>Phone</th><th>Work Area</th></tr></thead>
-                    <tbody>{% for row in reports.staffing.rows %}{% set person = row.person %}<tr><td><strong>{{ person.last_name }}, {{ person.first_name }}</strong><span>{{ person.employee_id }}</span></td><td>{{ classification_labels[person.classification] }}</td><td>{{ employee_status_labels[person.employee_status] }}</td><td>{{ person.seniority_date.isoformat() }}</td><td>{{ person.phone_number or "-" }}</td><td>{{ row.work_area.name if row.work_area else "Unassigned" }}</td></tr>{% else %}<tr><td colspan="6" class="neostaffing-reports-empty">No people match the filters.</td></tr>{% endfor %}</tbody>
+                    <tbody>{% for row in reports.staffing.rows %}{% set person = row.person %}<tr><td><strong>{{ person.last_name }}, {{ person.first_name }}</strong><span>{{ person.employee_id }}</span></td><td>{{ classification_labels[person.classification] }}</td><td>{{ employee_status_labels[person.employee_status] }}</td><td>{{ (person.seniority_date.isoformat() if person.seniority_date else '') }}</td><td>{{ person.phone_number or "-" }}</td><td>{{ row.work_area.name if row.work_area else "Unassigned" }}</td></tr>{% else %}<tr><td colspan="6" class="neostaffing-reports-empty">No people match the filters.</td></tr>{% endfor %}</tbody>
                 </table>
             </div>
             {% endif %}

@@ -12,7 +12,7 @@
   <label data-person-field="employee-status"><span>Employee Status</span><select name="employee_status" required>{% for value,label in employee_status_choices %}<option value="{{ value }}"{% if person and person.employee_status==value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
   <label data-person-field="first-name"><span>First Name</span><input name="first_name" value="{{ person.first_name if person else '' }}" required></label>
   <label data-person-field="last-name"><span>Last Name</span><input name="last_name" value="{{ person.last_name if person else '' }}" required></label>
-  <label data-person-field="seniority-date"><span>Seniority Date</span><input name="seniority_date" value="{{ person.seniority_date.strftime('%m/%d/%Y') if person else '' }}" placeholder="MM/DD/YYYY" inputmode="numeric" maxlength="10" required></label>
+  <label data-person-field="seniority-date"><span>Seniority Date</span><input name="seniority_date" value="{{ person.seniority_date.strftime('%m/%d/%Y') if person and person.seniority_date else '' }}" placeholder="MM/DD/YYYY" inputmode="numeric" maxlength="10"{% if not person or person.classification != 'seasonal' %} required{% endif %}></label>
   <label data-person-field="classification"><span>Classification</span><select name="classification" required>{% if not person %}<option value="">Select classification</option>{% endif %}{% for value,label in classification_choices %}<option value="{{ value }}"{% if person and person.classification==value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
   <label data-person-field="phone"><span>Phone</span><input name="phone_number" value="{{ (person.phone_number or '') if person else '' }}" inputmode="tel" placeholder="xxx-xxx-xxxx" maxlength="12"></label>
   {% if assignment_display %}<section class="employee-assignment-summary" aria-label="{{ assignment_display.heading }}"><strong>{{ assignment_display.heading }}</strong><ul>{% for assignment in assignment_display["items"] %}<li><span>{{ assignment.label }}</span> <b>{{ assignment.path }}</b></li>{% else %}<li>Unassigned</li>{% endfor %}</ul></section>{% endif %}
@@ -26,5 +26,18 @@
   </fieldset>
   {% endif %}
   <p data-employee-error role="alert" hidden></p>
-  <div class="employee-editor-actions"><button type="submit">SAVE</button>{% if person %}<button type="button" class="employee-delete" data-employee-delete>DELETE EMPLOYEE</button>{% endif %}</div>
+  <div class="employee-editor-actions"><button type="submit">SAVE</button>{% if person and person.active and transfer_sources %}<button type="button" data-employee-transfer data-transfer-url="{{ url_for('neostaffing.transfer_employee',person_id=person.id) }}">TRANSFER</button>{% endif %}{% if person %}<button type="button" class="employee-delete" data-employee-delete>DELETE EMPLOYEE</button>{% endif %}</div>
 </form>
+{% if person and person.active and transfer_sources %}
+<template data-employee-transfer-fields>
+  <p>Transfer <strong>{{ person.full_name }}</strong> · {{ person.employee_id }}. Saved employee details and historical records are retained.</p>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="expected_person_version" value="{{ person_version }}">
+  <input type="hidden" name="expected_assignment_version" value="{{ assignment_version }}">
+  <input type="hidden" name="confirm_transfer" value="yes">
+  {% if transfer_sources|length == 1 %}<input type="hidden" name="source_assignment_id" value="{{ transfer_sources[0].id }}"><div><strong>Current Work Area</strong><p class="employee-transfer-path">{{ unit_path(transfer_sources[0].work_area) }}</p></div>
+  {% else %}<label>Current Work Area<select name="source_assignment_id" required>{% for row in transfer_sources %}<option value="{{ row.id }}">{{ unit_path(row.work_area) }}</option>{% endfor %}</select></label><p class="employee-transfer-path" data-transfer-current-path></p>{% endif %}
+  <label>Destination Work Area<select name="destination_work_area_id" required><option value="">Select destination</option>{% for group in transfer_destinations|groupby('parent_id') %}<optgroup label="{{ unit_path(group.list[0].parent) }}">{% for area in group.list %}<option value="{{ area.id }}" data-shift="{{ 'yes' if is_shift(area) else 'no' }}" data-area-type="{{ shift_work_area_type(area) }}">{{ area.name }}</option>{% endfor %}</optgroup>{% endfor %}</select></label>
+  <p data-transfer-shift-note hidden>The destination becomes Shift Start. A Door also becomes its Final Door. Optional flow settings can be edited afterward.</p>
+</template>
+{% endif %}

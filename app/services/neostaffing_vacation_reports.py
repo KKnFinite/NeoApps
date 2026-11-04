@@ -268,7 +268,7 @@ def build_union_seniority_pdf(report, *, created_on=None):
             row["last_name"],
             row["first_name"],
             row["employee_id"],
-            row["seniority_date"].strftime("%m/%d/%Y"),
+            (row["seniority_date"].strftime("%m/%d/%Y") if row["seniority_date"] else ""),
         ]
         for row in report["rows"]
     )

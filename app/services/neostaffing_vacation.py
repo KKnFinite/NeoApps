@@ -5935,7 +5935,7 @@ def _seniority_order(people):
 
 def _person_sort_key(person):
     return (
-        person.seniority_date,
+        person.seniority_date or date.max,
         person.last_name.casefold(),
         person.first_name.casefold(),
         person.id,

@@ -129,7 +129,7 @@
     {% if is_neostaffing_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20261007-nav-construction-v1') }}">
     <script defer src="{{ url_for('static', filename='js/neostaffing_filters.js', v='20261001-report-state') }}"></script>
-    <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION, csrf='20261031-renewal-v1') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION, csrf='20261031-renewal-v1', seniority='20261104-seasonal-v1') }}"></script>
     {% if request.endpoint == 'neostaffing.reports' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_reports.css', v='20261001-report-date') }}">
     <script defer src="{{ url_for('static', filename='js/neostaffing_reports.js', v='20261001-console') }}"></script>

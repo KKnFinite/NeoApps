@@ -4,6 +4,9 @@
   if (!dialog) return;
   const content = dialog.querySelector('[data-employee-editor-content]');
   const confirmation = document.querySelector('[data-employee-delete-confirm]');
+  const transferDialog = document.querySelector('[data-employee-transfer-dialog]');
+  const transferForm = transferDialog?.querySelector('[data-employee-transfer-form]');
+  let transferOwner = null;
   let confirmedForm = null;
   const stateKey = 'neostaffing.employee-editor.return';
   let busy = false, opener = null;
@@ -31,9 +34,11 @@
   const post = async (url, form, extra = {}) => {
     const body = new FormData(form);
     Object.entries(extra).forEach(([key,value]) => body.set(key,value));
-    const controller = extra.confirm_delete === 'yes' ? new AbortController() : null;
+    const isTransfer = extra.confirm_transfer === 'yes';
+    const controller = extra.confirm_delete === 'yes' || isTransfer ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(),30000) : null;
-    const unknown = 'Deletion could not be confirmed. Check the roster or Employee Recovery before retrying; your entries remain here.';
+    const unknown = isTransfer ? 'Transfer could not be confirmed. Reopen the employee and check the current Work Area before retrying; your entries remain here.' :
+      'Deletion could not be confirmed. Check the roster or Employee Recovery before retrying; your entries remain here.';
     try {
       let response;
       try {
@@ -81,6 +86,10 @@
         date.value = digits.length > 4 ? `${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4)}` :
           digits.length > 2 ? `${digits.slice(0,2)}/${digits.slice(2)}` : digits;
       });
+      const classification = form.elements.classification;
+      const syncSeniority = () => { date.required = classification.value !== 'seasonal'; date.setAttribute('aria-required', String(date.required)); };
+      classification.addEventListener('change', syncSeniority); syncSeniority();
+      const savedFields = JSON.stringify([...new FormData(form)].filter(([key]) => key !== 'csrf_token'));
       const mutate = async (url, extra = {}) => {
         if (busy) return;
         busy = true; form.setAttribute('aria-busy','true');
@@ -100,6 +109,26 @@
       });
       form.employeeDelete = () => mutate(form.dataset.deleteUrl,
         {confirm_delete:'yes',confirmed_employee_id:form.dataset.deleteId});
+      form.querySelector('[data-employee-transfer]')?.addEventListener('click', event => {
+        if (busy || !transferForm) return;
+        if (savedFields !== JSON.stringify([...new FormData(form)].filter(([key]) => key !== 'csrf_token'))) {
+          error('Save your employee or Shift Flow edits before transferring. Your entries are still here.'); return;
+        }
+        transferOwner = form;
+        transferForm.action = event.currentTarget.dataset.transferUrl;
+        transferForm.querySelector('[data-transfer-fields]').replaceChildren(content.querySelector('[data-employee-transfer-fields]').content.cloneNode(true));
+        transferForm.querySelector('[data-transfer-error]').hidden = true;
+        const destination = transferForm.elements.destination_work_area_id;
+        const source = transferForm.elements.source_assignment_id;
+        const currentPath = transferForm.querySelector('[data-transfer-current-path]');
+        if (currentPath) {
+          const syncSource = () => { currentPath.textContent = source.selectedOptions[0]?.textContent || ''; };
+          source.addEventListener('change',syncSource); syncSource();
+        }
+        const syncDestination = () => { transferForm.querySelector('[data-transfer-shift-note]').hidden = destination.selectedOptions[0]?.dataset.shift !== 'yes'; };
+        destination.addEventListener('change', syncDestination); syncDestination();
+        transferDialog.showModal();
+      });
     } catch (cause) { content.textContent = cause.message; if (!dialog.open) dialog.showModal(); }
   };
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
@@ -113,6 +142,21 @@
     void form.employeeDelete();
   });
   confirmation?.addEventListener('cancel', () => { confirmedForm = null; });
+  transferForm?.querySelector('[data-transfer-cancel]').addEventListener('click', () => {
+    if (!busy) { transferDialog.close(); transferOwner?.querySelector('[data-employee-transfer]')?.focus(); transferOwner = null; }
+  });
+  transferDialog?.addEventListener('cancel', event => { if (busy) event.preventDefault(); else transferOwner = null; });
+  transferForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (busy || !transferOwner || !content.contains(transferOwner)) return;
+    busy = true;
+    transferForm.setAttribute('aria-busy','true');
+    transferForm.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    const feedback = transferForm.querySelector('[data-transfer-error]'); feedback.hidden = true;
+    try { await post(transferForm.action,transferForm,{confirm_transfer:'yes'}); transferDialog.close(); reload(); }
+    catch (cause) { feedback.textContent = cause.message; feedback.hidden = false; }
+    finally { busy = false; transferForm.removeAttribute('aria-busy'); transferForm.querySelectorAll('button').forEach(button => { button.disabled = false; }); }
+  });
   document.addEventListener('click', event => {
     if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const add = event.target.closest('[data-employee-add]');

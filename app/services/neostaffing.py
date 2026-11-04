@@ -2237,12 +2237,14 @@ def _person_values(values):
     employee_id = validate_employee_id(values.get("employee_id"))
     first_name = _normalize_person_name(values.get("first_name"), "First name")
     last_name = _normalize_person_name(values.get("last_name"), "Last name")
-    seniority_date = _parse_date(values.get("seniority_date"), "Seniority date")
     classification = _normalize_choice(
         values.get("classification"),
         STAFFING_CLASSIFICATIONS,
         "classification",
     )
+    seniority_date = (None if classification == SEASONAL_CLASSIFICATION
+                      and not str(values.get("seniority_date") or '').strip()
+                      else _parse_date(values.get("seniority_date"), "Seniority date"))
     employee_status = _normalize_choice(
         values.get("employee_status") or "active",
         STAFFING_EMPLOYEE_STATUSES,
@@ -3578,7 +3580,7 @@ def seniority_context(filters=None):
 
     rows.sort(
         key=lambda row: (
-            row["person"].seniority_date,
+            row["person"].seniority_date or date.max,
             str(row["person"].employee_id or ""),
             row["person"].id,
             row["scope_name"],
@@ -6067,7 +6069,7 @@ def people_query(search=None, classification=None, active=None, employee_status=
         query = query.filter_by(employee_status=employee_status)
     if active in {"active", "inactive"}:
         query = query.filter_by(active=(active == "active"))
-    return query.order_by(StaffingPerson.seniority_date, StaffingPerson.last_name, StaffingPerson.first_name)
+    return query.order_by(StaffingPerson.seniority_date.asc().nullslast(), StaffingPerson.last_name, StaffingPerson.first_name)
 
 
 def _work_assignment_in_scope(assignment, scope):

@@ -1,4 +1,4 @@
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_employee_editor.css', v='20261022-recovery-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_employee_editor.css', v='20261104-transfer-v1') }}">
 <dialog class="employee-editor theme-staffing" data-employee-editor data-editor-url="{{ url_for('neostaffing.employee_editor') }}"{% if selected %} data-initial-person="{{ selected.person.id }}"{% endif %}>
   <div data-employee-editor-content></div>
 </dialog>
@@ -8,4 +8,8 @@
   <p id="employee-delete-warning">Deletion removes this employee and associated employee data. Linked NeoApps User accounts and unrelated employee data are preserved. Authorized administrators can restore the employee for 24 hours; afterward the recovery backup and related stored files are purged.</p>
   <div class="employee-editor-actions"><button type="button" data-employee-delete-cancel>CANCEL</button><button type="button" class="employee-delete" data-employee-delete-confirmed>YES, DELETE EMPLOYEE</button></div>
 </dialog>
-<script src="{{ url_for('static', filename='js/neostaffing_employee_editor.js', v='20261022-recovery-v1') }}"></script>
+<dialog class="employee-editor employee-transfer-confirm theme-staffing" data-employee-transfer-dialog aria-labelledby="employee-transfer-title">
+  <h2 id="employee-transfer-title">TRANSFER EMPLOYEE</h2>
+  <form data-employee-transfer-form><div data-transfer-fields></div><p data-transfer-error role="alert" hidden></p><div class="employee-editor-actions"><button type="button" data-transfer-cancel>CANCEL</button><button type="submit">CONFIRM TRANSFER</button></div></form>
+</dialog>
+<script src="{{ url_for('static', filename='js/neostaffing_employee_editor.js', v='20261104-transfer-v1') }}"></script>

@@ -42,6 +42,10 @@ class StaffingPerson(db.Model):
     __tablename__ = "staffing_people"
     __table_args__ = (
         db.CheckConstraint(
+            "seniority_date IS NOT NULL OR classification = 'seasonal'",
+            name="ck_staffing_people_seniority_required",
+        ),
+        db.CheckConstraint(
             "classification IN ('part_time', 'full_time_combo', 'part_time_supervisor', "
             "'full_time_supervisor', 'twenty_c_full_time_supervisor', "
             "'full_time_specialist', 'manager', 'division_manager', "
@@ -61,7 +65,7 @@ class StaffingPerson(db.Model):
     employee_id = db.Column(db.String(80), nullable=False, unique=True, index=True)
     first_name = db.Column(db.String(80), nullable=False)
     last_name = db.Column(db.String(80), nullable=False)
-    seniority_date = db.Column(db.Date, nullable=False, index=True)
+    seniority_date = db.Column(db.Date, nullable=True, index=True)
     phone_number = db.Column(db.String(40), nullable=True)
     classification = db.Column(db.String(40), nullable=False, index=True)
     employee_status = db.Column(

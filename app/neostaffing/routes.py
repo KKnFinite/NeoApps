@@ -548,17 +548,42 @@ def employee_editor():
         areas = staffing_service.shift_flow_area_options(home.work_area) if home else []
     assignment_display = staffing_service._people_detail_assignment_display(
         staffing_service._people_rows([person], None)[0]) if person else None
+    from app.services import neostaffing_transfers as transfers
+    transfer_sources = staffing_service.assignment_service.flow_assignments(person, active_only=True) if person else []
     return render_template("neostaffing/_employee_editor.html", person=person,
         home=home, plan=person.shift_flow_plan if person else None,
         flow_version=staffing_service.shift_flow_revision(person, person.shift_flow_plan, home) if home else "",
         person_version=staffing_service.entity_version(person) if person else "",
         create_in_shift=create_in_shift, areas=areas, assignment_display=assignment_display,
+        transfer_sources=transfer_sources,
+        transfer_destinations=transfers.destinations() if transfer_sources else [],
+        assignment_version=staffing_service.assignment_service.version(person) if person else '',
+        unit_path=staffing_service.unit_path,
+        is_shift=staffing_service.assignment_service.is_shift,
         work_areas=staffing_service.work_area_units() if not person else [],
         classification_choices=staffing_service.classification_choices() if person else [
             choice for choice in staffing_service.classification_choices()
             if choice[0] in staffing_service.WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS],
         employee_status_choices=staffing_service.employee_status_choices(),
         shift_work_area_type=staffing_service.shift_work_area_type)
+
+
+@bp.route('/people/<int:person_id>/transfer', methods=['POST'])
+@login_required
+def transfer_employee(person_id):
+    from app.services import neostaffing_transfers as transfers
+    try:
+        person, changed = transfers.transfer_employee(person_id, current_user, request.form)
+        db.session.commit()
+    except PermissionError as error:
+        db.session.rollback()
+        return jsonify(ok=False,error=str(error)),403
+    except (ValueError, SQLAlchemyError) as error:
+        db.session.rollback()
+        status = 409 if isinstance(error,(transfers.TransferConflict, SQLAlchemyError)) else 400
+        return jsonify(ok=False,error=safe_mutation_error(error,'transfer employee')),status
+    flash('Employee transferred.' if changed else 'Employee is already in that Work Area.','success')
+    return jsonify(ok=True,person_id=person.id,changed=changed)
 
 
 @bp.route("/shift-flow/<int:person_id>", methods=["POST"])

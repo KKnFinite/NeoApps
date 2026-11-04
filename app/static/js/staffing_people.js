@@ -1,6 +1,13 @@
 (() => {
     "use strict";
     if (window.NeoStaffingPeople) return;
+    const syncSeniority = form => {
+        const classification = form?.querySelector('[name="classification"]');
+        const date = form?.querySelector('[name="seniority_date"]');
+        if (classification && date) { date.required = classification.value !== 'seasonal'; date.setAttribute('aria-required', String(date.required)); }
+    };
+    document.addEventListener('change', event => { if (event.target.name === 'classification') syncSeniority(event.target.form); });
+    document.querySelectorAll('form').forEach(syncSeniority);
     const bindPeopleDrawerClose = () => {
         const console = document.querySelector(".neostaffing-people-console");
         if (!console) {

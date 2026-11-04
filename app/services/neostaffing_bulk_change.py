@@ -396,7 +396,7 @@ def apply_workspace(workspace, user):
             employee_id=state["employee_id"],
             first_name=state["first_name"],
             last_name=state["last_name"],
-            seniority_date=date.fromisoformat(state["seniority_date"]),
+            seniority_date=(date.fromisoformat(state["seniority_date"]) if state["seniority_date"] else None),
             phone_number=state["phone_number"],
             classification=state["classification"],
             employee_status=state["employee_status"],
@@ -427,7 +427,7 @@ def apply_workspace(workspace, user):
                 if getattr(person, field) != state[field]:
                     setattr(person, field, state[field])
                     person_changed = True
-            seniority_date = date.fromisoformat(state["seniority_date"])
+            seniority_date = (date.fromisoformat(state["seniority_date"]) if state["seniority_date"] else None)
             if person.seniority_date != seniority_date:
                 person.seniority_date = seniority_date
                 person_changed = True
@@ -654,7 +654,7 @@ def _simulate(workspace, bundle):
             "employee_id": person.employee_id,
             "first_name": person.first_name,
             "last_name": person.last_name,
-            "seniority_date": person.seniority_date.isoformat(),
+            "seniority_date": (person.seniority_date.isoformat() if person.seniority_date else None),
             "phone_number": person.phone_number,
             "classification": person.classification,
             "employee_status": person.employee_status,
@@ -924,7 +924,7 @@ def _stage_existing_person(workspace, values, bundle, user):
         "employee_id": person.employee_id,
         "first_name": person.first_name,
         "last_name": person.last_name,
-        "seniority_date": person.seniority_date.isoformat(),
+        "seniority_date": (person.seniority_date.isoformat() if person.seniority_date else None),
         "phone_number": person.phone_number,
         "classification": person.classification,
         "employee_status": person.employee_status,
@@ -1361,7 +1361,7 @@ def _simulate_baseline(_workspace, bundle):
             "employee_id": person.employee_id,
             "first_name": person.first_name,
             "last_name": person.last_name,
-            "seniority_date": person.seniority_date.isoformat(),
+            "seniority_date": (person.seniority_date.isoformat() if person.seniority_date else None),
             "phone_number": person.phone_number,
             "classification": person.classification,
             "employee_status": person.employee_status,
@@ -1451,6 +1451,8 @@ def _validate_person_states(states, bundle):
     errors = []
     employee_ids = defaultdict(list)
     for state in states.values():
+        if not state["seniority_date"] and state["classification"] != "seasonal":
+            errors.append("Seniority Date is required unless the classification is Seasonal.")
         employee_ids[state["employee_id"].strip().lower()].append(state)
         if state["classification"] not in STAFFING_DATABASE_CLASSIFICATIONS:
             errors.append("A staged employee has an unsupported classification.")
@@ -1586,7 +1588,7 @@ def _bundle_revision(bundle):
                 row.employee_id,
                 row.first_name,
                 row.last_name,
-                row.seniority_date.isoformat(),
+                (row.seniority_date.isoformat() if row.seniority_date else None),
                 row.phone_number,
                 row.classification,
                 row.employee_status,
@@ -1726,6 +1728,8 @@ def _choice(value, choices, label):
 
 
 def _date_text(value):
+    if not str(value or "").strip():
+        return None
     try:
         return date.fromisoformat(str(value or "").strip()).isoformat()
     except ValueError as error:
