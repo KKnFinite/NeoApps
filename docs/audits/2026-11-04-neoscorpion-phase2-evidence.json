@@ -1,0 +1,599 @@
+{
+  "starting_sha": "89eea42e3d8062c3f9235570eb5f4676016a10fe",
+  "measurement_scope": "Synthetic 25-aircraft SQLite fixture; measurements are not production savings.",
+  "warm_context": {
+    "before": {
+      "dispatch": {
+        "bytes": 543001,
+        "html_bytes": 514333,
+        "median_ms": 49.08,
+        "queries": {
+          "selects": 84,
+          "writes": 0
+        }
+      },
+      "spear": {
+        "bytes": 28782,
+        "html_bytes": 0,
+        "median_ms": 32.84,
+        "queries": {
+          "selects": 64,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 2875,
+          "ms": 31.73,
+          "selects": 64,
+          "writes": 0
+        }
+      },
+      "critical": {
+        "bytes": 523201,
+        "html_bytes": 494036,
+        "median_ms": 40.91,
+        "queries": {
+          "selects": 71,
+          "writes": 0
+        }
+      },
+      "fueler": {
+        "bytes": 490656,
+        "html_bytes": 463421,
+        "median_ms": 28.13,
+        "queries": {
+          "selects": 46,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 175,
+          "ms": 26.09,
+          "selects": 46,
+          "writes": 0
+        }
+      },
+      "board": {
+        "bytes": 90646,
+        "html_bytes": 84857,
+        "median_ms": 19.38,
+        "queries": {
+          "selects": 45,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 20.15,
+          "selects": 45,
+          "writes": 0
+        }
+      },
+      "driver": {
+        "bytes": 2290,
+        "html_bytes": 2024,
+        "median_ms": 18.63,
+        "queries": {
+          "selects": 51,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 19.39,
+          "selects": 51,
+          "writes": 0
+        }
+      },
+      "hanzo": {
+        "bytes": 126203,
+        "html_bytes": 120304,
+        "median_ms": 17.93,
+        "queries": {
+          "selects": 39,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 18.7,
+          "selects": 39,
+          "writes": 0
+        }
+      },
+      "hanzo_document": {
+        "bytes": 151738,
+        "html_bytes": 0,
+        "median_ms": 19.65,
+        "queries": {
+          "selects": 41,
+          "writes": 0
+        }
+      }
+    },
+    "after": {
+      "dispatch": {
+        "bytes": 543001,
+        "html_bytes": 514333,
+        "median_ms": 49.67,
+        "queries": {
+          "selects": 77,
+          "writes": 0
+        }
+      },
+      "spear": {
+        "bytes": 28782,
+        "html_bytes": 0,
+        "median_ms": 32.27,
+        "queries": {
+          "selects": 57,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 2875,
+          "ms": 32.67,
+          "selects": 57,
+          "writes": 0
+        }
+      },
+      "critical": {
+        "bytes": 523201,
+        "html_bytes": 494036,
+        "median_ms": 41.79,
+        "queries": {
+          "selects": 66,
+          "writes": 0
+        }
+      },
+      "fueler": {
+        "bytes": 490656,
+        "html_bytes": 463421,
+        "median_ms": 25.49,
+        "queries": {
+          "selects": 38,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 175,
+          "ms": 23.98,
+          "selects": 38,
+          "writes": 0
+        }
+      },
+      "board": {
+        "bytes": 90646,
+        "html_bytes": 84857,
+        "median_ms": 17.64,
+        "queries": {
+          "selects": 37,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 16.68,
+          "selects": 37,
+          "writes": 0
+        }
+      },
+      "driver": {
+        "bytes": 2290,
+        "html_bytes": 2024,
+        "median_ms": 17.51,
+        "queries": {
+          "selects": 43,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 16.85,
+          "selects": 43,
+          "writes": 0
+        }
+      },
+      "hanzo": {
+        "bytes": 126203,
+        "html_bytes": 120304,
+        "median_ms": 14.85,
+        "queries": {
+          "selects": 31,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 14.6,
+          "selects": 31,
+          "writes": 0
+        }
+      },
+      "hanzo_document": {
+        "bytes": 151738,
+        "html_bytes": 0,
+        "median_ms": 20.08,
+        "queries": {
+          "selects": 37,
+          "writes": 0
+        }
+      }
+    }
+  },
+  "fresh_requests": {
+    "before": {
+      "dispatch": {
+        "bytes": 543001,
+        "ms": 51.35,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 88,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 51.35
+      },
+      "spear": {
+        "bytes": 2875,
+        "ms": 33.25,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 68,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 35.33
+      },
+      "fueler": {
+        "bytes": 175,
+        "ms": 27.32,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 50,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 27.73
+      },
+      "board": {
+        "bytes": 151,
+        "ms": 21.24,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 49,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 20.73
+      },
+      "driver": {
+        "bytes": 151,
+        "ms": 19.52,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 55,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 19.74
+      },
+      "hanzo": {
+        "bytes": 151,
+        "ms": 18.72,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 43,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 18.69
+      },
+      "board_revision": {
+        "bytes": 67,
+        "ms": 3.83,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 15,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 3.9
+      },
+      "driver_revision": {
+        "bytes": 67,
+        "ms": 3.98,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 15,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 3.98
+      },
+      "hanzo_revision": {
+        "bytes": 57,
+        "ms": 4.13,
+        "write_shapes": [
+          "INSERT INTO portal_app_accesses (user_id, app_code, status, role, is_active, approved_by_user_id, approved_at, approval_notes, denied_by_user_id, denied_at, denial_notes, created_at, updated_at)"
+        ],
+        "selects": 15,
+        "writes": 1,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 3.96
+      }
+    },
+    "after": {
+      "dispatch": {
+        "bytes": 543001,
+        "ms": 50.03,
+        "write_shapes": [],
+        "selects": 78,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 48.21
+      },
+      "spear": {
+        "bytes": 2875,
+        "ms": 32.3,
+        "write_shapes": [],
+        "selects": 58,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 32.3
+      },
+      "fueler": {
+        "bytes": 175,
+        "ms": 24.28,
+        "write_shapes": [],
+        "selects": 39,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 24.28
+      },
+      "board": {
+        "bytes": 151,
+        "ms": 17.15,
+        "write_shapes": [],
+        "selects": 38,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 16.82
+      },
+      "driver": {
+        "bytes": 151,
+        "ms": 17.57,
+        "write_shapes": [],
+        "selects": 44,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 16.53
+      },
+      "hanzo": {
+        "bytes": 151,
+        "ms": 14.76,
+        "write_shapes": [],
+        "selects": 32,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 14.76
+      },
+      "board_revision": {
+        "bytes": 67,
+        "ms": 2.37,
+        "write_shapes": [],
+        "selects": 8,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 2.49
+      },
+      "driver_revision": {
+        "bytes": 67,
+        "ms": 2.48,
+        "write_shapes": [],
+        "selects": 8,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 2.46
+      },
+      "hanzo_revision": {
+        "bytes": 57,
+        "ms": 2.47,
+        "write_shapes": [],
+        "selects": 8,
+        "writes": 0,
+        "begins": 1,
+        "commits": 0,
+        "rollbacks": 1,
+        "checkouts": 1,
+        "median_ms": 2.47
+      }
+    }
+  },
+  "idle_drain": {
+    "before": {
+      "selects": 7,
+      "writes": 0,
+      "transactions": 2,
+      "commits": 2,
+      "rollbacks": 0,
+      "connections": 2,
+      "released": true
+    },
+    "after": {
+      "selects": 7,
+      "writes": 0,
+      "transactions": 1,
+      "commits": 0,
+      "rollbacks": 1,
+      "connections": 1,
+      "released": true
+    }
+  },
+  "deadline_simulations": {
+    "idle": {
+      "sql": {
+        "clock_wakes": 120,
+        "connections": 12,
+        "transactions": 12,
+        "SELECT": 96,
+        "database_wakes": 12
+      },
+      "longest_database_free_seconds": 600.0,
+      "captures": []
+    },
+    "hourly_capture": {
+      "sql": {
+        "clock_wakes": 120,
+        "connections": 29,
+        "transactions": 29,
+        "SELECT": 131,
+        "database_wakes": 12,
+        "commits": 13,
+        "UPDATE": 10,
+        "SAVEPOINT": 1,
+        "INSERT": 1,
+        "RELEASE": 1
+      },
+      "longest_database_free_seconds": 600.0,
+      "captures": [
+        1800.0
+      ]
+    },
+    "recovery": {
+      "sql": {
+        "clock_wakes": 120,
+        "connections": 12,
+        "transactions": 12,
+        "SELECT": 99,
+        "database_wakes": 12,
+        "UPDATE": 2,
+        "SAVEPOINT": 1,
+        "INSERT": 1,
+        "RELEASE": 1,
+        "commits": 1
+      },
+      "longest_database_free_seconds": 600.0,
+      "captures": []
+    }
+  },
+  "chromium_dispatch": {
+    "timed_spear_requests": [
+      "http://127.0.0.1:61522/neoscorpion/fuel-dispatch/live-panel?spear_only=1&operation_id=1"
+    ],
+    "dirty_completion_requests": [
+      "http://127.0.0.1:61522/neoscorpion/fuel-dispatch/live-panel?completion_only=1&delta=1&operation_id=1"
+    ],
+    "clean_refresh_requests": [
+      "http://127.0.0.1:61522/neoscorpion/fuel-dispatch/live-panel"
+    ],
+    "unchanged_panel_requests": 0,
+    "spear_refresh_ms": 65.6,
+    "completion_visible_ms": 67.97,
+    "hanzo_document_preserved": true,
+    "javascript_errors": []
+  },
+  "chromium_fueler": {
+    "engine": "chromium",
+    "after_off": false,
+    "work_rows": 1,
+    "event_rows": 1,
+    "original_on_preserved": true,
+    "old_actor_preserved": true,
+    "submitted_by_replacement": true,
+    "prof_reasons": [
+      "MULTIPLE FUELERS"
+    ]
+  },
+  "tests": {
+    "unique_python_sqlite_passed": 190,
+    "unique_postgresql_passed": 39,
+    "javascript_passed": 8,
+    "chromium_workflows_passed": 2,
+    "skipped_in_these_runs": 0,
+    "failures_remaining_in_focused_scope": 0,
+    "subtests": "Additional passing subtests excluded from unique case totals; final 180-case run includes 67 passing subtests."
+  },
+  "production_baseline": {
+    "live_sha": "89eea42e3d8062c3f9235570eb5f4676016a10fe",
+    "deployment_id": "dep-dblqfv49v7es73brdm00",
+    "render_metrics_utc": [
+      "2026-11-04T20:00:00Z",
+      "2026-11-04T22:00:00Z"
+    ],
+    "bandwidth_provider_mb": {
+      "20:00": 19.38055,
+      "21:00": 0.010189056
+    },
+    "cpu_20_utc_provider_cpu": 0.004208266,
+    "memory_bytes_at_20_21_22_utc": [
+      303128580,
+      213327870,
+      194535420
+    ],
+    "comparison_limit": "Different instances/deploy windows and quiet traffic. No attributable before/after production savings.",
+    "neon_suspend_seconds": 300,
+    "unresolved_spear_decisions": 3,
+    "pending_spear_deliveries": 0,
+    "snapshot_application_idle_connections": 0,
+    "frost_ready_utc_hours": [
+      "2026-11-04T20:00:00Z",
+      "2026-11-04T21:00:00Z",
+      "2026-11-04T22:00:00Z"
+    ]
+  },
+  "remaining": [
+    "Full clean Dispatch responses remain approximately 543001 bytes in the fixture.",
+    "No new revision-only early return: current operational revision alone is not a proven complete panel-render input fingerprint.",
+    "No additional mission-fragment replacement released without validating all form/history/deletion and stale-response contracts.",
+    "Sustained Render/Neon active-time and egress comparisons require equivalent operational traffic windows."
+  ],
+  "preservation": {
+    "untracked_files_hash_checked": 12,
+    "differences": 0,
+    "schema_changes": false,
+    "production_test_mutations": false,
+    "settings_changed": false
+  }
+}

@@ -5,6 +5,7 @@ import os
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
+from datetime import datetime
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -27,7 +28,7 @@ class SpearReconciliationPostgresTest(cases.SpearReconciliationTest):
         if url.host not in {'localhost', '127.0.0.1'} or not url.database.startswith('neostaffing_test_'):
             raise RuntimeError('Refusing non-disposable PostgreSQL')
         self.schema = 'spear_reconcile_' + uuid4().hex
-        self.admin = create_engine(URI, poolclass=NullPool)
+        self.admin = create_engine(URI, poolclass=NullPool, connect_args={'connect_timeout': 5})
         with self.admin.begin() as connection:
             connection.execute(text(f'CREATE SCHEMA "{self.schema}"'))
         def drop():
@@ -37,11 +38,72 @@ class SpearReconciliationPostgresTest(cases.SpearReconciliationTest):
         self.addCleanup(drop)
         def local(config):
             return create_app(type('ReconcileConfig', (config,), dict(SQLALCHEMY_DATABASE_URI=URI,
-                SQLALCHEMY_ENGINE_OPTIONS={'poolclass': NullPool, 'connect_args': {'options':
+                SQLALCHEMY_ENGINE_OPTIONS={'poolclass': NullPool, 'connect_args': {'connect_timeout': 5, 'options':
                     f'-csearch_path={self.schema} -clock_timeout=3000 -cstatement_timeout=10000'}})))
         with patch.object(fixtures, 'create_app', local):
             super().setUp()
         self.app = self.fixture.app
+
+    def test_purge_skips_canonical_writer_and_recovers_after_rollback(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        self.assignment.assigned_truck_id = None
+        row = self.decision(sealed=False)
+        identifier, gateway_id, owner = row.id, self.gateway.id, self.assignment.id
+        with db.engine.connect() as connection:
+            transaction = connection.begin()
+            connection.execute(text('SELECT id FROM neoscorpion_fuel_assignments WHERE id=:id FOR UPDATE'), {'id': owner})
+            self.assertEqual(purge_closed_unmatched(gateway_id, now_utc=datetime(2026, 9, 4, 12)), 0)
+            self.assertIsNotNone(db.session.get(Observation, identifier))
+            db.session.rollback()
+            transaction.rollback()
+        self.assertEqual(purge_closed_unmatched(gateway_id, now_utc=datetime(2026, 9, 4, 12)), 1)
+
+    def test_reason_insertion_locks_parent_against_concurrent_purge(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        self.assignment.assigned_truck_id = None
+        row = self.decision(sealed=False)
+        gateway_id = self.gateway.id
+        child = service.add_reason(self.gateway, self.user, row.id, None, 'Synthetic review')
+        with self.app.app_context():
+            self.assertEqual(purge_closed_unmatched(gateway_id, now_utc=datetime(2026, 9, 4, 12)), 0)
+            db.session.remove()
+        db.session.commit()
+        self.assertIsNotNone(db.session.get(Observation, child))
+
+    def test_expired_archive_lease_cannot_be_deleted_during_provider_io(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        self.assignment.assigned_truck_id = None
+        row = self.decision(sealed=False)
+        identifier, gateway_id = row.id, self.gateway.id
+        entered, release = Event(), Event()
+        def export(payload):
+            entered.set()
+            self.assertTrue(release.wait(10))
+            return {'verified': True, 'key': 'synthetic/verified'}
+        def worker():
+            with self.app.app_context():
+                try: return service.drain(gateway_id, limit=1)
+                finally: db.session.remove()
+        with patch('app.services.neoscorpion_spear_expiry.purge_closed_unmatched', return_value=0), \
+             patch('app.services.neoscorpion_learning_vault.export_decision_record', side_effect=export):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(worker)
+                try:
+                    self.assertTrue(entered.wait(10))
+                    db.session.expire_all()
+                    claimed = db.session.get(Observation, identifier)
+                    self.assertEqual(claimed.attempts, 1)
+                    claimed.retry_at = datetime(2026, 9, 4)  # Crash lease expired while GET is pending.
+                    db.session.commit()
+                    self.assertEqual(purge_closed_unmatched(gateway_id, now_utc=datetime(2026, 9, 4, 12)), 0)
+                    self.assertIsNotNone(db.session.get(Observation, identifier))
+                finally: release.set()
+                self.assertEqual(future.result(timeout=10), 1)
+        db.session.expire_all()
+        self.assertIsNotNone(db.session.get(Observation, identifier).verified_at)
 
     def test_concurrent_workers_cannot_duplicate_one_final_outcome(self):
         row = self.decision()

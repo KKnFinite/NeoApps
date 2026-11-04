@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from flask import g, has_request_context
 
+# These handlers render private state but perform no operational mutation.
+# Reuse the same fresh, request-local authority projection as revision reads.
+SCORPION_READONLY_LIVE_ENDPOINTS = frozenset({
+    'neoscorpion.fuel_assignments_live_panel', 'neoscorpion.fuel_dispatch_live_panel',
+    'neoscorpion.fueling_board_live_panel', 'neoscorpion.truck_driver_live_panel',
+    'neoscorpion.hanzo_live_panel', 'neoscorpion.fueling_board_revision',
+    'neoscorpion.truck_driver_revision', 'neoscorpion.hanzo_revision',
+})
 
-LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
+LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = SCORPION_READONLY_LIVE_ENDPOINTS | frozenset(
     {
         "neoermac.door_view_state",
         "neoermac.building_lineup_state",
@@ -25,6 +33,7 @@ LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
 )
 
 LIGHTWEIGHT_LIVE_STATE_NODE_CODES = {
+    **dict.fromkeys(SCORPION_READONLY_LIVE_ENDPOINTS, 'scorpion'),
     "neoermac.door_view_state": "ermac",
     "neoermac.building_lineup_state": "ermac",
     "neoermac.upcoming_pulls_state": "ermac",

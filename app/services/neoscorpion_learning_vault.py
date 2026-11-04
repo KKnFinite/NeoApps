@@ -521,7 +521,7 @@ def _validate_learning_record(record):
                      "pump_rate", "forecasts", "exclusions", "on_source", "on_at", "actuals_received_at", "inventory_epoch",
                      "completion_ready_at", "completed_at", "preparation_completed_at",
                      "physical_work_id", "physical_sequence", "physical_tail", "planned_departure_at", "required_fuel_lbs",
-                     "participation", "prof_participation"}
+                     "participation", "prof_participation", "learning_origin"}
         if version == 'spear-learning/v3':
             fact_keys |= {'resource_timing','preparation_evidence','fueler_data_ready','fueler_work_end_at'}
         for item in record["operational_timelines"]:
@@ -529,6 +529,10 @@ def _validate_learning_record(record):
             require(positive_id(item["event_id"]))
             require(isinstance(item["facts"], dict) and set(item["facts"]) <= fact_keys)
             facts = item["facts"]
+            # Canonical rolling-learning snapshots already carry this field.
+            # Accept only its defined values; legacy missing/null provenance is
+            # preserved verbatim, never upgraded into verified attribution.
+            require(facts.get('learning_origin') in (None, 'production', 'test'))
             for name in ('participation','prof_participation'):
                 if name not in facts: continue  # Legacy receipts remain valid, never retroactively verified.
                 evidence = facts[name]

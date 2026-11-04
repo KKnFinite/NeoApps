@@ -215,7 +215,10 @@ def add_reason(gateway, actor, decision_id, reason, note):
     from app.models import NeoScorpionFuelAssignment
     if not enabled(gateway.id):
         raise ValueError('SPEAR Learning Capture is off or its Vault is unavailable.')
-    original = db.session.get(Observation, decision_id)
+    # Serialize child insertion with local Sort-end pruning. A read followed by
+    # an unlocked INSERT could otherwise outlive its deleted parent decision.
+    original = db.session.scalar(select(Observation).where(Observation.id == decision_id)
+        .with_for_update().execution_options(populate_existing=True))
     if not original or original.kind != 'decision' or original.gateway_id != gateway.id:
         raise ValueError('Select a valid decision observation.')
     if reason and reason not in TEACH_SPEAR_REASON_CODES:
@@ -350,6 +353,8 @@ def reconcile_fleet(gateway_id):
         .where(FleetObservation.gateway_id==gateway_id,FleetObservation.kind=='fleet',
             ~exists(select(outcome.id).where(outcome.audit_id==FleetObservation.audit_id,outcome.kind=='fleet_outcome')))
         .order_by(FleetObservation.created_at).limit(20)).all()
+    if not rows:
+        return  # Let the bounded drain finish this read-only transaction.
     for decision,start,end in rows:
         minutes=(end.occurred_at_utc-start.occurred_at_utc).total_seconds()/60
         if minutes <= 0 or end.gallons is None:
@@ -524,6 +529,9 @@ def drain(gateway_id, *, limit=3):
         FleetObservation.delivered_at.is_(None), FleetObservation.retry_at <= now)
         .order_by(FleetObservation.created_at,FleetObservation.id).limit(limit).with_for_update(skip_locked=True)).all()
     rows = sorted([*rows,*fleet],key=lambda item:(item.created_at,item.id))[:limit]
+    if not rows:
+        db.session.rollback()
+        return 0
     claims = []
     for item in rows:
         item.attempts += 1

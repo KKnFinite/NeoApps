@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload, selectinload, lazyload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
+from app.services.request_cache import request_cached
 from app.models import (
     MasterFlightSchedule,
     NeoScorpionAircraftFuelSetting,
@@ -484,16 +485,21 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
     return context
 
 
-def _attach_fueling_timing(rows, operation, settings, planning=None, calibrations=None, spear=None, *, jobs=None, now_utc=None):
+def _attach_fueling_timing(rows, operation, settings, planning=None, calibrations=None, spear=None, *, jobs=None, now_utc=None,
+                           review_learning=True):
     planning = planning or assignment_planning_settings(operation.gateway, settings=settings)
     spear = spear or effective_spear_settings(settings)
     now_utc = now_utc or datetime.utcnow()
+    # Operational screens display baseline timing in OBSERVE. The full learning
+    # review still runs in SPEAR/Dispatch and at canonical forecast capture.
+    # APPLY always loads verified history; no cross-request cache or stale data.
+    learning_needed = review_learning or spear.live_calibration_mode == 'apply'
     if jobs is None:
-        jobs = load_observation_jobs(operation.gateway_id, learning=True, now_utc=now_utc)
+        jobs = load_observation_jobs(operation.gateway_id, learning=True, now_utc=now_utc) if learning_needed else ()
     if calibrations is None:
-        calibrations = build_live_calibration(operation,planning,rows,jobs=jobs,now_utc=now_utc)
+        calibrations = build_live_calibration(operation,planning,rows,jobs=jobs,now_utc=now_utc) if learning_needed else {}
     from app.services.neoscorpion_resource_timing import attach_resource_evidence
-    attach_resource_evidence(rows,operation,settings,planning,datetime.utcnow())
+    attach_resource_evidence(rows,operation,settings,planning,now_utc)
     for row in rows:
         prediction = physical_off_forecast(row, planning, settings=settings, jobs=jobs,
             mode=spear.live_calibration_mode, now_utc=now_utc, calibrations=calibrations)
@@ -894,7 +900,7 @@ def hanzo_context(gateway):
     )
     try:
         with db.session.begin_nested():
-            _attach_fueling_timing(rows, operation, settings)
+            _attach_fueling_timing(rows, operation, settings, review_learning=False)
     except Exception:
         current_app.logger.exception("Hanzo fueling timing unavailable.")
     nicknames = fueler_nicknames(gateway, (row["assigned_fueler"] for row in rows))
@@ -1033,7 +1039,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     try:
         with db.session.begin_nested():
             if include_timing:
-                _attach_fueling_timing(rows, operation, settings)
+                _attach_fueling_timing(rows, operation, settings, review_learning=False)
     except Exception:
         current_app.logger.exception("Fueling timing unavailable; retaining TIMING UNKNOWN.")
         for row in rows:
@@ -1308,15 +1314,7 @@ def settings_context(gateway):
 def assignment_planning_settings(gateway, *, settings=None):
     if settings is None:
         settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
-    aircraft_settings = {
-        row.aircraft_type: row
-        for row in NeoScorpionAircraftFuelSetting.query.filter(
-            NeoScorpionAircraftFuelSetting.gateway_id == gateway.id,
-            NeoScorpionAircraftFuelSetting.aircraft_type.in_(
-                NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
-            ),
-        ).all()
-    }
+    aircraft_settings = _aircraft_fuel_settings(gateway.id)
     return AssignmentPlanningSettings(
         setup_minutes=(
             Decimal(settings.assignment_setup_minutes)
@@ -7875,11 +7873,14 @@ def _tail_fuel_states_by_tail(operation):
     }
 
 
+def _parking_assignment_rows(operation):
+    return _readonly_input('scorpion.parking_rows', operation.id, lambda:
+        SortDateParkingAssignment.query.filter_by(sort_date_operation_id=operation.id).all())
+
+
 def _parking_by_tail(operation):
     positions = {}
-    assignments = SortDateParkingAssignment.query.filter_by(
-        sort_date_operation_id=operation.id,
-    ).all()
+    assignments = _parking_assignment_rows(operation)
     for assignment in assignments:
         tail_number = _normalize_tail(assignment.tail_number)
         lane_suffix = f" / S{assignment.lane_number}" if assignment.lane_number == 2 else ""
@@ -8017,19 +8018,31 @@ def _effective_apu_rate(gateway_id, aircraft_type):
     return Decimal(setting.apu_rate_thousand_lbs_per_hour)
 
 
+def _readonly_input(namespace, key, resolver):
+    # Canonical mutations retain fresh read/flush semantics. Reuse only inside
+    # one GET/HEAD; existing transaction hooks discard it on commit/rollback.
+    if has_request_context() and request.method in {'GET', 'HEAD'}:
+        return request_cached(namespace, key, resolver)
+    return resolver()
+
+
+def _aircraft_fuel_settings(gateway_id):
+    return _readonly_input('scorpion.aircraft_fuel_settings', gateway_id, lambda: {
+        row.aircraft_type: row for row in NeoScorpionAircraftFuelSetting.query.filter(
+            NeoScorpionAircraftFuelSetting.gateway_id == gateway_id,
+            NeoScorpionAircraftFuelSetting.aircraft_type.in_(set(NEOSCORPION_APU_AIRCRAFT_TYPES)
+                | set(NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES))).all()})
+
+
 def _effective_aircraft_fuel_configuration(gateway_id):
     rates = {
         aircraft_type: DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR
         for aircraft_type in NEOSCORPION_APU_AIRCRAFT_TYPES
     }
     lateral_limits = {}
-    overrides = NeoScorpionAircraftFuelSetting.query.filter(
-        NeoScorpionAircraftFuelSetting.gateway_id == gateway_id,
-        NeoScorpionAircraftFuelSetting.aircraft_type.in_(
-            NEOSCORPION_APU_AIRCRAFT_TYPES
-        ),
-    ).all()
-    for override in overrides:
+    for override in _aircraft_fuel_settings(gateway_id).values():
+        if override.aircraft_type not in NEOSCORPION_APU_AIRCRAFT_TYPES:
+            continue
         rates[override.aircraft_type] = Decimal(
             override.apu_rate_thousand_lbs_per_hour
         )

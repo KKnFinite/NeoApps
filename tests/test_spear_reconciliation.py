@@ -60,7 +60,9 @@ class SpearReconciliationTest(unittest.TestCase):
 
     def reconcile(self, *, advance=True):
         if advance:
-            Clock.value += timedelta(minutes=6)
+            # Old observations now have a six-hour bounded retry, not five
+            # minutes. Exercise recovery at the actual next eligible deadline.
+            Clock.value += timedelta(hours=6, minutes=1)
         with patch.object(service, 'datetime', Clock):
             service.reconcile(self.gateway_id)
 
@@ -116,6 +118,98 @@ class SpearReconciliationTest(unittest.TestCase):
         self.assertEqual(purge_closed_unmatched(
             self.gateway.id, now_utc=datetime(2026, 9, 4, 12)), 0)
         self.assertIsNotNone(Observation.query.filter_by(id=row.id).first())
+
+    def test_started_visit_without_completion_event_is_not_unmatched(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        row = self.decision(sealed=False)
+        event_row = FuelEvent.query.one()
+        TankSnapshot.query.filter_by(fueling_event_id=event_row.id).delete(synchronize_session=False)
+        db.session.delete(event_row)
+        db.session.commit()
+        self.assertEqual(purge_closed_unmatched(self.gateway.id,
+            now_utc=datetime(2026, 9, 4, 12)), 0)
+        self.assertIsNotNone(db.session.get(Observation, row.id))
+
+    def test_unverified_upload_attempt_keeps_durable_receipt(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        self.assignment.assigned_truck_id = None
+        row = self.decision(sealed=False)
+        row.attempts = 1
+        row.retry_at = datetime(2026, 9, 4, 11, 59)  # Even an expired crash lease.
+        db.session.commit()
+        self.assertEqual(purge_closed_unmatched(self.gateway.id,
+            now_utc=datetime(2026, 9, 4, 12)), 0)
+        self.assertIsNotNone(db.session.get(Observation, row.id))
+
+    def test_uncertain_child_export_retains_whole_family(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        self.assignment.assigned_truck_id = None
+        row = self.decision(sealed=False)
+        self.reconcile()
+        child = Observation.query.filter_by(kind='outcome').one()
+        child.attempts = 1
+        db.session.commit()
+        self.assertEqual(purge_closed_unmatched(self.gateway.id,
+            now_utc=datetime(2026, 9, 4, 12)), 0)
+        self.assertEqual(Observation.query.filter(Observation.id.in_([row.id, child.id])).count(), 2)
+
+    def test_missing_window_protects_unmatched_decision(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self.assignment.assigned_truck_id = None
+        row = self.decision(sealed=False)
+        self.assertEqual(purge_closed_unmatched(self.gateway.id,
+            now_utc=datetime(2027, 1, 1)), 0)
+        self.assertIsNotNone(db.session.get(Observation, row.id))
+
+    def test_idle_drain_has_no_writes_or_commits_and_releases_connection(self):
+        self._sort_window()
+        gateway_id = self.gateway.id
+        engine = db.engine
+        db.session.remove()
+        commits = []
+        def committed(connection):
+            commits.append(connection)
+        event.listen(engine, 'commit', committed)
+        try:
+            with sql_counts() as counts:
+                self.assertEqual(service.drain(gateway_id), 0)
+            self.assertEqual(counts['updates'] + counts['inserts'], 0)
+            self.assertEqual(commits, [])
+            self.assertFalse(db.session().in_transaction())
+        finally:
+            event.remove(engine, 'commit', committed)
+
+    def test_dst_fold_and_gap_never_purge_early(self):
+        from app.services.neoscorpion_spear_expiry import sort_ended
+        window = SimpleNamespace(sort_window_start_local=time(21), sort_window_end_local=time(1, 30))
+        operation = SimpleNamespace(sort_date=date(2026, 10, 31))
+        self.assertFalse(sort_ended(operation, window, datetime(2026, 11, 1, 6, 45), 'America/Chicago'))
+        self.assertTrue(sort_ended(operation, window, datetime(2026, 11, 1, 7, 30), 'America/Chicago'))
+        window.sort_window_end_local = time(2, 30)
+        operation.sort_date = date(2026, 3, 7)
+        self.assertFalse(sort_ended(operation, window, datetime(2026, 3, 8, 8), 'America/Chicago'))
+        self.assertTrue(sort_ended(operation, window, datetime(2026, 3, 8, 8, 30), 'America/Chicago'))
+        self.assertFalse(sort_ended(operation, window, datetime(2027, 1, 1), 'Invalid/Timezone'))
+
+    def test_bounded_purge_progresses_past_connected_decisions_without_hydrating_events(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        protected = self.decision(sealed=False)
+        self.assignment.assigned_truck_id = None
+        self.before = service.scope(self.operation, self.mission, self.assignment, 13)
+        identifiers = [self.observe(now=self.now + timedelta(minutes=i)) for i in (20, 30, 40)]
+        db.session.commit()
+        with sql_counts() as counts:
+            self.assertEqual(purge_closed_unmatched(self.gateway.id,
+                now_utc=datetime(2026, 9, 4, 12), limit=2), 2)
+        self.assertLessEqual(counts['selects'], 6)
+        self.assertEqual(purge_closed_unmatched(self.gateway.id,
+            now_utc=datetime(2026, 9, 4, 12), limit=2), 1)
+        self.assertIsNotNone(db.session.get(Observation, protected.id))
+        self.assertEqual(Observation.query.filter(Observation.id.in_(identifiers)).count(), 0)
 
     def test_age_bounded_unresolved_retries_keep_late_evidence_eligible(self):
         now = datetime(2027, 1, 1)

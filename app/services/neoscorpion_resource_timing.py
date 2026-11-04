@@ -332,7 +332,8 @@ def attach_resource_evidence(rows,operation,settings,planning,now):
     histories={row[0]:(row[1],row[2]) for row in db.session.query(NeoScorpionSortTruck.fuel_truck_id,
         NeoScorpionSortTruck.availability_history,NeoScorpionFuelTruck.availability_history).join(NeoScorpionFuelTruck,
         NeoScorpionFuelTruck.id==NeoScorpionSortTruck.fuel_truck_id).filter(NeoScorpionSortTruck.sort_date_operation_id==operation.id).all()}
-    parking_dates={row.tail_number:row.assigned_at for row in SortDateParkingAssignment.query.filter_by(sort_date_operation_id=operation.id).all()}
+    from app.services.neoscorpion import _parking_assignment_rows
+    parking_dates={row.tail_number:row.assigned_at for row in _parking_assignment_rows(operation)}
     future=[row for row in rows if row.get('assignment') and not row.get('is_source_segment')
         and not row.get('administratively_complete') and not row.get('fueling_effective_on_utc')
         and not row.get('is_off')]
