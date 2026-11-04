@@ -158,4 +158,3 @@ def transfer_readings(*, remaining='6', actual='15', gallons='3000'):
     """Explicit synthetic operator entries, not inferred or inherited measurements."""
     return dict(apu_running='no', remaining_left=remaining, remaining_ctr='0', remaining_right=remaining,
         actual_left=actual, actual_ctr='0', actual_right=actual, transfer_fuel_gallons=gallons)
-
