@@ -34,9 +34,10 @@ class RainUICorrectionsTest(unittest.TestCase):
         self.assertEqual(html.count('data-rainrock-value='),9)
 
     def test_briefing_content_exactly_matches_existing_projection(self):
+        from app.services.neorain_daily_briefing import briefing_context,format_briefing
         with patch('app.services.neorain_reports.snapshot_current_google',return_value='Google unavailable'):
-            report=report_context(self.f.operation,current=True)
-            expected=briefing_text(report)
+            report=briefing_context(self.f.operation,current=True)
+            expected=format_briefing(report)
             response=self.f.client.get('/neorain/daily-briefing?operation_id='+str(self.f.operation.id))
         self.assertEqual(response.status_code,200)
         raw=re.search(r'<pre[^>]*id="briefing-text"[^>]*>(.*?)</pre>',response.get_data(as_text=True),re.S).group(1)

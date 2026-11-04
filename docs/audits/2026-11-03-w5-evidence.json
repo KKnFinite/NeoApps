@@ -1,0 +1,595 @@
+{
+  "package": "W5",
+  "starting_sha": "680556746e55f11f9b2929e03f25ba4b7cf1bec0",
+  "original_ids": 49,
+  "before": {
+    "passing": 0,
+    "failing": 49
+  },
+  "after": {
+    "passing": 49,
+    "failing": 0,
+    "passing_subtests": 89,
+    "skipped": 0
+  },
+  "full_367_inventory_run": false,
+  "application_changes": [
+    "app/static/css/sequence.json: CSS25 bytes and SHA256 only"
+  ],
+  "assets": {
+    "before": {
+      "file": "25-neosubzero.css",
+      "scope": "neosubzero",
+      "bytes": 19118,
+      "sha256": "44b52d0d88d9d432f45c19f79aa570ae2091d2a889345d3034187033b9f92b88"
+    },
+    "after": {
+      "file": "25-neosubzero.css",
+      "scope": "neosubzero",
+      "bytes": 18771,
+      "sha256": "1927a88a9d48124610eac4ef9382e96be3102a61c023a18e40ed3519b382b6fc"
+    }
+  },
+  "static_verification": {
+    "fragments": 29,
+    "unrelated_files_preserved": 12,
+    "python_files_compiled": 24,
+    "css_contents_changed": false,
+    "historical_provenance_changed": false
+  },
+  "files": [
+    "app/static/css/sequence.json",
+    "tests/browser/test_mobile_drawer.py",
+    "tests/browser/test_neofontlite.py",
+    "tests/browser/test_neorain_compact_overrides.py",
+    "tests/test_flight_api_import.py",
+    "tests/test_frost_phase10.py",
+    "tests/test_local_launch_navigation.py",
+    "tests/test_motherbrain_routes.py",
+    "tests/test_neofontlite.py",
+    "tests/test_neofontplain.py",
+    "tests/test_neorain_board_layout.py",
+    "tests/test_neorain_load_planner_routes.py",
+    "tests/test_neorain_outbound.py",
+    "tests/test_neorain_ui_corrections.py",
+    "tests/test_neosektor_css_cleanup.py",
+    "tests/test_neosektor_discharge_controls.py",
+    "tests/test_neostaffing_routes.py",
+    "tests/test_neostaffing_shell.py",
+    "tests/test_operational_shell.py",
+    "tests/test_page_assets.py",
+    "tests/test_shared_ux_hooks.py",
+    "tests/test_shell_metadata.py",
+    "tests/test_staffing_live_ux.py",
+    "tests/presentation_contracts.py",
+    "tests/neorain_presentation_fixture.py",
+    "docs/audits/2026-11-03-w5-presentation-csp-assets.md",
+    "docs/audits/2026-11-03-w5-evidence.json"
+  ],
+  "cases": [
+    {
+      "id": "tests.test_flight_api_import.FlightApiTestPageTest::test_flight_api_review_departure_rows_show_schedule_api_local_times_and_diff",
+      "before": "FAIL",
+      "classification": "Invalid time/current-sort fixture",
+      "verified_contract": "Fixed summer/winter clocks, coherent local/UTC schedule and a provider difference beyond the existing matching window.",
+      "original_failure": "AssertionError: b'API 08:00 Local Nov 4' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta na",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_frost_phase10.InspectionTest::test_changed_assets_have_new_immutable_cache_identities",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Check current versioned asset URLs and exact served CSS digest, retaining old-token rejection rather than freezing a superseded token.",
+      "original_failure": "AssertionError: 'neosubzero_operations.js?v=20261028-frost-prospective-v1' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, v",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_local_launch_navigation.LocalLaunchNavigationTest::test_base_template_cache_busts_stylesheet",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'filename=stylesheet, v=config.STATIC_ASSET_VERSION' not found in '<!doctype html>\\n<html lang=\"en\"{% if request.endpoint == \\'neosektor.driver_routing\\' and request.args.get(\\'tv\\') == \\'1\\' %} id=\"sektor-tv\"{% endif %}>\\n{% from \"_neo_brand.h",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_local_launch_navigation.LocalLaunchNavigationTest::test_mobile_account_moves_into_drawer_and_preserves_node_icons",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: (None, 'neo-drawer-user', {}, 0)",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_local_launch_navigation.LocalLaunchNavigationTest::test_mobile_gateway_node_topbar_standard_order_and_account_menu",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: (None, 'neo-drawer-user', {}, 0)",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_local_launch_navigation.LocalLaunchNavigationTest::test_motherbrain_mobile_short_titles_and_full_menu_labels",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'Manage Sort' not found in '\\n        \\n            NeoMotherBrain\\n            Parking Plan\\n        \\n        \\n        \\n        \\n        \\n\\n\\n\\n\\nArrival Planning\\n\\n\\nDeparture Planning\\n\\n\\nParking Plan\\n\\n\\nParking Rules\\n\\nMaster Sche",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_local_launch_navigation.LocalLaunchNavigationTest::test_shared_desktop_shell_uses_compact_neofont_utility_controls",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: '/static/images/logos/newlogo_ermac_small.png' != '/static/images/icons/neoapps/inapp/neoapps-inapp-128.png'\n- /static/images/logos/newlogo_ermac_small.png\n+ /static/images/icons/neoapps/inapp/neoapps-inapp-128.png",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_kessler_grandmaster_can_access_motherbrain_pages",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: b'neo-brand-title__node--motherbrain' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_mobile_manage_sort_detail_has_compact_locked_layout_hooks",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: '>Sort</span>' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta name=\"theme-c",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_mobile_parking_plan_renders_simple_ramp_cards_and_slot_picker",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: unexpectedly None",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_motherbrain_header_navigation_routes_work",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'Manage Sort' not found in '\\n        \\n            NeoMotherBrain\\n            Master Schedule\\n        \\n        \\n        \\n        \\n        \\n\\n\\n\\n\\nArrival Planning\\n\\n\\nDeparture Planning\\n\\n\\nParking Plan\\n\\n\\nParking Rules\\n\\nMaster S",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_parking_plan_all_assigned_uses_one_reusable_swap_editor",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: unexpectedly None",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_parking_plan_assignment_reuses_locked_and_loaded_state",
+      "before": "FAIL",
+      "classification": "Unattributed SQL expectation",
+      "verified_contract": "Separate one mandatory vendor-account authority SELECT; retain original domain query ceiling and write/commit assertions.",
+      "original_failure": "AssertionError: 16 not less than or equal to 15",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_parking_plan_changed_state_reuses_operational_collections",
+      "before": "FAIL",
+      "classification": "Unattributed SQL expectation",
+      "verified_contract": "Separate one mandatory vendor-account authority SELECT; retain original domain query ceiling and write/commit assertions.",
+      "original_failure": "AssertionError: 19 not less than or equal to 18",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_motherbrain_routes.MotherBrainRoutesTest::test_parking_plan_empty_slot_tail_picker_uses_shared_bootstrap_data",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: unexpectedly None",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neofontlite.NeoFontLiteTest::test_all_vector_glyphs_and_narrow_css_scope",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: '{% if is_rfd_hub_page or is_sektor_dashboard %}\\n    <link rel=\"stylesheet\" href=\"{{ url_for(\\'static\\', filename=\\'css/neofontlite.css\\'' not found in '<!doctype html>\\n<html lang=\"en\"{% if request.endpoint == \\'neosektor.driver_routing\\' and",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neofontplain.NeoFontPlainTest::test_specimen_and_gateway_scoped_workhorse",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'NeoFontPlain' unexpectedly found in '<!doctype html>\\n<html lang=\"en\"{% if request.endpoint == \\'neosektor.driver_routing\\' and request.args.get(\\'tv\\') == \\'1\\' %} id=\"sektor-tv\"{% endif %}>\\n{% from \"_neo_brand.html\" import neo_brand, neo_br",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_board_layout.NeoRainBoardLayoutTest::test_inbound_mobile_status_does_not_truncate_and_headers_align",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: '--neorain-inbound-columns:' not found in '<link rel=\"stylesheet\" href=\"{{ url_for(\\'static\\', filename=\\'css/neorain_csp_delay_panel_shared.css\\', v=\\'20261031-csp-v1\\') }}\">\\n<script defer src=\"{{ url_for(\\'static\\', filename=\\'js/neorain_del",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_board_layout.NeoRainBoardLayoutTest::test_inbound_outbound_share_full_width_board_layout",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'table-layout: fixed' not found in '{# Shared Rain board geometry and UI state; Scorpion/other nodes unaffected. #}\\n<link rel=\"stylesheet\" href=\"{{ url_for(\\'static\\', filename=\\'css/neorain_csp_board_layout_shared.css\\', v=\\'20261031-csp-v1\\'",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_board_layout.NeoRainBoardLayoutTest::test_mobile_inbound_and_outbound_columns_center_and_keep_full_flight_numbers",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: '--neorain-outbound-columns:' not found in '<link rel=\"stylesheet\" href=\"{{ url_for(\\'static\\', filename=\\'css/neorain_csp_delay_panel_shared.css\\', v=\\'20261031-csp-v1\\') }}\">\\n<script defer src=\"{{ url_for(\\'static\\', filename=\\'js/neorain_de",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_board_layout.NeoRainBoardLayoutTest::test_outbound_columns_fit_the_viewport_and_elmac_follows_center_fuel",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 0 != 21",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_board_layout.NeoRainBoardLayoutTest::test_outbound_fuel_labels_not_repeated_and_both_columns_centered",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'td[data-label=\"Neo Fuel\"], td[data-label=\"Center Fuel\"]' not found in '{# Shared Rain board geometry and UI state; Scorpion/other nodes unaffected. #}\\n<link rel=\"stylesheet\" href=\"{{ url_for(\\'static\\', filename=\\'css/neorain_csp_board_layout",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_board_layout.NeoRainBoardLayoutTest::test_summary_grid_and_board_exit_remain_consistent",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'grid-template-columns: repeat(3, minmax(0, 1fr))' not found in '{# Shared Rain board geometry and UI state; Scorpion/other nodes unaffected. #}\\n<link rel=\"stylesheet\" href=\"{{ url_for(\\'static\\', filename=\\'css/neorain_csp_board_layout_shared",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_board_layout.NeoRainBoardLayoutTest::test_white_neutral_text_preserves_semantic_status_colors",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'color: #fff' not found in '{# Shared Rain board geometry and UI state; Scorpion/other nodes unaffected. #}\\n<link rel=\"stylesheet\" href=\"{{ url_for(\\'static\\', filename=\\'css/neorain_csp_board_layout_shared.css\\', v=\\'20261031-csp-v1\\') }}\">\\n",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_load_planner_routes.NeoRainLoadPlannerRoutesTest::test_mobile_lineup_renders_five_requested_facts_and_preserves_save_forms",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'overflow-x: clip;' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta name=\"th",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_outbound.NeoRainOutboundTest::test_authorized_neo_mode_renders_three_hhmm_editors_only",
+      "before": "FAIL",
+      "classification": "Outdated authority/control assertion",
+      "verified_contract": "Use versioned override controls and real current-sort routes; confirm No Return reversal, preserve cancelled-work locks and exercise a real CSRF-protected view-only session.",
+      "original_failure": "AssertionError: b'placeholder=\"HHMM\"' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta name=",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_outbound.NeoRainOutboundTest::test_cancelled_outbound_row_is_full_width_and_locked_until_edit",
+      "before": "FAIL",
+      "classification": "Outdated authority/control assertion",
+      "verified_contract": "Use versioned override controls and real current-sort routes; confirm No Return reversal, preserve cancelled-work locks and exercise a real CSRF-protected view-only session.",
+      "original_failure": "AssertionError: b'data-neorain-hhmm' not found in b' data-mission-version=\"2026-11-04T03:43:03.882784\" data-neorain-no-return=\"false\" data-neorain-service-version=\"0\" data-neorain-cancelled=\"true\">\\n                <td data-label=\"Wave\">1</td>\\n               ",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_outbound.NeoRainOutboundTest::test_departed_row_shows_no_return_and_reverse_for_authorized_editor",
+      "before": "FAIL",
+      "classification": "Outdated authority/control assertion",
+      "verified_contract": "Use versioned override controls and real current-sort routes; confirm No Return reversal, preserve cancelled-work locks and exercise a real CSRF-protected view-only session.",
+      "original_failure": "AssertionError: b'data-neorain-no-return-action=\"reverse\"' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cov",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_outbound.NeoRainOutboundTest::test_inbound_blocked_in_and_cancelled_rows_remain_full_width",
+      "before": "FAIL",
+      "classification": "Outdated authority/control assertion",
+      "verified_contract": "Use versioned override controls and real current-sort routes; confirm No Return reversal, preserve cancelled-work locks and exercise a real CSRF-protected view-only session.",
+      "original_failure": "AssertionError: b'data-neorain-inbound-edit-protected hidden' not found in b' data-mission-version=\"2026-11-04T03:43:04.972466\" data-neorain-cancelled=\"true\">\\n            <td data-label=\"Wave\">1</td><td data-label=\"Flight #\"><strong>UPS651</strong></td><td da",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_outbound.NeoRainOutboundTest::test_mobile_boards_render_compact_hooks_and_preserve_desktop_tables",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: b'data-neorain-mobile-hhmm' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_outbound.NeoRainOutboundTest::test_rain_boards_link_to_canonical_manual_mission_form_and_ui_hooks",
+      "before": "FAIL",
+      "classification": "Outdated authority/control assertion",
+      "verified_contract": "Use versioned override controls and real current-sort routes; confirm No Return reversal, preserve cancelled-work locks and exercise a real CSRF-protected view-only session.",
+      "original_failure": "AssertionError: b'/motherbrain/operations/1/missions/new?mission_type=departure&amp;return_to=neorain.outbound' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-widt",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neorain_ui_corrections.RainUICorrectionsTest::test_briefing_content_exactly_matches_existing_projection",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Compare rendered briefing to the dedicated authoritative daily-briefing formatter, not the superseded report formatter.",
+      "original_failure": "AssertionError: \"********************\\n08/30/2026\\nRFD Ni[623 chars]ABLE\" != 'RFD night:\\n\\n\u2022 HPS Plan UNAVAILABLE vs [251 chars]rded'\nDiff is 999 characters long. Set self.maxDiff to None to see it.",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neosektor_css_cleanup.NeoSektorCssCleanupTest::test_display_bundles_keep_page_rules_and_mobile_overrides_separate",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "IndexError: list index out of range",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neosektor_discharge_controls.DischargeControlsTest::test_presentation_controls_local_bays_and_override_without_banner",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'DISCHARGE CUT.REPORT TO DOORS.' != 'Discharge cut. Report to doors.'\n- DISCHARGE CUT.REPORT TO DOORS.\n+ Discharge cut. Report to doors.",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_approved_neostaffing_user_can_open_landing_menu",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: b'href=\"/neostaffing/vacation-selection\"' unexpectedly found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_landing_hides_destinations_when_existing_thresholds_deny_them",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: b'href=\"/neostaffing/requests\"' not found in b' neostaffing-launch-grid\" aria-label=\"NeoStaffing main menu\">\\n            \\n            <a class=\"neostaffing-menu-tile is-priority\" href=\"/neostaffing/people\"><span>PEOPLE</span><em>Roster and as",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_people_interaction_script_contracts_remain_parse_separated",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Parse actual rendered trusted-inline and owned-external scripts with Node; enforce nonce and no inline handlers, rather than minified string adjacency.",
+      "original_failure": "AssertionError: b\"x.oninput()});document.querySelectorAll('[data-people-smart-form]')\" not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maxim",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_staffing_dashboard_sidebar_and_mobile_menu_share_ordered_destinations",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: Lists differ: [b'/n[139 chars]ing/settings'] != [b'/n[139 chars]ing/staffing-groups', b'/neostaffing/requests'[82 chars]ngs']\n\nFirst differing element 5:\nb'/neostaffing/settings'\nb'/neostaffing/staffing-groups'\n\nSecond list contains 4 additiona",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neostaffing_shell.StaffingShellTest::test_bottom_links_keep_active_page_and_full_shell_mobile_menu",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 2 != 1",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neostaffing_shell.StaffingShellTest::test_construction_heading_disappears_when_all_eight_links_denied",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 4 != 3",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_neostaffing_shell.StaffingShellTest::test_navigation_exact_order_desktop_split_and_mobile_links",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: Lists differ: ['/ne[305 chars]fing/app-management/employee-recovery', '/neos[80 chars]ion'] != ['/ne[305 chars]fing/timecards', '/neostaffing/accountability'[31 chars]ion']\n\nFirst differing element 11:\n'/neostaffing/app-management/employee-reco",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_operational_shell.OperationalShellTest::test_desktop_logo_size_and_collapsed_state_are_shared_and_mobile_is_untouched",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: '!important' unexpectedly found in \"/* Sektor's compact desktop topbar, shared by Gateway operational nodes. */\\n.operational-node-topbar {\\n    display: flex; align-items: center; gap: 20px; padding: 10px 28px;\\n    height: 84px; min-height: 8",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_operational_shell.OperationalShellTest::test_mobile_node_menus_have_only_screen_links_and_portal_logout",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'Pretreat' not found in ['DUCC', 'Deice Operations', 'Coordinator', 'Deicer', 'Deice Log', 'Settings', 'Callout Management', 'NeoPortal']",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_operational_shell.OperationalShellTest::test_staffing_is_not_marked_as_operational_shell",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: b'data-operational-shell' unexpectedly found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n  ",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_page_assets.PageAssetsTest::test_every_fragment_exists_once_and_matches_its_source_digest",
+      "before": "FAIL",
+      "classification": "Confirmed application asset defect (D2)",
+      "verified_contract": "Only CSS25 manifest size/digest was stale; all committed CSS and historical provenance remain unchanged.",
+      "original_failure": "AssertionError: 18771 != 19118",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_shared_ux_hooks.SharedUxHooksTest::test_shift_flow_unassigned_list_has_a_bounded_scroll_area",
+      "before": "FAIL",
+      "classification": "Invalid authority fixture / obsolete roster",
+      "verified_contract": "Explicit app approval and current scroll-region roster replace unauthenticated fixture and retired list.",
+      "original_failure": "AssertionError: 'UNASSIGNED / NEEDS ATTENTION' not found in '{% extends \"base.html\" %}\\n{% block title %}NeoStaffing Shift Flow{% endblock %}\\n{% block content %}\\n<section class=\"neostaffing-shift-flow theme-staffing\" aria-labelledby=\"shift-flow-title\">\\n  {%",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_shell_metadata.ShellMetadataTest::test_base_template_uses_one_shared_csrf_heartbeat_without_scope_payload",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: 'X-CSRF-Token' not found in '<!doctype html>\\n<html lang=\"en\"{% if request.endpoint == \\'neosektor.driver_routing\\' and request.args.get(\\'tv\\') == \\'1\\' %} id=\"sektor-tv\"{% endif %}>\\n{% from \"_neo_brand.html\" import neo_brand, neo_brand_name ",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_current_cleanup_mobile_and_time_only_contracts",
+      "before": "FAIL",
+      "classification": "Invalid presentation fixture / obsolete controls",
+      "verified_contract": "Create real editable time segments, grant actual Staffing access, then inspect numeric HHMM/versioned node controls and current roster.",
+      "original_failure": "AssertionError: 'type=\"time\"' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta name=\"theme-co",
+      "after": "PASS",
+      "failure_events_after": 0
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_dashboard_order_and_normal_half_width_live_counts",
+      "before": "FAIL",
+      "classification": "Outdated presentation assertion",
+      "verified_contract": "Current rendered navigation, controls or owned CSS/JS replace retired markup/source assertions.",
+      "original_failure": "AssertionError: Lists differ: ['ebm[36 chars], 'discharge', 'stats', 'live-counts', 'employees', 'settings'] != ['ebm[36 chars], 'discharge', 'settings', 'live-counts', 'employees']\n\nFirst differing element 5:\n'stats'\n'settings'\n\nFirst list contains 1 addition",
+      "after": "PASS",
+      "failure_events_after": 0
+    }
+  ],
+  "validation": {
+    "release": {
+      "tests": "138",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "34.937"
+    },
+    "presentation-modules": {
+      "tests": "400",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "26.813"
+    },
+    "asset-delivery": {
+      "tests": "70",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "2.507"
+    },
+    "security": {
+      "tests": "574",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "47.039"
+    },
+    "postgres-verified": {
+      "tests": "135",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "72.725"
+    },
+    "browser": {
+      "tests": "137",
+      "failures": "3",
+      "errors": "0",
+      "skipped": "0",
+      "time": "794.378"
+    },
+    "browser-contracts": {
+      "tests": "4",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "27.543"
+    },
+    "login-browser-repro": {
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "22.134"
+    },
+    "core": {
+      "tests": 300,
+      "passed": 300,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 238.0
+    },
+    "javascript": {
+      "passed": 402,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0
+    }
+  },
+  "additional_browser_repairs": [
+    {
+      "id": "tests.browser.test_neofontlite.NeoFontLiteBrowserTest::test_mobile_vector_font",
+      "root_cause": "Obsolete seven-screen list; current nine identities and loaded glyph geometry verified in both engines",
+      "final": "PASS"
+    },
+    {
+      "id": "tests.browser.test_mobile_drawer.MobileDrawerBrowserTest::test_portal_whole_card_actions",
+      "root_cause": "Ordinary request must preserve denied grant; separate inactive-approval request exercises pending review",
+      "final": "PASS"
+    }
+  ]
+}

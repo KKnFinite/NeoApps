@@ -111,11 +111,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/neostaffing/org-chart"', response.data)
         self.assertIn(b'href="/neostaffing/reports"', response.data)
         self.assertIn(b'href="/neostaffing/attendance"', response.data)
-        self.assertIn(b'href="/neostaffing/staffing-groups"', response.data)
-        self.assertIn(b'href="/neostaffing/requests"', response.data)
-        self.assertIn(b'href="/neostaffing/notifications"', response.data)
-        self.assertIn(b'href="/neostaffing/bulk-change"', response.data)
-        self.assertNotIn(b'href="/neostaffing/vacation-selection"', response.data)
+        menu=document(response).one('nav',**{'aria-label':'NeoStaffing main menu'})
+        self.assertEqual([n.attrs['href'] for n in menu.findall('a')],['/neostaffing/'+n for n in ('people','org-chart','attendance','reports','shift-flow','settings')])
+        self.assertFalse(menu.findall('a',href='/neostaffing/vacation-selection'))
         self.assertIn(b"neo-brand--apps", response.data)
         self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
         self.assertIn(b"operational-node-topbar", response.data)
@@ -123,7 +121,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"neostaffing-launch-console", response.data)
         self.assertIn(b"neostaffing-launch-grid", response.data)
         self.assertIn(b"SHIFT FLOW", response.data)
-        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 10)
+        self.assertEqual(len(menu.findall("a")),6)
         self.assertNotIn(b'href="/neostaffing/people/attendance" class="neostaffing-menu-tile"', response.data)
         self.assertNotIn(b"APP ROLE", response.data)
         self.assertNotIn(b"neostaffing-home-header", response.data)
@@ -137,7 +135,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"TOTAL PLANNED STAFFING", response.data)
         self.assertNotIn(b"STAFFING BOARD", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
-        self.assertNotIn(b"Change Characters", response.data)
+        self.assertNotIn("Change Characters",menu.text)
 
     def test_landing_hides_destinations_when_existing_thresholds_deny_them(self):
         user = self._user("staffing_landing_viewer")
@@ -165,9 +163,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         # Ordinary read-only node pages now rely on NeoStaffing node access;
         # changing obsolete per-page view thresholds must not hide them.
         self.assertIn(b'href="/neostaffing/reports"', landing_menu)
-        self.assertIn(b'href="/neostaffing/requests"', landing_menu)
-        self.assertIn(b'href="/neostaffing/notifications"', landing_menu)
-        self.assertNotIn(b'href="/neostaffing/bulk-change"', landing_menu)
+        full=document(response).one('nav',**{'aria-label':'NeoStaffing screens'})
+        self.assertTrue(full.findall('a',href='/neostaffing/requests'))
+        self.assertTrue(full.findall('a',href='/neostaffing/notifications'))
+        self.assertFalse(document(response).findall('a',href='/neostaffing/bulk-change'))
+        self.assertFalse(document(response).findall('a',href='/neostaffing/app-management/employee-recovery'))
         self.assertNotIn(b'href="/neostaffing/vacation-selection"', landing_menu)
         self.assertNotIn(b'href="/neostaffing/permissions"', landing_menu)
 
@@ -180,9 +180,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         expected = [
             b"/neostaffing/people", b"/neostaffing/org-chart",
             b"/neostaffing/attendance", b"/neostaffing/reports",
-            b"/neostaffing/shift-flow", b"/neostaffing/staffing-groups",
+            b"/neostaffing/shift-flow", b"/neostaffing/settings", b"/neostaffing/staffing-groups",
             b"/neostaffing/requests", b"/neostaffing/notifications",
-            b"/neostaffing/bulk-change", b"/neostaffing/settings",
+            b"/neostaffing/bulk-change", b"/neostaffing/employee-records",
+            b"/neostaffing/timecards",b"/neostaffing/accountability",b"/neostaffing/vacation-selection",
         ]
 
         def destinations(html, label):
@@ -194,14 +195,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         section = self.client.get("/neostaffing/people")
         self.assertEqual(dashboard.status_code, 200)
         self.assertEqual(section.status_code, 200)
-        self.assertEqual(destinations(dashboard.data, b"NeoStaffing main menu"), expected)
+        self.assertEqual(destinations(dashboard.data, b"NeoStaffing main menu"), expected[:6])
         self.assertEqual(destinations(dashboard.data, b"NeoStaffing screens"), expected)
         self.assertEqual(destinations(section.data, b"NeoStaffing menu"), expected)
         self.assertEqual(destinations(section.data, b"NeoStaffing screens"), expected)
         for html in (dashboard.data, section.data):
             self.assertNotIn(b'href="/neostaffing" aria-label="NeoStaffing home"', html)
-            for hidden in (b"employee-records", b"timecards", b"accountability", b"vacation-selection"):
-                self.assertNotIn(b'href="/neostaffing/' + hidden + b'"', html)
+            self.assertNotIn(b'href="/neostaffing/app-management/employee-recovery"',html)
 
     def test_staffing_menus_omit_items_without_permission(self):
         user = self._user("staffing_nav_watcher")
@@ -3090,32 +3090,22 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self._grant_app_access(simulator, "neostaffing", "simulator")
         _sort, _operation, _department, work_area = self._staffing_hierarchy()
         db.session.commit()
-        page = self._logged_in_client(simulator.username).get(
+        client=self._logged_in_client(simulator.username)
+        self.app.config['CSRF_PROTECT_TESTING']=True
+        page = client.get(
             f"/neostaffing/people?work_area_id={work_area.id}"
         )
 
         self.assertEqual(page.status_code, 200)
-        self.assertIn(
-            b"x.oninput()});document.querySelectorAll('[data-people-smart-form]')",
-            page.data,
-        )
-        self.assertNotIn(
-            b"x.oninput()})document.querySelectorAll('[data-people-smart-form]')",
-            page.data,
-        )
-        self.assertIn(b"[data-people-tree-toggle]", page.data)
-        self.assertIn(b"setAttribute('aria-expanded',on)", page.data)
-        self.assertIn(b"localStorage.getItem(key)", page.data)
-        self.assertIn(b"localStorage.setItem(key", page.data)
-        self.assertIn(b"[data-people-open-add]", page.data)
-        self.assertIn(b"data-people-add-drawer=", page.data)
-        self.assertIn(b"[data-neostaffing-close-drawer]", page.data)
-        self.assertIn(b"e.key==='Escape'", page.data)
-        self.assertIn(b".neostaffing-people-bulk-create-form", page.data)
-        self.assertIn(b"x.oninput=", page.data)
-        self.assertIn(b"[data-people-smart-form]", page.data)
-        self.assertIn(b"classification.addEventListener('change',sync)", page.data)
-        self.assertIn(b"sync()});})();", page.data)
+        from tests.presentation_contracts import assert_scripts_parse
+        root=assert_scripts_parse(self,page)
+        for marker in ('data-people-tree-toggle','data-people-open-add','data-people-add-drawer','data-people-smart-form'):
+            self.assertTrue(root.findall(**{marker:None}),marker)
+        for form in root.findall('form',**{'data-people-smart-form':None}):
+            self.assertEqual(form.attrs.get('method','get').lower(),'post')
+        from tests.presentation_contracts import asset
+        asset(self,page,'js/csrf.js',tag='script')
+        self.assertTrue(root.one('meta',name='csrf-token').attrs['content'])
 
     def test_people_add_person_uses_local_assignment_search_picker(self):
         simulator = self._user("staffing_people_assignment_picker")

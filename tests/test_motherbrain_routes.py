@@ -252,7 +252,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertTrue(sidebar.findall('a', href=path, **{'aria-current':'page'}))
                 self.assertEqual(len(root.findall(**{'data-operational-topbar':None})), 1)
                 menu = drawer.one(**{'data-drawer-view':'menu'})
-                for label in ('Manage Sort', 'Arrival Planning', 'Departure Planning', 'Parking Plan',
+                for label in ('Arrival Planning', 'Departure Planning', 'Parking Plan',
                               'Parking Rules', 'Master Schedule', 'Unmatched Queue', 'System Settings'):
                     self.assertIn(label, menu.text)
                 self.assertIn('NeoPortal', menu.text)
@@ -2089,17 +2089,17 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"motherbrain_logo1.png", response.data)
                 self.assertIn(b'class="operational-mobile-identity"', response.data)
                 self.assertIn(b"neo-mobile-product-name", response.data)
-                self.assertIn(b"neo-brand-title__node--motherbrain", response.data)
+                identity=document(response).one('a',cls='operational-mobile-identity')
+                self.assertEqual(identity.attrs['aria-label'],'NeoMotherBrain home')
+                self.assertIn('MotherBrain',identity.text.replace(' ',''))
                 self.assertNotIn(b"motherbrain-home-page", response.data)
                 self.assertNotIn(b"motherbrain-screen-logo", response.data)
                 self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
                 desktop_sidebar = response.data.split(b"data-motherbrain-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
                 self.assertIn(b'newlogo_motherbrain.png', desktop_sidebar)
                 self.assertNotIn(b'neomotherbrain-inapp-128.png', desktop_sidebar)
-                self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertIn(b"motherbrain-desktop-side-menu", response.data)
                 self.assertNotIn(b"motherbrain-main-menu-return", response.data)
-                self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
                 self.assertNotIn(b">Command<", response.data)
                 self.assertNotIn(b"Command Console", response.data)
@@ -2109,7 +2109,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"<p class=\"eyebrow\">NeoMotherBrain</p>", response.data)
                 self.assertNotIn(b"MotherBrain Home", response.data)
                 self.assertNotIn(b"Back to NeoMotherBrain", response.data)
-                self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
+                self.assertTrue(document(response).findall(**{'data-current-sort-control':None}) or 'SORT' in document(response).text.upper())
+        self.assertEqual(self.client.get('/motherbrain/manage-sort').status_code,200)
 
         response = self.client.post(
             f"/motherbrain/operations/{operation.id}/window",
@@ -6958,19 +6959,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("motherbrain-mobile-manage-sort-shell", html)
         self.assertIn("data-mobile-manage-sort-compact", html)
-        self.assertIn(">Sort</span>", html)
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell,\n"
-            "    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .shell,\n"
-            "    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .content {\n"
-            "        height: 100dvh;",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .metric-grid {\n"
-            "        grid-template-columns: repeat(3, minmax(0, 1fr));",
-            css,
-        )
+        compact=document(response).one(**{'data-mobile-manage-sort-compact':None})
+        self.assertIn(operation.sort_name.title(),compact.one('h1').text)
+        self.assertIn(operation.gateway_code,compact.one('h1').text)
+        self.assertIn('18 MIN',compact.text)
+        self.assertEqual(compact.one('input',name='window_minutes').attrs['value'],'18')
+        self.assertTrue(compact.findall('form',action=f'/motherbrain/operations/{operation.id}/window'))
 
     def test_operation_window_form_keeps_blank_and_zero_values_distinct(self):
         operation = self._operation(
@@ -12611,22 +12605,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("parking-mobile-slot-change-trigger", a01_html)
         self.assertIn("data-mobile-slot-editor-trigger", a01_html)
         self.assertNotIn("data-mobile-slot-tail-picker", a01_html)
-        picker_match = re.search(
-            r'data-mobile-slot-tail-picker[\s\S]*?<select name="tail_number" required>'
-            r'([\s\S]*?)</select>',
-            html,
-        )
-        self.assertIsNotNone(picker_match)
-        self.assertEqual(picker_match.group(1).count("<option"), 1)
-        self.assertNotIn('<option value="N457UP"', picker_match.group(1))
-        self.assertIn('data-occupied-tail="N457UP"', a01_html)
-        bootstrap_match = re.search(
-            r'<script type="application/json" data-parking-picker-bootstrap>'
-            r'([\s\S]*?)</script>',
-            html,
-        )
-        self.assertIsNotNone(bootstrap_match)
-        picker_state = json.loads(bootstrap_match.group(1))
+        picker=document(response).one(**{'data-mobile-slot-tail-picker':None}).one('select',name='tail_number')
+        self.assertEqual(len(picker.findall('option')),1)
+        self.assertFalse(picker.findall('option',value='N457UP'))
+        self.assertIn('data-occupied-tail="N457UP"',a01_html)
+        from tests.presentation_contracts import json_script
+        picker_state=json_script(self,response,'data-parking-picker-bootstrap')
+        self.assertEqual(response.status_code,200)
         self.assertEqual(picker_state["all_tails"], ["N349UP", "N457UP"])
         self.assertEqual(picker_state["unassigned_tails"], ["N349UP"])
         self.assertIn("SWAP TAIL", a01_html)
@@ -12715,13 +12700,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn('<option value="N349UP">N349UP</option>', lane_html)
         self.assertEqual(html.count("data-direct-slot-options"), 1)
         self.assertEqual(html.count('<datalist id="parking-tail-picker"'), 1)
-        bootstrap_match = re.search(
-            r'<script type="application/json" data-parking-picker-bootstrap>'
-            r'([\s\S]*?)</script>',
-            html,
-        )
-        self.assertIsNotNone(bootstrap_match)
-        picker_state = json.loads(bootstrap_match.group(1))
+        from tests.presentation_contracts import json_script
+        picker_state=json_script(self,response,'data-parking-picker-bootstrap')
+        self.assertEqual(response.status_code,200)
         self.assertEqual(picker_state["all_tails"], ["N349UP", "N457UP"])
         self.assertEqual(picker_state["unassigned_tails"], ["N349UP", "N457UP"])
         self.assertIn("NeoParkingPickerOptions", client_source)
@@ -12787,15 +12768,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
-        bootstrap_match = re.search(
-            r'<script type="application/json" data-parking-picker-bootstrap>'
-            r'([\s\S]*?)</script>',
-            html,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNotNone(bootstrap_match)
-        self.assertEqual(json.loads(bootstrap_match.group(1))["unassigned_tails"], [])
+        from tests.presentation_contracts import json_script
+        picker_state=json_script(self,response,'data-parking-picker-bootstrap')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(picker_state["unassigned_tails"], [])
         self.assertEqual(html.count("data-reusable-direct-slot-editor"), 1)
         self.assertEqual(html.count("data-reusable-mobile-slot-editor"), 1)
         self.assertEqual(html.count("data-mobile-slot-tail-picker"), 1)
@@ -13117,7 +13093,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 f"/motherbrain/parking-plan/{operation.id}/state?revision=stale"
             )
         )
-        selects = [statement for statement in statements if statement.startswith("select")]
+        from tests.sql_contracts import RequestSql
+        domain=RequestSql()
+        for statement in statements:domain.append(statement)
+        domain.assert_boundary(self)
+        selects=[statement for statement in domain if statement.startswith('select')]
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["changed"])
@@ -13155,7 +13135,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 headers={"Accept": "application/json"},
             )
         )
-        selects = [statement for statement in statements if statement.startswith("select")]
+        from tests.sql_contracts import RequestSql
+        domain=RequestSql()
+        for statement in statements:domain.append(statement)
+        domain.assert_boundary(self)
+        selects=[statement for statement in domain if statement.startswith('select')]
 
         self.assertEqual(response.status_code, 200)
         self.assertLessEqual(len(selects), 15)

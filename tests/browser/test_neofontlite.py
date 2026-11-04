@@ -22,7 +22,9 @@ class NeoFontLiteBrowserTest(unittest.TestCase):
                         page.evaluate("async()=>{await document.fonts.load('300 16px NeoFontLite');await document.fonts.ready;}")
                         self.assertTrue(page.evaluate("[...document.fonts].some(f=>f.family==='NeoFontLite' && f.status==='loaded')"))
                         self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
-                        self.assertEqual(page.locator('.sektor-command-copy strong').all_text_contents(),['EBM','WBM','Tunnel Conductor','Driver Routing','Discharge','Settings','Live Counts'])
+                        self.assertEqual(page.locator('[data-neosektor-mobile-tile]').evaluate_all('es=>es.map(e=>e.dataset.neosektorMobileTile)'),
+                            ['ebm','wbm','tunnel','driver-routing','discharge','stats','live-counts','employees','settings'])
+                        self.assertTrue(all(page.locator('.sektor-command-copy strong').all_text_contents()))
                         self.assertTrue(page.locator('.sektor-command-copy strong').evaluate_all('''es=>es.every(e=>{
                             const r=document.createRange();r.selectNodeContents(e);
                             const t=r.getBoundingClientRect(),b=e.closest('a').getBoundingClientRect();

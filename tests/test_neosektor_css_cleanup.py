@@ -71,13 +71,14 @@ class NeoSektorCssCleanupTest(unittest.TestCase):
         # TV readability has its own viewport-gated block, not Discharge rules.
         self.assertEqual(discharge.count("@media"), 1)
         self.assertEqual(driver.count("@media"), 2)
-        tv = driver.split("@media (min-width:601px) and (min-height:601px) {", 1)[1]
-        self.assertIn("#sektor-tv {", tv)
-        self.assertIn("--tv-target-size:clamp(29px,min(4.8vw,7.2vh),77px)", tv)
-        self.assertLess(driver.index("#sektor-tv [data-driver-bay-name]"), driver.index("@media"))
-        self.assertGreater(driver.index("html:not(#sektor-tv)"), driver.index("@media"))
-        self.assertLess(discharge.index("#sektor-discharge .neosektor-discharge-row"), discharge.index("@media"))
-        self.assertGreater(discharge.index("body:has(#sektor-discharge)"), discharge.index("@media"))
+        self.assertIn('@media (orientation:landscape)',driver)
+        self.assertIn('#sektor-tv .driver-wave-label',driver)
+        self.assertIn('#sektor-tv [data-driver-routing] [data-pickup="front"] [data-driver-bay-name]',driver)
+        self.assertIn('font-size:15vh',driver)
+        self.assertLess(driver.index('#sektor-tv [data-driver-bay-name]'),driver.index('@media'))
+        self.assertGreater(driver.index('html:not(#sektor-tv)'),driver.index('@media'))
+        self.assertLess(discharge.index('#sektor-discharge .neosektor-discharge-row'),discharge.index('@media'))
+        self.assertGreater(discharge.index('body:has(#sektor-discharge)'),discharge.index('@media'))
 
     def test_retired_dashboard_classes_are_absent_and_live_menu_is_preserved(self):
         root = Path(__file__).resolve().parents[1]

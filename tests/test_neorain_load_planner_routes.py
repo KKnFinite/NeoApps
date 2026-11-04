@@ -135,8 +135,10 @@ class NeoRainLoadPlannerRoutesTest(unittest.TestCase):
         self.assertIn("neorain-mobile-contact-details", html)
         self.assertIn('id="mobile-load-planner-extension-', html)
         self.assertIn('name="radio_channel"', html)
-        self.assertIn('overflow-x: clip;', html)
-        self.assertIn('grid-template-columns: minmax(0, 1.3fr)', html)
+        from tests.presentation_contracts import asset_source
+        css=asset_source(self,response,'css/neorain_csp_load_planner_lineup.css',tag='link')
+        self.assertIn('overflow-x: clip;',css)
+        self.assertIn('grid-template-columns: minmax(0, 1.3fr)',css)
 
         self.client.get("/logout")
         self._login(self._user("mobile_lineup_viewer", "watcher"))

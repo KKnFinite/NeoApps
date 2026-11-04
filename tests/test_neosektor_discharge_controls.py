@@ -313,7 +313,10 @@ class DischargeControlsTest(unittest.TestCase):
             self.assertNotIn(b'MANUAL OVERRIDE', response.data)
             dom = document(response)
             self.assertEqual(len(dom.findall(**{'data-driver-priority-index': None})), 3)
-            self.assertEqual(dom.one(**{'data-driver-discharge-cut': None}).text, 'Discharge cut. Report to doors.')
+            cut=dom.one(**{'data-driver-discharge-cut':None})
+            if '?tv=1' in path:
+                self.assertEqual([n.text for n in cut.findall('span')],['DISCHARGE CUT.','REPORT TO DOORS.'])
+            else:self.assertEqual(cut.text.strip(),'Discharge cut. Report to doors.')
         tunnel = document(self.client.get('/neosektor/tunnel-conductor'))
         self.assertEqual(len(tunnel.findall(**{'data-priority-bay': None})), 5)
         self.assertEqual(len(tunnel.findall(**{'data-discharge-back': None})), 2)

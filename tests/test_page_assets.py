@@ -16,6 +16,29 @@ class PageAssetsTest(unittest.TestCase):
                 self.assertEqual(len(source), row['bytes'])
                 self.assertEqual(hashlib.sha256(source).hexdigest(), row['sha256'])
 
+    def test_served_fragments_keep_manifest_identity_and_conditional_cache(self):
+        from app import create_app
+        config = type('AssetFixture', (), {
+            'TESTING': True, 'SECRET_KEY': 'isolated-assets-only',
+            'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+            'SQLALCHEMY_TRACK_MODIFICATIONS': False,
+        })
+        client = create_app(config).test_client()
+        for row in CSS_SEQUENCE:
+            with self.subTest(file=row['file']):
+                path = '/static/css/' + row['file'] + '?v=w5-cache-contract'
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                # The manifest declares LF source identity; Windows checkout uses CRLF.
+                source = response.get_data().replace(b'\r\n', b'\n')
+                self.assertEqual(len(source), row['bytes'])
+                self.assertEqual(hashlib.sha256(source).hexdigest(), row['sha256'])
+                self.assertIn('text/css', response.content_type)
+                self.assertTrue(response.headers.get('ETag'))
+                cached = client.get(path, headers={'If-None-Match': response.headers['ETag']})
+                self.assertEqual(cached.status_code, 304)
+                self.assertEqual(cached.get_data(), b'')
+
     def test_each_page_retains_original_shared_and_node_cascade_positions(self):
         shared = page_stylesheets(None)
         for blueprint in ('auth', 'neomotherbrain', 'neostaffing', 'neoermac',

@@ -222,26 +222,29 @@ class ShellMetadataTest(unittest.TestCase):
         self.assertIn("{{ mobile_shell_label }}", template)
 
     def test_base_template_uses_one_shared_csrf_heartbeat_without_scope_payload(self):
-        with open("app/templates/base.html", encoding="utf-8") as template_file:
-            template = template_file.read()
-
-        start = template.index("data-google-live-poll-heartbeat")
-        heartbeat = template[start : template.index("{% endif %}", start)]
-        self.assertIn("{% if uses_google_live_poll_heartbeat %}", template)
-        self.assertEqual(template.count("data-google-live-poll-heartbeat"), 1)
-        self.assertIn("window.__neoGoogleLivePollHeartbeatActive", heartbeat)
-        self.assertIn("const HEARTBEAT_MIN_DELAY_MS = 55_000", heartbeat)
-        self.assertIn("const HEARTBEAT_JITTER_MS = 10_000", heartbeat)
-        self.assertIn('headers: { "X-Neo-Google-Live-Poll-Client": clientVersion }', heartbeat)
-        self.assertIn("payload?.continue_heartbeat !== false", heartbeat)
-        self.assertIn("[400, 401, 403, 410].includes(response.status)", heartbeat)
-        self.assertIn("runHeartbeat();", heartbeat)
-        self.assertEqual(heartbeat.count("window.setTimeout"), 1)
-        self.assertIn("X-CSRF-Token", template)
-        self.assertNotIn("operation_id", heartbeat)
-        self.assertNotIn("sort_date", heartbeat)
-        self.assertNotIn("google_range", heartbeat)
-        self.assertNotIn("body:", heartbeat)
+        from tests import test_local_launch_navigation as fixtures
+        from tests.presentation_contracts import asset_source
+        host=fixtures.LocalLaunchNavigationTest();host.setUp();self.addCleanup(host.tearDown)
+        host._asset_test_login()
+        host.app.config['CSRF_PROTECT_TESTING']=True
+        from unittest.mock import patch
+        with patch('app.services.google_motherbrain_live_poll_execution.google_motherbrain_live_poll_preflight',return_value={'status':'eligible'}):
+            response=host.client.get('/motherbrain')
+        root=__import__('tests.html_contracts',fromlist=['document']).document(response)
+        self.assertEqual(len(root.findall('script',**{'data-google-live-poll-heartbeat':None})),1)
+        heartbeat=root.one('script',**{'data-google-live-poll-heartbeat':None})
+        self.assertTrue(heartbeat.attrs.get('nonce'))
+        self.assertNotIn('operation_id',heartbeat.text);self.assertNotIn('sort_date',heartbeat.text)
+        csrf=asset_source(self,response,'js/csrf.js',tag='script')
+        self.assertIn("headers.set('X-CSRF-Token', token())",csrf)
+        self.assertIn("const token = () => meta.content",csrf)
+        self.assertTrue(root.one('meta',name='csrf-token').attrs['content'])
+        for needle in ('window.__neoGoogleLivePollHeartbeatActive','const HEARTBEAT_MIN_DELAY_MS = 55_000',
+            'const HEARTBEAT_JITTER_MS = 10_000','payload?.continue_heartbeat !== false',
+            '[400, 401, 403, 410].includes(response.status)','runHeartbeat();'):
+            self.assertIn(needle,heartbeat.text)
+        self.assertEqual(heartbeat.text.count('window.setTimeout'),1)
+        self.assertNotIn('google_range',heartbeat.text);self.assertNotIn('body:',heartbeat.text)
 
 
 if __name__ == "__main__":

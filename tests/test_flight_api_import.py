@@ -4891,49 +4891,29 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertEqual(pending_review_items_for_operation(operation), [])
 
     def test_flight_api_review_departure_rows_show_schedule_api_local_times_and_diff(self):
-        local_date = date.today()
-        next_date = local_date + timedelta(days=1)
-        operation = self._review_operation(sort_date=local_date)
-        mission = self._mission_for_operation(
-            operation,
-            mission_type="departure",
-            flight_number="UPS0910",
-            origin="RFD",
-            destination="SDF",
-            planned_datetime_local=datetime.combine(local_date, time(23, 30)),
-            planned_datetime_utc=datetime.combine(local_date, time(4, 30)),
-            arrival_status=None,
-        )
-        db.session.add(mission)
-        self._review_item(
-            operation,
-            mission_type="departure",
-            flight_number="5X910",
-            call_sign="UPS910",
-            origin="RFD",
-            destination="SDF",
-            revised_time_utc=datetime.combine(next_date, time(13, 0)),
-            review_reason="departure time mismatch",
-        )
-        db.session.commit()
-        self._login_motherbrain_role("review_departure_diagnostics", "simulator")
-
-        response = self.client.get(
-            f"/motherbrain/flight-api-review?operation_id={operation.id}"
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(
-            f"SCHED 23:30 Local {local_date:%b} {local_date.day}".encode(),
-            response.data,
-        )
-        self.assertIn(
-            f"API 08:00 Local {next_date:%b} {next_date.day}".encode(),
-            response.data,
-        )
-        self.assertIn(b"DIFF 510 MIN", response.data)
-        self.assertIn(b"departure time mismatch", response.data)
-        self.assertIn(b"Current STD: 23:30 / API STD: 08:00", response.data)
+        from zoneinfo import ZoneInfo
+        from datetime import timezone
+        for local_date,api_hour,difference in ((date(2026,8,29),'08:00',510),(date(2026,11,3),'08:00',510)):
+            with self.subTest(date=local_date):
+                next_date=local_date+timedelta(days=1)
+                self.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE']=datetime.combine(local_date,time(22))
+                operation=self._review_operation(sort_date=local_date)
+                planned=datetime.combine(local_date,time(23,30))
+                planned_utc=planned.replace(tzinfo=ZoneInfo('America/Chicago')).astimezone(timezone.utc).replace(tzinfo=None)
+                mission=self._mission_for_operation(operation,mission_type='departure',flight_number='UPS0910',
+                    origin='RFD',destination='SDF',planned_datetime_local=planned,planned_datetime_utc=planned_utc,arrival_status=None)
+                db.session.add(mission)
+                self._review_item(operation,mission_type='departure',flight_number='5X910',call_sign='UPS910',origin='RFD',destination='SDF',
+                    revised_time_utc=datetime.combine(next_date,time(13 if local_date.month==8 else 14)),review_reason='departure time mismatch')
+                db.session.commit();self._login_motherbrain_role('review_departure_diagnostics_'+str(local_date.month),'simulator')
+                response=self.client.get(f'/motherbrain/flight-api-review?operation_id={operation.id}')
+                self.assertEqual(response.status_code,200)
+                text=response.get_data(as_text=True)
+                self.assertIn(f'SCHED 23:30 Local {local_date:%b} {local_date.day}',text)
+                self.assertIn(f'API {api_hour} Local {next_date:%b} {next_date.day}',text)
+                self.assertIn(f'DIFF {difference} MIN',text)
+                self.assertIn('departure time mismatch',text)
+                self.assertIn(f'Current STD: 23:30 / API STD: {api_hour}',text)
 
     def test_flight_api_review_page_does_not_leak_api_key_value(self):
         operation = self._review_operation()

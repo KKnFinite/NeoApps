@@ -135,7 +135,7 @@ class StaffingShellTest(unittest.TestCase):
     def test_navigation_exact_order_desktop_split_and_mobile_links(self):
         endpoints=['people','org_chart','attendance','reports','shift_flow','settings',
                    'staffing_groups','change_requests','staffing_notifications','bulk_change',
-                   'employee_records','timecards','accountability','vacation_selection']
+                   'employee_records','employee_recovery','timecards','accountability','vacation_selection']
         with self.app.test_request_context():
             expected=[url_for('neostaffing.'+endpoint) for endpoint in endpoints]
         desktop=self.navigation()
@@ -143,7 +143,7 @@ class StaffingShellTest(unittest.TestCase):
         mobile=self.navigation(desktop=False)
         self.assertEqual(self.nav_links(mobile),expected)
         for html in (desktop,mobile):
-            self.assertEqual(html.count('UNDER CONSTRUCTION'),1)
+            self.assertEqual(html.count('UNDER CONSTRUCTION'),2)
             self.assertLess(html.index(f'href="{expected[5]}"'),html.index('UNDER CONSTRUCTION'))
             self.assertLess(html.index('UNDER CONSTRUCTION'),html.index(f'href="{expected[6]}"'))
             self.assertNotIn('>Home<',html)
@@ -180,14 +180,14 @@ class StaffingShellTest(unittest.TestCase):
         html=self.client.get('/neostaffing/people').get_data(as_text=True)
         rail=html.split('data-operational-sidebar ',1)[1].split('</aside>',1)[0]
         mobile=html.split('id="neo-mobile-drawer"',1)[1].split('</aside>',1)[0]
-        self.assertEqual(rail.count('UNDER CONSTRUCTION'),1)
-        self.assertEqual(mobile.count('UNDER CONSTRUCTION'),1)
+        self.assertEqual(rail.count('UNDER CONSTRUCTION'),2)
+        self.assertEqual(mobile.count('UNDER CONSTRUCTION'),2)
         self.assertEqual(self.nav_links(rail),self.nav_links(mobile))
 
     def test_construction_heading_disappears_when_all_eight_links_denied(self):
         denied={'neostaffing.staffing_groups.view', 'neostaffing.change_requests.view',
                 'neostaffing.bulk_change.use', 'neostaffing.people.view',
-                'neostaffing.vacation_selection.view'}
+                'neostaffing.vacation_selection.view','neostaffing.people.edit'}
         for desktop in (True,False):
             html=self.navigation(desktop=desktop,denied=denied)
             self.assertNotIn('UNDER CONSTRUCTION',html)

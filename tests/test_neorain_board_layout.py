@@ -7,6 +7,10 @@ TEMPLATES = Path(__file__).resolve().parents[1] / "app" / "templates" / "neonode
 
 
 class NeoRainBoardLayoutTest(unittest.TestCase):
+    def rendered(self):
+        from tests.neorain_presentation_fixture import boards
+        return boards(self)[1]
+
     def test_aircraft_only_summaries_and_independent_collapsed_crew_admin(self):
         inbound = (TEMPLATES / "inbound.html").read_text()
         outbound = (TEMPLATES / "outbound.html").read_text()
@@ -21,135 +25,107 @@ class NeoRainBoardLayoutTest(unittest.TestCase):
         self.assertIn('data-neorain-board-collapse', inbound)
 
     def test_summary_grid_and_board_exit_remain_consistent(self):
-        common = (TEMPLATES / "_board_layout_shared.html").read_text()
-        self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr))", common)
-        self.assertIn("grid-template-columns: repeat(6, minmax(0, 1fr))", common)
-        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", common)
-        self.assertIn("font-size: 1.035rem", common)
-        self.assertIn("font-size: .9rem", common)
-        self.assertIn("font-size: 1.125rem", common)
-        self.assertIn("padding: 4px 4px 4px 40px", common)
-        self.assertIn("body.blueprint-neorain.operational-board-view .operational-board-exit", common)
-        self.assertIn("left: 8px;\n        right: auto;", common)
-        self.assertNotIn("left: auto;\n        right: 8px;", common)
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        for response in self.rendered().values():
+            root=document(response)
+            self.assertEqual(len(root.findall(**{'data-neorain-summary-total':None})),1)
+            self.assertTrue(root.findall('button',**{'data-operational-board-toggle':None}))
+            self.assertTrue(root.findall('button',**{'data-operational-board-toggle':None,'aria-label':'Exit Board View'}))
+            css=asset_source(self,response,'css/neorain_csp_board_layout_shared.css',tag='link')
+            for geometry in ('repeat(3, minmax(0, 1fr))','repeat(6, minmax(0, 1fr))','repeat(2, minmax(0, 1fr))'):
+                self.assertIn(geometry,css)
+            self.assertIn('body.blueprint-neorain.operational-board-view .operational-board-exit',css)
 
     def test_white_neutral_text_preserves_semantic_status_colors(self):
-        common = (TEMPLATES / "_board_layout_shared.html").read_text()
-        late = (TEMPLATES / "_delay_panel_shared.html").read_text()
-        self.assertIn("color: #fff", common)
-        self.assertIn(".neorain-mobile-column-head span", common)
-        self.assertIn(".neorain-crew-admin-ramp-option", common)
-        self.assertIn(".neorain-delay-existing-copy", common)
-        self.assertIn(".neorain-late-inclusion-control[data-neorain-included=\"false\"]", common)
-        self.assertIn("input::placeholder", common)
-        self.assertIn("color: #f2a3aa", late)
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        response=self.rendered()['outbound']
+        common=asset_source(self,response,'css/neorain_csp_board_layout_shared.css',tag='link')
+        late=asset_source(self,response,'css/neorain_csp_delay_panel_shared.css',tag='link')
+        self.assertIn('color: #fff',common)
+        self.assertIn('.neorain-mobile-column-head span',common)
+        self.assertIn('input::placeholder',common)
+        self.assertIn('color: #f2a3aa',late)
+        self.assertTrue(document(response).findall(**{'data-rain-override-field':'included'}))
 
     def test_outbound_columns_fit_the_viewport_and_elmac_follows_center_fuel(self):
         import re
-
-        desktop = (TEMPLATES / "_outbound_content.html").read_text()
-        mobile = (TEMPLATES / "_outbound_mobile_content.html").read_text()
-        styles = (TEMPLATES / "_board_layout_shared.html").read_text()
-        delay_styles = (TEMPLATES / "_delay_panel_shared.html").read_text()
-        base_styles = (
-            TEMPLATES.parents[2] / "static" / "css" / "22-neorain.css"
-        ).read_text()
-
-        cols = re.findall(
-            r'<col data-neorain-outbound-column="([^"]+)" style="width: ([0-9.]+)%">',
-            desktop,
-        )
-        self.assertEqual(len(cols), 21)
-        self.assertAlmostEqual(sum(float(width) for _name, width in cols), 100)
-        self.assertEqual(
-            [name for name, _width in cols][11:15],
-            ["neo-fuel", "center-fuel", "elmac", "ramp-lc"],
-        )
-        self.assertLess(desktop.index('data-label="Center Fuel"'), desktop.index('data-label="eLMAC"'))
-        self.assertLess(desktop.index('data-label="eLMAC"'), desktop.index("milestone_cell(row, 'ramp_load_complete'"))
-        self.assertLess(mobile.index("<dt>CENTER FUEL</dt>"), mobile.index("<dt>eLMAC</dt>"))
-        self.assertLess(mobile.index("<dt>eLMAC</dt>"), mobile.index("<dt>RAMP LC</dt>"))
-        self.assertIn("neorain-outbound-table--flight-board", desktop)
-        self.assertIn(">DELAY ({{ row.delay_info|length }})", desktop)
-        self.assertIn("table-layout: fixed", styles)
-        self.assertIn("max-width: 100%;", styles)
-        self.assertIn("padding: 7px 3px", styles)
-        self.assertIn('overflow-x: hidden;', styles)
-        self.assertIn("@media (min-width: 901px) and (max-width: 1440px)", styles)
-        self.assertIn("@media (max-width: 1440px)", base_styles)
-        self.assertIn("@media (max-width: 1440px)", delay_styles)
-        self.assertIn("neorain-mobile-board", base_styles)
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        response=self.rendered()['outbound'];root=document(response)
+        table=root.one('table',cls='neorain-outbound-table')
+        cols=table.findall('col');self.assertEqual(len(cols),21)
+        css=asset_source(self,response,'css/csp_compatibility.css',tag='link')
+        widths=[]
+        for col in cols:
+            self.assertNotIn('style',col.attrs)
+            cls=col.attrs['class']
+            width=re.search(r'\.'+re.escape(cls)+r'\s*\{\s*width:\s*([0-9.]+)%',css)
+            self.assertIsNotNone(width,cls);widths.append(float(width.group(1)))
+        self.assertAlmostEqual(sum(widths),100)
+        self.assertEqual([n.attrs['data-neorain-outbound-column'] for n in cols][11:15],['neo-fuel','center-fuel','elmac','ramp-lc'])
+        headers=[n.text for n in table.one('thead').findall('th')]
+        self.assertLess(headers.index('CENTER FUEL'),headers.index('eLMAC'));self.assertLess(headers.index('eLMAC'),headers.index('RAMP LC'))
+        mobile=root.one(**{'data-neorain-mobile-board':'outbound'})
+        labels=[n.text for n in mobile.findall('dt')]
+        self.assertLess(labels.index('CENTER FUEL'),labels.index('eLMAC'));self.assertLess(labels.index('eLMAC'),labels.index('RAMP LC'))
+        self.assertTrue(table.findall(**{'data-neorain-delay-toggle':None}))
 
     def test_outbound_fuel_labels_not_repeated_and_both_columns_centered(self):
-        desktop = (TEMPLATES / "_outbound_content.html").read_text()
-        mobile = (TEMPLATES / "_outbound_mobile_content.html").read_text()
-        styles = (TEMPLATES / "_board_layout_shared.html").read_text()
-
-        self.assertIn("<th>NEO FUEL</th><th>CENTER FUEL</th>", desktop)
-        self.assertNotIn('class="neorain-fuel-source"', desktop)
-        self.assertNotIn("FUEL · {{ row.fuel_source|upper }}", desktop)
-        self.assertIn("<dt>NEO FUEL</dt>", mobile)
-        self.assertNotIn("NEO FUEL · {{ row.fuel_source|upper }}", mobile)
-        self.assertIn('td[data-label="Neo Fuel"], td[data-label="Center Fuel"]', styles)
-        self.assertIn("th:nth-child(12), th:nth-child(13)", styles)
-        self.assertIn(".neorain-fuel-cell > span", styles)
-        self.assertIn("text-align: center;", styles)
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        response=self.rendered()['outbound'];root=document(response)
+        table=root.one('table',cls='neorain-outbound-table')
+        headers=[n.text for n in table.one('thead').findall('th')]
+        self.assertEqual(headers.count('NEO FUEL'),1);self.assertEqual(headers.count('CENTER FUEL'),1)
+        self.assertFalse(table.findall(cls='neorain-fuel-source'))
+        self.assertTrue(root.one(**{'data-neorain-mobile-board':'outbound'}).findall('dt'))
+        css=asset_source(self,response,'css/neorain_csp_board_layout_shared.css',tag='link')
+        self.assertIn('td[data-label="Neo Fuel"], td[data-label="Center Fuel"]',css)
+        self.assertIn('text-align: center;',css)
 
     def test_inbound_mobile_status_does_not_truncate_and_headers_align(self):
-        shared = (TEMPLATES / "_delay_panel_shared.html").read_text()
-        inbound = (TEMPLATES / "_inbound_mobile_content.html").read_text()
-        outbound = (TEMPLATES / "_outbound_mobile_content.html").read_text()
-        self.assertIn('--neorain-inbound-columns:', shared)
-        self.assertIn('data-neorain-mobile-board="inbound"] .neorain-mobile-column-head', shared)
-        self.assertIn('data-neorain-mobile-board="inbound"] .neorain-mobile-mission-grid', shared)
-        self.assertIn('grid-template-columns: var(--neorain-inbound-columns)', shared)
-        self.assertIn('span[data-neorain-display="status"]', shared)
-        self.assertIn('white-space: normal;', shared)
-        self.assertIn('overflow-wrap: anywhere;', shared)
-        self.assertIn('text-overflow: clip;', shared)
-        self.assertIn('data-neorain-mobile-board="inbound"', inbound)
-        self.assertIn('data-neorain-display="status"', inbound)
-        self.assertIn('data-neorain-mobile-board="outbound"', outbound)
-        self.assertNotIn('--neorain-inbound-columns:', outbound)
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        response=self.rendered()['inbound'];root=document(response)
+        mobile=root.one(**{'data-neorain-mobile-board':'inbound'})
+        self.assertEqual([n.text for n in mobile.findall(role='columnheader')],['FLIGHT','TAIL','ORIGIN','PARKING','ETA','BLOCK-IN','+/-'])
+        self.assertIn('UPS0911',mobile.text)
+        css=asset_source(self,response,'css/neorain_csp_delay_panel_shared.css',tag='link')
+        for declaration in ('--neorain-inbound-columns:','grid-template-columns: var(--neorain-inbound-columns)',
+            'white-space: normal;','overflow-wrap: anywhere;','text-overflow: clip;'):
+            self.assertIn(declaration,css)
+        self.assertTrue(root.findall(**{'data-neorain-display':'status'}))
 
     def test_mobile_inbound_and_outbound_columns_center_and_keep_full_flight_numbers(self):
-        shared = (TEMPLATES / "_delay_panel_shared.html").read_text()
-        inbound = (TEMPLATES / "_inbound_mobile_content.html").read_text()
-        outbound = (TEMPLATES / "_outbound_mobile_content.html").read_text()
-        self.assertIn('--neorain-outbound-columns:', shared)
-        self.assertIn('minmax(0, 1.6fr)', shared)
-        self.assertIn('data-neorain-mobile-board="outbound"] .neorain-mobile-column-head', shared)
-        self.assertIn('data-neorain-mobile-board="outbound"] .neorain-mobile-mission-grid', shared)
-        self.assertIn('grid-template-columns: var(--neorain-outbound-columns);', shared)
-        self.assertIn('grid-template-columns: var(--neorain-inbound-columns);', shared)
-        self.assertIn('.neorain-mobile-board .neorain-mobile-column-head > span', shared)
-        self.assertIn('place-items: center;', shared)
-        self.assertIn('.neorain-mobile-mission-grid > .neorain-mobile-mission-open', shared)
-        self.assertIn('.neorain-mobile-mission-grid > .neorain-mobile-time', shared)
-        self.assertIn('.neorain-mobile-mission-grid > .neorain-mobile-inclusion', shared)
-        self.assertIn('.neorain-mobile-mission-grid > :first-child strong', shared)
-        self.assertIn('overflow-wrap: anywhere;', shared)
-        self.assertIn('text-overflow: clip;', shared)
-        self.assertIn('data-neorain-mobile-board="inbound"', inbound)
-        self.assertIn('data-neorain-mobile-board="outbound"', outbound)
-        self.assertIn('data-neorain-mobile-row-open', inbound)
-        self.assertIn('data-neorain-mobile-row-open', outbound)
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        for name,response in self.rendered().items():
+            mobile=document(response).one(**{'data-neorain-mobile-board':name})
+            self.assertIn('UPS0911' if name=='inbound' else 'UPS0910',mobile.text)
+            self.assertTrue(mobile.findall(**{'data-neorain-mobile-row-open':None}))
+            self.assertEqual(len(mobile.findall(role='columnheader')),7 if name=='inbound' else 8)
+            css=asset_source(self,response,'css/neorain_csp_delay_panel_shared.css',tag='link')
+            self.assertIn(f'grid-template-columns: var(--neorain-{name}-columns);',css)
+            self.assertIn('place-items: center;',css)
+            self.assertIn('text-overflow: clip;',css)
 
     def test_inbound_outbound_share_full_width_board_layout(self):
-        common = (TEMPLATES / "_board_layout_shared.html").read_text()
-        self.assertIn("table-layout: fixed", common)
-        self.assertIn("overflow-x: hidden", common)
-        self.assertIn("position: sticky", common)
-        self.assertIn("height: 100dvh", common)
-        self.assertIn("sessionStorage.setItem(boardKey", common)
-        self.assertIn("sessionStorage.setItem(scrollKey", common)
-        for name in ("inbound", "outbound"):
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        for name,response in self.rendered().items():
             with self.subTest(board=name):
-                template = (TEMPLATES / f"{name}.html").read_text()
-                self.assertIn(f'data-neorain-board-page="{name}"', template)
-                self.assertIn("data-neorain-board-collapse", template)
-                self.assertIn("data-neorain-board-support", template)
-                self.assertIn('_board_layout_shared.html', template)
+                root=document(response)
+                self.assertTrue(root.findall(**{'data-neorain-board-page':name}))
+                self.assertTrue(root.findall(**{'data-neorain-board-collapse':None}))
+                self.assertTrue(root.findall(**{'data-neorain-board-support':None}))
+                css=asset_source(self,response,'css/neorain_csp_board_layout_shared.css',tag='link')
+                for declaration in ('table-layout: fixed','overflow-x: hidden','position: sticky','height: 100dvh'):
+                    self.assertIn(declaration,css)
+                scripts='\n'.join(n.text for n in root.findall('script') if not n.attrs.get('src'))
+                self.assertIn('sessionStorage.setItem(boardKey',scripts)
+                self.assertIn('sessionStorage.setItem(scrollKey',scripts)
 
 if __name__ == "__main__":
     unittest.main()

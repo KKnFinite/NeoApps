@@ -473,6 +473,18 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 request.click(position={'x':5,'y':5})
             # Playwright's integration-blocking route can follow the local redirect.
             self.assertIn(posted.value.status,(200,302))
+            # N01: a normal request cannot undo an administrator's denial.
+            expect(page.locator('button[data-portal-app="neostaffing"]')).to_be_visible()
+            self.assertEqual(context.request.get(self.origin+'/neostaffing',max_redirects=0).status,302)
+            with self.app.app_context():
+                access=PortalAppAccess.query.filter_by(user_id=user_id,app_code='neostaffing').one()
+                self.assertEqual(access.status,'denied')
+                # Separate controlled fixture: inactive prior approval may request review,
+                # while remaining unauthorized until explicit administrator approval.
+                access.status='approved';access.is_active=False;db.session.commit()
+            self.ready(page,'/portal')
+            with page.expect_response(lambda r:r.url.endswith('/portal/request-access') and r.request.method=='POST'):
+                page.locator('button[data-portal-app="neostaffing"]').click(position={'x':5,'y':5})
             pending=page.locator('article[data-portal-app="neostaffing"]')
             expect(pending).to_have_attribute('aria-disabled','true')
             self.assertEqual(pending.locator('a,button,input').count(),0)

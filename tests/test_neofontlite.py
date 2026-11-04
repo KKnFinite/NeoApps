@@ -83,5 +83,11 @@ class NeoFontLiteTest(unittest.TestCase):
         self.assertIn('@media (max-width: 900px)',css)
         self.assertIn('body .gateway-mobile-header .neo-mobile-product-name',css)
         self.assertNotIn('!important',css)
-        template=(ROOT/'app/templates/base.html').read_text()
-        self.assertIn("{% if is_rfd_hub_page or is_sektor_dashboard %}\n    <link rel=\"stylesheet\" href=\"{{ url_for('static', filename='css/neofontlite.css'",template)
+        from tests import test_local_launch_navigation as fixtures
+        from tests.presentation_contracts import asset
+        host=fixtures.LocalLaunchNavigationTest();host.setUp();self.addCleanup(host.tearDown)
+        host._asset_test_login()
+        for path,media in (('/rfd',None),('/neosektor',None),('/motherbrain/manage-sort','(min-width: 901px)')):
+            with self.subTest(path=path):
+                link=asset(self,host.client.get(path),'css/neofontlite.css',tag='link')
+                self.assertEqual(link.attrs.get('media'),media)

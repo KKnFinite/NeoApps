@@ -172,20 +172,31 @@ class NeoFontPlainTest(unittest.TestCase):
             self.assertIn(f'NeoFontPlain-{style}.woff2', preview)
         for sample in ('ABCDEFGHIJKLM', 'abcdefghijklm', '0123456789', 'font-size:12px', 'font-size:14px', 'font-size:16px'):
             self.assertIn(sample, preview)
-        for directory in (ROOT/'app/templates', ROOT/'app/static/css', ROOT/'app/static/js'):
-            for path in directory.rglob('*'):
-                if path.is_file() and path.suffix in ('.html', '.css', '.js'):
-                    if path.name != 'neofontplain.css':
-                        self.assertNotIn('NeoFontPlain', path.read_text(encoding='utf-8'), str(path))
-        base = (ROOT/'app/templates/base.html').read_text(encoding='utf-8')
-        self.assertIn("{% if is_gateway_typography_page %}", base)
-        self.assertIn("filename='css/neofontplain.css'", base)
+        from tests import test_local_launch_navigation as fixtures
+        from tests.presentation_contracts import asset
+        from tests.html_contracts import document
+        host=fixtures.LocalLaunchNavigationTest();host.setUp();self.addCleanup(host.tearDown)
+        host._asset_test_login()
+        from app.models import User, PortalAppAccess
+        from app.extensions import db
+        user=User.query.filter_by(username='Kessler').one()
+        db.session.add(PortalAppAccess(user_id=user.id,app_code='neostaffing',status='approved',role='master',is_active=True));db.session.commit()
+        for page in ('/rfd','/motherbrain/manage-sort','/neosektor','/neostaffing'):
+            response=host.client.get(page)
+            asset(self,response,'css/neofontplain.css',tag='link')
+            self.assertEqual(len([n for n in document(response).findall('link',rel='preload',**{'as':'font'}) if '/neofontplain/' in n.attrs['href']]),2)
+        login=host.app.test_client().get('/login')
+        self.assertFalse([n for n in document(login).findall('link',rel='stylesheet') if 'neofontplain.css' in n.attrs['href']])
         css = (ROOT/'app/static/css/neofontplain.css').read_text()
         self.assertEqual(css.count('@font-face'), 2)
         self.assertIn('--font-sans: NeoFontPlain, sans-serif', css)
         self.assertIn('font-synthesis: none', css)
         self.assertNotIn('@font-face', (ROOT/'app/static/css/neosektor_live_counts.css').read_text())
-        self.assertIn("{% if is_neosektor_live_counts_page %}\n    <link rel=\"stylesheet\" href=\"{{ url_for('static', filename='css/neosektor_live_counts.css'", base)
+        from tests import test_neosektor_discharge_controls as sektor
+        operational=sektor.DischargeControlsTest();operational.setUp();self.addCleanup(operational.tearDown)
+        response=operational.client.get('/neosektor/live-counts')
+        self.assertEqual(response.status_code,200)
+        asset(self,response,'css/neosektor_live_counts.css',tag='link')
 
 
 if __name__ == '__main__':

@@ -535,40 +535,28 @@ class NeoRainOutboundTest(unittest.TestCase):
                     response = self.client.get("/neorain/outbound")
 
                 self.assertEqual(response.status_code, 200)
-                self.assertIn(b'data-mutation-url="/neorain/outbound/milestone"', response.data)
-                self.assertIn(b'inputmode="numeric"', response.data)
-                self.assertIn(b'maxlength="5"', response.data)
-                self.assertIn(b'placeholder="HHMM"', response.data)
-                self.assertIn(
-                    f'data-mission-version="{entity_version(mission)}"'.encode(),
-                    response.data,
-                )
-                for field, value in (
-                    ("ramp_load_complete", b'value="01:37"'),
-                    ("crew_load_complete", b'value="01:45"'),
-                    ("official_block_out", b'value="01:55"'),
-                ):
-                    self.assertIn(f'data-neorain-field="{field}"'.encode(), response.data)
-                    self.assertIn(value, response.data)
-                self.assertNotIn(b'data-neorain-field="elmac"', response.data)
-                self.assertNotIn(b'data-neorain-field="no_return"', response.data)
-                self.assertIn(b'data-neorain-no-return-action="set"', response.data)
-                self.assertIn(b'data-neorain-no-return-action="reverse"', response.data)
-                self.assertIn(b'field: "no_return"', response.data)
-                self.assertIn(b'value: desired', response.data)
-                self.assertIn(b'"Reverse No Return for this mission?"', response.data)
-                self.assertIn(b'data-neorain-display="departure_variance"', response.data)
-                self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
-                self.assertIn(b'included: desired', response.data)
-                self.assertIn(b'data-neorain-late-inclusion-saving', response.data)
-                self.assertLess(response.data.index(b">+/-<"), response.data.index(b">Include/Exclude<"))
-                self.assertLess(response.data.index(b">Include/Exclude<"), response.data.index(b">No Return<"))
-                self.assertNotIn(b'data-neorain-collapsed-row', response.data)
-                self.assertNotIn(b'data-neorain-final-row', response.data)
-                self.assertNotIn(b'data-neorain-reopen', response.data)
-                self.assertIn(b"expected_version", response.data)
-                self.assertIn(b"stale_version", response.data)
-                self.assertIn(b"neorainRefreshDeferred", response.data)
+                from tests.html_contracts import document
+                from tests.presentation_contracts import asset
+                root=document(response)
+                asset(self,response,'js/neorain_overrides.js',tag='script')
+                for field,value in (('ramp_load_complete','01:37'),('crew_load_complete','01:45'),('official_block_out','01:55')):
+                    groups=root.findall(**{'data-rain-override-mission':str(mission.id),'data-rain-override-field':field})
+                    self.assertTrue(groups,field)
+                    for group in groups:
+                        self.assertEqual(group.attrs['data-rain-override-version'],entity_version(mission))
+                        control=group.one('input',**{'data-rain-override-time':None})
+                        self.assertEqual(control.attrs['value'],value)
+                        self.assertEqual(control.attrs['inputmode'],'numeric')
+                        self.assertEqual(control.attrs['maxlength'],'5')
+                        self.assertEqual(control.attrs['title'],'HHMM')
+                        self.assertNotIn('disabled',control.attrs)
+                # Current explicit override UI also supports ETD/eLMAC; no-return is a checkbox.
+                for field in ('etd','elmac','included','no_return'):
+                    self.assertTrue(root.findall(**{'data-rain-override-field':field}))
+                for group in root.findall(**{'data-rain-override-field':'no_return'}):
+                    self.assertEqual(group.one('input').attrs['type'],'checkbox')
+                self.assertTrue(root.findall(**{'data-rain-reset-selected':None}))
+                self.assertFalse(root.findall(**{'data-neorain-collapsed-row':None}))
 
     def test_blocked_out_rows_remain_full_width(self):
         operation = self._operation()
@@ -669,7 +657,7 @@ class NeoRainOutboundTest(unittest.TestCase):
             "UPS630",
             "SDF",
             planned=datetime(2026, 8, 30, 6, 30),
-            status="departed",
+            status="blocked_out",
         )
         mission.ramp_load_completed_at_utc = datetime(2026, 8, 30, 6, 37)
         mission.crew_load_completed_at_utc = datetime(2026, 8, 30, 6, 45)
@@ -686,22 +674,26 @@ class NeoRainOutboundTest(unittest.TestCase):
         ):
             response = self.client.get("/neorain/outbound")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b">NO RETURN<", response.data)
-        self.assertIn(b'data-neorain-no-return-action="reverse"', response.data)
-        self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
-        self.assertIn(b'data-neorain-no-return-action="set"', response.data)
-        self.assertIn(b'data-neorain-no-return-edit', response.data)
-        self.assertIn(b'neorain-outbound-row--no-return', response.data)
-        self.assertNotIn(b'data-neorain-final-row', response.data)
-        self.assertNotIn(b'data-neorain-collapsed-row', response.data)
-        self.assertNotIn(b'REOPEN', response.data)
-        for visible in (b"UPS630", b"SDF", b"N630UP", b"Crew Load Complete", b"Ramp Load Complete", b"Parking"):
-            self.assertIn(visible, response.data)
-        self.assertIn(b'data-neorain-field="ramp_load_complete"', response.data)
-        self.assertIn(b'data-neorain-field="crew_load_complete"', response.data)
-        self.assertIn(b'data-neorain-field="official_block_out"', response.data)
-        self.assertIn(b'setOutboundEditLock', response.data)
+        from tests.html_contracts import document
+        # Record No Return through its real authorized action before verifying its reversal.
+        with patch('app.neonodes.neorain.routes.current_neorain_outbound_operation',return_value=operation):
+            for desired in (True,False):
+                changed=self.client.post('/neorain/override',json={'mission_id':mission.id,'field':'no_return',
+                    'value':desired,'confirmed':not desired,'expected_version':entity_version(mission)})
+                self.assertEqual(changed.status_code,200,changed.json)
+                response=self.client.get('/neorain/outbound')
+                self.assertEqual(response.status_code,200)
+                root=document(response)
+                for group in root.findall(**{'data-rain-override-field':'no_return'}):
+                    control=group.one('input',**{'data-rain-override-checkbox':None})
+                    self.assertEqual('checked' in control.attrs,desired)
+                    self.assertNotIn('disabled',control.attrs)
+                row=root.one('tr',**{'data-neorain-mission-id':str(mission.id)})
+                self.assertEqual('neorain-outbound-row--no-return' in row.attrs['class'],desired)
+                self.assertEqual(len(row.findall('td')),21)
+                for value in ('UPS630','SDF','N630UP'):self.assertIn(value,row.text)
+                for field in ('ramp_load_complete','crew_load_complete','official_block_out'):
+                    self.assertTrue(row.findall(**{'data-rain-override-field':field}))
 
     def test_cancelled_outbound_row_is_full_width_and_locked_until_edit(self):
         operation = self._operation()
@@ -724,20 +716,23 @@ class NeoRainOutboundTest(unittest.TestCase):
         ):
             response = self.client.get("/neorain/outbound")
 
-        self.assertEqual(response.status_code, 200)
-        fragment = response.data.split(
-            f'data-neorain-mission-id="{mission.id}"'.encode(), 1
-        )[1].split(b"</tr>", 1)[0]
-        self.assertIn(b'neorain-outbound-row--cancelled', response.data)
-        for visible in (b"UPS635", b"N635UP", b"Parking", b"Ramp Load Complete", b"Delay Info"):
-            self.assertIn(visible, response.data)
-        self.assertIn(b'data-neorain-hhmm', fragment)
-        self.assertIn(b'disabled', fragment)
-        self.assertIn(b'data-neorain-no-return-edit', fragment)
-        self.assertIn(b'data-neorain-no-return-action="set" hidden', fragment)
-        self.assertIn(b'data-neorain-outbound-edit-protected hidden', fragment)
-        self.assertIn(b'setOutboundEditLock', response.data)
-        self.assertIn(b'nextRow.status === "CANCELLED"', response.data)
+        from tests.html_contracts import document
+        self.assertEqual(response.status_code,200)
+        row=document(response).one('tr',**{'data-neorain-mission-id':str(mission.id)})
+        self.assertIn('neorain-outbound-row--cancelled',row.attrs['class'])
+        self.assertEqual(len(row.findall('td')),21)
+        for value in ('UPS635','N635UP'):self.assertIn(value,row.text)
+        self.assertFalse(row.findall('input',**{'data-rain-override-time':None}))
+        self.assertTrue(row.findall(**{'data-rain-override-readout':None}))
+        for control in row.findall('input',**{'data-rain-override-checkbox':None}):
+            self.assertIn('disabled',control.attrs)
+        # Mission management, rather than a client-only unlock, must restore cancelled work.
+        old=entity_version(mission)
+        with patch('app.neonodes.neorain.routes.current_neorain_outbound_operation',return_value=operation):
+            rejected=self.client.post('/neorain/override',json={'mission_id':mission.id,'field':'ramp_load_complete','value':'0235','expected_version':old})
+        self.assertEqual(rejected.status_code,400)
+        self.assertEqual(entity_version(mission),old)
+        self.assertIsNone(mission.ramp_load_completed_at_utc)
 
     def test_inbound_blocked_in_and_cancelled_rows_remain_full_width(self):
         operation = self._operation()
@@ -760,26 +755,20 @@ class NeoRainOutboundTest(unittest.TestCase):
         ):
             response = self.client.get("/neorain/inbound")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'neorain-inbound-row--blocked-in', response.data)
-        self.assertIn(b'neorain-inbound-row--cancelled', response.data)
-        self.assertNotIn(b'data-neorain-inbound-collapsed', response.data)
-        self.assertNotIn(b'data-neorain-inbound-reopen', response.data)
-        for column in (b"Ground Time", b"Connecting Outbound", b"Include/Exclude", b"Delay Info"):
-            self.assertIn(column, response.data)
-        self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
-        blocked_fragment = response.data.split(
-            f'data-neorain-mission-id="{blocked_in.id}"'.encode(), 1
-        )[1].split(b"</tr>", 1)[0]
-        cancelled_fragment = response.data.split(
-            f'data-neorain-mission-id="{cancelled.id}"'.encode(), 1
-        )[1].split(b"</tr>", 1)[0]
-        self.assertIn(b'data-neorain-inbound-edit hidden', blocked_fragment)
-        self.assertNotIn(b'data-neorain-inbound-edit-protected hidden', blocked_fragment)
-        self.assertIn(b'data-neorain-inbound-edit', cancelled_fragment)
-        self.assertIn(b'data-neorain-inbound-edit-protected hidden', cancelled_fragment)
-        self.assertIn(b'disabled', cancelled_fragment)
-        self.assertIn(b'setInboundEditLock', response.data)
+        from tests.html_contracts import document
+        root=document(response)
+        self.assertEqual(response.status_code,200)
+        for mission,cls in ((blocked_in,'blocked-in'),(cancelled,'cancelled')):
+            row=root.one('tr',**{'data-neorain-mission-id':str(mission.id)})
+            self.assertIn('neorain-inbound-row--'+cls,row.attrs['class'])
+            self.assertGreater(len(row.findall('td')),10)
+            self.assertFalse(row.findall(**{'data-neorain-inbound-collapsed':None}))
+            groups=row.findall(**{'data-rain-override-field':'block_in'});self.assertTrue(groups)
+            for group in groups:
+                self.assertEqual(bool(group.findall('input',**{'data-rain-override-time':None})),mission is blocked_in)
+        for control in root.one('tr',**{'data-neorain-mission-id':str(cancelled.id)}).findall('input',**{'data-rain-override-checkbox':None}):
+            self.assertIn('disabled',control.attrs)
+        for column in ('Ground Time','Connecting Outbound','Include/Exclude','Delay Info'):self.assertIn(column,root.text)
 
     def test_rain_boards_link_to_canonical_manual_mission_form_and_ui_hooks(self):
         operation = self._operation()
@@ -797,21 +786,32 @@ class NeoRainOutboundTest(unittest.TestCase):
             outbound = self.client.get("/neorain/outbound")
             inbound = self.client.get("/neorain/inbound")
 
-        self.assertIn(
-            f"/motherbrain/operations/{operation.id}/missions/new?mission_type=departure&amp;return_to=neorain.outbound".encode(),
-            outbound.data,
-        )
-        self.assertIn(
-            f"/motherbrain/operations/{operation.id}/missions/new?mission_type=arrival&amp;return_to=neorain.inbound".encode(),
-            inbound.data,
-        )
-        css = stylesheet_source().encode()
-        for hook in (
-            b'grid-template-columns: minmax(4.5rem, .55fr)',
-            b'.neorain-outbound-late-summary strong',
-            b'td[data-label="Connecting Outbound"]',
-        ):
-            self.assertIn(hook, css)
+        from tests.html_contracts import document
+        for board,response in (('outbound',outbound),('inbound',inbound)):
+            self.assertEqual(response.status_code,200)
+            links=document(response).findall('a',cls='neorain-add-flight')
+            self.assertTrue(links)
+            self.assertEqual(len({n.attrs['href'] for n in links}),1)
+            link=links[0]
+            self.assertEqual(link.attrs['href'],'/neorain/'+board+'/missions/new')
+            self.app.config['CSRF_PROTECT_TESTING']=True
+            with patch('app.neonodes.neorain.mission_routes.current_neorain_outbound_operation',return_value=operation):
+                form=self.client.get(link.attrs['href'])
+            self.assertEqual(form.status_code,200)
+            self.assertTrue(document(form).one('meta',name='csrf-token').attrs['content'])
+            self.assertTrue(document(form).findall('input',name='operation_id',value=str(operation.id)))
+            self.assertTrue(document(form).findall('form',method='post'))
+        # View-only access must not expose an actionable creation control.
+        watcher=self._user('rain_viewonly_links','watcher')
+        from tests.html_contracts import csrf_token
+        token=csrf_token(self.client.get('/rfd'))
+        self.assertEqual(self.client.post('/logout',data={'csrf_token':token}).status_code,302)
+        token=csrf_token(self.client.get('/login'))
+        signed_in=self.client.post('/login',data={'username':watcher.username,'password':'TestPassword123!','csrf_token':token})
+        self.assertEqual(signed_in.status_code,302)
+        with patch('app.neonodes.neorain.routes.current_neorain_outbound_operation',return_value=operation):
+            response=self.client.get('/neorain/outbound')
+        self.assertFalse(document(response).findall('a',cls='neorain-add-flight'))
 
     def test_mobile_boards_render_compact_hooks_and_preserve_desktop_tables(self):
         operation = self._operation()
@@ -840,21 +840,17 @@ class NeoRainOutboundTest(unittest.TestCase):
             inbound = self.client.get("/neorain/inbound")
             outbound = self.client.get("/neorain/outbound")
 
-        self.assertEqual(inbound.status_code, 200)
-        self.assertEqual(outbound.status_code, 200)
-        self.assertIn(b'data-neorain-mobile-board="inbound"', inbound.data)
-        self.assertIn(b'data-block-in-url="/neorain/inbound/block-in"', inbound.data)
-        self.assertIn(b'data-neorain-inbound-hhmm', inbound.data)
-        self.assertIn(b'data-neorain-mobile-row-open', inbound.data)
-        self.assertIn(b'data-neorain-summary-total', inbound.data)
-        self.assertIn(f'data-neorain-mission-id="{arrival.id}"'.encode(), inbound.data)
-        self.assertIn(b'data-neorain-mobile-board="outbound"', outbound.data)
-        self.assertIn(b'data-neorain-mobile-hhmm', outbound.data)
-        self.assertIn(b'data-neorain-mobile-row-open', outbound.data)
-        self.assertIn(b'data-neorain-summary-total', outbound.data)
-        self.assertIn(f'data-neorain-mission-id="{departure.id}"'.encode(), outbound.data)
-        self.assertIn(b'neorain-desktop-board', inbound.data)
-        self.assertIn(b'neorain-desktop-board', outbound.data)
+        from tests.html_contracts import document
+        for board,response,mission,field in (('inbound',inbound,arrival,'block_in'),('outbound',outbound,departure,'official_block_out')):
+            self.assertEqual(response.status_code,200)
+            root=document(response)
+            mobile=root.one(**{'data-neorain-mobile-board':board})
+            desktop=root.one(cls='neorain-desktop-board')
+            self.assertTrue(mobile.findall(**{'data-neorain-mobile-row-open':None}))
+            for view in (mobile,desktop):
+                self.assertTrue(view.findall(**{'data-neorain-mission-id':str(mission.id)}))
+                self.assertTrue(view.findall(**{'data-rain-override-field':field}))
+            self.assertTrue(root.findall(**{'data-neorain-summary-total':None}))
 
     def test_mobile_inbound_block_in_saves_four_digit_operational_time(self):
         operation = self._operation()

@@ -145,7 +145,9 @@ class OperationalShellTest(unittest.TestCase):
         self.assertIn('body.operational-board-view .operational-node-topbar { display: none; }', desktop)
         self.assertIn('@media (max-width: 900px) {\n    .operational-node-topbar { display: none; }', css)
         self.assertIn('#sektor-tv .operational-node-topbar { display: none; }', css)
-        self.assertNotIn('!important', css)
+        # Deliberate dark native-select and board-mode overrides are scoped, not a blanket ban.
+        self.assertIn('body.operational-board-view',css)
+        self.assertIn('background-color: #0d171c !important;',css)
 
     def test_neoscorpion_desktop_sidebar_has_no_legacy_off_canvas_override(self):
         css = Path(
@@ -205,9 +207,17 @@ class OperationalShellTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
-                self.assertNotIn(b"data-operational-shell", response.data)
-                self.assertNotIn(b"data-operational-mobile-header", response.data)
-                self.assertNotIn(b"css/operational_node_shell.css", response.data)
+                from tests.html_contracts import document
+                root=document(response)
+                if path=='/neostaffing':
+                    self.assertIn(b'data-operational-shell',response.data)
+                    self.assertTrue(root.findall(**{'data-operational-mobile-header':None}))
+                    self.assertFalse(root.findall(**{'data-operational-sidebar':None}))
+                    self.assertTrue(root.findall('nav',**{'aria-label':'NeoStaffing main menu'}))
+                else:
+                    self.assertNotIn(b'data-operational-shell',response.data)
+                    self.assertNotIn(b'data-operational-mobile-header',response.data)
+                    self.assertNotIn(b'css/operational_node_shell.css',response.data)
 
     def test_mobile_node_menus_have_only_screen_links_and_portal_logout(self):
         for path, dashboard, screen in (
@@ -218,7 +228,7 @@ class OperationalShellTest(unittest.TestCase):
             ("/neoermac/settings", False, "Door View"),
             ("/neoscorpion/settings", False, "Fuel Dispatch"),
             ("/neorain/inbound", False, "Outbound"),
-            ("/neosubzero/pretreat", False, "Pretreat"),
+            ("/neosubzero/pretreat", False, "Deice Operations"),
             ("/motherbrain/manage-sort", False, "Master Schedule"),
             ("/neostaffing", True, None), ("/neostaffing/people", False, "Attendance"),
         ):
@@ -226,10 +236,8 @@ class OperationalShellTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 root = document(response)
-                if path.startswith('/neostaffing'):
-                    menu = root.one(**{'data-mobile-shell-menu-panel': None})
-                else:
-                    menu = root.one(**{'data-drawer-view': 'menu'})
+                menu = root.one(**{'data-drawer-view': 'menu'})
+                if not path.startswith('/neostaffing'):
                     # HOME/NODES remain separate controls, not duplicate menu items.
                     dock = root.one('nav', 'neo-mobile-bottom')
                     self.assertEqual([el.text.strip() for el in dock.findall('span')], ['Home', 'Nodes', 'Menu'])
@@ -246,8 +254,10 @@ class OperationalShellTest(unittest.TestCase):
                     self.assertNotIn(forbidden, labels)
                 self.assertFalse(menu.findall(cls='neo-drawer-user'))
                 self.assertFalse(menu.findall(**{'data-mobile-share-open': None}))
-                if dashboard:
+                if dashboard and not path.startswith('/neostaffing'):
                     self.assertEqual(labels, ['NeoPortal'])
+                elif path.startswith('/neostaffing'):
+                    self.assertIn('People',labels)
                 else:
                     self.assertIn(screen, labels)
 

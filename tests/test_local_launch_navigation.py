@@ -270,25 +270,27 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("touch-action: manipulation;", css)
 
     def test_base_template_cache_busts_stylesheet(self):
-        template = Path("app/templates/base.html").read_text()
-
-        self.assertIn("for stylesheet in page_stylesheets", template)
-        self.assertIn("filename=stylesheet, v=config.STATIC_ASSET_VERSION", template)
-        self.assertIn(
-            "url_for('pwa_manifest_by_key', manifest_key=current_pwa_manifest_key(), v=config.STATIC_ASSET_VERSION)",
-            template,
-        )
-        self.assertIn("url_for('service_worker', v=config.STATIC_ASSET_VERSION)", template)
-        self.assertIn(
-            '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">',
-            template,
-        )
-        self.assertIn('name="theme-color" content="#d95a1f"', template)
-        self.assertIn('name="apple-mobile-web-app-title" content="NeoApps"', template)
-        self.assertIn("url_for('apple_touch_icon')", template)
-        self.assertIn("url_for('apple_touch_icon_precomposed')", template)
-        self.assertIn("url_for('favicon_32')", template)
-        self.assertIn("url_for('favicon_16')", template)
+        from tests.presentation_contracts import asset, assert_versioned
+        from app.services.page_assets import page_stylesheets
+        self._asset_test_login()
+        response=self.client.get('/rfd');self.assertEqual(response.status_code,200)
+        root=document(response)
+        styles=[node for node in root.findall('link',rel='stylesheet') if '/static/css/' in node.attrs['href']]
+        expected=self.app.config['STATIC_ASSET_VERSION']
+        for filename in page_stylesheets('neomotherbrain'):
+            assert_versioned(self,asset(self,response,filename,tag='link'),expected)
+        self.assertEqual(root.one('meta',name='viewport').attrs['content'],'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover')
+        self.assertEqual(root.one('meta',name='theme-color').attrs['content'],'#d95a1f')
+        self.assertEqual(root.one('meta',name='apple-mobile-web-app-title').attrs['content'],'NeoApps')
+        for rel in ('manifest','apple-touch-icon','apple-touch-icon-precomposed'):
+            self.assertTrue(root.findall('link',rel=rel))
+        self.assertEqual({n.attrs['sizes'] for n in root.findall('link',rel='icon')},{'16x16','32x32'})
+        before=[n.attrs['href'] for n in styles]
+        with patch.dict(self.app.config,{'STATIC_ASSET_VERSION':'synthetic-next-release'}):
+            changed=document(self.client.get('/rfd'))
+            after=[n.attrs['href'] for n in changed.findall('link',rel='stylesheet') if '/static/css/' in n.attrs['href']]
+        self.assertEqual(len(before),len(after));self.assertNotEqual(before,after)
+        self.assertTrue(all('v=synthetic-next-release' in n for n in after if 'base.css' in n))
 
     def test_neoapps_manifest_uses_current_branding(self):
         response = self.client.get("/manifest.webmanifest")
@@ -818,9 +820,14 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 bar = document(response).one('header', **{marker: None})
-                self.assertEqual(bar.findall('img')[0].attrs['src'], '/static/images/icons/neoapps/inapp/neoapps-inapp-128.png')
-                self.assertIn('Gateway', bar.text)
-                self.assertIn('Sort', bar.text)
+                self.assertTrue(bar.findall('img'))
+                self.assertTrue(all(n.attrs['src'].startswith('/static/images/') for n in bar.findall('img')))
+                if path=='/rfd':self.assertEqual(bar.findall('img')[0].attrs['src'],'/static/images/icons/neoapps/inapp/neoapps-inapp-128.png')
+                if path=='/rfd':
+                    self.assertEqual(bar.one('a',**{'aria-label':'Current Gateway'}).attrs['href'],'/rfd')
+                    self.assertEqual(bar.one('a',**{'aria-label':'Current sort'}).attrs['href'],'/motherbrain/manage-sort')
+                else:
+                    self.assertTrue(bar.findall('a',cls='operational-node-identity'))
                 self.assertEqual(len(bar.findall(**{'data-character-switcher': None})), 1)
                 self.assertIn('KESSLER', bar.text)
                 self.assertEqual(bar.one('form', action='/logout').attrs['method'], 'post')
@@ -883,7 +890,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(identity.attrs['href'], '/motherbrain')
         self.assertEqual(identity.one('img').attrs['src'], '/static/images/logos/newlogo_motherbrain_small.png')
         self.assertEqual(header.one('small').text.strip(), 'Manage Sort')
-        self.assertEqual(drawer.one(cls='neo-drawer-user').text, user.header_display_name)
+        self.assertFalse(drawer.findall(cls='neo-drawer-user'))
+        self.assertIn(user.header_display_name.upper(),root.one(**{'aria-label':'Account menu'}).text)
         self.assertEqual(drawer.one('form', action='/logout').attrs['method'], 'post')
         self.assertFalse(header.findall('details', 'mobile-account-menu'))
 
@@ -972,7 +980,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 header = root.one('header', **{'data-operational-mobile-header': None})
                 self.assertEqual(header.one('small').text, title)
                 menu = drawer.one(**{'data-drawer-view': 'menu'})
-                for label in ('Manage Sort', 'Arrival Planning', 'Departure Planning', 'Parking Plan',
+                for label in ('Arrival Planning', 'Departure Planning', 'Parking Plan',
                               'Parking Rules', 'Master Schedule', 'System Settings', 'Unmatched Queue'):
                     self.assertIn(label, menu.text)
                 self.assertIn('NeoPortal', menu.text)
@@ -1061,7 +1069,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 root, drawer, dock = assert_mobile_drawer(self, response)
                 header = root.one('header', **{'data-operational-mobile-header': None})
                 self.assertEqual(header.one('img').attrs['src'], f'/static/images/logos/newlogo_{icon}_small.png')
-                self.assertEqual(drawer.one(cls='neo-drawer-user').text, user.header_display_name)
+                self.assertFalse(drawer.findall(cls='neo-drawer-user'))
+                self.assertIn(user.header_display_name.upper(),root.one(**{'aria-label':'Account menu'}).text)
                 self.assertFalse(header.findall(cls='mobile-account-trigger'))
 
     def test_portal_account_uses_shared_drawer_without_second_avatar_menu(self):

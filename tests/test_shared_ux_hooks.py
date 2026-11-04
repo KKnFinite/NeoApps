@@ -42,14 +42,20 @@ class SharedUxHooksTest(unittest.TestCase):
         self.assertIn("background: #07151f", css)
 
     def test_shift_flow_unassigned_list_has_a_bounded_scroll_area(self):
-        template = (ROOT / "app/templates/neostaffing/shift_flow.html").read_text(
-            encoding="utf-8"
-        )
-        css = stylesheet_source()
-
-        self.assertIn("UNASSIGNED / NEEDS ATTENTION", template)
-        self.assertIn(".neostaffing-shift-flow-needs-attention ul { max-height:", css)
-        self.assertIn("overflow-y: auto", css)
+        from tests import test_staffing_live_ux as fixtures
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        host=fixtures.LiveUxTest();host.setUp();self.addCleanup(host.tearDown)
+        from app.models import PortalAppAccess
+        from app.extensions import db
+        host.user.role='grandmaster'
+        db.session.add(PortalAppAccess(user_id=host.user.id,app_code='neostaffing',status='approved',role='master',is_active=True));db.session.commit()
+        response=host.client.get('/neostaffing/shift-flow');self.assertEqual(response.status_code,200)
+        scroll=document(response).one(**{'data-roster-scroll':None})
+        self.assertEqual(scroll.attrs['role'],'region');self.assertEqual(scroll.attrs['tabindex'],'0')
+        self.assertIn('NEEDS ASSIGNMENT',scroll.text)
+        css=asset_source(self,response,'css/neostaffing_shift_map.css',tag='link')
+        self.assertIn('max-height:min(74vh,720px)',css);self.assertIn('overflow:auto',css)
 
 
 if __name__ == "__main__":

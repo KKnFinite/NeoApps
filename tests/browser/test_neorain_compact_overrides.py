@@ -86,6 +86,7 @@ class CompactRainBrowserTest(unittest.TestCase):
         return page.locator(f'.rain-override[data-rain-override-field="{field}"]:visible').first
 
     def input(self, page, field):
+        self.reveal(page, field)
         return self.cell(page, field).locator('[data-rain-override-time]')
 
     def save(self, page, field, value, status=200):

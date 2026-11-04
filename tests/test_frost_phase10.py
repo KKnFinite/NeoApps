@@ -140,10 +140,20 @@ class InspectionTest(unittest.TestCase):
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=self.f.operation):
             response=client.get('/neosubzero/operations?mode=outbound')
         self.assertEqual(response.status_code,200)
-        body=response.get_data(as_text=True)
-        self.assertIn('neosubzero_operations.js?v=20261028-frost-prospective-v1',body)
-        self.assertIn('ucc=20261030-subzero-launch-v1',body)
-        self.assertNotIn('neosubzero_operations.js?v=20261023-release2-v1',body)
+        from tests.presentation_contracts import asset, assert_versioned
+        import hashlib, json
+        js=asset(self,response,'js/neosubzero_operations.js',tag='script')
+        self.assertNotEqual(assert_versioned(self,js)['v'],['20261023-release2-v1'])
+        css=asset(self,response,'css/25-neosubzero.css',tag='link')
+        query=assert_versioned(self,css)
+        self.assertEqual(query['ucc'],['20261103-palette-v1'])
+        manifest=json.loads(Path('app/static/css/sequence.json').read_text())
+        entry=next(row for row in manifest['stylesheets'] if row['file']=='25-neosubzero.css')
+        served=client.get(css.attrs['href'])
+        self.assertEqual(served.status_code,200)
+        data=served.get_data().replace(b'\r\n',b'\n')
+        self.assertEqual(len(data),entry['bytes'])
+        self.assertEqual(hashlib.sha256(data).hexdigest(),entry['sha256'])
 
 
 class WeatherAndCollectionTest(unittest.TestCase):

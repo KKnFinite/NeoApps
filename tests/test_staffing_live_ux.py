@@ -28,19 +28,32 @@ class LiveUxTest(unittest.TestCase):
     command = fixtures.TimecardsTest.command
 
     def test_current_cleanup_mobile_and_time_only_contracts(self):
-        self.attendance()
-        html = self.client.get('/neosektor/manage-employees?area=ebm&mode=times').get_data(as_text=True)
-        self.assertIn('type="time"', html)
-        self.assertIn('THIS WEEK', html)
-        template = Path('app/templates/neostaffing/org_chart.html').read_text()
-        self.assertLess(template.index('neostaffing-tree-management-summary'), template.index('org-unit-canvas'))
-        self.assertIn('<details id="structure-editor"', template)
-        shift = Path('app/templates/neostaffing/_shift_flow_map.html').read_text()
-        self.assertIn('data-mobile-side', shift)
-        css = Path('app/static/css/neostaffing_live_cleanup.css').read_text()
-        self.assertIn('min-width:0; display:flex; flex-direction:column', css)
-        self.assertIn('vacation-scope-months', css)
-        self.assertIn("('Vacation','vacation_selection')", Path('app/templates/_mobile_drawer.html').read_text())
+        from tests.html_contracts import document
+        from tests.presentation_contracts import asset_source
+        row=self.attendance()
+        saved=self.client.post('/neostaffing/timecards/save',json={'node_workspace':'sektor','node_area':'ebm','commands':[self.command(row)]})
+        self.assertEqual(saved.status_code,200,saved.json)
+        self.user.role='grandmaster'
+        db.session.add(PortalAppAccess(user_id=self.user.id,app_code='neostaffing',status='approved',role='master',is_active=True));db.session.commit()
+        response=self.client.get('/neosektor/manage-employees?area=ebm&mode=times');self.assertEqual(response.status_code,200)
+        root=document(response)
+        for marker in ('data-start','data-end'):
+            fields=root.findall('input',**{marker:None});self.assertTrue(fields)
+            for field in fields:
+                self.assertEqual(field.attrs['type'],'text');self.assertEqual(field.attrs['inputmode'],'numeric')
+                self.assertEqual(field.attrs['maxlength'],'5');self.assertEqual(field.attrs['placeholder'],'HHMM')
+                self.assertIn('T',field.attrs['data-original'])
+        self.assertIn('WEEK',root.text)
+        self.assertTrue(root.findall(**{'data-timecard-id':None}))
+        script=asset_source(self,response,'js/neostaffing_node_times.js',tag='script')
+        self.assertIn('version',script);self.assertIn('HHMM',script)
+        shift=self.client.get('/neostaffing/shift-flow');self.assertEqual(shift.status_code,200)
+        roster=document(shift).one(**{'data-shift-roster':None})
+        self.assertTrue(roster.findall(**{'data-roster-search':None}))
+        self.assertTrue(roster.findall(**{'data-roster-scroll':None}))
+        self.assertIn('NEEDS ASSIGNMENT',roster.text)
+        drawer=document(shift).one(**{'data-drawer-view':'menu'})
+        self.assertTrue(drawer.findall('a',href='/neostaffing/vacation-selection'))
 
     def test_shared_staffing_drawer_always_loads_style_and_behavior(self):
         self.user.role = 'grandmaster'
@@ -83,7 +96,7 @@ class LiveUxTest(unittest.TestCase):
     def test_dashboard_order_and_normal_half_width_live_counts(self):
         html = self.client.get('/neosektor').get_data(as_text=True)
         keys = re.findall(r'data-node-dashboard-tile="([^"]+)"', html)
-        self.assertEqual(keys, ['ebm', 'wbm', 'tunnel', 'driver-routing', 'discharge', 'settings', 'live-counts', 'employees'])
+        self.assertEqual(keys, ['ebm','wbm','tunnel','driver-routing','discharge','stats','live-counts','employees','settings'])
         css = Path('app/static/css/neosektor_dashboard.css').read_text()
         self.assertNotIn('.sektor-command-tile--live-counts', css)
         self.assertIn('<strong>Employees</strong>', html)
