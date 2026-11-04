@@ -1,13 +1,15 @@
 """Final physical outcomes stop reconciling; provider delivery is independent."""
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from copy import deepcopy
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from sqlalchemy import event, inspect, text
 from app.extensions import db
 from app.models import NeoScorpionFuelingEvent as FuelEvent, NeoScorpionFuelWorkState as Work
+from app.models import SortTimelineSettings, SortTimelineSortSetting
 from app.models import NeoScorpionFuelingEventTankSnapshot as TankSnapshot
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation as Observation
 from app.services import neoscorpion_spear_decisions as service
@@ -61,6 +63,59 @@ class SpearReconciliationTest(unittest.TestCase):
             Clock.value += timedelta(minutes=6)
         with patch.object(service, 'datetime', Clock):
             service.reconcile(self.gateway_id)
+
+    def _sort_window(self):
+        parent = SortTimelineSettings.query.filter_by(gateway_id=self.gateway.id).first()
+        if parent is None:
+            parent = SortTimelineSettings(gateway_id=self.gateway.id, gateway_code=self.gateway.code)
+            db.session.add(parent)
+            db.session.flush()
+        window = SortTimelineSortSetting.query.filter_by(
+            gateway_id=self.gateway.id, sort_name='night').first()
+        if window is None:
+            window = SortTimelineSortSetting(settings_id=parent.id,
+                gateway_id=self.gateway.id, gateway_code=self.gateway.code, sort_name='night')
+            db.session.add(window)
+        window.sort_window_start_local = time(21, 0)
+        window.sort_window_end_local = time(5, 0)
+        db.session.commit()
+        return window
+
+    def test_closed_sort_uses_actual_local_end_including_dst(self):
+        from app.services.neoscorpion_spear_expiry import sort_ended
+        window = self._sort_window()
+        operation = SimpleNamespace(sort_date=date(2026, 11, 3))
+        self.assertFalse(sort_ended(operation, window, datetime(2026, 11, 4, 10, 59), 'America/Chicago'))
+        self.assertTrue(sort_ended(operation, window, datetime(2026, 11, 4, 11), 'America/Chicago'))
+        window.sort_window_end_local = None
+        self.assertFalse(sort_ended(operation, window, datetime(2026, 11, 5), 'America/Chicago'))
+
+    def test_unmatched_decision_and_derived_outcome_purge_only_after_close(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        self.assignment.assigned_truck_id = None
+        row = self.decision(sealed=False)
+        self.reconcile()
+        outcome = Observation.query.filter_by(kind='outcome').one()
+        self.assertIsNone(row.reconciled_at)
+        events_before, works_before = FuelEvent.query.count(), Work.query.count()
+        self.assertEqual(purge_closed_unmatched(
+            self.gateway.id, now_utc=datetime(2026, 9, 4, 9, 59)), 0)
+        self.assertEqual(purge_closed_unmatched(
+            self.gateway.id, now_utc=datetime(2026, 9, 4, 10)), 1)
+        self.assertIsNone(Observation.query.filter_by(id=row.id).first())
+        self.assertIsNone(Observation.query.filter_by(id=outcome.id).first())
+        self.assertEqual((FuelEvent.query.count(), Work.query.count()), (events_before, works_before))
+        self.assertEqual(purge_closed_unmatched(
+            self.gateway.id, now_utc=datetime(2026, 9, 4, 12)), 0)
+
+    def test_connected_physical_decision_is_never_purged(self):
+        from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+        self._sort_window()
+        row = self.decision(sealed=False)
+        self.assertEqual(purge_closed_unmatched(
+            self.gateway.id, now_utc=datetime(2026, 9, 4, 12)), 0)
+        self.assertIsNotNone(Observation.query.filter_by(id=row.id).first())
 
     def test_age_bounded_unresolved_retries_keep_late_evidence_eligible(self):
         now = datetime(2027, 1, 1)

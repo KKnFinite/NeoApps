@@ -512,6 +512,8 @@ def drain(gateway_id, *, limit=3):
     from app.services.neoscorpion_learning_vault import export_decision_record, export_learning_record
     if not enabled(gateway_id):
         return 0
+    from app.services.neoscorpion_spear_expiry import purge_closed_unmatched
+    purge_closed_unmatched(gateway_id)
     reconcile(gateway_id)
     reconcile_fleet(gateway_id)
     now = datetime.utcnow()
