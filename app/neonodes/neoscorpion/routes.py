@@ -1,5 +1,5 @@
 from app.services.neoscorpion_tail_notes import tail_notes_revision
-from app.services.neoscorpion_dispatch_fragments import panel_content, spear_fragments
+from app.services.neoscorpion_dispatch_fragments import panel_content, spear_fragments, DispatchParts
 from app.services.neoscorpion_admin_forms import (SettingsConflict, guard_settings, admin_form_context, truck_integrity_message)
 from flask import send_file, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -318,6 +318,10 @@ def fuel_dispatch_live_panel():
     )
     if not access["can_view"]:
         return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    if request.args.get('operation_id') is not None:
+        current = current_sort_operation(gateway)
+        if request.args['operation_id'] != str(current.id if current else 'none'):
+            return _json_no_store({'ok':False, 'error':'Current sort changed. Refresh the current operation.'}, 409)
     notes_revision = tail_notes_revision(gateway)
     spear_only = request.args.get('spear_only') == '1'
     if spear_only:
@@ -330,6 +334,7 @@ def fuel_dispatch_live_panel():
         context = _dispatch_presentation_context(
             gateway, include_asset_choices=access["can_edit"],
             include_spear=request.args.get("completion_only") != "1",
+            capture_manual=request.args.get('missions_delta') == '1',
         )
     operation = context["operation"]
     spear_plan = context["spear_plan"]
@@ -337,6 +342,7 @@ def fuel_dispatch_live_panel():
         return _json_no_store({'ok': False, 'error': 'Current sort changed. Refresh the current operation.'}, 409)
     if spear_only:
         return _json_no_store({'ok': True, 'operation_id': operation.id if operation else None,
+            'can_edit': bool(access['can_edit']),
             'revision': int(context.get('nightly_asset_revision') or 0),
             'tail_revision': _dispatch_tail_revision(operation.id if operation else None),
             'spear_plan_token': spear_plan.token if spear_plan else '',
@@ -368,6 +374,10 @@ def fuel_dispatch_live_panel():
                 and context["spear_automatic_available"]
             ),
             "tail_notes_revision": notes_revision,
+            "can_edit": bool(access['can_edit']),
+            "mission_manifest": {str(r['mission'].id):{'arrival':r['dispatch_arrival_rank'], 'etd':r['dispatch_etd_rank']}
+                                 for r in context['rows']},
+            "spear_references": {str(r['mission'].id):r.get('spear_decision_reference', '') for r in context['rows']},
             "html": render_template(
                 "neonodes/neoscorpion/_fuel_dispatch_panel.html",
                 gateway=gateway,
@@ -375,6 +385,10 @@ def fuel_dispatch_live_panel():
                 can_edit=access["can_edit"],
                 can_manage_assets=access["can_edit"],
                 can_view_spear_settings=user_can(SETTINGS_VIEW_PERMISSION),
+                **({'dispatch_parts': DispatchParts(context, gateway, access,
+                    supplied=request.headers.get('X-Neo-Dispatch-Parts', ''),
+                    critical_supplied=request.headers.get('X-Neo-Dispatch-Fingerprints', ''),
+                    settings_view=user_can(SETTINGS_VIEW_PERMISSION)).render} if request.args.get('missions_delta') == '1' else {}),
                 **context,
             ),
         }
@@ -1517,7 +1531,7 @@ def fuel_assignments_acknowledge_update():
 @gateway_node_required("scorpion")
 def fuel_dispatch_revision():
     gateway = get_current_gateway()
-    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION)
+    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
     if not access["can_view"]:
         response = jsonify({"error": "Access denied."})
         response.headers["Cache-Control"] = "no-store"
@@ -1526,6 +1540,7 @@ def fuel_dispatch_revision():
     fingerprint = fuel_assignments_live_revision(gateway)
     fingerprint["tail_revision"] = _dispatch_tail_revision(fingerprint["operation_id"])
     fingerprint["tail_notes_revision"] = tail_notes_revision(gateway)
+    fingerprint['can_edit'] = bool(access['can_edit'])
     response = jsonify(
         fingerprint
     )
@@ -2102,18 +2117,12 @@ def completed_fuel():
     return redirect(url_for("neoscorpion.history"))
 
 
-def _dispatch_presentation_context(gateway, *, include_asset_choices=False, include_spear=True):
-    # All projections, scheduling and SPEAR enrichment finish in their existing
-    # order. Sort a new list only for these two Dispatch render paths.
-    context = fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices, include_spear=include_spear)
-    rows = [dict(row) for row in context["rows"]]
-    # Browser reorders existing DOM groups using ranks derived from full UTC
-    # timestamps, never formatted clock strings or operational planning order.
+def _dispatch_presentation_context(gateway, *, include_asset_choices=False, include_spear=True, capture_manual=False):
+    captured = []
+    context = fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices, include_spear=include_spear,
+        capture_manual=captured.append if capture_manual else None)
     from app.services.neoscorpion_dispatch_preferences import dispatch_preferences
     preferences = dispatch_preferences(gateway, current_user)
-    for mode in ("arrival", "etd"):
-        for rank, row in enumerate(sorted(rows, key=lambda row: _dispatch_presentation_key(row, mode, False))):
-            row[f"dispatch_{mode}_rank"] = rank
     from app.models import NeoScorpionVendorRequest, NeoScorpionSortTruck, NeoScorpionFuelingEvent
     from sqlalchemy import func
     from app.services.neoscorpion_vendors import driver_name
@@ -2126,13 +2135,6 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
         selections={s.fuel_truck_id:s for s in NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()}
         postings=dict(db.session.query(NeoScorpionFuelingEvent.fuel_truck_id,func.max(NeoScorpionFuelingEvent.id)).filter_by(
             sort_date_operation_id=operation.id).group_by(NeoScorpionFuelingEvent.fuel_truck_id).all())
-        for visual in context.get('truck_visuals',[]):
-            selection=selections.get(visual['truck_id'])
-            from app.services.neoscorpion_assets import top_off_action_state
-            visual['top_off_action_state'] = top_off_action_state(selection) if selection else ''
-            visual['inventory_epoch']=selection.inventory_epoch if selection else None
-            visual['inventory_posting_id']=postings.get(visual['truck_id'],0)
-            visual['driver_name']=driver_name(gateway,operation,visual['truck_id'],roster['drivers_by_truck_id'])
     # Presentation-only pointers to existing truck controls: never duplicate
     # inventory/approval mutations inside a mission's DETAILS.
     dispatch_editable = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)['can_edit']
@@ -2140,53 +2142,73 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
     if dispatch_editable and include_asset_choices:
         from app.neonodes.neoscorpion.vendor_routes import driver_management_context
         driver_admin = driver_management_context(gateway, operation)
-    for row in rows:
-        truck = row.get('assigned_truck')
-        visual = next((v for v in context.get('truck_visuals', []) if truck and v['truck_id'] == truck.id), None)
-        reasons = []
-        if truck and not row.get('administratively_complete') and pending.get(truck.id):
-            reasons.append('Fuel verification awaiting Dispatcher approval')
-        if visual and not row.get('administratively_complete') and visual.get('status') in ('needs_sump', 'unavailable_oos'):
-            reasons.append('Serviceability: ' + visual['status'].replace('_', ' ').upper())
-        if visual and not row.get('administratively_complete') and visual.get('inventory_reconciliation_required') and visual.get('status') == 'available':
-            reasons.append('Truck inventory discrepancy / unknown baseline')
-        row['console_truck_review'] = ' · '.join(reasons)
-        row['action_count'] += int(bool(row.get('call_dispatch_alert') and dispatch_editable))
-        row['action_count'] += int(bool(reasons))
-        # Presentation only: missing row data is not an additional mandatory
-        # action. Existing canonical eligibility and mutation guards still rule.
-        row['details_action_count'] = max(0, row['action_count'] - int(row['mission_data_action']))
-        row['details_action_count'] += int(bool(row.get('confirm_tail_available')))
-        # Current-visit verification is already directly on the mission row.
-        # DETAILS counts only actions actually offered inside its workspace.
-        if not row.get('assignment'):
-            second_reason = 'Assign the mission first.'
-        elif row.get('administratively_complete'):
-            second_reason = 'Use UPLIFT after completed physical fueling.'
-        elif row.get('pending_uplift') and row['pending_uplift'].plan_kind=='uplift':
-            second_reason = 'Review the saved post-completion uplift first.'
-        elif row.get('cycle_type') == 'defuel':
-            second_reason = 'Complete or review DEFUEL first.'
-        elif not row['mission'].planned_fuel_load:
-            second_reason = 'Enter Required Fuel first.'
-        else:
-            second_reason = ''
-        row['second_truck_reason'] = second_reason
-        if row.get('fuel_on_board_complete'):
-            follow_reason = 'FOB does not establish a physical fueling event.'
-        elif row.get('pending_uplift'):
-            follow_reason = 'Resolve the saved truck / uplift plan first.'
-        elif not row.get('normal_completion_complete'):
-            follow_reason = 'Dispatcher COMPLETE required.'
-        elif not row.get('has_prior_fueling_events'):
-            follow_reason = 'A completed physical fueling event is required.'
-        elif not row.get('follow_up_available') or row['assignment'].review_status != 'complete' or row['mission'].fuel_status != 'complete':
-            follow_reason = 'Review the completed cycle and confirmed aircraft.'
-        else:
-            follow_reason = ''
-        row['follow_up_reason'] = follow_reason
-    return {**context, 'asset_driver_admin':driver_admin, 'dispatch_preferences':preferences, 'vendor_pending_by_truck':pending,
-        "rows": sorted(rows, key=lambda row: _dispatch_presentation_key(row, preferences['secondary_sort'], preferences['arrived_first'])), **roster}
+    def present(context):
+        rows = [dict(row) for row in context["rows"]]
+        # Browser reorders existing DOM groups using ranks derived from full UTC
+        # timestamps, never formatted clock strings or operational planning order.
+        for mode in ("arrival", "etd"):
+            for rank, row in enumerate(sorted(rows, key=lambda row: _dispatch_presentation_key(row, mode, False))):
+                row[f"dispatch_{mode}_rank"] = rank
+        if operation:
+            for visual in context.get('truck_visuals',[]):
+                selection=selections.get(visual['truck_id'])
+                from app.services.neoscorpion_assets import top_off_action_state
+                visual['top_off_action_state'] = top_off_action_state(selection) if selection else ''
+                visual['inventory_epoch']=selection.inventory_epoch if selection else None
+                visual['inventory_posting_id']=postings.get(visual['truck_id'],0)
+                visual['driver_name']=driver_name(gateway,operation,visual['truck_id'],roster['drivers_by_truck_id'])
+        for row in rows:
+            truck = row.get('assigned_truck')
+            visual = next((v for v in context.get('truck_visuals', []) if truck and v['truck_id'] == truck.id), None)
+            reasons = []
+            if truck and not row.get('administratively_complete') and pending.get(truck.id):
+                reasons.append('Fuel verification awaiting Dispatcher approval')
+            if visual and not row.get('administratively_complete') and visual.get('status') in ('needs_sump', 'unavailable_oos'):
+                reasons.append('Serviceability: ' + visual['status'].replace('_', ' ').upper())
+            if visual and not row.get('administratively_complete') and visual.get('inventory_reconciliation_required') and visual.get('status') == 'available':
+                reasons.append('Truck inventory discrepancy / unknown baseline')
+            row['console_truck_review'] = ' · '.join(reasons)
+            row['action_count'] += int(bool(row.get('call_dispatch_alert') and dispatch_editable))
+            row['action_count'] += int(bool(reasons))
+            # Presentation only: missing row data is not an additional mandatory
+            # action. Existing canonical eligibility and mutation guards still rule.
+            row['details_action_count'] = max(0, row['action_count'] - int(row['mission_data_action']))
+            row['details_action_count'] += int(bool(row.get('confirm_tail_available')))
+            # Current-visit verification is already directly on the mission row.
+            # DETAILS counts only actions actually offered inside its workspace.
+            if not row.get('assignment'):
+                second_reason = 'Assign the mission first.'
+            elif row.get('administratively_complete'):
+                second_reason = 'Use UPLIFT after completed physical fueling.'
+            elif row.get('pending_uplift') and row['pending_uplift'].plan_kind=='uplift':
+                second_reason = 'Review the saved post-completion uplift first.'
+            elif row.get('cycle_type') == 'defuel':
+                second_reason = 'Complete or review DEFUEL first.'
+            elif not row['mission'].planned_fuel_load:
+                second_reason = 'Enter Required Fuel first.'
+            else:
+                second_reason = ''
+            row['second_truck_reason'] = second_reason
+            if row.get('fuel_on_board_complete'):
+                follow_reason = 'FOB does not establish a physical fueling event.'
+            elif row.get('pending_uplift'):
+                follow_reason = 'Resolve the saved truck / uplift plan first.'
+            elif not row.get('normal_completion_complete'):
+                follow_reason = 'Dispatcher COMPLETE required.'
+            elif not row.get('has_prior_fueling_events'):
+                follow_reason = 'A completed physical fueling event is required.'
+            elif not row.get('follow_up_available') or row['assignment'].review_status != 'complete' or row['mission'].fuel_status != 'complete':
+                follow_reason = 'Review the completed cycle and confirmed aircraft.'
+            else:
+                follow_reason = ''
+            row['follow_up_reason'] = follow_reason
+        return {**context, 'asset_driver_admin':driver_admin, 'dispatch_preferences':preferences, 'vendor_pending_by_truck':pending,
+            "rows": sorted(rows, key=lambda row: _dispatch_presentation_key(row, preferences['secondary_sort'], preferences['arrived_first'])), **roster}
+
+    result = present(context)
+    if captured:
+        result['_dispatch_critical_context'] = present(captured[0])
+    return result
 
 
 def _dispatch_presentation_key(row, mode="etd", arrived_first=True):
@@ -2208,6 +2230,7 @@ def _dispatch_presentation_key(row, mode="etd", arrived_first=True):
 
 
 def _dispatch_response(gateway, access, status_code=200):
+    context = _dispatch_presentation_context(gateway, include_asset_choices=access['can_edit'], capture_manual=True)
     response = render_template(
         "neonodes/neoscorpion/fuel_dispatch.html",
         gateway=gateway,
@@ -2215,10 +2238,8 @@ def _dispatch_response(gateway, access, status_code=200):
         can_edit=access["can_edit"],
         can_manage_assets=access["can_edit"],
         can_view_spear_settings=user_can(SETTINGS_VIEW_PERMISSION),
-        **_dispatch_presentation_context(
-            gateway,
-            include_asset_choices=access["can_edit"],
-        ),
+        dispatch_parts=DispatchParts(context, gateway, access, settings_view=user_can(SETTINGS_VIEW_PERMISSION)).render,
+        **context,
     )
     return response, status_code
 

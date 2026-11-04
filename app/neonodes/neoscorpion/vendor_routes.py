@@ -259,12 +259,13 @@ def driver_management_context(gateway,operation):
     """Existing gateway-scoped administration data, shared by Dispatch and fallback."""
     profiles=NeoScorpionVendorAccount.query.filter_by(gateway_id=gateway.id).all()
     nights={r.user_id:r for r in NeoScorpionVendorNight.query.filter_by(sort_date_operation_id=operation.id).all()} if operation else {}
-    connections=NeoScorpionTruckDriver.query.filter_by(sort_date_operation_id=operation.id).all() if operation else []
     from app.services.neoscorpion_drivers import driver_roster
-    employee_choices=driver_roster(gateway,operation,include_choices=True)['eligible_drivers']
+    roster=driver_roster(gateway,operation,include_choices=True)
+    connections=list(roster['drivers_by_truck_id'].values())
+    employee_choices=roster['eligible_drivers']
     approved_vendors=[p.user for p in profiles if p.enabled and p.user.is_active and p.user.email_verified_at and nights.get(p.user_id) and nights[p.user_id].status=='approved']
     return dict(profiles=profiles,nights=nights,driver_choices=employee_choices+approved_vendors,
         connections={r.fuel_truck_id:r for r in connections}, trucks_by_driver={r.driver_user_id:r.fuel_truck_id for r in connections if r.driver_user_id},
         pending=NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,kind='claim',status='pending').all() if operation else [],
-        driver_trucks=NeoScorpionFuelTruck.query.join(NeoScorpionSortTruck,NeoScorpionSortTruck.fuel_truck_id==NeoScorpionFuelTruck.id).filter(NeoScorpionSortTruck.sort_date_operation_id==operation.id).all() if operation else [],
+        driver_trucks=roster['driver_trucks'],
         audits=NeoScorpionVendorAudit.query.filter_by(gateway_id=gateway.id).order_by(NeoScorpionVendorAudit.id.desc()).limit(100).all())

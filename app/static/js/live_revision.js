@@ -3,7 +3,7 @@
     "use strict";
     const scope = document.querySelector('meta[name="live-poll-scope"]')?.content;
     const entries = new Map();
-    const fields = ['ok', 'current_operation', 'operation_id', 'revision', 'tail_revision', 'tail_notes_revision'];
+    const fields = ['ok', 'current_operation', 'operation_id', 'revision', 'tail_revision', 'tail_notes_revision', 'can_edit'];
     const primitive = value => value === null || typeof value === 'boolean'
         || (typeof value === 'number' && Number.isFinite(value))
         || (typeof value === 'string' && value.length <= 160);
@@ -29,6 +29,7 @@
         } else if (data.type === 'revision' && Number.isFinite(data.at)
                 && data.at >= entry.at && data.at <= Date.now() + 1000 && Date.now() - data.at < 60000
                 && data.value && Object.keys(data.value).every(key => fields.includes(key) && primitive(data.value[key]))
+                && (!data.key.includes('/fuel-dispatch/revision') || typeof data.value.can_edit === 'boolean')
                 && (!entry.value || entry.value.operation_id !== data.value.operation_id
                     || Number(data.value.revision) >= Number(entry.value.revision))) {
             entry.at = data.at;

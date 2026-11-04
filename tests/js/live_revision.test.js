@@ -131,3 +131,20 @@ test('login redirects never masquerade as successful operational revisions',asyn
     await assert.rejects(a.api.revision('/revision'),e=>e.sessionChanged===true);
     assert.equal(w.messages.filter(m=>m.type==='revision').length,0);
 });
+
+test('Dispatch peers carry fresh edit authority, never legacy permission-free hints',async()=>{
+    const w=world(),a=w.tab(),b=w.tab();let calls=0;
+    for(const tab of [a,b]) tab.context.fetch=async()=>{calls++;return new Response(
+        JSON.stringify({revision:1,operation_id:8,can_edit:false}),
+        {headers:{'X-Neo-Live-Scope':'user-gateway-session'}});};
+    const url='/neoscorpion/fuel-dispatch/revision';
+    assert.equal((await (await a.api.revision(url)).json()).can_edit,false);
+    assert.equal((await (await b.api.revision(url)).json()).can_edit,false);
+    assert.equal(calls,1);
+    const other=world(),old=other.tab(),fresh=other.tab();
+    // A pre-release tab can publish revisions without the new authority bit.
+    // The current receiver must make its own authorized request instead.
+    await old.api.revision(url);
+    await fresh.api.revision(url);
+    assert.equal(other.requests,2);
+});

@@ -1,0 +1,438 @@
+{
+  "starting_sha": "5910faed80cd7899943799b3976cd9e1a6857be3",
+  "starting_live_deployment": "dep-dblr6qdg1s2s73c5mr7g",
+  "scope": "Synthetic SQLite performance; loopback PostgreSQL concurrency; read-only production checks",
+  "before": {
+    "dispatch": {
+      "bytes": 543001,
+      "html_bytes": 514333,
+      "median_ms": 49.82,
+      "queries": {
+        "selects": 77,
+        "writes": 0
+      }
+    },
+    "spear": {
+      "bytes": 28782,
+      "html_bytes": 0,
+      "median_ms": 33.91,
+      "queries": {
+        "selects": 57,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 2875,
+        "ms": 32.37,
+        "selects": 57,
+        "writes": 0
+      }
+    },
+    "critical": {
+      "bytes": 523201,
+      "html_bytes": 494036,
+      "median_ms": 39.92,
+      "queries": {
+        "selects": 66,
+        "writes": 0
+      }
+    },
+    "fueler": {
+      "bytes": 490656,
+      "html_bytes": 463421,
+      "median_ms": 25.19,
+      "queries": {
+        "selects": 38,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 175,
+        "ms": 24.2,
+        "selects": 38,
+        "writes": 0
+      }
+    },
+    "board": {
+      "bytes": 90646,
+      "html_bytes": 84857,
+      "median_ms": 16.96,
+      "queries": {
+        "selects": 37,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 17.99,
+        "selects": 37,
+        "writes": 0
+      }
+    },
+    "driver": {
+      "bytes": 2290,
+      "html_bytes": 2024,
+      "median_ms": 16.83,
+      "queries": {
+        "selects": 43,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 16.13,
+        "selects": 43,
+        "writes": 0
+      }
+    },
+    "hanzo": {
+      "bytes": 126203,
+      "html_bytes": 120304,
+      "median_ms": 14.61,
+      "queries": {
+        "selects": 31,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 15.18,
+        "selects": 31,
+        "writes": 0
+      }
+    },
+    "hanzo_document": {
+      "bytes": 151738,
+      "html_bytes": 0,
+      "median_ms": 17.67,
+      "queries": {
+        "selects": 37,
+        "writes": 0
+      }
+    }
+  },
+  "after_legacy_paths": {
+    "dispatch": {
+      "bytes": 543978,
+      "html_bytes": 514360,
+      "median_ms": 47.92,
+      "queries": {
+        "selects": 73,
+        "writes": 0
+      }
+    },
+    "spear": {
+      "bytes": 28798,
+      "html_bytes": 0,
+      "median_ms": 31.83,
+      "queries": {
+        "selects": 57,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 2891,
+        "ms": 31.77,
+        "selects": 57,
+        "writes": 0
+      }
+    },
+    "critical": {
+      "bytes": 523935,
+      "html_bytes": 494036,
+      "median_ms": 43.46,
+      "queries": {
+        "selects": 62,
+        "writes": 0
+      }
+    },
+    "fueler": {
+      "bytes": 490656,
+      "html_bytes": 463421,
+      "median_ms": 24.92,
+      "queries": {
+        "selects": 38,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 175,
+        "ms": 24.35,
+        "selects": 38,
+        "writes": 0
+      }
+    },
+    "board": {
+      "bytes": 90646,
+      "html_bytes": 84857,
+      "median_ms": 16.73,
+      "queries": {
+        "selects": 37,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 17.67,
+        "selects": 37,
+        "writes": 0
+      }
+    },
+    "driver": {
+      "bytes": 2290,
+      "html_bytes": 2024,
+      "median_ms": 16.2,
+      "queries": {
+        "selects": 43,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 16.4,
+        "selects": 43,
+        "writes": 0
+      }
+    },
+    "hanzo": {
+      "bytes": 126203,
+      "html_bytes": 120304,
+      "median_ms": 14.44,
+      "queries": {
+        "selects": 31,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 14.7,
+        "selects": 31,
+        "writes": 0
+      }
+    },
+    "hanzo_document": {
+      "bytes": 151748,
+      "html_bytes": 0,
+      "median_ms": 17.94,
+      "queries": {
+        "selects": 37,
+        "writes": 0
+      }
+    }
+  },
+  "final_delta": {
+    "unchanged_delta": {
+      "bytes": 9370,
+      "html_bytes": 7831,
+      "selects": 73,
+      "writes": 0,
+      "median_ms": 56.61,
+      "sent_groups": [],
+      "reuse_count": 28
+    },
+    "unchanged_critical": {
+      "bytes": 2960,
+      "html_bytes": 219,
+      "selects": 62,
+      "writes": 0,
+      "median_ms": 43.42,
+      "sent_groups": [],
+      "reuse_count": 0
+    },
+    "changed_critical": {
+      "bytes": 28389,
+      "html_bytes": 24264,
+      "selects": 62,
+      "writes": 0,
+      "median_ms": 42.38,
+      "sent_groups": [],
+      "reuse_count": 0
+    },
+    "changed_delta": {
+      "bytes": 34864,
+      "html_bytes": 31947,
+      "selects": 73,
+      "writes": 0,
+      "median_ms": 57.59,
+      "sent_groups": [
+        "mission-1"
+      ],
+      "reuse_count": 27
+    },
+    "subsequent_unchanged_delta": {
+      "bytes": 9370,
+      "html_bytes": 7831,
+      "selects": 73,
+      "writes": 0,
+      "median_ms": 55.5,
+      "sent_groups": [],
+      "reuse_count": 28
+    }
+  },
+  "fresh_session_profile": {
+    "legacy_full": {
+      "selects": 73,
+      "writes": 0,
+      "sql_ms": 1.95,
+      "context_ms": 32.42,
+      "render_ms": 12.85,
+      "fragment_body_ms": 0,
+      "context_html_bytes": 0,
+      "connections": 1,
+      "transactions": 1,
+      "request_ms": 49.51,
+      "response_bytes": 543978,
+      "python_peak_alloc_bytes_separate_run": 3297576
+    },
+    "unchanged_delta": {
+      "selects": 73,
+      "writes": 0,
+      "sql_ms": 2.05,
+      "context_ms": 32.21,
+      "render_ms": 18.57,
+      "fragment_body_ms": 12.55,
+      "context_html_bytes": 509479,
+      "connections": 1,
+      "transactions": 1,
+      "request_ms": 54.13,
+      "response_bytes": 9370,
+      "python_peak_alloc_bytes_separate_run": 1405149
+    },
+    "unseeded_critical": {
+      "selects": 62,
+      "writes": 0,
+      "sql_ms": 1.34,
+      "context_ms": 19.45,
+      "render_ms": 13.85,
+      "fragment_body_ms": 0,
+      "context_html_bytes": 0,
+      "connections": 1,
+      "transactions": 1,
+      "request_ms": 43.68,
+      "response_bytes": 523935,
+      "python_peak_alloc_bytes_separate_run": 4929796
+    },
+    "seeded_critical": {
+      "selects": 62,
+      "writes": 0,
+      "sql_ms": 1.33,
+      "context_ms": 19.66,
+      "render_ms": 13.07,
+      "fragment_body_ms": 0,
+      "context_html_bytes": 0,
+      "connections": 1,
+      "transactions": 1,
+      "request_ms": 41.13,
+      "response_bytes": 2960,
+      "python_peak_alloc_bytes_separate_run": 1175705
+    }
+  },
+  "browser": {
+    "two-session-receipt": {
+      "completion_visible_ms": 141.09,
+      "unchanged_node_preserved": true,
+      "draft_preserved": true,
+      "event_rows": 1,
+      "current_gallons": 7000,
+      "added_removed_reordered": true,
+      "mobile_no_overflow": true,
+      "responses": [
+        {
+          "url": "synthetic://loopback/neoscorpion/fuel-dispatch/live-panel?completion_only=1&delta=1&operation_id=1",
+          "status": 200,
+          "bytes": 55820
+        },
+        {
+          "url": "synthetic://loopback/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+          "status": 200,
+          "bytes": 59725
+        },
+        {
+          "url": "synthetic://loopback/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+          "status": 200,
+          "bytes": 74418
+        },
+        {
+          "url": "synthetic://loopback/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+          "status": 200,
+          "bytes": 54071
+        },
+        {
+          "url": "synthetic://loopback/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+          "status": 200,
+          "bytes": 54071
+        },
+        {
+          "url": "synthetic://loopback/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+          "status": 200,
+          "bytes": 31176
+        },
+        {
+          "url": "synthetic://loopback/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+          "status": 200,
+          "bytes": 20956
+        },
+        {
+          "url": "synthetic://loopback/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+          "status": 200,
+          "bytes": 16305
+        }
+      ],
+      "errors": []
+    },
+    "race-receipt": {
+      "dialog_preserved": true,
+      "atomic_fallback": true,
+      "revoked_controls_disabled": true,
+      "draft_preserved": true,
+      "errors": []
+    }
+  },
+  "tests": {
+    "fragments-final": [
+      "20 passed, 8182 warnings, 4 subtests passed in 21.07s"
+    ],
+    "focused-regression": [
+      "72 passed, 12875 warnings, 19 subtests passed in 25.73s"
+    ],
+    "final-delta-pg": [
+      "27 passed, 11335 warnings, 11 subtests passed in 112.01s (0:01:52)"
+    ],
+    "security-spear": [
+      "20 passed, 3590 warnings, 271 subtests passed in 8.59s"
+    ],
+    "roster-cleanup": [
+      "88 passed, 15268 warnings, 5 subtests passed in 349.65s (0:05:49)"
+    ],
+    "browser-verified": [
+      "3 passed, 1687 warnings in 43.30s"
+    ],
+    "javascript": [
+      "\u2139 tests 27",
+      "\u2139 pass 27",
+      "\u2139 fail 0",
+      "\u2139 skipped 0"
+    ]
+  },
+  "production_baseline": {
+    "interval_utc": [
+      "2026-11-04T22:40:00Z",
+      "2026-11-04T23:25:00Z"
+    ],
+    "log_entries": 33,
+    "has_more": false,
+    "detected_errors": 0,
+    "frost_capture_seconds": 43.208,
+    "spear_settings": {
+      "recommendations": true,
+      "automation": false,
+      "calibration": "observe",
+      "whole_sort": "shadow"
+    },
+    "bandwidth_buckets_mb": [
+      17.800728,
+      0.0024032593
+    ],
+    "cpu_series": [],
+    "memory_samples_bytes": [
+      194535420,
+      185831420
+    ],
+    "production_savings_verified": false,
+    "sustained_neon_cu_transfer_active_time": "unavailable"
+  },
+  "unrelated_original_hashes": {
+    "count": 12,
+    "unchanged": true
+  }
+}

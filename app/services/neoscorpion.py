@@ -383,7 +383,7 @@ def _fuel_assignments_revision_for_operation(operation):
 
 
 def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nicknames=True,
-                          include_fueling_performance=True, include_spear=True):
+                          include_fueling_performance=True, include_spear=True, capture_manual=None):
     """Build core Dispatch first, then add optional planning intelligence."""
     context = _manual_fuel_dispatch_context(
         gateway, include_asset_choices=include_asset_choices
@@ -400,6 +400,20 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
                  *(row["assigned_fueler"] for row in context["rows"])]
         nicknames = fueler_nicknames(gateway, users)
 
+    if capture_manual is not None:
+        # One read of canonical operations supplies both ordinary and critical
+        # rendering. Copy containers before optional SPEAR enrichment; retain
+        # the already-loaded ORM evidence without another query/identity model.
+        def containers(value):
+            if isinstance(value, dict): return {k:containers(v) for k,v in value.items()}
+            if isinstance(value, list): return [containers(v) for v in value]
+            if isinstance(value, tuple): return tuple(containers(v) for v in value)
+            return value
+        manual = containers(context)
+        if display_nicknames:
+            _apply_operational_fueler_names(manual, nicknames)
+        manual['fueling_performance'] = {'fuelers': (), 'trucks': ()}
+        capture_manual(manual)
     if not include_spear:
         _apply_operational_fueler_names(context, nicknames)
         context["fueling_performance"] = {"fuelers": (), "trucks": ()}

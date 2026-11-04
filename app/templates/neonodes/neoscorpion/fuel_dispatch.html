@@ -7,6 +7,7 @@
     class="neoscorpion-shell neoscorpion-screen"
     aria-label="NeoScorpion Fuel Dispatch"
     data-fuel-dispatch-live
+    data-dispatch-can-edit="{{ 'true' if can_edit else 'false' }}"
     data-sort-preferences-url="{{ url_for('neoscorpion.fuel_dispatch_preferences') }}"
     data-sort-mode="{{ dispatch_preferences.secondary_sort }}"
     data-arrived-first="{{ '1' if dispatch_preferences.arrived_first else '0' }}"
@@ -57,5 +58,6 @@
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_data.js', v=config.STATIC_ASSET_VERSION, scorpion='20261021-direct-entry-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_copy.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_tail_notes.js', scorpion='20261019-details-compact-v1') }}"></script>
-<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v='20261104-scorpion-bandwidth-v1', scorpion='20261030-report-actions-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_dispatch_delta.js', v='20261104-scorpion-phase3-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v='20261104-scorpion-phase3-v1', scorpion='20261030-report-actions-v1') }}"></script>
 {% endblock %}

@@ -1,10 +1,12 @@
 """Driver selection is sort-scoped identity, not physical truck occupancy."""
 from datetime import datetime
+from flask import has_request_context, request
 from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.models import NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit, NeoScorpionSortTruck, NeoScorpionFuelTruck, User
 from app.services.neoscorpion_assets import (eligible_nightly_fueler_users,
     lock_nightly_asset_scope_for_mutation, record_nightly_operational_change)
+from app.services.request_cache import request_cached
 
 DRIVER_VIEW = "neoscorpion.truck_driver.view"
 DRIVER_EDIT = "neoscorpion.truck_driver.edit"
@@ -13,13 +15,19 @@ DRIVER_EDIT = "neoscorpion.truck_driver.edit"
 def driver_roster(gateway, operation, *, include_choices=False):
     if operation is None:
         return dict(driver_trucks=[], drivers_by_truck_id={}, eligible_drivers=[])
-    trucks = (NeoScorpionFuelTruck.query.join(NeoScorpionSortTruck,
-        NeoScorpionSortTruck.fuel_truck_id == NeoScorpionFuelTruck.id)
-        .filter(NeoScorpionSortTruck.sort_date_operation_id == operation.id,
-                NeoScorpionFuelTruck.gateway_id == gateway.id)
-        .order_by(NeoScorpionFuelTruck.truck_number).all())
-    drivers = NeoScorpionTruckDriver.query.options(joinedload(NeoScorpionTruckDriver.driver)).filter_by(
-        sort_date_operation_id=operation.id).all()
+    def read():
+        trucks = (NeoScorpionFuelTruck.query.join(NeoScorpionSortTruck,
+            NeoScorpionSortTruck.fuel_truck_id == NeoScorpionFuelTruck.id)
+            .filter(NeoScorpionSortTruck.sort_date_operation_id == operation.id,
+                    NeoScorpionFuelTruck.gateway_id == gateway.id)
+            .order_by(NeoScorpionFuelTruck.truck_number).all())
+        drivers = NeoScorpionTruckDriver.query.options(joinedload(NeoScorpionTruckDriver.driver)).filter_by(
+            sort_date_operation_id=operation.id).all()
+        return trucks, drivers
+    # Dispatch uses the same roster in its physical cards and management area.
+    # Share only within a GET/HEAD, never a mutation or another user's request.
+    trucks, drivers = (request_cached('scorpion.driver_roster', (gateway.id,operation.id), read)
+        if has_request_context() and request.method in {'GET','HEAD'} else read())
     return dict(driver_trucks=trucks, drivers_by_truck_id={d.fuel_truck_id:d for d in drivers},
         eligible_drivers=eligible_nightly_fueler_users(gateway, permission_key=DRIVER_EDIT) if include_choices else [])
 

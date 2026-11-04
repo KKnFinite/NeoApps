@@ -770,7 +770,7 @@
         + "[data-pending-uplift-form] input:not([type=hidden]), [data-pending-uplift-form] select, "
         + ".scorpion-desktop-console input:not([type=hidden]):not([disabled]), .scorpion-desktop-console select:not([disabled]), .scorpion-desktop-console textarea:not([disabled]), "
         + "[data-assets-workspace] input:not([type=hidden]):not([disabled]), [data-assets-workspace] select:not([disabled]), [data-assets-workspace] textarea:not([disabled]), "
-        + "[data-truck-card-actions] input:not([type=hidden])"
+        + "[data-truck-card-actions] input:not([type=hidden]), input[data-dispatch-authority-locked], select[data-dispatch-authority-locked], textarea[data-dispatch-authority-locked]"
     )).filter(control => !control.closest("[data-tail-note-form]"));
 
     const resetProtectedBaselines = () => {
@@ -879,10 +879,36 @@
     let pendingFuelDataRefresh = false;
     let criticalRefreshKey = "";
     let criticalRefreshBusy = false;
-    let criticalFingerprints = {};
+    const dispatchDelta = window.NeoScorpionDispatchDelta;
+    const initialParts = dispatchDelta?.fingerprints(root);
+    let dispatchFingerprints = initialParts?.full || {};
+    let criticalFingerprints = initialParts?.critical || {};
+    const invalidatePart = element => {
+        const key = dispatchDelta?.keyFor(element);
+        if (!key) return;
+        delete dispatchFingerprints[key];
+        delete criticalFingerprints[key.startsWith('mission-') ? key.slice(8) : key];
+    };
+    ['input','change','submit'].forEach(name => root.addEventListener(name, event => invalidatePart(event.target), true));
+    const retainAndDisable = control => {
+        if (control.tagName !== 'BUTTON' && !initialControlValues.has(control)) {
+            initialControlValues.set(control, control.type === 'checkbox' ? (control.defaultChecked ? '1' : '0')
+                : control.dataset.savedValue ?? control.defaultValue ?? control.value);
+        }
+        control.dataset.dispatchAuthorityLocked = '1'; control.disabled = true;
+    };
+    const lockAuthority = () => {
+        root.querySelectorAll('input,select,textarea,button').forEach(control => {
+            if (control.type !== 'hidden' && !control.disabled && control.form?.method.toLowerCase() === 'post') {
+                retainAndDisable(control);
+            }
+        });
+        dispatchFingerprints = {}; criticalFingerprints = {}; criticalRefreshKey = '';
+        pendingFuelDataRefresh = true;
+    };
     let spearFingerprints = {};
 
-    const applyCriticalCompletion = (nextPanel) => {
+    const applyCriticalCompletion = (nextPanel, manifest) => {
         const scrollState = typeof dispatchScroll === 'undefined' ? null
             : dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
         let rowHeightChanged = false;
@@ -903,7 +929,7 @@
         }
         let regrouped = false;
         const groupDirty = nodes => nodes.some(node => node.querySelector?.('[data-assignment-saving="true"], [data-assignment-failed="true"]') || Array.from(node.querySelectorAll('input,select,textarea')).some(control => {
-            if (control.type === 'hidden' || control.disabled || control.readOnly) return false;
+            if (control.type === 'hidden' || ((control.disabled || control.readOnly) && !control.dataset.dispatchAuthorityLocked)) return false;
             if (initialControlValues.has(control)) return initialControlValues.get(control) !== controlValue(control);
             if (control.matches('[data-dispatch-autosave]')) return control.dataset.autosaveSaving === 'true' || control.value.trim() !== (control.dataset.savedValue || '');
             if (control.type === 'checkbox') return control.checked !== (control.dataset.savedChecked === '1');
@@ -923,10 +949,40 @@
         const live = new Map(Array.from(root.querySelectorAll(
             ".neoscorpion-dispatch-primary-row[data-dispatch-mission-id]"
         ), row => [row.dataset.dispatchMissionId, row]));
+        if (manifest) live.forEach((row, missionId) => {
+            const ranks = manifest[missionId];
+            if (ranks) {
+                regrouped ||= row.dataset.dispatchArrivalRank !== String(ranks.arrival)
+                    || row.dataset.dispatchEtdRank !== String(ranks.etd);
+                row.dataset.dispatchArrivalRank = String(ranks.arrival);
+                row.dataset.dispatchEtdRank = String(ranks.etd);
+                return;
+            }
+            const group = Array.from(row.closest('tbody').children).filter(n => n.dataset.dispatchSortGroup === missionId);
+            delete dispatchFingerprints['mission-' + missionId];
+            if (groupDirty(group)) {
+                group.forEach(node => node.querySelectorAll('input,select,textarea,button').forEach(control => {
+                    if (control.type !== 'hidden' && control.form) {
+                        retainAndDisable(control);
+                    }
+                }));
+                row.dataset.dispatchRemoved = '1';
+                setStatus(row.querySelector('[data-assignment-save-status]'), 'MISSION REMOVED · DRAFT RETAINED', 'error');
+            } else { group.forEach(node => node.remove()); regrouped = true; }
+        });
         nextPanel.querySelectorAll(".neoscorpion-dispatch-primary-row[data-dispatch-mission-id]").forEach(nextRow => {
             const missionId = nextRow.dataset.dispatchMissionId;
             const currentRow = live.get(missionId);
-            if (!currentRow) return;
+            delete dispatchFingerprints['mission-' + missionId];
+            if (!currentRow) {
+                const body = root.querySelector('.neoscorpion-dispatch-table--compact > tbody');
+                if (body) {
+                    Array.from(nextRow.closest('tbody').children).filter(n => n.dataset.dispatchSortGroup === missionId)
+                        .forEach(node => body.appendChild(node.cloneNode(true)));
+                    regrouped = true;
+                }
+                return;
+            }
             const currentStack = currentRow.querySelector(".neoscorpion-dispatch-action-stack");
             const nextStack = nextRow.querySelector(".neoscorpion-dispatch-action-stack");
             if (!currentStack || !nextStack) return;
@@ -1157,6 +1213,7 @@
             if (scrollState) dispatchScroll.restoreSnapshot(scrollState);
         }
         const oldAssets=root.querySelector('[data-assets-workspace]'), newAssets=nextPanel.querySelector('[data-assets-workspace]');
+        if (newAssets) delete dispatchFingerprints.assets;
         if (oldAssets && newAssets && oldAssets.dataset.assetsOperationId === newAssets.dataset.assetsOperationId) {
             const incoming=new Map(Array.from(newAssets.querySelectorAll('[data-assets-unit]'),item=>[item.dataset.assetsUnit,item]));
             oldAssets.querySelectorAll('[data-assets-unit]').forEach(item=>{
@@ -1196,6 +1253,7 @@
         // Truck physical status must not be frozen by a mission/inventory draft.
         // Preserve every editable control and optional planning enrichment.
         nextPanel.querySelectorAll('[data-dispatch-truck-id]').forEach(nextCard => {
+            delete dispatchFingerprints['truck-' + nextCard.dataset.dispatchTruckId];
             const currentCard=Array.from(root.querySelectorAll('[data-dispatch-truck-id]')).find(card => card.dataset.dispatchTruckId===nextCard.dataset.dispatchTruckId);
             if (!currentCard) return;
             const oldBadge=currentCard.querySelector('.neoscorpion-truck-activity');
@@ -1237,6 +1295,7 @@
                     "X-Neo-Dispatch-Fingerprints": JSON.stringify(criticalFingerprints)},
             });
             const payload = await response.json().catch(() => ({}));
+            if (response.status === 403) lockAuthority();
             if (!response.ok || payload.ok !== true || !payload.html
                     || String(payload.operation_id) !== nextOperationId || !currentResponse(payload, requestGeneration)) return false;
             const holder = document.createElement("template");
@@ -1245,7 +1304,8 @@
             if (!nextPanel?.matches(".neoscorpion-panel")) return false;
             // Deliberately update *only* read-only handoff text and server-rendered
             // COMPLETE actions. Full page replacement still waits for clean inputs.
-            applyCriticalCompletion(nextPanel);
+            if (payload.can_edit === false) lockAuthority();
+            applyCriticalCompletion(nextPanel, payload.mission_manifest);
             stateGeneration += 1;
             criticalRefreshKey = key;
             criticalFingerprints = payload.fingerprints || {};
@@ -1274,7 +1334,11 @@
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true || !payload.spear_fragments) {
+                if (response.status === 403) lockAuthority();
                 throw new Error(payload.error || 'SPEAR refresh unavailable.');
+            }
+            if (payload.can_edit === false && root.dataset.dispatchCanEdit !== 'false') {
+                lockAuthority(); return false;
             }
             // A prediction cannot acknowledge an unapplied operational change.
             if (!currentResponse(payload, generation) || Number(payload.revision || 0) !== revision
@@ -1294,6 +1358,9 @@
                 const open = Array.from(old.querySelectorAll('details'), node => node.open);
                 fresh.querySelectorAll('details').forEach((node, index) => { node.open = open[index] ?? node.open; });
                 replacements.push([old, fresh]);
+                if (key === 'overview') delete dispatchFingerprints.summary;
+                else if (key.startsWith('mission-') || key.startsWith('truck-')) delete dispatchFingerprints[key];
+                else if (key.startsWith('tail-')) delete dispatchFingerprints['mission-' + key.slice(5)];
             }
             const saved = dispatchScroll.snapshot();
             replacements.forEach(([old, fresh]) => old.replaceWith(fresh));
@@ -1341,19 +1408,24 @@
         reloading = true;
         const requestGeneration = stateGeneration;
         try {
-            const response = await (window.NeoLiveRevision?.fetch || fetch)(panelUrl, {
+            const url = new URL(panelUrl, window.location.href);
+            if (dispatchDelta) url.searchParams.set('missions_delta', '1');
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {
                 cache: "no-store",
                 credentials: "same-origin",
-                headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+                headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest",
+                    ...(dispatchDelta ? {'X-Neo-Dispatch-Parts':JSON.stringify(dispatchDelta.bounded(dispatchFingerprints)),
+                        'X-Neo-Dispatch-Fingerprints':JSON.stringify(dispatchDelta.bounded(criticalFingerprints))} : {})},
             });
             const payload = await response.json().catch(() => ({}));
+            if (response.status === 403) lockAuthority();
             if (!response.ok || payload.ok !== true || !payload.html) {
                 throw new Error(payload.error || "Fuel Dispatch refresh failed.");
             }
             if (!currentResponse(payload, requestGeneration)) return false;
             // Input may have become dirty while the network request was in
             // flight. Never replace live operator typing with fetched markup.
-            if (hasUnsavedControls() || dispatcherCheckSaving > 0 || preferenceSaving) {
+            if (hasUnsavedControls() || dispatcherCheckSaving > 0 || preferenceSaving || window.NeoScorpionFuelData?.isOpen()) {
                 pendingFuelDataRefresh = true;
                 return false;
             }
@@ -1364,6 +1436,9 @@
             if (!nextPanel?.matches(".neoscorpion-panel") || !currentPanel) {
                 throw new Error("Fuel Dispatch refresh returned invalid content.");
             }
+            const commitParts = dispatchDelta?.prepare(nextPanel, currentPanel);
+            dispatchDelta?.applyRanks(nextPanel, payload.mission_manifest);
+            const savedFocus = dispatchDelta?.saveFocus(currentPanel);
             // A dispatcher may scroll while the panel request is in flight.
             // Restore the working position at replacement, not request start.
             const saved = dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
@@ -1375,7 +1450,9 @@
             const selection = searchFocused ? [search.selectionStart, search.selectionEnd] : null;
             const incomingToolbar = nextPanel.querySelector('.neoscorpion-dispatch-sort');
             if (toolbar && incomingToolbar) incomingToolbar.replaceWith(toolbar);
+            commitParts?.();
             currentPanel.replaceWith(nextPanel);
+            dispatchDelta?.applyRanks(nextPanel, payload.mission_manifest);
             if (searchFocused && search?.isConnected) {
                 search.focus({preventScroll:true});
                 search.setSelectionRange(...selection);
@@ -1395,21 +1472,32 @@
             updateTopOffAlerts(root);
             applyMissionSearch(root);
             adoptFingerprint(payload);
-            criticalFingerprints = {};
+            const applied = dispatchDelta?.fingerprints(root);
+            dispatchFingerprints = applied?.full || {};
+            criticalFingerprints = applied?.critical || {};
             spearFingerprints = {};
             root.dataset.spearPlanToken = payload.spear_plan_token || "";
             root.dataset.spearAutomaticReference = payload.spear_automatic_reference || "";
             root.dataset.spearAutomationEnabled = payload.spear_automation_enabled ? "true" : "false";
+            if (typeof payload.can_edit === 'boolean') root.dataset.dispatchCanEdit = String(payload.can_edit);
+            for (const [id, reference] of Object.entries(payload.spear_references || {})) {
+                root.querySelectorAll('[data-dispatch-sort-group]').forEach(group => {
+                    if (group.dataset.dispatchSortGroup === id) group.querySelectorAll('input[name="spear_decision_reference"]')
+                        .forEach(input => { input.value = reference; });
+                });
+            }
             spearRenderedAt = Date.now();
             initializeDispatchSelects(root);
             initializeDispatchApuEditors(root);
             resetProtectedBaselines();
             syncDirtyState();
             dispatchScroll.restoreSnapshot(saved);
+            dispatchDelta?.restoreFocus(savedFocus, root);
             pendingFuelDataRefresh = false;
             scheduleSpearAutomation();
             return true;
         } catch (error) {
+            dispatchFingerprints = {};
             const status = root.querySelector("[data-spear-fleet-status]");
             setStatus(status, `LIVE REFRESH: ${error.message || "Unable to refresh Dispatch."}`, "error");
             return false;
@@ -1445,6 +1533,7 @@
         }, pollIntervalMs, operationId);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
+            if (response.status === 403) lockAuthority();
             throw new Error("Fuel Dispatch live status is unavailable.");
         }
         const nextOperationId = payload.operation_id === null
@@ -1452,8 +1541,15 @@
             : String(payload.operation_id);
         const nextRevision = Number(payload.revision || 0);
         const nextTailRevision = String(payload.tail_revision || "");
+        const permissionChanged = typeof payload.can_edit === 'boolean'
+            && String(payload.can_edit) !== root.dataset.dispatchCanEdit;
+        if (permissionChanged) {
+            root.dataset.dispatchCanEdit = String(payload.can_edit);
+            if (!payload.can_edit) lockAuthority();
+            criticalRefreshKey = ''; pendingFuelDataRefresh = true; stateGeneration += 1;
+        }
         if (!observeLiveState(nextOperationId, nextRevision, nextTailRevision)) return;
-        if (nextOperationId !== operationId || nextRevision !== revision
+        if (permissionChanged || nextOperationId !== operationId || nextRevision !== revision
                 || nextTailRevision !== tailRevision
                 || (pendingFuelDataRefresh && criticalRefreshKey !== [nextOperationId,nextRevision,nextTailRevision].join(':'))) {
             // Concurrent autosaves can adopt a revision while its critical GET

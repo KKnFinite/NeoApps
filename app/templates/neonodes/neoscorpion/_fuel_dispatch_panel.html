@@ -1,6 +1,7 @@
 {% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status, call_dispatch_ack with context %}
 {% from "neonodes/neoscorpion/_spear_display.html" import spear_indicator, spear_resources %}
 {% from "neonodes/neoscorpion/_spear_calibration_display.html" import calibration_mode, calibration_values %}
+{% macro fragment(key) -%}{% if dispatch_parts is defined %}{{ dispatch_parts(key, caller) }}{% else %}{{ caller() }}{% endif %}{%- endmacro %}
 {% macro mission_truck_bars(truck_visual) -%}
 {% if truck_visual %}
 <div
@@ -21,8 +22,8 @@
         <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
     </div>
     </div>
-    {% include "neonodes/neoscorpion/_nightly_assets.html" %}
-    <div data-dispatch-board-header>
+    {% call fragment('assets') %}{% include "neonodes/neoscorpion/_nightly_assets.html" %}{% endcall %}
+    {% call fragment('summary') %}<div data-dispatch-board-header>
     {% if operation %}
     <div class="neoscorpion-dispatch-insights" aria-label="SPEAR and fueling performance">
     {% include "neonodes/neoscorpion/_dispatch_spear_overview.html" %}
@@ -56,7 +57,7 @@
     </section>
     </div>
     {% endif %}
-    </div>{% if operation and truck_visuals %}
+    </div>{% endcall %}{% if operation and truck_visuals %}
     <aside class="neoscorpion-truck-visual-panel" aria-label="Tonight's fuel truck capacity">
         <header class="neoscorpion-dispatch-section-head">
             <strong>TRUCK FUEL STATUS</strong>
@@ -66,6 +67,7 @@
         </header>
         <div class="neoscorpion-truck-visual-list" id="dispatch-truck-cards" data-dispatch-section="trucks"{% if dispatch_preferences.truck_cards_collapsed %} hidden{% endif %}>
             {% for truck in truck_visuals %}
+            {% call fragment('truck-' ~ truck.truck_id) %}
             <article data-dispatch-truck-id="{{ truck.truck_id }}" data-truck-operational-status="{{ truck.status }}" data-top-off-return-utc="{{ truck.top_off_return_utc }}" class="neoscorpion-truck-visual-card neoscorpion-truck-visual-card--{{ truck.status }}{% if truck.projected_short %} is-short{% endif %}">
                 <header>
                     <strong>TRUCK {{ truck.truck_number }}</strong>
@@ -129,6 +131,7 @@
                 {% endif %}
                 </div>
             </article>
+            {% endcall %}
             {% endfor %}
         </div>
     </aside>
@@ -165,7 +168,7 @@
             </tr></thead>
             <tbody>
                 {% for row in rows %}
-                {% include "neonodes/neoscorpion/_dispatch_mission_rows.html" %}
+                {% call fragment('mission-' ~ row.mission.id) %}{% include "neonodes/neoscorpion/_dispatch_mission_rows.html" %}{% endcall %}
                 {% endfor %}
             </tbody>
         </table>
