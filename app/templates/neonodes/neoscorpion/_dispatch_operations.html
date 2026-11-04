@@ -2,6 +2,28 @@
 <div class="scorpion-operation-list">
 {% if can_edit and row.direct_entry_available %}<button class="action-button" type="button" data-fuel-data-open="{{ url_for('neoscorpion.dispatch_direct_entry',mission_id=row.mission.id) }}">ENTER AND COMPLETE</button>{% endif %}
 {% if can_edit %}
+{% if row.assignment and (row.assignment.assigned_fueler_user_id or row.assignment.assigned_truck_id) %}
+<div class="scorpion-operation" data-console-section="remove-assignment">
+    <button class="action-button" type="button" data-operation-toggle aria-expanded="false" aria-controls="remove-assignment-{{ row.mission.id }}">REMOVE ASSIGNMENT</button>
+    <div id="remove-assignment-{{ row.mission.id }}" data-operation-panel hidden>
+        <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_remove_assignment') }}" data-dispatch-lifecycle-form data-confirm="Remove the Fueler and truck assignment? The mission and saved evidence will be retained.">
+            {{ csrf_field() }}
+            <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
+            <input type="hidden" name="expected_cycle" value="{{ row.assignment.current_cycle_number }}">
+            <input type="hidden" name="expected_tail" value="{{ row.mission.assigned_tail_number or '' }}">
+            <input type="hidden" name="expected_work_ref" value="{{ row.assignment.active_work_state_id or '' }}">
+            <input type="hidden" name="expected_assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id or '' }}">
+            <input type="hidden" name="expected_assigned_truck_id" value="{{ row.assignment.assigned_truck_id or '' }}">
+            <input type="hidden" name="expected_assignment_version" value="{{ row.assignment.updated_at.isoformat() }}">
+            <label>Removal reason<input name="reason" required maxlength="1000"></label>
+            <label><input type="checkbox" name="confirm_remove" value="yes" required> Confirm removal of the Fueler and truck only</label>
+            <button class="action-button" type="submit">CONFIRM REMOVE</button>
+            <small>Unstarted assignments only. Physical work requires the existing OFF/review process. Submitted assignments cannot be removed.</small>
+            <small data-lifecycle-status role="status"></small>
+        </form>
+    </div>
+</div>
+{% endif %}
 <div class="scorpion-operation" data-console-section="second-truck" data-operation-unavailable="{{ 'true' if row.second_truck_reason else 'false' }}">
     <button class="action-button" type="button" data-operation-toggle aria-expanded="false" aria-controls="plan-truck-{{ row.mission.id }}"{% if row.second_truck_reason %} aria-describedby="plan-truck-reason-{{ row.mission.id }}"{% endif %}>PLAN ANOTHER TRUCK</button>
     <div id="plan-truck-{{ row.mission.id }}" data-operation-panel hidden>

@@ -972,8 +972,10 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     for work in all_work(fuel_work_states):
         owner = by_assignment[work.fuel_assignment_id]
         if (work.physical_sequence_number is None or (work.physical_finalized_at_utc is not None and not include_completed)
+                or (owner.assigned_fueler_user_id is None and not _fuel_work_has_begun(work, owner))
                 or (work.id == owner.active_work_state_id and work.tail_number == _normalize_tail(owner.sort_date_mission.assigned_tail_number))
-                or (not dispatcher and work_owner_id(work) != user.id)
+                or (not dispatcher and (work_owner_id(work) if _fuel_work_has_begun(work, owner)
+                    else owner.assigned_fueler_user_id) != user.id)
                 or (assignment_id is not None and owner.id != assignment_id)):
             continue
         source_assignment, source_mission = _segment_views(owner, owner.sort_date_mission, work)
@@ -2326,12 +2328,16 @@ def _locked_source_segment(assignment, mission, work_id, sequence, user, *, disp
         raise FuelerDataConflict()
     if work.physical_cycle_number is None:
         raise ValueError("REVIEW REQUIRED: legacy physical cycle identity is unknown; do not guess its transfer allocation.")
+    if assignment.assigned_fueler_user_id is None and not _fuel_work_has_begun(work, assignment):
+        raise ValueError("This preparation is unassigned. A Dispatcher must assign resources before Fueler entry.")
     is_current = work.id == assignment.active_work_state_id and work.tail_number == _normalize_tail(mission.assigned_tail_number)
     from app.services.neoscorpion_participation import owner_id as work_owner_id
     if not is_current:
         from app.services.neoscorpion_participation import hydrate_legacy_owners
         hydrate_legacy_owners([work])
-    owner_id = assignment.assigned_fueler_user_id if is_current else work_owner_id(work)
+    # Unstarted preparation follows current personnel authority. It is not an
+    # independently owned physical visit merely because its tail was replaced.
+    owner_id = assignment.assigned_fueler_user_id if is_current or not _fuel_work_has_begun(work, assignment) else work_owner_id(work)
     if not dispatcher and owner_id != user.id:
         raise ValueError("This physical segment belongs to another Fueler.")
     return (*_segment_views(assignment, mission, work), work)
@@ -4620,6 +4626,70 @@ def swap_assignment_truck(
         fueling_event=fueling_event,
         audit_entries=(audit,),
     )
+
+
+def remove_fuel_assignment(gateway, user, assignment_id, *, expected, now_utc=None):
+    """Detach only unstarted resources; keep mission, visit and measurements intact."""
+    if expected.get("confirm_remove") != "yes":
+        raise ValueError("Confirm REMOVE ASSIGNMENT before continuing.")
+    reason = _required_correction_reason(expected.get("reason"))
+    if len(reason) > 1000:
+        raise ValueError("Removal reason must be 1,000 characters or fewer.")
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for REMOVE ASSIGNMENT.")
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation, assignment_id, action_label="REMOVE ASSIGNMENT", current_work_only=True)
+    identity = dict(expected_cycle=assignment.current_cycle_number,
+        expected_tail=mission.assigned_tail_number,
+        expected_work_ref=assignment.active_work_state_id,
+        expected_assigned_fueler_user_id=assignment.assigned_fueler_user_id,
+        expected_assigned_truck_id=assignment.assigned_truck_id,
+        expected_assignment_version=assignment.updated_at.isoformat())
+    if any(key not in expected or str(expected.get(key) or "") != str(value or "")
+           for key, value in identity.items()):
+        raise FuelerDataConflict()
+    if assignment.assigned_fueler_user_id is None and assignment.assigned_truck_id is None:
+        raise FuelerDataConflict()
+    _validate_precompletion_assignment(assignment, mission, "REMOVE ASSIGNMENT")
+    # Include the previous tail and retired visits: a tail replacement must not
+    # hide physical work that still belongs to this cycle.
+    works = NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=assignment.id).filter(
+        db.or_(NeoScorpionFuelWorkState.physical_cycle_number == assignment.current_cycle_number,
+               NeoScorpionFuelWorkState.physical_cycle_number.is_(None)),
+    ).with_for_update().populate_existing().all()
+    if any(work.fueler_submitted_at_utc for work in works):
+        raise ValueError("REMOVE ASSIGNMENT is locked after Fueler COMPLETE ASSIGNMENT.")
+    if (assignment.transfer_fuel_gallons not in (None, 0)
+            or any(_fuel_work_has_begun(work, assignment) or work.on_at_utc
+                   or work.physical_transfer_gallons not in (None, 0)
+                   or work.physical_transfer_review for work in works)):
+        raise ValueError("Physical work exists. Use the existing TRUCK OFF/review process; ordinary removal is not permitted.")
+    if NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=assignment.id,
+            cycle_number=assignment.current_cycle_number).first() is not None:
+        raise ValueError("Completed physical evidence exists; ordinary removal is not permitted.")
+    from app.services.neoscorpion_spear_decisions import prepare_scope, observe
+    before = prepare_scope(operation, mission, assignment, int(asset_state.revision if asset_state else 0))
+    now_utc = now_utc or datetime.utcnow()
+    old = json.dumps(dict(fueler_user_id=assignment.assigned_fueler_user_id,
+                         truck_id=assignment.assigned_truck_id), sort_keys=True)
+    # Reuse the established resource-unassignment audit action. field_name
+    # distinguishes full removal from truck-only unassignment, without a schema change.
+    audit = _new_fuel_audit(operation, assignment, user, "unassign_truck", "resource_assignments",
+        old, None, reason, fuel_work_state=next((w for w in works if w.id == assignment.active_work_state_id), None),
+        now_utc=now_utc)
+    assignment.assigned_fueler_user_id = None
+    assignment.assigned_truck_id = None
+    assignment.fueler_assigned_at_utc = None
+    assignment.truck_assigned_at_utc = None
+    assignment.resource_assignment_by_user_id = user.id
+    _record_assigned_fueler_update(assignment, ("Assignment removed by Dispatch.",), now_utc=now_utc)
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    observe(gateway, assignment, before, 'unassignment', actor=user, now=now_utc)
+    return FuelInterruptionResult(True, int(asset_state.revision), assignment,
+        next((w for w in works if w.id == assignment.active_work_state_id), None), audit_entries=(audit,))
 
 
 def unassign_assignment_truck(gateway, user, assignment_id, *, expected_truck_id,

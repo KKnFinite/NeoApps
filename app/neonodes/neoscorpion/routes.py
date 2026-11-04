@@ -55,6 +55,7 @@ from app.services.neoscorpion import (
     cancel_uplift,
     cancel_defuel,
     unassign_assignment_truck,
+    remove_fuel_assignment,
     swap_assignment_fueler,
     swap_assignment_truck,
     truck_manager_context,
@@ -684,6 +685,14 @@ def fuel_dispatch_unassign_truck():
         expected_cycle=request.form.get("expected_cycle", ""),
         expected_tail=request.form.get("expected_tail", ""),
     ), "TRUCK UNASSIGNED.")
+
+
+@bp.post("/fuel-dispatch/remove-assignment")
+@gateway_node_required("scorpion")
+def fuel_dispatch_remove_assignment():
+    return _run_dispatch_lifecycle_action(lambda gateway: remove_fuel_assignment(
+        gateway, current_user, request.form.get("assignment_id"), expected=request.form,
+    ), "ASSIGNMENT REMOVED. Mission and saved evidence retained.", conflict_status=409)
 
 
 @bp.post("/fuel-dispatch/reopen-off")
@@ -2266,7 +2275,7 @@ def _spear_calibration_response(gateway, access, status_code=200):
     return response, status_code
 
 
-def _run_dispatch_lifecycle_action(action, success_message):
+def _run_dispatch_lifecycle_action(action, success_message, *, conflict_status=400):
     gateway = get_current_gateway()
     access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
     json_response = request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.accept_mimetypes.best == "application/json"
@@ -2277,7 +2286,7 @@ def _run_dispatch_lifecycle_action(action, success_message):
         try:
             result = action(gateway)
         except (IntegrityError, ValueError) as exc:
-            status_code = 400
+            status_code = conflict_status if isinstance(exc, FuelerDataConflict) else 400
             message = str(exc) if isinstance(exc, ValueError) else "Fuel assignment changed. Refresh and review the current state."
     if status_code != 200:
         db.session.rollback()
