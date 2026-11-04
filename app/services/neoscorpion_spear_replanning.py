@@ -48,11 +48,14 @@ def inputs(context,calibrations):
         next((r['spear_physical_visits'] for r in context['rows'] if 'spear_physical_visits' in r),[])])
 
 
-def load_top_off_history(operation):
+def load_top_off_history(operation, *, now_utc=None):
+    from app.services.neoscorpion_spear_calibration import learning_window
+    start, now = learning_window(now_utc)
     sent,returned=aliased(Event),aliased(Event)
     pairs=db.session.query(sent,returned).join(returned,returned.sent_event_id==sent.id).join(
         SortDateOperation,SortDateOperation.id==sent.sort_date_operation_id).filter(
-        SortDateOperation.gateway_id==operation.gateway_id,returned.occurred_at_utc<=datetime.utcnow()).order_by(returned.occurred_at_utc.desc()).limit(1000).all()
+        SortDateOperation.gateway_id==operation.gateway_id,returned.occurred_at_utc>=start,
+        returned.occurred_at_utc<=now).order_by(returned.occurred_at_utc.desc()).limit(1000).all()
     events=Event.query.filter_by(sort_date_operation_id=operation.id).order_by(Event.occurred_at_utc).limit(1001).all()
     if len(events)>1000:raise ValueError('Current TOP OFF history bound exceeded')
     return pairs,events
@@ -66,8 +69,9 @@ def freeze_sent_forecast(operation,truck_id,sent_at):
     try:
         with db.session.begin_nested():
             settings=effective_spear_settings(NeoScorpionSettings.query.filter_by(gateway_id=operation.gateway_id).first())
-            pairs,_=load_top_off_history(operation)
-            policy=top_off_policy(pairs,truck_id,settings)
+            pairs,_=load_top_off_history(operation,now_utc=sent_at)
+            policy=top_off_policy(pairs,truck_id,settings,now_utc=sent_at)
+            policy['learning_origin']='test' if current_app.config.get('TESTING') else 'production'
             return sent_at+timedelta(minutes=float(policy['minutes'])),policy
     except Exception:
         current_app.logger.warning('SPEAR SENT prediction unavailable; physical action preserved',exc_info=True)
@@ -187,7 +191,7 @@ def enrich(context,baseline,planning,calibrations,now=None):
             previous=_history.get(key)
         if cached is None:
             if previous is None:previous=_previous(context['operation'].id,settings.whole_sort_mode)
-            pairs,events=load_top_off_history(context['operation'])
+            pairs,events=load_top_off_history(context['operation'],now_utc=now)
             candidate=optimize(context['rows'],operation=context['operation'],planning_settings=planning,
                 spear_settings=settings,nightly_fuelers=context['nightly_assignment_fuelers'],
                 nightly_trucks=context['nightly_trucks'],now_utc=now,calibrations=calibrations,

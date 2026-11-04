@@ -185,15 +185,17 @@ class ResourceProfMathTest(unittest.TestCase):
             history=self.event(id=identity,fuel_assignment_id=identity,fuel_work_state_id=identity)
             history.performance_snapshot=copy.deepcopy(history.performance_snapshot)
             history.performance_snapshot['resource_timing']['work_id']=identity
+            history.performance_snapshot['completed_at']=at(45).isoformat()
+            history.performance_snapshot['actuals_received_at']=at(44).isoformat()
             jobs.append(dict(event=history,**event_math(history)))
-        observed=physical_off_forecast(row,planning,jobs=jobs,mode='observe')
-        applied=physical_off_forecast(row,planning,jobs=jobs,mode='apply')
+        observed=physical_off_forecast(row,planning,jobs=jobs,mode='observe',now_utc=at(60))
+        applied=physical_off_forecast(row,planning,jobs=jobs,mode='apply',now_utc=at(60))
         self.assertEqual(observed['likely'],observed['goal'])
         self.assertEqual(applied['goal'],at(50))
         self.assertEqual(applied['likely'],at(42))
         self.assertEqual(applied['samples'],3)
         jobs[0]['facts']['version']=3
-        insufficient=physical_off_forecast(row,planning,jobs=jobs,mode='apply')
+        insufficient=physical_off_forecast(row,planning,jobs=jobs,mode='apply',now_utc=at(60))
         self.assertEqual(insufficient['samples'],2)
         self.assertEqual(insufficient['likely'],insufficient['goal'])
 

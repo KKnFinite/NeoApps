@@ -8,7 +8,6 @@ This is a bounded search, not a claim of an exhaustive global optimum.
 from dataclasses import dataclass, field, replace, asdict, is_dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from math import ceil
 from types import SimpleNamespace
 from time import monotonic
 from functools import lru_cache
@@ -46,9 +45,11 @@ def digest(value):
         separators=(',', ':')).encode()).hexdigest()
 
 
-def top_off_policy(pairs, truck_id, settings):
+def top_off_policy(pairs, truck_id, settings, *, now_utc=None):
     """Exact linked, verified SENT/RETURN evidence only; never reconstruct history."""
-    samples = []
+    from app.services.neoscorpion_spear_calibration import learning_window, recency_weight, robust_weighted_samples
+    cutoff, now = learning_window(now_utc)
+    samples, seen = [], set()
     for sent, returned in pairs:
         start, end = stamp(sent.occurred_at_utc), stamp(returned.occurred_at_utc)
         if (sent.kind != 'sent' or returned.kind != 'returned'
@@ -57,20 +58,43 @@ def top_off_policy(pairs, truck_id, settings):
                 or sent.sort_date_operation_id != returned.sort_date_operation_id
                 or not start or not end or not returned.inventory_verified
                 or returned.gallons is None or returned.gallons < 0
-                or not sent.actor_user_id or not returned.actor_user_id):
+                or not sent.actor_user_id or not returned.actor_user_id
+                or not cutoff<=end<=now or sent.id in seen
+                or (getattr(sent,'spear_roundtrip_policy',None) or {}).get('learning_origin','production')!='production'):
             continue
         duration = (end-start).total_seconds()/60
         if 2 <= duration <= 240:
-            samples.append((sent.fuel_truck_id, sent.sort_date_operation_id, duration))
+            seen.add(sent.id)
+            samples.append((sent.fuel_truck_id, sent.sort_date_operation_id, Decimal(str(duration)), end))
     specific = [s for s in samples if s[0] == truck_id]
     qualified = lambda rows: len(rows) >= 10 and len({r[1] for r in rows}) >= 2
-    evidence = specific if qualified(specific) else samples
-    use = settings.use_learned_top_off and qualified(evidence)
-    duration = sorted(s[2] for s in evidence)[ceil(.8*len(evidence))-1] if use else settings.top_off_roundtrip_minutes
-    return dict(minutes=duration, source=('truck p80' if evidence is specific else 'gateway p80') if use else 'manual',
-        sample_count=len(evidence), sort_count=len({s[1] for s in evidence}),
+    def filter_outliers(rows):
+        kept,rejected,_=robust_weighted_samples([(s[2],s[3],1) for s in rows],now,floor=Decimal(2))
+        retained={(v,at) for v,at,_ in kept}
+        return kept,rejected,[s for s in rows if (s[2],s[3]) in retained]
+    kept,rejected,eligible=filter_outliers(specific)
+    evidence=specific
+    if not qualified(eligible):
+        evidence=samples
+        kept,rejected,eligible=filter_outliers(evidence)
+    ready=qualified(eligible)
+    candidate=Decimal(settings.top_off_roundtrip_minutes)
+    if ready:
+        weighted=sorted([(v,recency_weight(at,now)) for v,at,_ in kept]+[(candidate,Decimal(3))])
+        target=sum(w for _,w in weighted)*Decimal('0.8');cumulative=Decimal(0)
+        for value,weight in weighted:
+            cumulative+=weight
+            if cumulative>=target:
+                candidate=max(Decimal(2),min(Decimal(240),value));break
+    use = settings.use_learned_top_off and settings.live_calibration_mode=='apply' and ready
+    return dict(minutes=float(candidate) if use else settings.top_off_roundtrip_minutes,
+        candidate_minutes=float(candidate),source=('truck p80' if evidence is specific else 'gateway p80') if use else 'manual',
+        sample_count=len(eligible), excluded_samples=len(rejected),sort_count=len({s[1] for s in eligible}),
         confidence='qualified' if use else 'manual fallback' if settings.use_learned_top_off else 'manual',
-        minimum_samples=10, percentile=80)
+        unavailable_reason='Need 10 reliable pairs across 2 sorts in 30 days' if not ready else
+            'OBSERVE: candidate not applied' if settings.live_calibration_mode!='apply' else
+            'Learned TOP OFF control is off' if not settings.use_learned_top_off else '',
+        minimum_samples=10, percentile=80,window_days=30,recency_half_life_days=7)
 
 
 @dataclass(frozen=True)
@@ -305,7 +329,7 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
             continue
         if s.status != 'available' and not sent:
             continue
-        policies[t.id]=dict(top_off_policy(top_off_pairs,t.id,settings),truck_number=str(t.truck_number))
+        policies[t.id]=dict(top_off_policy(top_off_pairs,t.id,settings,now_utc=now_utc),truck_number=str(t.truck_number))
         trucks[t.id]=dict(truck=t,base=now,ramp=settings.truck_begins_at,
             gallons=int(inventory_bases.get(t.id,s.current_gallons) or 0),capacity=int(t.capacity_gallons),status=s.status,
             sent=sent,conditional=False)
@@ -400,7 +424,7 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
             unavailable[mid]='TIMING / FUEL / PARKING UNKNOWN — no invented schedule'
             protection_unknown=mid>0
             continue
-        duration=minutes(timing.setup_minutes+timing.pump_minutes)
+        duration=minutes(getattr(timing,'physical_service_minutes',timing.setup_minutes+timing.pump_minutes))
         finishing=minutes(timing.finishing_minutes)
         assignment=row.get('assignment')
         assigned_t=getattr(assignment,'assigned_truck_id',None)
@@ -531,6 +555,7 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
             truck_travel_minutes='Included in protected calendar',fueler_travel_minutes='Included in protected calendar',
             setup_minutes=legacy._minutes_display(timing.setup_minutes),pump_minutes=legacy._minutes_display(timing.pump_minutes),
             finishing_minutes=legacy._minutes_display(timing.finishing_minutes),projected_completion=legacy._display_time(c['finish'],mission),
+            service_prediction_minutes=legacy._minutes_display(getattr(timing,'physical_service_minutes',None)),
             risk=risk,truck_gallons_before=int(before),estimated_gallons=int(abs(c['demand'])),
             truck_gallons_after=int(before-c['demand']),reserve_gallons=settings.minimum_truck_reserve_gallons,
             truck_location=dict(location=truck['ramp'],source='physical calendar',confidence='conditional' if release else 'verified inventory / configured start'),

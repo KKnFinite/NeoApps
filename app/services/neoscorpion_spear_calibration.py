@@ -1,4 +1,4 @@
-"""Bounded, current-sort SPEAR timing calibration.
+"""Bounded, gateway-isolated rolling SPEAR timing calibration.
 
 This intentionally derives from canonical completed work on each request.  It
 does not retain a training-event stream and it never changes configured
@@ -6,16 +6,16 @@ planning settings.  A reset is only a small cutoff marker for the current sort.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, time
 from decimal import Decimal, ROUND_HALF_UP
 from types import SimpleNamespace
-from sqlalchemy.orm import joinedload
-from app.services.neoscorpion_prof import event_math, minutes as timeline_minutes, timestamp
+from zoneinfo import ZoneInfo
+from statistics import median
+from flask import current_app, has_app_context
+from app.services.neoscorpion_prof import minutes as timeline_minutes, timestamp
 
 from app.extensions import db
 from app.models import (
-    NeoScorpionFuelAssignment,
-    NeoScorpionFuelingEvent,
     NeoScorpionSpearCalibrationReset,
 )
 
@@ -23,6 +23,10 @@ from app.models import (
 CALIBRATION_SCHEMA_VERSION = "v1"
 SPEAR_ALGORITHM_VERSION = "spear-v4-resource-aware"
 MINIMUM_ACTIVE_SAMPLES = 3
+LEARNING_DAYS = 30
+HALF_LIFE_DAYS = 7
+MAX_LEARNING_EVENTS = 2000
+MAX_DISPLAY_OBSERVATIONS = 25
 BASELINE_WEIGHT = Decimal("3")
 METRICS = (
     "pump_rate",
@@ -34,7 +38,69 @@ METRICS = (
     "top_off_minutes",
     "service_minutes", "actual_wrapup_minutes", "assignment_lead_minutes",
     "preparation_minutes", "off_prediction_error_minutes",
+    "service_ratio",
 )
+
+
+def learning_window(now_utc=None):
+    """Latest 30 gateway-local calendar dates, including today; never future data."""
+    now = _utc_naive(now_utc or datetime.utcnow())
+    zone = ZoneInfo(current_app.config.get('DEFAULT_GATEWAY_TIMEZONE', 'America/Chicago')
+                    if has_app_context() else 'UTC')
+    today = now.replace(tzinfo=timezone.utc).astimezone(zone).date()
+    start = datetime.combine(today-timedelta(days=LEARNING_DAYS-1), time.min, zone)
+    return start.astimezone(timezone.utc).replace(tzinfo=None), now
+
+
+def recency_weight(observed_at, now_utc):
+    zone = ZoneInfo(current_app.config.get('DEFAULT_GATEWAY_TIMEZONE', 'America/Chicago')
+                    if has_app_context() else 'UTC')
+    local_date = lambda value: _utc_naive(value).replace(tzinfo=timezone.utc).astimezone(zone).date()
+    age = (local_date(now_utc)-local_date(observed_at)).days
+    return Decimal(str(2 ** (-max(0, age)/HALF_LIFE_DAYS)))
+
+
+def learning_reasons(job, now_utc=None):
+    """Canonical completion/participation remain mandatory, even for imported samples."""
+    event, facts = job['event'], job['facts']
+    reasons = list(job.get('fueler_reasons') or ())
+    start, now = learning_window(now_utc)
+    ended = timestamp(getattr(event, 'ended_at_utc', None))
+    completed = timestamp(facts.get('completed_at'))
+    if ended is None or not start <= ended <= now:
+        reasons.append('Outside rolling 30 calendar days or future evidence')
+    if ended is None or completed is None or not ended <= completed <= now:
+        reasons.append('Completed operation provenance unavailable')
+    actuals=timestamp(facts.get('actuals_received_at'))
+    if actuals is None or completed is None or actuals>completed:
+        reasons.append('Final actual-measurement chronology unavailable')
+    if str(facts.get('learning_origin', 'production')).lower() != 'production' or any(
+            str(facts.get(key)).lower() in ('true','1') for key in ('test_data','synthetic','simulation')):
+        reasons.append('Test/simulated evidence')
+    if str(facts.get('training_eligible')).lower() in ('false','0'):
+        reasons.append('Explicitly ineligible evidence')
+    if getattr(event, 'event_type', None) == 'defuel':
+        reasons.append('DEFUEL is not a fueling-service calibration sample')
+    return tuple(dict.fromkeys(reasons))
+
+
+def robust_weighted_samples(samples, now_utc, *, floor=Decimal('0.1')):
+    """Samples are (value, observed time, relevance weight). No history is edited."""
+    start, now = learning_window(now_utc)
+    valid = [(number, timestamp(at), Decimal(str(weight))) for value, at, weight in samples
+        if (number := _decimal(value)) is not None and timestamp(at) is not None
+        and start <= timestamp(at) <= now and Decimal(str(weight)) > 0]
+    if not valid:
+        return (), (), None
+    center = median(v for v, _, _ in valid)
+    deviation = median(abs(v-center) for v, _, _ in valid)
+    band = max(Decimal('4.5')*deviation, abs(center)*Decimal('0.5'), floor)
+    kept, rejected = [], []
+    for value, at, relevance in valid:
+        (kept if len(valid)<3 or abs(value-center)<=band else rejected).append((value, at, relevance))
+    denominator = sum(recency_weight(at, now)*w for _, at, w in kept)
+    average = sum(value*recency_weight(at, now)*w for value, at, w in kept)/denominator if denominator else None
+    return tuple(kept), tuple(rejected), average
 
 
 @dataclass(frozen=True)
@@ -62,6 +128,7 @@ class LiveCalibration:
     most_recent_observation_utc: datetime | None
     observations: tuple[CalibrationObservation, ...]
     excluded_observations: tuple[CalibrationObservation, ...]
+    reset_after_utc: datetime | None = None
 
     @property
     def active(self):
@@ -79,9 +146,13 @@ class LiveCalibration:
 
     @property
     def explanation(self):
+        if self.metric in {'truck_travel_minutes', 'fueler_travel_minutes'}:
+            return 'Independent measured travel unavailable; configured allowances are not observations.'
+        if self.configured is None:
+            return 'Review-only observed opportunity/duration; no compatible predictive baseline. History is not active labor or pump-rate evidence.'
         if not self.active:
-            return "Collecting current-sort operational observations."
-        return "Configured baseline blended with current-sort qualifying work."
+            return 'Fewer than 3 qualifying observations in the last 30 calendar days; configured baseline retained.'
+        return '30 calendar days; 7-day recency half-life, robust outlier exclusion, baseline weight 3.'
 
     def recommendation_using(self, mode):
         return self.effective if mode == "apply" and self.active else self.configured
@@ -96,52 +167,57 @@ def blended_estimate(configured, observations):
     return (baseline * BASELINE_WEIGHT + sum(values)) / (BASELINE_WEIGHT + len(values))
 
 
-def build_live_calibration(operation, planning_settings, rows):
-    """Build the full current-sort calibration snapshot with bounded queries."""
+def build_live_calibration(operation, planning_settings, rows, *, jobs=None, now_utc=None):
+    """One bounded history projection shared with operational OFF forecasts."""
     if operation is None:
         return {}
-    row_by_assignment_id = {
-        getattr(row.get("assignment"), "id", None): row
-        for row in rows
-        if row.get("assignment") is not None
-    }
-    observations = _canonical_observations(operation.id, row_by_assignment_id)
-    reset_cutoffs = {
-        (item.metric, item.scope_key): item.observed_after_utc
-        for item in NeoScorpionSpearCalibrationReset.query.filter_by(
-            sort_date_operation_id=operation.id
-        ).all()
-    }
+    now = _utc_naive(now_utc or datetime.utcnow())
+    if jobs is None:
+        from app.services.neoscorpion_prof import load_observation_jobs
+        jobs = load_observation_jobs(operation.gateway_id, learning=True, now_utc=now)
+    observations = _canonical_observations(jobs, now)
+    reset_cutoffs = {(item.metric, item.scope_key):item.observed_after_utc
+        for item in NeoScorpionSpearCalibrationReset.query.filter_by(sort_date_operation_id=operation.id).all()}
     grouped = {}
     for observation in observations:
         grouped.setdefault((observation.metric, observation.scope_key), []).append(observation)
-
+    types = {row.get('detailed_aircraft_type') for row in rows if row.get('detailed_aircraft_type')}
+    types.update(scope for _, scope in grouped)
+    for kind in types:
+        for metric in ('service_ratio','preparation_minutes','actual_wrapup_minutes',
+                       'truck_travel_minutes','fueler_travel_minutes'):
+            grouped.setdefault((metric,kind), [])
     calibrations = {}
+    from dataclasses import replace
     for (metric, scope_key), items in grouped.items():
         cutoff = reset_cutoffs.get((metric, scope_key))
-        eligible = tuple(
-            item for item in items
-            if item.excluded_reason is None and (
-                cutoff is None
-                or _utc_naive(item.observed_at_utc) > _utc_naive(cutoff)
-            )
-        )
-        excluded = tuple(item for item in items if item.excluded_reason is not None)
-        configured = _configured_baseline(metric, scope_key, planning_settings)
-        observed = (sum(item.value for item in eligible) / len(eligible)) if eligible else None
-        calibrations[(metric, scope_key)] = LiveCalibration(
-            metric=metric,
-            scope_key=scope_key,
-            configured=configured,
-            observed=observed,
-            effective=blended_estimate(configured, (item.value for item in eligible)),
-            samples=len(eligible),
-            excluded_samples=len(excluded),
-            first_observation_utc=min((item.observed_at_utc for item in eligible), default=None),
-            most_recent_observation_utc=max((item.observed_at_utc for item in eligible), default=None),
-            observations=eligible,
-            excluded_observations=excluded,
-        )
+        candidates, excluded = [], []
+        for item in items:
+            if item.excluded_reason:
+                excluded.append(item)
+            elif cutoff is not None and item.observed_at_utc <= _utc_naive(cutoff):
+                excluded.append(replace(item, excluded_reason='Before current-sort calibration reset'))
+            else:
+                candidates.append(item)
+        kept, outliers, observed = robust_weighted_samples(
+            [(item.value,item.observed_at_utc,1) for item in candidates], now,
+            floor=Decimal('0.1') if metric=='service_ratio' else Decimal(1))
+        rejected = {(value,at) for value,at,_ in outliers}
+        eligible = [item for item in candidates if (item.value,item.observed_at_utc) not in rejected]
+        excluded.extend(replace(item,excluded_reason='Outlier outside robust median band')
+            for item in candidates if (item.value,item.observed_at_utc) in rejected)
+        configured = _configured_baseline(metric,scope_key,planning_settings)
+        effective = configured
+        if configured is not None and len(eligible)>=MINIMUM_ACTIVE_SAMPLES:
+            weight = sum(recency_weight(item.observed_at_utc,now) for item in eligible)
+            effective = (configured*BASELINE_WEIGHT + sum(item.value*recency_weight(item.observed_at_utc,now)
+                for item in eligible))/(BASELINE_WEIGHT+weight)
+            if metric=='service_ratio':effective=max(Decimal('0.5'),min(Decimal(2),effective))
+            if metric=='actual_wrapup_minutes':effective=max(Decimal(0),min(Decimal(60),effective))
+        calibrations[(metric,scope_key)] = LiveCalibration(metric,scope_key,configured,observed,effective,
+            len(eligible),len(excluded),min((i.observed_at_utc for i in eligible),default=None),
+            max((i.observed_at_utc for i in eligible),default=None),
+            tuple(eligible[:MAX_DISPLAY_OBSERVATIONS]),tuple(excluded[:MAX_DISPLAY_OBSERVATIONS]),cutoff)
     return calibrations
 
 
@@ -167,8 +243,9 @@ def calibrated_planning_settings(planning_settings, calibrations, *, mode="obser
         calibrations, "setup_minutes", aircraft_type, planning_settings.setup_minutes
     )
     proxy.finishing_for = lambda aircraft_type: _active_value(
-        calibrations, "finishing_minutes", aircraft_type, planning_settings.finishing_minutes
+        calibrations, "actual_wrapup_minutes" if ("actual_wrapup_minutes",aircraft_type) in calibrations else "finishing_minutes", aircraft_type, planning_settings.finishing_minutes
     )
+    proxy.service_factor_for = lambda aircraft_type: _active_value(calibrations,"service_ratio",aircraft_type,Decimal(1))
     proxy.is_complete_for = planning_settings.is_complete_for
     return proxy
 
@@ -179,7 +256,7 @@ def calibration_summary(calibrations):
     return {
         "active_count": len(active),
         "collecting_count": len(collecting),
-        "label": f"SPEAR CALIBRATION · {len(active)} ACTIVE" if active else "SPEAR CALIBRATION · COLLECTING",
+        "label": f"SPEAR CALIBRATION · {len(active)} ACTIVE · 30 DAYS" if active else "SPEAR CALIBRATION · COLLECTING · 30 DAYS",
         "items": tuple(sorted(calibrations.values(), key=lambda item: (item.metric, item.scope_key))),
     }
 
@@ -225,68 +302,43 @@ def calibration_review_payload(operation, calibrations):
     }
 
 
-def _canonical_observations(operation_id, row_by_assignment_id):
-    events = (
-        NeoScorpionFuelingEvent.query.join(NeoScorpionFuelAssignment)
-        .options(joinedload(NeoScorpionFuelingEvent.fuel_assignment))
-        .filter(
-            NeoScorpionFuelingEvent.sort_date_operation_id == operation_id,
-            NeoScorpionFuelingEvent.started_at_utc.is_not(None),
-            NeoScorpionFuelingEvent.ended_at_utc.is_not(None),
-        )
-        .order_by(NeoScorpionFuelingEvent.ended_at_utc.asc())
-        .limit(5000)
-        .all()
-    )
-    from app.services.neoscorpion_participation import cycles, key
-    participation = cycles(events)
-    output = []
-    for event in events:
-        row = row_by_assignment_id.get(event.fuel_assignment_id)
-        if row is None or event.event_type == "defuel":
+def _canonical_observations(jobs, now):
+    output, seen = [], set()
+    for job in jobs:
+        event, facts = job['event'],job['facts']
+        identity = getattr(event,'fuel_work_state_id',None)
+        if identity is None or identity in seen:
             continue
-        assignment = event.fuel_assignment
-        observed_at = _utc_naive(event.ended_at_utc)
-        aircraft_type = row.get("detailed_aircraft_type") or "UNKNOWN"
-        math = event_math(event, participation=participation[key(event)])
-        exclusion = "; ".join(math["fueler_reasons"]) or None
-        if math["actual_minutes"] is not None:
-            output.append(CalibrationObservation(
-                "service_minutes", aircraft_type, math["actual_minutes"], observed_at,
-                assignment.id, assignment.sort_date_mission_id, "Physical ON to OFF service (not mechanical pump rate)", exclusion))
-        resources=math['facts'].get('resource_timing') or {}
-        ready = (resources.get('fueler_available_preparation_at') if math['facts'].get('version')==4 else
-                 getattr(assignment, "ready_for_fuel_at_utc", None))
-        if isinstance(ready,str):
-            ready=timestamp(ready)
-        ready = _utc_naive(ready)
-        started_at = _utc_naive(event.started_at_utc)
-        ended_at = _utc_naive(event.ended_at_utc)
-        preparation_end=timestamp(resources.get('preparation_ready_at')) if math['facts'].get('version')==4 else started_at
-        if ready and preparation_end and started_at and ready <= preparation_end <= started_at:
-            setup_minutes = _minutes_between(ready, preparation_end)
-            if setup_minutes is not None:
-                output.append(CalibrationObservation(
-                    "preparation_minutes", aircraft_type, setup_minutes, observed_at,
-                    assignment.id, assignment.sort_date_mission_id, "Available preparation opportunity to recorded readiness (not measured active labor)" if math['facts'].get('version')==4 else "Ready for Fuel to fuel start",
-                    exclusion,
-                ))
-        if math["wrap_minutes"] is not None:
-            output.append(CalibrationObservation("actual_wrapup_minutes", aircraft_type,
-                math["wrap_minutes"], math["actuals_at"] or observed_at, assignment.id,
-                assignment.sort_date_mission_id, "OFF to final valid Actual readings; separate from administrative delay", exclusion))
-        lead = (timeline_minutes(math['facts'].get('fueler_assigned_at'),math['facts'].get('truck_assigned_at'))
-                if math['facts'].get('version')==4 else _decimal(math["facts"].get("lead_minutes")))
-        if lead is not None:
-            output.append(CalibrationObservation("assignment_lead_minutes", aircraft_type,
-                lead, observed_at, assignment.id, assignment.sort_date_mission_id,
-                "Recorded assignment lead; policy allowance is not observed preparation", exclusion))
-        for forecast in math["facts"].get("forecasts", []):
-            error = timeline_minutes(forecast.get("likely"), event.ended_at_utc)
-            if error is not None:
-                output.append(CalibrationObservation("off_prediction_error_minutes", aircraft_type,
-                    error, observed_at, assignment.id, assignment.sort_date_mission_id,
-                    "Immutable prediction known before OFF versus observed physical OFF", exclusion))
+        seen.add(identity)
+        at = timestamp(event.ended_at_utc)
+        if at is None:continue
+        aircraft = facts.get('aircraft_type') or 'UNKNOWN'
+        exclusion = '; '.join(learning_reasons(job,now)) or None
+        def add(metric,value,label,reason=None):
+            value=_decimal(value)
+            if value is not None:
+                output.append(CalibrationObservation(metric,aircraft,value,at,event.fuel_assignment_id,
+                    getattr(event,'sort_date_mission_id',None),label,reason or exclusion))
+        add('service_minutes',job['actual_minutes'],'Physical ON to OFF service, not mechanical pump rate')
+        expected,actual = _decimal(job['expected_fueler']),_decimal(job['actual_minutes'])
+        if expected is not None and expected>0 and actual is not None and actual>0:
+            add('service_ratio',actual/expected,'Verified physical service / frozen configured service')
+        resources=facts.get('resource_timing') or {}
+        available=timestamp(resources.get('fueler_available_preparation_at'))
+        prepared=timestamp(resources.get('preparation_ready_at'))
+        on=timestamp(event.started_at_utc)
+        if facts.get('version')==4 and available and prepared and on and available<=prepared<=on:
+            add('preparation_minutes',timeline_minutes(available,prepared),
+                'Elapsed available preparation opportunity, not active labor')
+        ready=timestamp(facts.get('fueler_work_end_at'))
+        completed=timestamp(facts.get('completed_at'))
+        if ready and completed and at<=ready<=completed:
+            add('actual_wrapup_minutes',timeline_minutes(at,ready),'Physical OFF to validated final Fueler data')
+        forecast=facts.get('last_forecast') or {}
+        observed=timestamp(forecast.get('observed_at'))
+        if observed and on and on<=observed<=at and timestamp(forecast.get('likely')):
+            add('off_prediction_error_minutes',timeline_minutes(forecast['likely'],at),
+                'Latest immutable pre-OFF forecast error')
     return output
 
 
@@ -295,8 +347,10 @@ def _configured_baseline(metric, scope_key, settings):
         return _decimal(settings.pump_rate_for(scope_key))
     if metric == "setup_minutes":
         return _decimal(settings.setup_minutes)
-    if metric == "finishing_minutes":
+    if metric in {"finishing_minutes", "actual_wrapup_minutes"}:
         return _decimal(settings.finishing_minutes)
+    if metric == "service_ratio":
+        return Decimal(1)
     if metric == "ready_delay_minutes":
         return _decimal(settings.eta_safety_buffer_minutes)
     return None
@@ -325,7 +379,8 @@ def _utc_naive(value):
 def _decimal(value):
     if value is None:
         return None
-    return Decimal(str(value))
+    from app.services.neoscorpion_prof import number
+    return number(value)
 
 
 def _display_decimal(value):

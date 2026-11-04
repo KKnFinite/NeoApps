@@ -185,7 +185,7 @@ class SpearCalibrationObservationTest(unittest.TestCase):
         self.assignment.ready_for_fuel_at_utc = datetime(2026, 9, 3, 4, 35)
         first = NeoScorpionFuelingEvent.query.one()
         initial = build_live_calibration(self.operation, _Settings(), rows)
-        self.assertEqual(initial[("service_minutes", "B757")].samples, 1)
+        self.assertNotIn(("service_minutes", "B757"), initial)  # Legacy unsealed work is not a completed rolling sample.
         for sequence in (2, 3):
             db.session.add(NeoScorpionFuelingEvent(
                 sort_date_operation_id=self.operation.id, fuel_assignment_id=self.assignment.id,
@@ -198,10 +198,10 @@ class SpearCalibrationObservationTest(unittest.TestCase):
             ))
         db.session.commit()
         observed = build_live_calibration(self.operation, _Settings(), rows)
-        pump = observed[("service_minutes", "B757")]
+        pump = observed[("preparation_minutes", "B757")]
         self.assertFalse(pump.active)  # Effective service duration is not a mechanical pump-rate setting.
-        self.assertEqual(pump.samples, 3)
-        self.assertEqual(pump.observed, Decimal("40"))
+        self.assertEqual(pump.samples, 0)  # Duplicate raw events cannot authenticate the missing physical seal.
+        self.assertIsNone(pump.observed)
         self.assertIsNone(pump.effective)
         self.assertIsNone(pump.recommendation_using("observe"))
         review = calibration_review_payload(self.operation, observed)

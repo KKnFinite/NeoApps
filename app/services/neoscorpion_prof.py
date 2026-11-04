@@ -9,8 +9,8 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from types import SimpleNamespace
 
 from app.extensions import db
-from app.models import (NeoScorpionFuelingEvent, NeoScorpionFuelAssignment,
-                        NeoScorpionFuelTruck, SortDateMission, SortDateOperation, User)
+from app.models import (NeoScorpionFuelingEvent, NeoScorpionFuelAssignment, NeoScorpionFuelWorkState,
+                        NeoScorpionFuelTruck, NeoScorpionFuelCycleHistory, SortDateMission, SortDateOperation, User)
 
 
 def number(value):
@@ -63,7 +63,9 @@ def policy_snapshot(assignment, settings, planning, aircraft_type, *, resources=
         allowance=number(resources.get('setup_allowance'))
         lead=number(resources.get('lead_minutes'))
         reason=resources.get('setup_reason')
+    from flask import current_app, has_app_context
     return {
+        "learning_origin": "test" if has_app_context() and current_app.config.get('TESTING') else "production",
         "version": 4 if resources is not None else 3, "aircraft_type": aircraft_type,
         "fueler_id": assignment.assigned_fueler_user_id,
         "truck_id": assignment.assigned_truck_id,
@@ -179,30 +181,65 @@ def load_jobs(gateway_id, *, operation_id=None, limit=2000, offset=0):
                  **event_math(e, participation=participation[key(e)])) for e,m,o,u,t in rows]
 
 
-def load_observation_jobs(gateway_id, *, operation_id=None, limit=2000):
+def load_observation_jobs(gateway_id, *, operation_id=None, limit=2000, learning=False, now_utc=None):
     """Compact live-read projection; excludes archived forecast arrays and names."""
     model = NeoScorpionFuelingEvent
     keys = ("version", "aircraft_type", "fueler_id", "truck_id", "pump_rate", "setup_allowance",
             "fueler_assigned_at", "truck_assigned_at", "on_source", "exclusions", "resource_timing")
+    if learning:
+        keys += ('actuals_received_at','fueler_work_end_at','completed_at','learning_origin',
+                 'test_data','synthetic','simulation','training_eligible')
     columns = [model.id, model.sort_date_operation_id, model.fuel_assignment_id, model.cycle_number,
                model.fueler_user_id, model.fuel_truck_id, model.started_at_utc, model.ended_at_utc,
                model.transfer_fuel_gallons, model.event_type,model.fuel_work_state_id,model.tail_number]
     event_columns=tuple(columns)
-    columns.extend((model.performance_snapshot[key].as_json() if key in {"exclusions","resource_timing"} else
+    columns.extend((model.performance_snapshot[key].as_json() if key in {"exclusions","resource_timing",
+                    'test_data','synthetic','simulation','training_eligible'} else
                     model.performance_snapshot[key].as_integer() if key in {"version","fueler_id","truck_id"} else
                     model.performance_snapshot[key].as_string()).label("fact_"+key) for key in keys)
     query = db.session.query(*columns).join(SortDateOperation,SortDateOperation.id == model.sort_date_operation_id).filter(
         SortDateOperation.gateway_id == gateway_id)
+    if learning:
+        from sqlalchemy import func
+        from app.services.neoscorpion_spear_calibration import learning_window, MAX_LEARNING_EVENTS
+        start, now = learning_window(now_utc)
+        # Only one forecast object, not potentially large historical arrays.
+        last = (func.json_extract(model.performance_snapshot,'$.forecasts[#-1]')
+                if db.engine.dialect.name == 'sqlite' else model.performance_snapshot['forecasts'][-1].as_json())
+        query = query.add_columns(last.label('last_forecast')).join(NeoScorpionFuelWorkState,
+            NeoScorpionFuelWorkState.id==model.fuel_work_state_id).join(NeoScorpionFuelAssignment,
+            NeoScorpionFuelAssignment.id==model.fuel_assignment_id).add_columns(
+            NeoScorpionFuelAssignment.sort_date_mission_id.label('learning_mission_id')).outerjoin(NeoScorpionFuelCycleHistory,
+            db.and_(NeoScorpionFuelCycleHistory.fuel_assignment_id==model.fuel_assignment_id,
+                NeoScorpionFuelCycleHistory.sort_date_operation_id==model.sort_date_operation_id,
+                NeoScorpionFuelCycleHistory.cycle_number==model.cycle_number)).filter(
+            model.ended_at_utc>=start,model.ended_at_utc<=now,model.created_at<=now,
+            NeoScorpionFuelAssignment.sort_date_operation_id==model.sort_date_operation_id,
+            db.or_(db.and_(NeoScorpionFuelAssignment.current_cycle_number==model.cycle_number,
+                NeoScorpionFuelAssignment.review_status=='complete',NeoScorpionFuelAssignment.completed_at_utc<=now),
+                db.and_(NeoScorpionFuelCycleHistory.snapshot['administratively_complete'].as_boolean()==True,
+                    NeoScorpionFuelCycleHistory.created_at<=now)),
+            NeoScorpionFuelWorkState.physical_finalized_at_utc.is_not(None),
+            NeoScorpionFuelWorkState.physical_finalized_by_user_id.is_not(None),
+            NeoScorpionFuelWorkState.fuel_assignment_id==model.fuel_assignment_id,
+            NeoScorpionFuelWorkState.physical_cycle_number==model.cycle_number,
+            NeoScorpionFuelWorkState.physical_sequence_number==model.sequence_number)
+        limit=min(limit,MAX_LEARNING_EVENTS)
     if operation_id is not None:
         query = query.filter(model.sort_date_operation_id == operation_id)
-    else:
+    elif not learning:
         query = query.filter(model.ended_at_utc >= datetime.utcnow()-timedelta(days=90))
     rows = query.order_by(model.ended_at_utc.desc(),model.id.desc()).limit(limit).all()
     events = []
     for row in rows:
         facts = {key:getattr(row,"fact_"+key) for key in keys}
         facts["exclusions"] = facts["exclusions"] or []
+        if learning:
+            import json
+            forecast=row.last_forecast
+            facts['last_forecast']=json.loads(forecast) if isinstance(forecast,str) else forecast
         e = SimpleNamespace(**{column.key:getattr(row,column.key) for column in event_columns}, performance_snapshot=facts)
+        if learning:e.sort_date_mission_id=row.learning_mission_id
         events.append(e)
     from app.services.neoscorpion_participation import cycles, key
     participation = cycles(events)

@@ -1036,6 +1036,7 @@ def _assignment_explanation(
         "setup_minutes": _minutes_display(timing.setup_minutes),
         "pump_minutes": _minutes_display(timing.pump_minutes),
         "finishing_minutes": _minutes_display(timing.finishing_minutes),
+        "service_prediction_minutes": _minutes_display(getattr(timing,'physical_service_minutes',None)),
         "projected_completion": _display_time(selected["finish"], mission),
         "risk": selected["risk"],
         "truck_gallons_before": int(selected["truck_gallons_before"]),
@@ -1072,6 +1073,11 @@ def _live_calibration_notes(calibrations, aircraft_type, mode):
         ("setup_minutes", aircraft_type),
         ("finishing_minutes", aircraft_type),
         ("pump_rate", aircraft_type),
+        ("service_ratio", aircraft_type),
+        ("preparation_minutes", aircraft_type),
+        ("actual_wrapup_minutes", aircraft_type),
+        ("truck_travel_minutes", aircraft_type),
+        ("fueler_travel_minutes", aircraft_type),
     ):
         item = calibrations.get((metric, scope))
         if item is not None:
@@ -1086,11 +1092,14 @@ def _live_calibration_notes(calibrations, aircraft_type, mode):
                 "samples": item.samples,
                 "excluded_samples": item.excluded_samples,
                 "confidence": item.confidence,
+                "reason": getattr(item,'explanation',''),
             })
     return notes
 
 
 def _calibration_value_display(value, metric):
+    if metric == 'service_ratio':
+        return f'{float(value):g}× service' if value is not None else '-'
     if metric == "pump_rate":
         return f"{float(value):g} gal/min" if value is not None else "-"
     return _minutes_display(value)
@@ -1222,7 +1231,9 @@ def _spear_timing(row, operation, planning_settings):
         planning_settings=spear_planning_settings,
     )
     if timing.available:
-        return timing
+        factor = getattr(planning_settings,'service_factor_for',lambda _:Decimal(1))(row.get('detailed_aircraft_type'))
+        if row.get('cycle_type')=='defuel':factor=Decimal(1)
+        return SimpleNamespace(**asdict(timing),physical_service_minutes=(timing.setup_minutes+timing.pump_minutes)*factor)
 
     aircraft_ready_utc = (
         actual_block_in
@@ -1257,6 +1268,9 @@ def _spear_timing(row, operation, planning_settings):
         pump_minutes=pump_minutes,
         finishing_minutes=finishing_minutes,
         total_duration_minutes=total_duration_minutes,
+        physical_service_minutes=((setup_minutes+pump_minutes)*(Decimal(1) if row.get('cycle_type')=='defuel' else
+            getattr(planning_settings,'service_factor_for',lambda _:Decimal(1))(row.get('detailed_aircraft_type')))
+            if total_duration_minutes is not None else None),
         aircraft_ready_utc=aircraft_ready_utc,
         aircraft_ready_source=aircraft_ready_source,
         fuel_complete_deadline_utc=None,
@@ -1321,7 +1335,8 @@ def _schedule_pair(
     fueler_ready = max(fueler_arrival, staging_allowed_at_utc)
     start = max(truck_ready, fueler_ready, timing.aircraft_ready_utc or truck_ready)
     finish = (
-        start + timedelta(minutes=float(timing.total_duration_minutes-(timing.finishing_minutes or 0)))
+        start + timedelta(minutes=float(getattr(timing,'physical_service_minutes',
+            timing.total_duration_minutes-(timing.finishing_minutes or 0))))
         if timing.total_duration_minutes is not None
         else None
     )

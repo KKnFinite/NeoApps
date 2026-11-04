@@ -5,7 +5,7 @@
 <section class="neoscorpion-shell neoscorpion-screen neoscorpion-spear-settings" aria-label="SPEAR Live Calibration">
     <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
         {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}{% include "neonodes/neoscorpion/_brand_title.html" %}{% endwith %}
-        <h1>SPEAR Live Calibration</h1><p>Current-sort operational estimates only · no Learning Vault capture</p>
+        <h1>SPEAR Live Calibration</h1><p>Rolling 30 calendar days · recent verified work weighted more heavily · no history deleted</p>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
     <section class="neoscorpion-panel">
@@ -22,12 +22,12 @@
                 {% if can_edit and operation %}<form method="post"><input type="hidden" name="metric" value="{{ item.metric }}"><input type="hidden" name="scope_key" value="{{ item.scope_key }}"><button class="action-button" type="submit">RESET</button></form>{% endif %}
                 <details><summary>Observations</summary>{% for observation in item.observations %}<span>{{ observation.source_label }} · mission {{ observation.mission_id }} · {{ observation.value }} at {{ observation.observed_at_utc.strftime('%H:%M') }}</span>{% else %}<span>No qualifying observations yet.</span>{% endfor %}{% for observation in item.excluded_observations %}<span>EXCLUDED · {{ observation.excluded_reason }}</span>{% endfor %}</details>
             </article>
-        {% else %}<p class="neoscorpion-empty">Collecting qualifying completed current-sort work.</p>{% endfor %}
+        {% else %}<p class="neoscorpion-empty">Collecting verified completed work within the rolling 30-day window.</p>{% endfor %}
         </div>
     </section>
     <section class="neoscorpion-panel">
         <div class="neoscorpion-panel-head"><span>Calibration Review</span><strong>REVIEW ONLY</strong></div>
-        <p>Configured versus observed current-sort values are shown above. Strong candidates require 10+ qualifying observations; fewer than 3 need more data.</p>
+        <p>Configured versus recency-weighted 30-day observations are shown above. Baseline weight: 3; recency half-life: 7 days. Fewer than 3 reliable independent visits retain the baseline. Preparation opportunity is review-only; configured travel is never treated as measured travel.</p>
         {% if spear_learning_vault.configured and can_edit %}<form method="post" action="{{ url_for('neoscorpion.spear_calibration_archive') }}"><button class="action-button" type="submit">SAVE TO SPEAR VAULT</button></form>{% else %}<button class="action-button" type="button" disabled title="SPEAR Vault is not configured.">SAVE TO SPEAR VAULT · NOT CONFIGURED</button>{% endif %}
     </section>
 </section>

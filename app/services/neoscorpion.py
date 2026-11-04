@@ -415,11 +415,15 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
             configured_planning_settings = assignment_planning_settings(
                 gateway, settings=context["settings"]
             )
+            learning_now = datetime.utcnow()
+            learning_jobs = load_observation_jobs(gateway.id, learning=True, now_utc=learning_now)
             live_calibrations = build_live_calibration(
-                context["operation"], configured_planning_settings, context["rows"]
+                context["operation"], configured_planning_settings, context["rows"],
+                jobs=learning_jobs, now_utc=learning_now,
             )
             _attach_fueling_timing(context["rows"], context["operation"], context["settings"],
-                                   configured_planning_settings, live_calibrations, context["spear_settings"])
+                                   configured_planning_settings, live_calibrations, context["spear_settings"],
+                                   jobs=learning_jobs, now_utc=learning_now)
             stage = "SPEAR plan"
             spear_plan = build_spear_plan(
                 context["rows"],
@@ -480,14 +484,19 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
     return context
 
 
-def _attach_fueling_timing(rows, operation, settings, planning=None, calibrations=None, spear=None):
+def _attach_fueling_timing(rows, operation, settings, planning=None, calibrations=None, spear=None, *, jobs=None, now_utc=None):
     planning = planning or assignment_planning_settings(operation.gateway, settings=settings)
     spear = spear or effective_spear_settings(settings)
-    jobs = load_observation_jobs(operation.gateway_id)
+    now_utc = now_utc or datetime.utcnow()
+    if jobs is None:
+        jobs = load_observation_jobs(operation.gateway_id, learning=True, now_utc=now_utc)
+    if calibrations is None:
+        calibrations = build_live_calibration(operation,planning,rows,jobs=jobs,now_utc=now_utc)
     from app.services.neoscorpion_resource_timing import attach_resource_evidence
     attach_resource_evidence(rows,operation,settings,planning,datetime.utcnow())
     for row in rows:
-        prediction = physical_off_forecast(row, planning, settings=settings, jobs=jobs, mode=spear.live_calibration_mode)
+        prediction = physical_off_forecast(row, planning, settings=settings, jobs=jobs,
+            mode=spear.live_calibration_mode, now_utc=now_utc, calibrations=calibrations)
         row["physical_off_forecast"] = prediction
     from app.services.neoscorpion_spear import _parking_ramp, _travel_minutes
     for row in rows:
@@ -511,7 +520,8 @@ def _attach_fueling_timing(rows, operation, settings, planning=None, calibration
             if planning.finishing_minutes is None:
                 continue
             row["forecast_fueler_available_at"] = release+timedelta(minutes=float(planning.finishing_minutes))
-        row["physical_off_forecast"] = physical_off_forecast(row, planning, settings=settings, jobs=jobs, mode=spear.live_calibration_mode)
+        row["physical_off_forecast"] = physical_off_forecast(row, planning, settings=settings, jobs=jobs,
+            mode=spear.live_calibration_mode, now_utc=now_utc, calibrations=calibrations)
     for row in rows:
         prediction = row["physical_off_forecast"]
         row["fueling_predicted_finish_utc"] = prediction["likely"]
@@ -3338,12 +3348,17 @@ def _capture_physical_forecast(gateway, assignment, mission, work, now):
             demand = lbs_to_gallons(max(0, (mission.planned_fuel_load or 0)-sum(remaining.values())),
                                    settings.fuel_density_lbs_per_gallon if settings else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON)
         with db.session.begin_nested():
-            history = load_observation_jobs(gateway.id)
+            history = load_observation_jobs(gateway.id, learning=True, now_utc=now)
+            planning = assignment_planning_settings(gateway,settings=settings)
+            calibration = build_live_calibration(db.session.get(SortDateOperation,assignment.sort_date_operation_id),
+                planning,[dict(detailed_aircraft_type=detailed_aircraft_type_for_tail(work.tail_number))],
+                jobs=history,now_utc=now)
         prediction = physical_off_forecast(dict(assignment=assignment, fuel_work_state=work,
             detailed_aircraft_type=detailed_aircraft_type_for_tail(work.tail_number),
             fueling_effective_on_utc=work.manual_on_at_utc or work.confirmed_on_at_utc,
-            planning_demand_gallons=demand), assignment_planning_settings(gateway, settings=settings),
-            settings=settings, jobs=history, mode=effective_spear_settings(settings).live_calibration_mode)
+            planning_demand_gallons=demand), planning,
+            settings=settings, jobs=history, mode=effective_spear_settings(settings).live_calibration_mode,
+            now_utc=now,calibrations=calibration)
         snapshot = dict(goal=prof_iso(prediction["goal"]), likely=prof_iso(prediction["likely"]),
                         source=prediction["source"], samples=prediction["samples"], gallons=assignment.transfer_fuel_gallons or demand)
         facts = dict(work.performance_context)

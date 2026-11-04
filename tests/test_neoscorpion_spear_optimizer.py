@@ -285,8 +285,8 @@ class TopOffLearningTest(unittest.TestCase):
 
     def test_default_manual_and_p80_not_average(self):
         pairs=[self.pair(i,duration=20+i*5) for i in range(10)]
-        self.assertEqual(top_off_policy(pairs,10,SpearSettings())['minutes'],40)
-        policy=top_off_policy(pairs,10,SpearSettings(use_learned_top_off=True))
+        self.assertEqual(top_off_policy(pairs,10,SpearSettings(),now_utc=NOW+timedelta(hours=5))['minutes'],40)
+        policy=top_off_policy(pairs,10,SpearSettings(use_learned_top_off=True,live_calibration_mode='apply'),now_utc=NOW+timedelta(hours=5))
         self.assertEqual(policy['minutes'],55)
         self.assertEqual(policy['source'],'truck p80')
         self.assertEqual(policy['confidence'],'qualified')
@@ -294,12 +294,13 @@ class TopOffLearningTest(unittest.TestCase):
     def test_insufficient_single_sort_invalid_pairs_fallback(self):
         for pairs in ([self.pair(i) for i in range(9)], [self.pair(i,op=1) for i in range(12)],
                 [self.pair(i,duration=-1) for i in range(12)]):
-            self.assertEqual(top_off_policy(pairs,10,SpearSettings(use_learned_top_off=True))['source'],'manual')
+            self.assertEqual(top_off_policy(pairs,10,SpearSettings(use_learned_top_off=True,live_calibration_mode='apply'),now_utc=NOW+timedelta(hours=5))['source'],'manual')
         pairs=[self.pair(i) for i in range(10)]
         pairs[-1][1].sent_event_id=999
-        self.assertEqual(top_off_policy(pairs,10,SpearSettings(use_learned_top_off=True))['minutes'],40)
+        self.assertEqual(top_off_policy(pairs,10,SpearSettings(use_learned_top_off=True,live_calibration_mode='apply'),now_utc=NOW+timedelta(hours=5))['minutes'],40)
 
     def test_gateway_fallback_and_independent_controls(self):
         pairs=[self.pair(i,truck=i%3+10,duration=50) for i in range(12)]
-        policy=top_off_policy(pairs,99,SpearSettings(use_learned_top_off=True,live_calibration_mode='observe',learning_capture_enabled=False))
-        self.assertEqual(policy['source'],'gateway p80');self.assertEqual(policy['minutes'],50)
+        policy=top_off_policy(pairs,99,SpearSettings(use_learned_top_off=True,live_calibration_mode='observe',learning_capture_enabled=False),now_utc=NOW+timedelta(hours=5))
+        self.assertEqual(policy['source'],'manual');self.assertEqual(policy['minutes'],40)
+        self.assertEqual(policy['candidate_minutes'],50);self.assertIn('OBSERVE',policy['unavailable_reason'])

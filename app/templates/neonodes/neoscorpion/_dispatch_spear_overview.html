@@ -23,7 +23,7 @@
         {% if spear_whole_sort.fallback %}<span>{{ spear_whole_sort.reason }}</span>{% else %}
         <span>Strict earliest authoritative departure priority · {{ spear_whole_sort.evaluations }} evaluated schedules</span>
         {% if spear_whole_sort.mode=='active' %}{% for change in spear_whole_sort.changes %}<span>{{ change }}</span>{% endfor %}{% else %}<span>SHADOW comparison only; current SPEAR recommendations remain authoritative.</span>{% endif %}
-        {% for truck_id, policy in spear_whole_sort.policies.items() %}<span>Truck {{ policy.truck_number or truck_id }} TOP OFF: {{ policy.minutes|round(1) }} MIN · {{ policy.source }} · {{ policy.sample_count }} samples / {{ policy.sort_count }} sorts · {{ policy.confidence }}</span>{% endfor %}
+        {% for truck_id, policy in spear_whole_sort.policies.items() %}<span>Truck {{ policy.truck_number or truck_id }} TOP OFF: {{ policy.minutes|round(1) }} MIN · {{ policy.source }} · {{ policy.sample_count }} samples / {{ policy.sort_count }} sorts · {{ policy.confidence }}{% if policy.candidate_minutes is defined %} · 30-day candidate {{ policy.candidate_minutes|round(1) }} MIN{% endif %}{% if policy.unavailable_reason %} · {{ policy.unavailable_reason }}{% endif %}</span>{% endfor %}
         {% endif %}</div></details>{% endif %}
     <details class="neoscorpion-spear-calibration" data-spear-calibration>
         <summary>{{ spear_calibration.label }} · {{ spear_settings.live_calibration_mode|upper }}</summary>
@@ -31,7 +31,7 @@
             <span>{{ calibration_mode(spear_settings.live_calibration_mode) }}</span>
             {% for item in spear_calibration["items"] %}
             <span><strong>{{ item.metric|replace('_', ' ')|title }} · {{ item.scope_key }}</strong> · {{ calibration_values(item, spear_settings.live_calibration_mode) }} · {{ item.samples }} samples · {{ item.excluded_samples }} excluded · {{ item.confidence }}</span>
-            {% else %}<span>Collecting qualifying completed current-sort work.</span>{% endfor %}
+            {% else %}<span>Collecting verified completed work in the rolling 30-day window.</span>{% endfor %}
         </div>
     </details>
     {% endif %}

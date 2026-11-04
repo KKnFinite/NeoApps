@@ -5,15 +5,18 @@ included once at its most specific resource match (pair, Fueler, Truck, aircraft
 OBSERVE preserves baseline. APPLY needs three qualified outcomes. This does not
 multiply resource PROF ratings or label effective service throughput a pump rate.
 """
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from app.services.neoscorpion_prof import number, timestamp, setup_allowance
+from app.services.neoscorpion_spear_calibration import learning_reasons, robust_weighted_samples, recency_weight
 
 
-def physical_off_forecast(row, planning, *, settings=None, jobs=(), mode="observe"):
+def physical_off_forecast(row, planning, *, settings=None, jobs=(), mode="observe", now_utc=None, calibrations=None):
     assignment, work = row.get("assignment"), row.get("fuel_work_state")
-    result = dict(goal=None, likely=None, difference=None, source="TIMING UNKNOWN", samples=0)
+    now_utc = now_utc or datetime.utcnow()
+    result = dict(goal=None, likely=None, difference=None, source="TIMING UNKNOWN", samples=0,
+        confidence='UNAVAILABLE',excluded_samples=0,unavailable_reason='Verified physical timing/measurements unavailable')
     if assignment is None or (work and (work.off_at_utc or work.ended_early_at_utc)) or row.get("administratively_complete") or row.get("effective_hold"):
         return result
     if assignment.assigned_fueler_user_id is None or assignment.assigned_truck_id is None:
@@ -80,13 +83,22 @@ def physical_off_forecast(row, planning, *, settings=None, jobs=(), mode="observ
     if resources is not None:
         result['physical_start']=start
     result["goal"] = start + timedelta(seconds=float(expected*60))
-    weighted, weight_total, sample_count = Decimal(3), Decimal(3), 0
+    samples, seen, excluded = [], set(), 0
+    calibration = (calibrations or {}).get(('service_ratio',aircraft))
     for job in jobs:
         if (facts.get('version')==4 or resources is not None) and job['facts'].get('version') != 4:
             continue  # Assignment-only v3 setup credit is not v4 calibration.
-        if job["fueler_reasons"] or job["expected_fueler"] is None or job["expected_fueler"] <= 0:
+        if learning_reasons(job,now_utc) or job["expected_fueler"] is None or job["expected_fueler"] <= 0:
+            excluded += 1
             continue
         e = job["event"]
+        identity = getattr(e,'fuel_work_state_id',None)
+        if identity is None or identity in seen:
+            continue
+        seen.add(identity)
+        if calibration and getattr(calibration,'reset_after_utc',None) and timestamp(e.ended_at_utc)<=calibration.reset_after_utc:
+            excluded += 1
+            continue
         if e.fuel_assignment_id == assignment.id and e.cycle_number == getattr(assignment, "current_cycle_number", 1):
             # Repeated visits in the same cycle are independent outcomes. Only
             # the current segment is self-evidence; prior sealed visits remain
@@ -97,9 +109,11 @@ def physical_off_forecast(row, planning, *, settings=None, jobs=(), mode="observ
             continue
         f, t = e.fueler_user_id == assignment.assigned_fueler_user_id, e.fuel_truck_id == assignment.assigned_truck_id
         weight = Decimal(4 if f and t else 3 if f else 2 if t else 1)
-        weighted += weight*job["actual_minutes"]/job["expected_fueler"]
-        weight_total += weight
-        sample_count += 1
+        samples.append((job['actual_minutes']/job['expected_fueler'],e.ended_at_utc,weight))
+    kept, outliers, average = robust_weighted_samples(samples,now_utc)
+    weighted = Decimal(3)+sum(value*weight*recency_weight(at,now_utc) for value,at,weight in kept)
+    weight_total = Decimal(3)+sum(weight*recency_weight(at,now_utc) for _,at,weight in kept)
+    sample_count = len(kept)
     factor = weighted/weight_total if mode == "apply" and sample_count >= 3 else Decimal(1)
     # Bound accepted observations to avoid a single abnormal sample inventing a
     # precise estimate. The report retains that sample and its actual facts.
@@ -107,5 +121,8 @@ def physical_off_forecast(row, planning, *, settings=None, jobs=(), mode="observ
     result.update(likely=start+timedelta(seconds=float(expected*factor*60)),
                   difference=int((expected*(factor-1)).quantize(Decimal(1), rounding=ROUND_HALF_UP)),
                   source="QUALIFIED SERVICE HISTORY" if mode == "apply" and sample_count >= 3 else "BASELINE",
-                  samples=sample_count)
+                  samples=sample_count,excluded_samples=excluded+len(outliers),
+                  confidence='COLLECTING' if sample_count<3 else 'LOW' if sample_count<6 else 'MEDIUM' if sample_count<10 else 'HIGH',
+                  unavailable_reason=('Fewer than 3 qualifying 30-day samples; configured baseline retained' if sample_count<3 else
+                      'OBSERVE: learned candidate not applied' if mode!='apply' else ''))
     return result
