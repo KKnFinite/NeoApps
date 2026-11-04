@@ -74,7 +74,7 @@ def learning_reasons(job, now_utc=None):
     actuals=timestamp(facts.get('actuals_received_at'))
     if actuals is None or completed is None or actuals>completed:
         reasons.append('Final actual-measurement chronology unavailable')
-    if str(facts.get('learning_origin', 'production')).lower() != 'production' or any(
+    if str(facts.get('learning_origin') or 'production').lower() != 'production' or any(
             str(facts.get(key)).lower() in ('true','1') for key in ('test_data','synthetic','simulation')):
         reasons.append('Test/simulated evidence')
     if str(facts.get('training_eligible')).lower() in ('false','0'):

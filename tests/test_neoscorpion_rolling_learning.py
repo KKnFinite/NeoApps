@@ -66,6 +66,10 @@ class RollingLearningMathTest(unittest.TestCase):
         self.assertTrue(learning_reasons(job(1,days=30),NOW))
         self.assertTrue(learning_reasons(job(1,days=-1),NOW))
 
+    def test_unmarked_legacy_origin_still_requires_and_accepts_canonical_proof(self):
+        self.assertEqual(learning_reasons(job(1,learning_origin=None),NOW),())
+        self.assertTrue(learning_reasons(job(1,learning_origin=None,completed_at=None),NOW))
+
     def test_recent_evidence_has_more_weight_and_extreme_outlier_is_rejected(self):
         samples=[(Decimal(1),NOW-timedelta(days=28),1),
                  (Decimal('1.5'),NOW-timedelta(days=1),1),(Decimal('1.5'),NOW,1)]
@@ -153,7 +157,8 @@ class RollingLearningDatabaseTest(unittest.TestCase):
         # This fixture represents production provenance in an isolated database;
         # all actual lifecycle, permission, inventory and event guards execute.
         def production_fixture(*args,**kwargs):
-            return dict(original(*args,**kwargs),learning_origin='production')
+            facts=original(*args,**kwargs);facts.pop('learning_origin',None)
+            return facts # Legacy tag absent; canonical physical/completion proof is still required.
         with patch.object(fuel,'policy_snapshot',side_effect=production_fixture):
             c.ready();fuel.complete_fueled_assignment(c.gateway,c.dispatcher,c.assignment.id);db.session.commit()
         asof=datetime.utcnow()
