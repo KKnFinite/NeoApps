@@ -98,6 +98,18 @@ class ShellMetadataTest(unittest.TestCase):
         self.assertEqual(staffing["neostaffing_current_label"], "People")
         self.assertEqual(staffing["mobile_shell_label"], "People")
 
+    def test_scorpion_report_labels_do_not_fall_back_to_dashboard(self):
+        for path in ('/neoscorpion/reports', '/neoscorpion/reports/fuel',
+                     '/neoscorpion/reports/prof', '/neoscorpion/reports/truck-rolldown'):
+            with self.subTest(path=path):
+                metadata = self.metadata_for_path(path)
+                self.assertEqual(metadata['node_current_label'], 'REPORTS')
+                self.assertEqual(metadata['mobile_shell_label'], 'REPORTS')
+                self.assertEqual(metadata['mobile_shell_key'], 'scorpion')
+        self.assertEqual(self.metadata_for_path('/neoscorpion')['mobile_shell_label'], 'DASHBOARD')
+        from app.services.shell_metadata import _neoscorpion_labels
+        self.assertEqual(_neoscorpion_labels('/neoscorpion/reports-other'), ('DASHBOARD', 'DASHBOARD'))
+
     def test_ballmat_side_and_motherbrain_page_labels_remain_route_specific(self):
         east = self.metadata_for_path("/neosektor/ballmat?side=east")
         parking = self.metadata_for_path("/motherbrain/parking-plan")

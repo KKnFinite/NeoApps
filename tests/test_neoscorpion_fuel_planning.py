@@ -575,29 +575,31 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         self.assertIn("<dt>Off</dt><dd>—</dd>", blank)
         self.assertNotIn('class="is-fuel-short"', blank)
 
-        work = NeoScorpionFuelWorkState(
-            fuel_assignment_id=assignment.id, tail_number="N412UP",
-            on_at_utc=datetime(2026, 8, 18, 7, 15),
-            off_at_utc=datetime(2026, 8, 18, 7, 40),
-            apu_running=False, apu_allowance_lbs=0,
-        )
-        db.session.add(work)
+        from tests.neoscorpion_evidence_fixture import FuelCycle
+        import copy
+        cycle = FuelCycle(self.gateway, _operation, mission, self.user, self.user, truck, assignment=assignment)
+        cycle.assign(datetime(2026,8,18,7,10), current_gallons=10000)
+        cycle.on(datetime(2026,8,18,7,15))
+        cycle.save(datetime(2026,8,18,7,30), apu_running='no', remaining_left='6', remaining_ctr='0',
+            remaining_right='6', actual_left='14.6', actual_ctr='20.8', actual_right='14.6', transfer_fuel_gallons='3000')
+        cycle.off(datetime(2026,8,18,7,40))
+        row = hanzo_context(self.gateway)['rows'][0]
+        self.assertEqual((row['hanzo_on_time'], row['hanzo_off_time']), ('02:15','02:40'))
+        cycle.submit(datetime(2026,8,18,7,41)); event = cycle.complete(datetime(2026,8,18,7,45)).fueling_event
+        frozen = (event.id,event.fuel_work_state_id,event.started_at_utc,event.ended_at_utc,
+            event.transfer_fuel_gallons,copy.deepcopy(event.performance_snapshot))
+        completed = self.client.get('/neoscorpion/hanzo').get_data(as_text=True)
+        self.assertIn('JAKE', completed)
+        self.assertIn('<dt>Off</dt><dd>02:40</dd>', completed)
+        # A separate unassigned mission does not reopen or relabel the completed visit.
+        pending = FuelCycle.create(self.gateway, _operation, self.user, self.user, truck,
+            flight='UPS1502', tail='N491UP')
         db.session.commit()
-        row = hanzo_context(self.gateway)["rows"][0]
-        self.assertEqual(row["hanzo_on_time"], "02:15")
-        self.assertEqual(row["hanzo_off_time"], "02:40")
-        assignment.completed_at_utc = datetime(2026, 8, 18, 7, 45)
-        db.session.commit()
-        completed = self.client.get("/neoscorpion/hanzo").get_data(as_text=True)
-        self.assertIn("JAKE", completed)
-        self.assertIn("<dt>Off</dt><dd>02:40</dd>", completed)
-        assignment.completed_at_utc = None
-        assignment.assigned_fueler_user_id = None
-        assignment.assigned_truck_id = None
-        db.session.commit()
-        unassigned = self.client.get("/neoscorpion/hanzo").get_data(as_text=True)
-        self.assertIn("<dt>Fueler</dt><dd>—</dd>", unassigned)
-        self.assertIn("<dt>Truck</dt><dd>—</dd>", unassigned)
+        unassigned_row = next(r for r in hanzo_context(self.gateway)['rows'] if r['mission'].id == pending.mission.id)
+        self.assertEqual(unassigned_row['hanzo_fueler_name'], '—')
+        self.assertIsNone(unassigned_row['assigned_truck'])
+        self.assertEqual((event.id,event.fuel_work_state_id,event.started_at_utc,event.ended_at_utc,
+            event.transfer_fuel_gallons,event.performance_snapshot), frozen)
         for neo, required, expected in ((49999, 50000, True), (50000, 50000, False),
                                         (50001, 50000, False), (None, 50000, False)):
             self.assertEqual(_hanzo_fuel_short(required, neo), expected)

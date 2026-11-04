@@ -113,8 +113,7 @@ class DispatchLoadPlannerTest(unittest.TestCase):
         self._mission(2)
         assignment = self.fixture._assignment(assigned)
         work = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id, tail_number="N4LP1",
-                                       apu_running=False, apu_allowance_lbs=0,
-                                       off_at_utc=datetime(2026, 8, 19, 3, 0))
+                                       apu_running=False, apu_allowance_lbs=0)
         db.session.add(work)
         db.session.flush()
         for code, lbs in (("left", 8000), ("ctr", 9000), ("right", 8000)):
@@ -125,13 +124,15 @@ class DispatchLoadPlannerTest(unittest.TestCase):
         before = self.fixture._row_counts()
         response = self.fixture.client.get("/neoscorpion/fuel-dispatch")
         self.assertEqual(response.status_code, 200)
-        sections = re.findall(r'<section><strong>LOAD PLANNING</strong>(.*?)</section>',
-                              response.data.decode(), flags=re.S)
-        self.assertEqual(len(sections), 2)
-        assigned_section = next(section for section in sections if self.alex.full_name in section)
-        self.assertIn('data-copy-value="UPS901 SDF N4LP1 NEO &gt; 25.0"', assigned_section)
-        self.assertLess(assigned_section.index('>COPY</button>'),
-                        assigned_section.index('Load Planner: Alex Planner'))
-        self.assertTrue(any('Load Planner: UNASSIGNED' in section for section in sections))
-        self.assertTrue(all('<input' not in section and '<select' not in section for section in sections))
+        from tests.html_contracts import document
+        sections=document(response).findall(**{'data-dispatch-console-planning':None})
+        self.assertEqual(len(sections),2)
+        assigned_section=next(s for s in sections if self.alex.full_name in s.text)
+        self.assertEqual(assigned_section.one(**{'data-copy-value':None}).attrs['data-copy-value'], 'UPS901 SDF N4LP1 NEO > 25.0')
+        self.assertIn('Load Planner: Alex Planner',assigned_section.text)
+        regions=document(response).findall(**{'data-console-region':'planning'})
+        self.assertEqual(len(regions),2)
+        self.assertTrue(all(not s.findall(**{'data-dispatch-load-planner':None}) for s in regions if self.alex.full_name not in s.text))
+        self.assertIn('Load Planner: UNASSIGNED',response.text)
+        self.assertTrue(all(not s.findall('input') and not s.findall('select') for s in sections))
         self.assertEqual(self.fixture._row_counts(), before)

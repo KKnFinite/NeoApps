@@ -1,0 +1,393 @@
+{
+  "source_sha": "65bccb7cf42420a48f65e4c98d76c8f5fa1eb7d2",
+  "package": "W3",
+  "original_cases": 41,
+  "before": {
+    "passed": 0,
+    "failed": 41
+  },
+  "after": {
+    "passed": 41,
+    "failed": 0,
+    "skipped": 0
+  },
+  "classifications": {
+    "outdated assertion": 18,
+    "invalid fixture": 22,
+    "application presentation defect": 1
+  },
+  "confirmed_application_defects": 1,
+  "confirmed_operational_application_defects": 0,
+  "full_367_inventory_rerun": false,
+  "cases": [
+    {
+      "id": "tests.test_neoscorpion_apu_truck_projections.ApuTruckProjectionsTest::test_recommended_allowance_changes_only_projected_inventory",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: '35142617f2f72f235490cfa8' != '75db52cfc2bc5d52b4491428'\n- 35142617f2f72f235490cfa8\n+ 75db52cfc2bc5d52b4491428",
+      "contract": "APU burn changes projections, not canonical transfer/inventory. Changed safety inputs invalidate the SPEAR token even if executable steps are identical; identical inputs retain the token."
+    },
+    {
+      "id": "tests.test_neoscorpion_assignment_integration.NeoScorpionAssignmentIntegrationTest::test_dispatch_choices_are_current_nightly_assets_and_preserve_stale_assignments",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: b'TRUCK TOPPING' unexpectedly found in b'\\n                \\n                \\n\\n\\n\\n                \\n                \\n                \\n                \\n                <tr class=\"",
+      "contract": "Only current, eligible nightly resources are selectable; unavailable resources may still appear in review/asset displays and retained assignments."
+    },
+    {
+      "id": "tests.test_neoscorpion_current_operation.NeoScorpionCurrentOperationTest::test_expired_previous_sort_is_not_current_and_current_contexts_are_empty",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AttributeError: 'NoneType' object has no attribute 'id'",
+      "contract": "Context requires a real authenticated User; an expired prior Sort returns no current operation or rows."
+    },
+    {
+      "id": "tests.test_neoscorpion_details_layout.DetailsLayoutRenderTest::test_controls_and_identity_fields_survive_every_layout_state",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: Count[1161 chars]t', 'expected_last_plan_ref', None): 1, ('inpu[402 chars]: 1}) != Count[1161 chars]t', 'plan_kind', None): 1, ('input', 'pending_[356 chars]: 1})",
+      "contract": "Original actions and identity fields remain, plus the established additive safety/planner controls. No nested forms."
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatch_order.DispatchOrderTest::test_only_final_presentation_copies_rows_not_projection_or_plan",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "TypeError: 'object' object is not iterable",
+      "contract": "Projection rows stay untouched; only the final presentation owns copied order. Valid action-count/mission mocks are required."
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatch_workflow.NeoScorpionDispatchWorkflowTest::test_dispatch_status_is_derived_and_assigned_truck_is_locked",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: '>Assigned</span>' not found in ' data-dispatch-sort-group=\"1\" data-dispatch-arrival-rank=\"0\" data-dispatch-etd-rank=\"0\" data-dispatch-mission-id=\"1\" data-dispatch-row-key=\"1-1\">\\n    ",
+      "contract": "Assignment/preparation is not physical ON. Ordinary resource replacement locks after genuine physical work; the dedicated swap remains authoritative. OFF, submission and Dispatcher completion are independent."
+    },
+    {
+      "id": "tests.test_neoscorpion_dispatch_workflow.NeoScorpionDispatchWorkflowTest::test_work_started_with_missing_truck_allows_initial_truck_only",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: '<select form=\"neoscorpion-dispatch-assignment-1\" class=\"neoscorpion-inline-select\" name=\"assigned_truck_id\"' not found in ' data-dispatch-sort-group=\"1\" data-dispatch-arrival-rank=\"0\"",
+      "contract": "Assignment/preparation is not physical ON. Ordinary resource replacement locks after genuine physical work; the dedicated swap remains authoritative. OFF, submission and Dispatcher completion are independent."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_data.FuelerDataTest::test_assigned_active_only_and_shared_card",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 'Fuel Load' not found in '\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n            <article class=\"neoscorpion-fueler-card\" data-fuel-assignment-id=\"1\" data-physical-work-id=\"\" data-fuel-card-key=\"1:N412",
+      "contract": "Shared Fueler/Dispatcher card retains canonical tank totals and estimates. Dispatcher OPEN may inspect retained/completed data; former/unassigned Fueler cannot access it. Completion uses all five canonical stages."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_data.FuelerDataTest::test_estimated_gallons_uses_dispatch_calculation_in_both_shared_cards",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 2,
+      "original_failure": "AssertionError: 8336 not less than 2499",
+      "contract": "Shared Fueler/Dispatcher card retains canonical tank totals and estimates. Dispatcher OPEN may inspect retained/completed data; former/unassigned Fueler cannot access it. Completion uses all five canonical stages."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_data.FuelerDataTest::test_shared_tank_grid_headers_and_totals_in_editable_and_readonly_cards",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 4,
+      "original_failure": "AssertionError: Lists differ: ['TOTAL'] != ['TOTAL', '60.0', '50.0', '54.0']\n\nSecond list contains 3 additional elements.\nFirst extra element 1:\n'60.0'\n\n- ['TOTAL']\n+ ['TOTAL', '60.0', '50.0', '54.0']",
+      "contract": "Shared Fueler/Dispatcher card retains canonical tank totals and estimates. Dispatcher OPEN may inspect retained/completed data; former/unassigned Fueler cannot access it. Completion uses all five canonical stages."
+    },
+    {
+      "id": "tests.test_neoscorpion_fuel_planning.NeoScorpionFuelPlanningTest::test_hanzo_fueling_identity_timing_and_required_warning",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: '—' != '02:15'\n- —\n+ 02:15",
+      "contract": "Hanzo uses trusted canonical ON/OFF and immutable event identity, not raw ORM timestamps or reopening a completed row for display."
+    },
+    {
+      "id": "tests.test_neoscorpion_live_assignments.NeoScorpionLiveAssignmentsTest::test_dispatch_performance_aggregates_events_and_refreshes_with_dispatch",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: Tuples differ: ('Falcon', 0, None) != ('Falcon', 1, 100)\n\nFirst differing element 1:\n0\n1\n\n- ('Falcon', 0, None)\n+ ('Falcon', 1, 100)",
+      "contract": "Only qualified immutable participation/policy evidence scores PROF. First truck origin may be unknown; later proven releases can qualify. Current assignments, other Sorts, interrupted/unverified imports and today's changed rates cannot rewrite history."
+    },
+    {
+      "id": "tests.test_neoscorpion_live_assignments.NeoScorpionLiveAssignmentsTest::test_dispatch_performance_excludes_unreliable_events_and_other_sorts",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 0 != 1",
+      "contract": "Only qualified immutable participation/policy evidence scores PROF. First truck origin may be unknown; later proven releases can qualify. Current assignments, other Sorts, interrupted/unverified imports and today's changed rates cannot rewrite history."
+    },
+    {
+      "id": "tests.test_neoscorpion_load_planner.DispatchLoadPlannerTest::test_name_renders_after_unchanged_copy_and_with_incomplete_calculation",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 0 != 2",
+      "contract": "Canonical planner identity and copy output appear in the owned details region; missing planner does not invent one. Read-only rendering preserves row counts."
+    },
+    {
+      "id": "tests.test_neoscorpion_nightly_asset_services.NeoScorpionNightlyAssetServicesTest::test_top_off_requires_dedicated_valid_completion",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 1200 != 1800",
+      "contract": "Opening snapshot is the validated current reading. Missing/negative/over-capacity current gallons reject atomically; TOP OFF return preserves the opening snapshot."
+    },
+    {
+      "id": "tests.test_neoscorpion_nightly_asset_services.NeoScorpionNightlyAssetServicesTest::test_truck_selection_validation_and_atomicity",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: ValueError not raised",
+      "contract": "Opening snapshot is the validated current reading. Missing/negative/over-capacity current gallons reject atomically; TOP OFF return preserves the opening snapshot."
+    },
+    {
+      "id": "tests.test_neoscorpion_number_alignment.NumberMarkupTest::test_original_controls_and_visit_identity_survive_numeric_wrappers",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: Count[113 chars]ut', 'mission_id', None): 2, ('input', 'assign[1450 chars]: 1}) != Count[113 chars]ut', None, None): 2, ('input', 'mission_id', N[1450 chars]: 1}) : empty",
+      "contract": "Operational form/action identity is preserved across numeric wrappers. Only bounded known safety/report/locator inputs are additive; actual TOP OFF guards remain paired per form."
+    },
+    {
+      "id": "tests.test_neoscorpion_off_projection.OffProjectionHttpTest::test_live_initial_unknown_off_and_canonical_performance_apply",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: Tuples differ: (0, None) != (3, 50)\n\nFirst differing element 0:\n0\n3\n\n- (0, None)\n+ (3, 50)",
+      "contract": "One shared physical OFF forecast excludes post-OFF wrap-up. Frozen policy and qualified event-level v4 history drive forecasts; aggregate PROF counts cannot replace provenance. OBSERVE preserves baseline, APPLY needs three qualified outcomes; unknown demand/location stays unknown."
+    },
+    {
+      "id": "tests.test_neoscorpion_off_projection.OffProjectionTest::test_different_aircraft_rates_and_missing_rate_or_demand",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'ended_early_at_utc'",
+      "contract": "One shared physical OFF forecast excludes post-OFF wrap-up. Frozen policy and qualified event-level v4 history drive forecasts; aggregate PROF counts cannot replace provenance. OBSERVE preserves baseline, APPLY needs three qualified outcomes; unknown demand/location stays unknown."
+    },
+    {
+      "id": "tests.test_neoscorpion_off_projection.OffProjectionTest::test_observe_apply_aircraft_calibration_and_profiles_do_not_multiply_adjustments",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 9,
+      "original_failure": "AssertionError: '' != '2026-10-14T04:46:00Z'\n+ 2026-10-14T04:46:00Z",
+      "contract": "One shared physical OFF forecast excludes post-OFF wrap-up. Frozen policy and qualified event-level v4 history drive forecasts; aggregate PROF counts cannot replace provenance. OBSERVE preserves baseline, APPLY needs three qualified outcomes; unknown demand/location stays unknown."
+    },
+    {
+      "id": "tests.test_neoscorpion_off_projection.OffProjectionTest::test_overdue_zero_valid_unknown_and_off_remove_projection",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 'TIMING UNKNOWN' != 'EST OFF OVERDUE'\n- TIMING UNKNOWN\n+ EST OFF OVERDUE",
+      "contract": "One shared physical OFF forecast excludes post-OFF wrap-up. Frozen policy and qualified event-level v4 history drive forecasts; aggregate PROF counts cannot replace provenance. OBSERVE preserves baseline, APPLY needs three qualified outcomes; unknown demand/location stays unknown."
+    },
+    {
+      "id": "tests.test_neoscorpion_off_projection.OffProjectionTest::test_physical_off_excludes_pre_on_setup_and_post_off_completion",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'ended_early_at_utc'",
+      "contract": "One shared physical OFF forecast excludes post-OFF wrap-up. Frozen policy and qualified event-level v4 history drive forecasts; aggregate PROF counts cannot replace provenance. OBSERVE preserves baseline, APPLY needs three qualified outcomes; unknown demand/location stays unknown."
+    },
+    {
+      "id": "tests.test_neoscorpion_off_projection.OffProjectionTest::test_recorded_on_anchors_physical_timing_without_etd_or_arrival_timestamp",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'ended_early_at_utc'",
+      "contract": "One shared physical OFF forecast excludes post-OFF wrap-up. Frozen policy and qualified event-level v4 history drive forecasts; aggregate PROF counts cannot replace provenance. OBSERVE preserves baseline, APPLY needs three qualified outcomes; unknown demand/location stays unknown."
+    },
+    {
+      "id": "tests.test_neoscorpion_off_projection.OffProjectionTest::test_template_only_dispatch_fueling_one_line_warning_priority_and_actual_off",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 'EST OFF 23:46 · ~12 MIN' not found in '\\n<div class=\"neoscorpion-fuel-status\" data-fuel-status=\"fueling\" data-fuel-status-etd=\"\" data-fuel-status-threshold=\"\" data-fuel-status-finish=",
+      "contract": "One shared physical OFF forecast excludes post-OFF wrap-up. Frozen policy and qualified event-level v4 history drive forecasts; aggregate PROF counts cannot replace provenance. OBSERVE preserves baseline, APPLY needs three qualified outcomes; unknown demand/location stays unknown."
+    },
+    {
+      "id": "tests.test_neoscorpion_production_schema.NeoScorpionProductionSchemaTest::test_current_model_table_and_column_contract_is_covered",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: Tuples differ: ('neoscorpion_direct_entries', 'neoscorpion_dispatch_pr[1080 chars]ots') != ('neoscorpion_tail_fuel_states', 'neoscorpion_fuel_truc[561 chars]cks')\n\nFirst differing elem",
+      "contract": "Frozen reviewed current additive schema/table/constraint contract replaces an obsolete inventory, with real PostgreSQL bootstrap/immutability checks. No schema changes."
+    },
+    {
+      "id": "tests.test_neoscorpion_production_schema.NeoScorpionProductionSchemaTest::test_required_additive_columns_and_constraints_are_current",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: {'top[25 chars]TAMP', 'inventory_verified': 'BOOLEAN NOT NULL[129 chars]SON'} != {'top[25 chars]TAMP'}\n- {'availability_history': 'JSON',\n-  'inventory_epoch': 'INTEGER NOT NULL DEFAUL",
+      "contract": "Frozen reviewed current additive schema/table/constraint contract replaces an obsolete inventory, with real PostgreSQL bootstrap/immutability checks. No schema changes."
+    },
+    {
+      "id": "tests.test_neoscorpion_resource_availability.NeoScorpionResourceAvailabilityTest::test_finished_assignments_do_not_block",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: {('fueler', 10): ResourceCalendar(resource[232 chars]lse)} != {}\nDiff is 763 characters long. Set self.maxDiff to None to see it.",
+      "contract": "Physical OFF releases truck; Fueler remains committed while required final data is pending. Administrative completion is a separate boundary."
+    },
+    {
+      "id": "tests.test_neoscorpion_routes.NeoScorpionRoutesTest::test_fuel_dispatch_assembles_owned_data",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: b'A300' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-",
+      "contract": "Current owned template fragments, semantic cells/headers/menu and report headings retain actions and authority. Legacy tail summary is not verified Actual; legacy vendor name is not a claimed current-Sort driver."
+    },
+    {
+      "id": "tests.test_neoscorpion_routes.NeoScorpionRoutesTest::test_fuel_dispatch_menu_overlay_and_compact_detail_hooks",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 'data-neoscorpion-dispatch-details aria-expanded=\"false\"' not found in '{% extends \"base.html\" %}\\n\\n{% block title %}Fuel Dispatch | NeoScorpion{% endblock %}\\n\\n{% block content %}\\n",
+      "contract": "Current owned template fragments, semantic cells/headers/menu and report headings retain actions and authority. Legacy tail summary is not verified Actual; legacy vendor name is not a claimed current-Sort driver."
+    },
+    {
+      "id": "tests.test_neoscorpion_routes.NeoScorpionRoutesTest::test_mobile_topbar_uses_complete_short_labels_without_ellipsis",
+      "classification": "application presentation defect",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 2,
+      "original_failure": "AssertionError: b'<small>REPORTS</small>' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial",
+      "contract": "Report routes were missing from shell metadata and incorrectly showed DASHBOARD on mobile. Exact report-path label mapping restores REPORTS without changing permissions, queries or report data."
+    },
+    {
+      "id": "tests.test_neoscorpion_routes.NeoScorpionRoutesTest::test_neoscorpion_menu_order_is_operational_and_permission_filtered",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: Lists differ: ['Das[45 chars]ruck Driver', 'Truck Manager', 'Fueler', 'Quic[51 chars]ngs'] != ['Das[45 chars]ruck Manager', 'Fueler', 'Quick Fuel', 'Report[35 chars]ngs']\n\nFirst differ",
+      "contract": "Current owned template fragments, semantic cells/headers/menu and report headings retain actions and authority. Legacy tail summary is not verified Actual; legacy vendor name is not a claimed current-Sort driver."
+    },
+    {
+      "id": "tests.test_neoscorpion_routes.NeoScorpionRoutesTest::test_truck_manager_can_add_vendor_driver_truck",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: b'Casey Vendor' not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, ",
+      "contract": "Current owned template fragments, semantic cells/headers/menu and report headings retain actions and authority. Legacy tail summary is not verified Actual; legacy vendor name is not a claimed current-Sort driver."
+    },
+    {
+      "id": "tests.test_neoscorpion_spear.NeoScorpionSpearPlanningTest::test_dispatch_rows_show_spear_recommendation_for_each_unassigned_resource",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 'SPEAR → {{ row.spear_step.fueler_name }}' not found in '{% from \"neonodes/neoscorpion/_fuel_status.html\" import fuel_status, call_dispatch_ack with context %}\\n{% from \"neonodes/neosc",
+      "contract": "Resource reuse/location requires real physical release and frozen ramp provenance. Current parking cannot rewrite a prior release; recommendation/readiness assertions follow owned fragments."
+    },
+    {
+      "id": "tests.test_neoscorpion_spear.NeoScorpionSpearPlanningTest::test_latest_recorded_release_sets_location_across_release_types",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 'Remote' != 'Delta'\n- Remote\n+ Delta",
+      "contract": "Resource reuse/location requires real physical release and frozen ramp provenance. Current parking cannot rewrite a prior release; recommendation/readiness assertions follow owned fragments."
+    },
+    {
+      "id": "tests.test_neoscorpion_spear.NeoScorpionSpearPlanningTest::test_recorded_release_allows_reuse_without_re_reserving_finished_work",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 3,
+      "original_failure": "AssertionError: 'Remote' != 'Charlie'\n- Remote\n+ Charlie",
+      "contract": "Resource reuse/location requires real physical release and frozen ramp provenance. Current parking cannot rewrite a prior release; recommendation/readiness assertions follow owned fragments."
+    },
+    {
+      "id": "tests.test_neoscorpion_spear.NeoScorpionSpearSettingsTest::test_dispatch_renders_compact_readiness_and_collapsed_why_hook",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: '<details class=\"neoscorpion-spear-why\"' not found in '{% from \"neonodes/neoscorpion/_fuel_status.html\" import fuel_status, call_dispatch_ack with context %}\\n{% from \"neonodes/neoscor",
+      "contract": "Resource reuse/location requires real physical release and frozen ramp provenance. Current parking cannot rewrite a prior release; recommendation/readiness assertions follow owned fragments."
+    },
+    {
+      "id": "tests.test_neoscorpion_spear_calibration.SpearLiveCalibrationTest::test_observe_uses_configured_timing_and_apply_uses_all_three_candidates",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: datetime.timedelta(seconds=330) != datetime.timedelta(seconds=450)",
+      "contract": "OBSERVE retains configured timing; APPLY changes approved components once. Physical OFF excludes finishing time; safety tokens change with effective policy."
+    },
+    {
+      "id": "tests.test_neoscorpion_spear_display.SpearDisplayTest::test_card_parking_matches_canonical_mission_without_queries",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AttributeError: 'types.SimpleNamespace' object has no attribute 'fueler_id'",
+      "contract": "Full current read-only plan-step shape supplies resource identity/start/finish. Canonical mission parking determines card label without database access."
+    },
+    {
+      "id": "tests.test_neoscorpion_truck_display_updates.ScorpionDisplayUpdatesTest::test_actual_and_apu_independent_display_all_missing_zero_and_override_cases",
+      "classification": "outdated assertion",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 8,
+      "original_failure": "AssertionError: '-' != 'ACTUAL: -'\n- -\n+ ACTUAL: -",
+      "contract": "Only trusted canonical ON is physical activity. OFF supplies real release/travel provenance, before final completion. TOP OFF rejects active fueling; stored contradictory legacy state is diagnostic unknown. Actual and APU display independently."
+    },
+    {
+      "id": "tests.test_neoscorpion_truck_display_updates.ScorpionDisplayUpdatesTest::test_conflicting_activity_top_off_and_live_panel",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: 'CURRENTLY FUELING ON A4' not found in '<section class=\"neoscorpion-panel\" data-fuel-assignments-panel>\\n        <div class=\"neoscorpion-panel-head\">\\n            <span>Dispatch Planne",
+      "contract": "Only trusted canonical ON is physical activity. OFF supplies real release/travel provenance, before final completion. TOP OFF rejects active fueling; stored contradictory legacy state is diagnostic unknown. Actual and APU display independently."
+    },
+    {
+      "id": "tests.test_neoscorpion_truck_display_updates.ScorpionDisplayUpdatesTest::test_shared_truck_real_on_and_excluded_released_completed_fob_future_work",
+      "classification": "invalid fixture",
+      "baseline": "FAIL",
+      "final": "PASS",
+      "baseline_failure_events": 1,
+      "original_failure": "AssertionError: '' != 'CURRENTLY FUELING ON A4'\n+ CURRENTLY FUELING ON A4",
+      "contract": "Only trusted canonical ON is physical activity. OFF supplies real release/travel provenance, before final completion. TOP OFF rejects active fueling; stored contradictory legacy state is diagnostic unknown. Actual and APU display independently."
+    }
+  ]
+}

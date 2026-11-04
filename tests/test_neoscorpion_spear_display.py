@@ -1,4 +1,5 @@
 """Display-only SPEAR summaries and canonical Dispatch HTTP regressions."""
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 import re
@@ -58,9 +59,9 @@ class SpearDisplayTest(unittest.TestCase):
         visual = dict(truck_id=7)
         plan = SimpleNamespace(risks_by_mission_id={2:'COVERED'}, readiness_by_mission_id={2:()},
             waiting_for_data_by_mission_id={}, unavailable_by_mission_id={},
-            steps=[SimpleNamespace(mission_id=2, truck_id=7, action_type="assign",
-                                   risk="COVERED", projected_complete_at_utc=object())],
-            occupied_truck_next={}, status_text="SPEAR: ALL LOADS COVERED", waiting_for_data_count=0, relevant_count=1)
+            steps=[SimpleNamespace(mission_id=2, truck_id=7, fueler_id=1, requires_resource_release=False, action_type="assign",
+                                   risk="COVERED", fueler_name="Synthetic Fueler", truck_number="7", projected_start_at_utc=datetime(2026,9,3,1), projected_complete_at_utc=datetime(2026,9,3,2))],
+            occupied_truck_next={}, status_text="SPEAR: ALL LOADS COVERED", waiting_for_data_count=0, relevant_count=1, priority_order=())
         _attach_spear_plan(rows, [visual], plan)
         self.assertEqual(visual['spear_parking_position'], 'E03')
         self.assertEqual(rows[1]['spear_risk'], 'COVERED')

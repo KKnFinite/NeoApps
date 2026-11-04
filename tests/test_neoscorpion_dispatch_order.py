@@ -64,7 +64,10 @@ class DispatchOrderTest(unittest.TestCase):
     def test_only_final_presentation_copies_rows_not_projection_or_plan(self):
         at=datetime(2026,10,14,1)
         rows=[row(1),row(2,Item(actual_block_in_datetime_utc=at),present='Arrived')]
-        context=dict(rows=rows,truck_visuals=object(),spear_plan=object())
+        for item in rows:
+            item.update(action_count=0, mission_data_action=False)
+            item['mission'].planned_fuel_load = 25000
+        context=dict(rows=rows,truck_visuals=[],spear_plan=None)
         with patch("app.neonodes.neoscorpion.routes.fuel_dispatch_context",return_value=context) as core:
             result=_dispatch_presentation_context(object(),include_asset_choices=True)
         self.assertEqual([r["mission"].id for r in result["rows"]],[2,1])

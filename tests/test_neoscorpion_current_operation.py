@@ -116,7 +116,12 @@ class NeoScorpionCurrentOperationTest(unittest.TestCase):
         self.assertIsNone(current_sort_operation(self.gateway))
         self.assertEqual(fuel_dispatch_context(self.gateway)["rows"], [])
         self.assertIsNone(fuel_dispatch_context(self.gateway)["operation"])
-        self.assertEqual(fueler_context(self.gateway, None)["rows"], [])
+        from app.models import User
+        reader = User(username='w3-no-sort-reader', is_active=True)
+        from app.services.password_policy import set_user_password
+        set_user_password(reader, 'FixturePassword123!')
+        db.session.add(reader); db.session.commit()
+        self.assertEqual(fueler_context(self.gateway, reader)["rows"], [])
         self.assertIsNone(hanzo_context(self.gateway)["operation"])
         self.assertEqual(hanzo_context(self.gateway)["rows"], [])
         self.assertEqual(truck_manager_context(self.gateway)["nightly_trucks_by_id"], {})

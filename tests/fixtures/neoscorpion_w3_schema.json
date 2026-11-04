@@ -1,0 +1,261 @@
+{
+  "baseline": "65bccb7cf42420a48f65e4c98d76c8f5fa1eb7d2",
+  "tables": [
+    "neoscorpion_direct_entries",
+    "neoscorpion_dispatch_preferences",
+    "neoscorpion_tail_notes",
+    "neoscorpion_tail_fuel_states",
+    "neoscorpion_fuel_trucks",
+    "neoscorpion_fueler_nicknames",
+    "neoscorpion_settings",
+    "neoscorpion_spear_audit_entries",
+    "neoscorpion_spear_calibration_resets",
+    "neoscorpion_sort_asset_states",
+    "neoscorpion_sort_fuelers",
+    "neoscorpion_sort_trucks",
+    "neoscorpion_fuel_assignments",
+    "neoscorpion_truck_drivers",
+    "neoscorpion_truck_driver_audits",
+    "neoscorpion_fuel_work_states",
+    "neoscorpion_fuel_tank_states",
+    "neoscorpion_aircraft_fuel_settings",
+    "neoscorpion_fueling_events",
+    "neoscorpion_fueling_event_tank_snapshots",
+    "neoscorpion_truck_inventory_audits",
+    "neoscorpion_fuel_cycle_history",
+    "neoscorpion_fuel_audit_entries",
+    "neoscorpion_dispatcher_checks",
+    "neoscorpion_call_dispatch_acks",
+    "neoscorpion_vendor_accounts",
+    "neoscorpion_vendor_nights",
+    "neoscorpion_vendor_requests",
+    "neoscorpion_vendor_audits",
+    "neoscorpion_inventory_readings",
+    "neoscorpion_top_off_events",
+    "neoscorpion_pending_uplifts",
+    "neoscorpion_spear_observations",
+    "neoscorpion_spear_fleet_observations",
+    "neoscorpion_spear_plan_snapshots"
+  ],
+  "additive_columns": {
+    "neoscorpion_pending_uplifts": {
+      "plan_kind": "VARCHAR(16) NOT NULL DEFAULT 'uplift'",
+      "handoff_snapshot": "JSON"
+    },
+    "neoscorpion_dispatch_preferences": {
+      "board_truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "statistics_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "spear_data_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE"
+    },
+    "neoscorpion_fuel_trucks": {
+      "availability_history": "JSON"
+    },
+    "neoscorpion_truck_drivers": {
+      "manual_name": "VARCHAR(120) NOT NULL DEFAULT ''"
+    },
+    "neoscorpion_sort_trucks": {
+      "top_off_sent_at_utc": "TIMESTAMP",
+      "inventory_verified": "BOOLEAN NOT NULL DEFAULT TRUE",
+      "inventory_epoch": "INTEGER NOT NULL DEFAULT 0",
+      "inventory_pending_epoch": "INTEGER",
+      "availability_history": "JSON"
+    },
+    "neoscorpion_top_off_events": {
+      "spear_predicted_return_at_utc": "TIMESTAMP",
+      "spear_roundtrip_policy": "JSON"
+    },
+    "neoscorpion_settings": {
+      "truck_fuel_discrepancy_threshold_gallons": "INTEGER NOT NULL DEFAULT 1000",
+      "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
+      "planning_inbound_fuel_fallback_lbs": "INTEGER",
+      "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
+      "ready_assignment_pulse_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
+      "mission_row_height_percent": "INTEGER NOT NULL DEFAULT 100",
+      "assignment_setup_minutes": "NUMERIC(8, 2)",
+      "advance_setup_window_minutes": "INTEGER",
+      "assignment_finishing_minutes": "NUMERIC(8, 2)",
+      "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
+      "spear_recommendations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
+      "spear_automation_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "spear_learning_capture_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "spear_minimum_truck_reserve_gallons": "INTEGER NOT NULL DEFAULT 500",
+      "spear_do_not_top_off_above_percent": "INTEGER NOT NULL DEFAULT 70",
+      "spear_truck_minutes_per_ramp_move": "NUMERIC(8, 2) NOT NULL DEFAULT 2",
+      "spear_fueler_begins_at": "VARCHAR(16) NOT NULL DEFAULT 'Remote'",
+      "spear_truck_begins_at": "VARCHAR(16) NOT NULL DEFAULT 'Remote'",
+      "spear_truck_after_top_off": "VARCHAR(16) NOT NULL DEFAULT 'Remote'",
+      "spear_incoming_early_staging_minutes": "INTEGER NOT NULL DEFAULT 15",
+      "spear_recalculation_interval_minutes": "INTEGER NOT NULL DEFAULT 2",
+      "spear_automation_stability_delay_seconds": "INTEGER NOT NULL DEFAULT 5",
+      "spear_whole_sort_mode": "VARCHAR(8) NOT NULL DEFAULT 'shadow' CHECK (spear_whole_sort_mode IN ('shadow','active'))",
+      "spear_top_off_roundtrip_minutes": "INTEGER NOT NULL DEFAULT 40 CHECK (spear_top_off_roundtrip_minutes > 0)",
+      "spear_use_learned_top_off": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "spear_priority_order_json": "TEXT"
+    },
+    "neoscorpion_aircraft_fuel_settings": {
+      "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
+      "max_lateral_imbalance_lbs": "INTEGER"
+    },
+    "neoscorpion_fuel_assignments": {
+      "active_work_state_id": "INTEGER REFERENCES neoscorpion_fuel_work_states(id)",
+      "fueler_assigned_at_utc": "TIMESTAMP",
+      "truck_assigned_at_utc": "TIMESTAMP",
+      "resource_assignment_by_user_id": "INTEGER",
+      "fuel_on_board_at_utc": "TIMESTAMP",
+      "fuel_on_board_by_user_id": "INTEGER",
+      "ready_for_fuel_at_utc": "TIMESTAMP",
+      "ready_for_fuel_by_user_id": "INTEGER",
+      "completed_at_utc": "TIMESTAMP",
+      "completed_by_user_id": "INTEGER",
+      "confirmed_tail_number": "VARCHAR(32)",
+      "operational_status": "VARCHAR(32) NOT NULL DEFAULT 'active'",
+      "hold_reason": "TEXT",
+      "hold_at_utc": "TIMESTAMP",
+      "hold_by_user_id": "INTEGER",
+      "current_cycle_type": "VARCHAR(16) NOT NULL DEFAULT 'fuel'",
+      "current_cycle_number": "INTEGER NOT NULL DEFAULT 1",
+      "fueler_update_version": "INTEGER NOT NULL DEFAULT 0",
+      "fueler_update_message": "TEXT",
+      "fueler_update_at_utc": "TIMESTAMP",
+      "fueler_update_acknowledged_version": "INTEGER NOT NULL DEFAULT 0"
+    },
+    "neoscorpion_fuel_work_states": {
+      "target_frozen": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "continuation_review_reason": "TEXT",
+      "fueler_submitted_at_utc": "TIMESTAMP",
+      "fueler_submitted_by_user_id": "INTEGER",
+      "fueler_submission_evidence": "VARCHAR(64)",
+      "fueler_submission_version": "INTEGER NOT NULL DEFAULT 0",
+      "notes": "TEXT",
+      "visit_number": "INTEGER",
+      "actuals_received_at_utc": "TIMESTAMP",
+      "preparation_received_at_utc": "TIMESTAMP",
+      "completion_ready_at_utc": "TIMESTAMP",
+      "off_inventory_epoch": "INTEGER",
+      "performance_context": "JSON",
+      "physical_sequence_number": "INTEGER",
+      "physical_cycle_number": "INTEGER",
+      "physical_cycle_type": "VARCHAR(16)",
+      "physical_truck_id": "INTEGER REFERENCES neoscorpion_fuel_trucks(id)",
+      "physical_fueler_user_id": "INTEGER REFERENCES users(id)",
+      "physical_required_fuel_lbs": "INTEGER",
+      "physical_transfer_gallons": "INTEGER",
+      "physical_finalized_at_utc": "TIMESTAMP",
+      "physical_finalized_by_user_id": "INTEGER REFERENCES users(id)",
+      "physical_transfer_review": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "confirmed_on_at_utc": "TIMESTAMP",
+      "manual_on_at_utc": "TIMESTAMP",
+      "manual_on_by_user_id": "INTEGER",
+      "manual_on_truck_id": "INTEGER",
+      "manual_on_cycle_number": "INTEGER",
+      "apu_running": "BOOLEAN",
+      "apu_confirmed_at_utc": "TIMESTAMP",
+      "apu_allowance_lbs": "INTEGER",
+      "automatic_apu_allowance_lbs": "INTEGER",
+      "apu_override_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
+      "apu_override_allowance_lbs": "INTEGER",
+      "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
+      "apu_source_tank_code": "VARCHAR(32)",
+      "off_at_utc": "TIMESTAMP",
+      "off_by_user_id": "INTEGER",
+      "truck_segment_started_at_utc": "TIMESTAMP",
+      "ended_early_at_utc": "TIMESTAMP",
+      "ended_early_by_user_id": "INTEGER",
+      "ended_early_reason": "TEXT"
+    },
+    "neoscorpion_fueling_events": {
+      "performance_snapshot": "JSON",
+      "event_type": "VARCHAR(16) NOT NULL DEFAULT 'fuel'",
+      "cycle_number": "INTEGER NOT NULL DEFAULT 1",
+      "fueler_user_id": "INTEGER",
+      "required_fuel_lbs": "INTEGER",
+      "apu_running": "BOOLEAN",
+      "apu_allowance_lbs": "INTEGER",
+      "apu_source_tank_code": "VARCHAR(32)",
+      "neo_fuel_lbs": "INTEGER",
+      "center_fuel_lbs": "INTEGER"
+    }
+  },
+  "checks": [
+    [
+      "neoscorpion_sort_trucks",
+      "ck_neoscorpion_sort_truck_status",
+      "status",
+      [
+        "available",
+        "unavailable_oos",
+        "topping_off",
+        "needs_sump"
+      ]
+    ],
+    [
+      "neoscorpion_fuel_assignments",
+      "ck_neoscorpion_fuel_assignment_operational_status",
+      "operational_status",
+      [
+        "active",
+        "hold_review"
+      ]
+    ],
+    [
+      "neoscorpion_fuel_assignments",
+      "ck_neoscorpion_fuel_assignment_cycle_type",
+      "current_cycle_type",
+      [
+        "fuel",
+        "uplift",
+        "defuel"
+      ]
+    ],
+    [
+      "neoscorpion_fueling_events",
+      "ck_neoscorpion_fueling_event_type",
+      "event_type",
+      [
+        "fuel",
+        "uplift",
+        "defuel"
+      ]
+    ],
+    [
+      "neoscorpion_fuel_audit_entries",
+      "ck_neoscorpion_fuel_audit_entry_action",
+      "action",
+      [
+        "reopen_off",
+        "correct_actual",
+        "auto_hold",
+        "resume_hold",
+        "swap_fueler",
+        "swap_truck",
+        "confirm_tail",
+        "end_early",
+        "cancel_uplift",
+        "cancel_defuel",
+        "unassign_truck",
+        "truck_on",
+        "segment_transfer",
+        "segment_transfer_review",
+        "segment_transfer_review_required"
+      ]
+    ]
+  ],
+  "expressions": [
+    [
+      "neoscorpion_settings",
+      "ck_neoscorpion_neo_fuel_excess_nonnegative",
+      "neo_fuel_excess_alert_gallons >= 0"
+    ],
+    [
+      "neoscorpion_fuel_assignments",
+      "ck_neoscorpion_fuel_assignment_cycle_number_positive",
+      "current_cycle_number >= 1"
+    ],
+    [
+      "neoscorpion_fueling_events",
+      "ck_neoscorpion_fueling_event_cycle_number_positive",
+      "cycle_number >= 1"
+    ]
+  ]
+}

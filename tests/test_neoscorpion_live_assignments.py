@@ -1,5 +1,6 @@
+import copy
 import unittest
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -109,100 +110,107 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         db.session.add(event)
         return event
 
+    def _canonical_performance_cycle(self, operation, fueler, dispatcher, truck, number, tail, start, minutes):
+        from tests.neoscorpion_evidence_fixture import FuelCycle, transfer_readings
+        cycle = FuelCycle.create(self.gateway, operation, fueler, dispatcher, truck,
+            flight=number, tail=tail)
+        cycle.record_arrival(start - timedelta(minutes=5))
+        cycle.assign(start - timedelta(minutes=1), current_gallons=5000)
+        cycle.park(start - timedelta(minutes=1), 'A', 'A01' if tail == 'N491UP' else 'A02')
+        cycle.save(start - timedelta(minutes=1), apu_running='no',
+            remaining_left='6', remaining_ctr='0', remaining_right='6')
+        event = cycle.finish(start, start + timedelta(minutes=minutes),
+            **transfer_readings(gallons='1500'))
+        return cycle, event
+
     def test_dispatch_performance_aggregates_events_and_refreshes_with_dispatch(self):
         operation, assignment, work, fueler, replacement, trucks = self._performance_fixture()
-        start = datetime(2026, 8, 18, 2, 0)
-        self._performance_event(operation, assignment, work, fueler, trucks[0], 1,
-                                start, datetime(2026, 8, 18, 2, 1))
+        dispatcher = self._add_user('performance_dispatcher', 'simulator')
         db.session.commit()
-
+        cycle, first_event = self._canonical_performance_cycle(operation, fueler, dispatcher, trucks[0],
+            'UPS-W3-1', 'N491UP', datetime(2026, 8, 18, 2), 15)
         context = fuel_dispatch_context(self.gateway)
-        by_fueler = {row["id"]: row for row in context["fueling_performance"]["fuelers"]}
-        by_truck = {row["id"]: row for row in context["fueling_performance"]["trucks"]}
-        self.assertEqual((by_fueler[fueler.id]["name"], by_fueler[fueler.id]["jobs"],
-                          by_fueler[fueler.id]["prof"]), ("Falcon", 1, 100))
-        self.assertEqual((by_fueler[replacement.id]["jobs"], by_fueler[replacement.id]["prof"]), (0, None))
-        self.assertEqual((by_truck[trucks[0].id]["jobs"], by_truck[trucks[0].id]["prof"]), (1, 100))
-        self.assertEqual((by_truck[trucks[1].id]["jobs"], by_truck[trucks[1].id]["prof"]), (0, None))
-
+        by_fueler = {row['id']: row for row in context['fueling_performance']['fuelers']}
+        by_truck = {row['id']: row for row in context['fueling_performance']['trucks']}
+        self.assertEqual((by_fueler[fueler.id]['name'], by_fueler[fueler.id]['jobs'],
+            by_fueler[fueler.id]['prof']), ('Falcon', 1, 100))
+        self.assertEqual((by_fueler[replacement.id]['jobs'], by_fueler[replacement.id]['prof']), (0, None))
+        # No earlier physical truck origin exists for the first visit. Do not invent one.
+        self.assertEqual((by_truck[trucks[0].id]['jobs'], by_truck[trucks[0].id]['prof']), (0, None))
+        self.assertEqual((by_truck[trucks[1].id]['jobs'], by_truck[trucks[1].id]['prof']), (0, None))
         self._login(replacement)
-        first = self.client.get("/neoscorpion/fuel-dispatch/live-panel").get_json()
-        self.assertIn("data-fueling-performance", first["html"])
-        self.assertIn("1 job · PROF 100", first["html"])
-        self.assertIn("0 jobs · PROF â€”", first["html"])
-        self.assertIn("Falcon", first["html"])
-        self._performance_event(operation, assignment, work, fueler, trucks[0], 2,
-                                datetime(2026, 8, 18, 2, 2), datetime(2026, 8, 18, 2, 4),
-                                event_type="uplift")
-        NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=operation.id).one().revision = 2
-        db.session.commit()
-        changed = self.client.get("/neoscorpion/fuel-dispatch/live-panel").get_json()
-        self.assertEqual(changed["revision"], 2)
-        self.assertIn("2 jobs · PROF 67", changed["html"])
+        first = self.client.get('/neoscorpion/fuel-dispatch/live-panel').get_json()
+        self.assertIn('data-fueling-performance', first['html'])
+        self.assertIn('1 job · PROF 100', first['html'])
+        self.assertIn('0 jobs · PROF —', first['html'])
+        self.assertIn('Falcon', first['html'])
+        frozen = copy.deepcopy(first_event.performance_snapshot)
+        second, second_event = self._canonical_performance_cycle(operation, fueler, dispatcher, trucks[0],
+            'UPS-W3-2', 'N492UP', datetime(2026, 8, 18, 2, 30), 30)
+        changed = self.client.get('/neoscorpion/fuel-dispatch/live-panel').get_json()
+        self.assertGreater(changed['revision'], first['revision'])
+        self.assertIn('2 jobs · PROF 67', changed['html'])
+        from app.services.neoscorpion_prof import event_math
+        self.assertEqual(event_math(second_event)['truck_prof'], 16)
         self.assertEqual(assignment.assigned_fueler_user_id, replacement.id)
         self.assertEqual(assignment.assigned_truck_id, trucks[1].id)
-
-        db.session.add(NeoScorpionAircraftFuelSetting(
-            gateway_id=self.gateway.id, aircraft_type="B747-400",
-            apu_rate_thousand_lbs_per_hour=0.3,
-            assignment_pump_rate_gallons_per_minute=150,
-        ))
+        db.session.add(NeoScorpionAircraftFuelSetting(gateway_id=self.gateway.id, aircraft_type='B757',
+            apu_rate_thousand_lbs_per_hour=0.3, assignment_pump_rate_gallons_per_minute=150))
         db.session.commit()
-        configured = fuel_dispatch_context(self.gateway)["fueling_performance"]
-        self.assertEqual(next(row["prof"] for row in configured["fuelers"] if row["id"] == fueler.id), 133)
+        configured = fuel_dispatch_context(self.gateway)['fueling_performance']
+        self.assertEqual(next(row['prof'] for row in configured['fuelers'] if row['id'] == fueler.id), 67)
+        self.assertEqual(first_event.performance_snapshot, frozen)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 2)
+        self.assertEqual(NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id,
+            fuel_truck_id=trucks[0].id).one().current_gallons, 2000)
 
     def test_dispatch_performance_excludes_unreliable_events_and_other_sorts(self):
-        operation, assignment, work, fueler, _replacement, trucks = self._performance_fixture()
-        base = datetime(2026, 8, 18, 2, 0)
-        self._performance_event(operation, assignment, work, fueler, trucks[0], 1,
-                                base, datetime(2026, 8, 18, 2, 1))
-        cases = (
-            (2, "defuel", 300, datetime(2026, 8, 18, 2, 2), datetime(2026, 8, 18, 2, 3), fueler, "N500UP"),
-            (3, "fuel", 0, datetime(2026, 8, 18, 2, 4), datetime(2026, 8, 18, 2, 5), fueler, "N500UP"),
-            (4, "fuel", 300, None, datetime(2026, 8, 18, 2, 7), fueler, "N500UP"),
-            (5, "fuel", 300, datetime(2026, 8, 18, 2, 9), datetime(2026, 8, 18, 2, 8), fueler, "N500UP"),
-            (6, "fuel", 300, datetime(2026, 8, 18, 2, 10), datetime(2026, 8, 18, 2, 11), fueler, "N500UP"),
-            (7, "fuel", 300, datetime(2026, 8, 18, 2, 12), datetime(2026, 8, 18, 2, 13), None, "N500UP"),
-            (8, "fuel", 300, datetime(2026, 8, 18, 2, 14), datetime(2026, 8, 18, 2, 15), fueler, "N777UP"),
-        )
-        for sequence, kind, gallons, start, end, actor, tail in cases:
-            self._performance_event(operation, assignment, work, actor, trucks[0], sequence,
-                                    start, end, gallons=gallons, event_type=kind, tail=tail)
-        work.ended_early_at_utc = datetime(2026, 8, 18, 2, 11)
-        assignment.hold_at_utc = datetime(2026, 8, 18, 2, 10, 30)
-        prior_operation = SortDateOperation(
-            gateway_id=self.gateway.id, sort_date=date(2026, 8, 16),
-            gateway_code=self.gateway.code, sort_name="night", window_minutes=360,
-        )
-        db.session.add(prior_operation)
-        db.session.flush()
-        prior_mission = SortDateMission(
-            sort_date=prior_operation.sort_date, gateway_code=self.gateway.code,
-            sort_name="night", sort_date_operation_id=prior_operation.id,
-            mission_type="departure", mission_source="manual", flight_number="UPS499",
-            origin=self.gateway.code, destination="SDF", timezone="America/Chicago",
-            planned_datetime_local=datetime(2026, 8, 16, 23, 30),
-            planned_datetime_utc=datetime(2026, 8, 17, 4, 30), planned_source="manual",
-            assigned_tail_number="N500UP", tail_source="manual", fuel_status="waiting",
-        )
-        db.session.add(prior_mission)
-        db.session.flush()
-        prior_assignment = NeoScorpionFuelAssignment(
-            sort_date_operation_id=prior_operation.id, sort_date_mission_id=prior_mission.id,
-            assigned_fueler_user_id=fueler.id, assigned_truck_id=trucks[0].id,
-        )
-        db.session.add(prior_assignment)
-        db.session.flush()
-        prior_work = NeoScorpionFuelWorkState(fuel_assignment_id=prior_assignment.id, tail_number="N500UP")
-        db.session.add(prior_work)
-        db.session.flush()
-        self._performance_event(prior_operation, prior_assignment, prior_work, fueler, trucks[0], 1,
-                                datetime(2026, 8, 17, 2), datetime(2026, 8, 17, 2, 1))
+        operation, assignment, work, fueler, replacement, trucks = self._performance_fixture()
+        dispatcher = self._add_user('performance_dispatcher', 'simulator')
         db.session.commit()
-        scores = fuel_dispatch_context(self.gateway)["fueling_performance"]
-        self.assertEqual(scores["fuelers"][0]["jobs"], 1)
-        self.assertEqual(scores["trucks"][0]["jobs"], 1)
-        self.assertEqual(scores["fuelers"][0]["prof"], 100)
+        canonical, valid = self._canonical_performance_cycle(operation, fueler, dispatcher, trucks[0],
+            'UPS-W3-1', 'N491UP', datetime(2026, 8, 18, 2), 15)
+        # Controlled legacy imports remain explicitly unverified; they cannot
+        # become positive samples merely because their raw times/gallons look plausible.
+        base = datetime(2026, 8, 18, 2)
+        invalid = [self._performance_event(operation, assignment, work, replacement, trucks[1], 1,
+            base, base+timedelta(minutes=1), gallons=300)]
+        # Retain all original unreliable-import cases. Each remains an explicitly
+        # unverified legacy record, never a canonical positive performance sample.
+        for sequence, kind, gallons, start, end, actor, tail in (
+            (2,'defuel',300,base+timedelta(minutes=2),base+timedelta(minutes=3),fueler,'N500UP'),
+            (3,'fuel',0,base+timedelta(minutes=4),base+timedelta(minutes=5),fueler,'N500UP'),
+            (4,'fuel',300,None,base+timedelta(minutes=7),fueler,'N500UP'),
+            (5,'fuel',300,base+timedelta(minutes=9),base+timedelta(minutes=8),fueler,'N500UP'),
+            (6,'fuel',300,base+timedelta(minutes=10),base+timedelta(minutes=11),fueler,'N500UP'),
+            (7,'fuel',300,base+timedelta(minutes=12),base+timedelta(minutes=13),None,'N500UP'),
+            (8,'fuel',300,base+timedelta(minutes=14),base+timedelta(minutes=15),fueler,'N777UP')):
+            legacy = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id,tail_number=tail,visit_number=sequence)
+            db.session.add(legacy); db.session.flush()
+            invalid.append(self._performance_event(operation, assignment, legacy, actor, trucks[0], sequence,
+                start,end,gallons=gallons,event_type=kind,tail=tail))
+        # Controlled interrupted/held historical import, with no trusted ON.
+        work.ended_early_at_utc=base+timedelta(minutes=11)
+        assignment.hold_at_utc=base+timedelta(minutes=10,seconds=30)
+        db.session.commit()
+        prior_operation = SortDateOperation(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+            sort_date=date(2026, 8, 16), sort_name='night', window_minutes=360)
+        db.session.add(prior_operation); db.session.commit()
+        prior, prior_event = self._canonical_performance_cycle(prior_operation, fueler, dispatcher, trucks[0],
+            'UPS-W3-PRIOR', 'N493UP', datetime(2026, 8, 17, 2), 15)
+        scores = fuel_dispatch_context(self.gateway)['fueling_performance']
+        by_fueler = {row['id']: row for row in scores['fuelers']}
+        self.assertEqual((by_fueler[fueler.id]['jobs'], by_fueler[fueler.id]['prof']), (1, 100))
+        self.assertEqual(by_fueler[replacement.id]['jobs'], 0)
+        from app.services.neoscorpion_prof import load_observation_jobs
+        jobs = load_observation_jobs(self.gateway.id, operation_id=operation.id)
+        self.assertEqual({j['event'].id for j in jobs}, {valid.id, *(e.id for e in invalid)})
+        self.assertNotIn(prior_event.id, {j['event'].id for j in jobs})
+        for job in jobs:
+            if job['event'].id != valid.id:
+                self.assertTrue(job['fueler_reasons'])
+                self.assertIsNone(job['fueler_prof'])
+                self.assertIsNone(job['truck_prof'])
 
     def test_dispatch_performance_empty_roster(self):
         self._configure_active_night_sort()

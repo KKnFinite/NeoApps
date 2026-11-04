@@ -219,21 +219,21 @@ class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
                 invalid_operation,
                 self.other_truck,
                 status="available",
-                starting_gallons=None,
-                current_gallons=100,
+                starting_gallons=100,
+                current_gallons=None,
             ),
             lambda: select_nightly_truck(
                 invalid_operation,
                 self.other_truck,
                 status="unavailable_oos",
-                starting_gallons=-1,
+                current_gallons=-1,
             ),
             lambda: select_nightly_truck(
                 invalid_operation,
                 self.other_truck,
                 status="available",
                 starting_gallons=1700,
-                current_gallons=1900,
+                current_gallons=2100,
             ),
             lambda: select_nightly_truck(
                 invalid_operation,
@@ -358,7 +358,7 @@ class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
             fuel_truck_id=self.truck.id,
         ).one()
         self.assertEqual(nightly_truck.status, "available")
-        self.assertEqual(nightly_truck.starting_gallons, 1800)
+        self.assertEqual(nightly_truck.starting_gallons, 1200)  # Captured opening = validated current reading.
         self.assertEqual(nightly_truck.current_gallons, 1900)
         self.assertEqual(nightly_truck.top_off_sent_at_utc, sent_at)
         self.assertEqual(self.truck.remaining_fuel_gallons, legacy_remaining)

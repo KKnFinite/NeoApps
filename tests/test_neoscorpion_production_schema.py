@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
@@ -44,27 +46,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
         ensure.assert_not_called()
 
     def test_current_model_table_and_column_contract_is_covered(self):
-        expected_table_names = (
-            "neoscorpion_tail_fuel_states",
-            "neoscorpion_fuel_trucks",
-            "neoscorpion_fueler_nicknames",
-            "neoscorpion_settings",
-            "neoscorpion_spear_audit_entries",
-            "neoscorpion_spear_calibration_resets",
-            "neoscorpion_sort_asset_states",
-            "neoscorpion_sort_fuelers",
-            "neoscorpion_sort_trucks",
-            "neoscorpion_fuel_assignments",
-            "neoscorpion_fuel_work_states",
-            "neoscorpion_fuel_tank_states",
-            "neoscorpion_aircraft_fuel_settings",
-            "neoscorpion_fueling_events",
-            "neoscorpion_fueling_event_tank_snapshots",
-            "neoscorpion_fuel_cycle_history",
-            "neoscorpion_fuel_audit_entries",
-            "neoscorpion_dispatcher_checks",
-            "neoscorpion_call_dispatch_acks",
-        )
+        expected_table_names = tuple(json.loads(Path('tests/fixtures/neoscorpion_w3_schema.json').read_text(encoding='utf-8'))['tables'])
         self.assertEqual(
             tuple(model.__table__.name for model in NEOSCORPION_MODEL_TABLES),
             expected_table_names,
@@ -78,142 +60,18 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             )
 
     def test_required_additive_columns_and_constraints_are_current(self):
-        self.assertEqual(
-            NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_sort_trucks"],
-            {"top_off_sent_at_utc": "TIMESTAMP"},
-        )
-        self.assertEqual(
-            NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_settings"],
-            {
-                "planning_inbound_fuel_fallback_lbs": "INTEGER",
-                "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
-                "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
-                "assignment_setup_minutes": "NUMERIC(8, 2)",
-                "assignment_finishing_minutes": "NUMERIC(8, 2)",
-                "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
-                # Live calibration has its own additive SPEAR bootstrap.
-                **{name: sql for name, sql in SPEAR_SETTINGS_COLUMNS.items()
-                   if name != "spear_live_calibration_mode"},
-            },
-        )
-        self.assertEqual(
-            NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_aircraft_fuel_settings"],
-            {
-                "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
-                "max_lateral_imbalance_lbs": "INTEGER",
-            },
-        )
-        self.assertEqual(
-            set(NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_fuel_assignments"]),
-            {
-                "fuel_on_board_at_utc",
-                "fuel_on_board_by_user_id",
-                "ready_for_fuel_at_utc",
-                "ready_for_fuel_by_user_id",
-                "completed_at_utc",
-                "completed_by_user_id",
-                "confirmed_tail_number",
-                "operational_status",
-                "hold_reason",
-                "hold_at_utc",
-                "hold_by_user_id",
-                "current_cycle_type",
-                "current_cycle_number",
-                "fueler_update_version",
-                "fueler_update_message",
-                "fueler_update_at_utc",
-                "fueler_update_acknowledged_version",
-            },
-        )
-        self.assertIn(
-            "NOT NULL DEFAULT 'active'",
-            NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_fuel_assignments"][
-                "operational_status"
-            ],
-        )
-        self.assertEqual(
-            set(NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_fueling_events"]),
-            {
-                "event_type",
-                "cycle_number",
-                "fueler_user_id",
-                "required_fuel_lbs",
-                "apu_running",
-                "apu_allowance_lbs",
-                "apu_source_tank_code",
-                "neo_fuel_lbs",
-                "center_fuel_lbs",
-            },
-        )
-        self.assertEqual(
-            set(NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_fuel_work_states"]),
-            {
-                "apu_running",
-                "apu_confirmed_at_utc",
-                "apu_allowance_lbs",
-                "automatic_apu_allowance_lbs",
-                "apu_override_enabled",
-                "apu_override_allowance_lbs",
-                "applied_apu_rate_thousand_lbs_per_hour",
-                "apu_source_tank_code",
-                "off_at_utc",
-                "off_by_user_id",
-                "truck_segment_started_at_utc",
-                "ended_early_at_utc",
-                "ended_early_by_user_id",
-                "ended_early_reason",
-            },
-        )
-        constraints = {
-            constraint_name: frozenset(allowed_values)
-            for _table, constraint_name, _column, allowed_values in (
-                NEOSCORPION_CHECK_CONSTRAINTS
-            )
-        }
-        self.assertEqual(
-            constraints["ck_neoscorpion_sort_truck_status"],
-            frozenset(
-                ("available", "unavailable_oos", "topping_off", "needs_sump")
-            ),
-        )
-        self.assertEqual(
-            constraints["ck_neoscorpion_fuel_assignment_operational_status"],
-            frozenset(("active", "hold_review")),
-        )
-        self.assertEqual(
-            constraints["ck_neoscorpion_fuel_assignment_cycle_type"],
-            frozenset(("fuel", "uplift", "defuel")),
-        )
-        self.assertEqual(
-            constraints["ck_neoscorpion_fueling_event_type"],
-            frozenset(("fuel", "uplift", "defuel")),
-        )
-        self.assertEqual(
-            {name: expression for _table, name, expression in NEOSCORPION_EXPRESSION_CHECK_CONSTRAINTS},
-            {
-                "ck_neoscorpion_fuel_assignment_cycle_number_positive": "current_cycle_number >= 1",
-                "ck_neoscorpion_fueling_event_cycle_number_positive": "cycle_number >= 1",
-                "ck_neoscorpion_neo_fuel_excess_nonnegative": "neo_fuel_excess_alert_gallons >= 0",
-            },
-        )
-        self.assertEqual(
-            constraints["ck_neoscorpion_fuel_audit_entry_action"],
-            frozenset(
-                (
-                    "reopen_off",
-                    "correct_actual",
-                    "auto_hold",
-                    "resume_hold",
-                    "swap_fueler",
-                    "swap_truck",
-                    "confirm_tail",
-                    "end_early",
-                    "cancel_uplift",
-                    "cancel_defuel",
-                    "unassign_truck",
-                )
-            ),
-        )
+        expected = json.loads(Path('tests/fixtures/neoscorpion_w3_schema.json').read_text(encoding='utf-8'))
+        self.assertEqual(NEOSCORPION_ADDITIVE_COLUMNS, expected['additive_columns'])
+        self.assertEqual(json.loads(json.dumps(NEOSCORPION_CHECK_CONSTRAINTS)), expected['checks'])
+        self.assertEqual(json.loads(json.dumps(NEOSCORPION_EXPRESSION_CHECK_CONSTRAINTS)), expected['expressions'])
+        # Permanent visit identity and immutable evidence remain explicit requirements.
+        for table, fields in {
+            'neoscorpion_fuel_work_states': ('visit_number', 'fueler_submitted_at_utc', 'physical_cycle_number', 'performance_context'),
+            'neoscorpion_fueling_events': ('performance_snapshot',),
+            'neoscorpion_sort_trucks': ('inventory_epoch', 'inventory_verified', 'availability_history'),
+        }.items():
+            for field in fields:
+                self.assertIn(field, NEOSCORPION_ADDITIVE_COLUMNS[table])
 
     def test_additive_sql_and_constraint_repair_are_targeted(self):
         connection = Mock()

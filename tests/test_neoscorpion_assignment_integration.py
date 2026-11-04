@@ -119,7 +119,9 @@ class NeoScorpionAssignmentIntegrationTest(unittest.TestCase):
         self.assertNotIn(b"Unselected Fueler", dispatch_table)
         self.assertIn(b"Removed Fueler (Current - unavailable)", dispatch_table)
         self.assertIn(b"TRUCK AVAILABLE", dispatch_table)
-        self.assertNotIn(b"TRUCK TOPPING", dispatch_table)
+        from tests.html_contracts import document
+        options = ' '.join(o.text for o in document(response).findall('select', name='assigned_truck_id') for o in o.findall('option'))
+        self.assertNotIn('TRUCK TOPPING', options)
         self.assertNotIn(b"TRUCK UNSELECTED", dispatch_table)
         self.assertIn(b"TRUCK OOS (Current - unavailable)", dispatch_table)
         assignment = NeoScorpionFuelAssignment.query.filter_by(

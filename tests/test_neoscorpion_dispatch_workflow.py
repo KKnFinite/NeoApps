@@ -336,81 +336,41 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertIn("Truck:", assignment.fueler_update_message)
 
     @patch("app.services.neoscorpion.current_sort_operation")
-    def test_dispatch_status_is_derived_and_assigned_truck_is_locked(
-        self,
-        current_sort_operation,
-    ):
+    def test_dispatch_status_is_derived_and_assigned_truck_is_locked(self, current_sort_operation):
+        from tests.neoscorpion_evidence_fixture import FuelCycle, transfer_readings
+        from tests.html_contracts import document
         operation, mission = self._operation_and_mission()
         current_sort_operation.return_value = operation
+        mission.assigned_tail_number="N491UP"
         fueler = self._add_user("derived_status_fueler", "operator")
         truck = self._truck("DERIVED STATUS TRUCK")
-        assignment = NeoScorpionFuelAssignment(
-            sort_date_operation_id=operation.id,
-            sort_date_mission_id=mission.id,
-            assigned_fueler_user_id=fueler.id,
-            assigned_truck_id=truck.id,
-            review_status="assigned",
-        )
-        db.session.add_all(
-            [
-                assignment,
-                NeoScorpionSortFueler(
-                    sort_date_operation_id=operation.id,
-                    user_id=fueler.id,
-                ),
-                self._nightly_truck(operation, truck),
-            ]
-        )
-        db.session.commit()
-
-        def primary_row():
-            page = self.client.get("/neoscorpion/fuel-dispatch").get_data(
-                as_text=True
-            )
-            self.assertNotIn('name="review_status"', page)
-            return page.split(
-                '<tr class="neoscorpion-dispatch-primary-row"',
-                1,
-            )[1].split("</tr>", 1)[0]
-
-        row = primary_row()
-        self.assertIn(">Assigned</span>", row)
-        self.assertIn("DERIVED STATUS TRUCK", row)
-        self.assertNotIn('name="assigned_truck_id"', row)
-        self.assertIn('class="neoscorpion-dispatch-action-stack"', row)
-        self.assertIn('class="neoscorpion-dispatch-ready-text">READY</span>', row)
-        self.assertNotIn(">READY</button>", row)
-        self.assertNotIn("fuel-dispatch/ready-for-fuel", row)
-
-        assignment.ready_for_fuel_at_utc = datetime(2026, 8, 20, 1, 5)
-        db.session.commit()
-        self.assertIn(">Ready</span>", primary_row())
-
-        work = NeoScorpionFuelWorkState(
-            fuel_assignment_id=assignment.id,
-            tail_number=mission.assigned_tail_number,
-            on_at_utc=datetime(2026, 8, 20, 1, 10),
-            apu_running=False,
-            apu_confirmed_at_utc=datetime(2026, 8, 20, 1, 10),
-            apu_allowance_lbs=0,
-            automatic_apu_allowance_lbs=0,
-        )
-        db.session.add(work)
-        db.session.commit()
-        self.assertIn(">Fueling</span>", primary_row())
-
-        work.off_at_utc = datetime(2026, 8, 20, 1, 30)
-        db.session.commit()
-        self.assertIn(">OFF</span>", primary_row())
-
-        assignment.completed_at_utc = datetime(2026, 8, 20, 1, 35)
-        assignment.review_status = "complete"
-        mission.fuel_status = "complete"
-        db.session.commit()
-        completed_row = primary_row()
-        self.assertIn(">Complete</span>", completed_row)
-        self.assertIn("is-complete", completed_row)
-        self.assertIn("data-neoscorpion-dispatch-details", completed_row)
+        cycle = FuelCycle(self.gateway, operation, mission, fueler, self.dispatcher, truck)
+        cycle.assign(datetime(2026,8,20,1),current_gallons=6000)
+        def primary():
+            response = self.client.get('/neoscorpion/fuel-dispatch')
+            self.assertEqual(response.status_code,200)
+            root=document(response)
+            self.assertFalse(root.findall(name='review_status'))
+            return root.one(**{'data-dispatch-mission-id':str(mission.id)})
+        row=primary()
+        self.assertEqual(row.one(**{'data-fuel-status':None}).attrs['data-fuel-status'],'assigned')
+        self.assertIn(truck.truck_number,row.text)
+        self.assertEqual(row.one('select',name='assigned_truck_id').one('option',selected=None).attrs['value'],str(truck.id))
+        self.assertFalse([b for b in row.findall('button') if b.text.strip()=='READY'])
+        # Retained historical ready flag cannot override derived physical status.
+        cycle.assignment.ready_for_fuel_at_utc=datetime(2026,8,20,1,5); db.session.commit()
+        self.assertEqual(primary().one(**{'data-fuel-status':None}).attrs['data-fuel-status'],'assigned')
+        cycle.on(datetime(2026,8,20,1,10))
+        started=primary()
+        self.assertEqual(started.one(**{'data-fuel-status':None}).attrs['data-fuel-status'],'fueling')
+        self.assertFalse(started.findall('select',name='assigned_truck_id'))
+        cycle.save(datetime(2026,8,20,1,29),**transfer_readings(actual='30'))
+        cycle.off(datetime(2026,8,20,1,30))
+        self.assertEqual(primary().one(**{'data-fuel-status':None}).attrs['data-fuel-status'],'off')
+        cycle.submit(datetime(2026,8,20,1,31)); cycle.complete(datetime(2026,8,20,1,35))
+        row=primary()
+        self.assertEqual(row.one(**{'data-fuel-status':None}).attrs['data-fuel-status'],'complete')
+        self.assertTrue(row.findall(**{'data-neoscorpion-dispatch-details':None}))
 
     @patch("app.services.neoscorpion.current_sort_operation")
     def test_work_started_with_missing_truck_allows_initial_truck_only(
@@ -419,6 +379,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
     ):
         operation, mission = self._operation_and_mission()
         current_sort_operation.return_value = operation
+        mission.assigned_tail_number="N491UP"
         fueler = self._add_user("started_missing_truck_fueler", "operator")
         truck_a = self._truck("STARTED TRUCK A")
         truck_b = self._truck("STARTED TRUCK B")
@@ -439,41 +400,23 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
                 self._nightly_truck(operation, truck_b),
             ]
         )
-        db.session.flush()
-        db.session.add(
-            NeoScorpionFuelWorkState(
-                fuel_assignment_id=assignment.id,
-                tail_number=mission.assigned_tail_number,
-                apu_running=True,
-                apu_confirmed_at_utc=datetime(2026, 8, 20, 1, 0),
-                apu_allowance_lbs=400,
-                automatic_apu_allowance_lbs=400,
-                applied_apu_rate_thousand_lbs_per_hour=Decimal("0.30"),
-            )
-        )
         db.session.commit()
+        from tests.neoscorpion_evidence_fixture import FuelCycle
+        cycle=FuelCycle(self.gateway,operation,mission,fueler,self.dispatcher,truck_a,assignment=assignment)
+        cycle.save(datetime(2026,8,20,1),apu_running='no',remaining_left='6')
+        self.assertIsNone(cycle.work.on_at_utc)
 
         page = self.client.get("/neoscorpion/fuel-dispatch").get_data(as_text=True)
         primary_row = page.split(
             '<tr class="neoscorpion-dispatch-primary-row"',
             1,
         )[1].split("</tr>", 1)[0]
-        self.assertIn(
-            f'<select form="neoscorpion-dispatch-assignment-{mission.id}" '
-            'class="neoscorpion-inline-select" name="assigned_truck_id"'.replace(
-                "{mission.id}",
-                str(mission.id),
-            ),
-            primary_row,
-        )
-        self.assertNotIn(
-            f'<select form="neoscorpion-dispatch-assignment-{mission.id}" '
-            'class="neoscorpion-inline-select" name="assigned_fueler_user_id"'.replace(
-                "{mission.id}",
-                str(mission.id),
-            ),
-            primary_row,
-        )
+        from tests.html_contracts import document
+        root=document(self.client.get('/neoscorpion/fuel-dispatch'))
+        choice=root.one('select',name='assigned_truck_id')
+        self.assertEqual(choice.attrs['form'],f'neoscorpion-dispatch-assignment-{mission.id}')
+        self.assertTrue(choice.findall('option',value=str(truck_a.id)))
+        self.assertEqual(root.one('select',name='assigned_fueler_user_id').one('option',selected=None).attrs['value'],str(fueler.id))
 
         initial = self._save_assignment(
             mission,
@@ -485,6 +428,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         db.session.refresh(assignment)
         self.assertEqual(assignment.assigned_truck_id, truck_a.id)
 
+        cycle.on(datetime(2026,8,20,1,1))
         replacement = self._save_assignment(
             mission,
             assignment=assignment,

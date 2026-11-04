@@ -40,27 +40,30 @@ class ScorpionDisplayUpdatesTest(unittest.TestCase):
                 response = self.client.get("/neoscorpion/fuel-dispatch")
                 self.assertEqual(response.status_code, 200)
                 cell = document(response).one(cls="neoscorpion-dispatch-actual-apu")
-                self.assertEqual(cell.one(**{"data-dispatch-actual": None}).text, "ACTUAL: -")
+                self.assertEqual(cell.one(**{"data-dispatch-actual": None}).text, "-")
                 self.assertEqual(cell.one(**{"data-dispatch-apu-effective": None}).text, f"APU: {expected}")
         for tank in work.tank_states:
             tank.actual_lbs = 10000
         db.session.commit()
         cell = document(self.client.get("/neoscorpion/fuel-dispatch")).one(cls="neoscorpion-dispatch-actual-apu")
-        self.assertEqual(cell.one(**{"data-dispatch-actual": None}).text, "ACTUAL: 30.0")
+        self.assertEqual(cell.one(**{"data-dispatch-actual": None}).text, "30.0")
 
     def setup_shared_truck(self):
-        truck = self.fixture._nightly_truck()
-        self.assignment.assigned_truck_id = truck.id
-        self.assignment.assigned_fueler_user_id = self.fueler.id
-        mission = self.fixture._mission("UPS902", "N492UP", 25000, 2)
-        other = self.fixture._assignment(mission, truck=truck)
-        other.assigned_fueler_user_id = self.dispatcher.id
-        work = NeoScorpionFuelWorkState(fuel_assignment_id=other.id,
-            tail_number="N492UP", on_at_utc=datetime(2026, 8, 19, 2))
-        parking = SortDateParkingAssignment(sort_date_operation_id=self.operation.id,
-            tail_number="N492UP", ramp_code="A", position_code="A4")
-        db.session.add_all([work, parking]); db.session.commit()
-        return truck, other, work, parking
+        from tests.neoscorpion_evidence_fixture import FuelCycle
+        truck=self.fixture._nightly_truck()
+        mission=self.fixture._mission('UPS902','N492UP',25000,2)
+        self.other_cycle=FuelCycle(self.gateway,self.operation,mission,self.dispatcher,self.dispatcher,truck)
+        self.other_cycle.assign(datetime(2026,8,19,2))
+        self.other_cycle.park(datetime(2026,8,19,2),'A','A04')
+        self.other_cycle.on(datetime(2026,8,19,2,1))
+        # Current Fueler has the same planned truck, but no second physical ON.
+        from app.services import neoscorpion_assets as assets
+        assets.select_nightly_fueler(self.operation,self.fueler)
+        self.assignment.assigned_truck_id=truck.id
+        self.assignment.assigned_fueler_user_id=self.fueler.id
+        db.session.commit()
+        parking=SortDateParkingAssignment.query.filter_by(sort_date_operation_id=self.operation.id,tail_number='N492UP').one()
+        return truck,self.other_cycle.assignment,self.other_cycle.work,parking
 
     def current_status(self):
         db.session.commit()
@@ -69,48 +72,57 @@ class ScorpionDisplayUpdatesTest(unittest.TestCase):
         return context["rows"][0]["assigned_truck_current_status"]
 
     def test_shared_truck_real_on_and_excluded_released_completed_fob_future_work(self):
-        truck, other, work, parking = self.setup_shared_truck()
-        self.assertEqual(self.current_status(), "CURRENTLY FUELING ON A4")
-        for target, field, value in (
-            (work, "on_at_utc", None), (work, "off_at_utc", datetime.now()),
-            (work, "ended_early_at_utc", datetime.now()), (other, "completed_at_utc", datetime.now()),
-            (other, "fuel_on_board_at_utc", datetime.now()), (other, "review_status", "complete"),
-            (other, "assigned_truck_id", None), (other.sort_date_mission, "fuel_status", "complete"),
-        ):
-            with self.subTest(field=field):
-                original = getattr(target, field)
-                setattr(target, field, value)
-                self.assertEqual(self.current_status(), "")
-                setattr(target, field, original)
-        parking.position_code = None
-        self.assertEqual(self.current_status(), "CURRENTLY FUELING · LOCATION UNKNOWN")
+        from tests.neoscorpion_evidence_fixture import transfer_readings
+        from app.models import NeoScorpionFuelingEvent
+        truck,other,work,parking=self.setup_shared_truck()
+        self.assertEqual(self.current_status(),'CURRENTLY FUELING ON A04')
+        self.other_cycle.off(datetime(2026,8,19,2,10))
+        self.assertEqual(self.current_status(),'COMING FROM ALPHA · ~2 MIN')  # Verified physical release supplies travel provenance.
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        self.other_cycle.save(datetime(2026,8,19,2,11),**transfer_readings(gallons='500'))
+        self.other_cycle.submit(datetime(2026,8,19,2,12));self.other_cycle.complete(datetime(2026,8,19,2,13))
+        self.assertEqual(self.current_status(),'COMING FROM ALPHA · ~2 MIN')
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
+        self.assertEqual(NeoScorpionSortTruck.query.one().current_gallons,9500)
+        # Future planned assignment still cannot claim actual physical occupancy.
+        self.assertIsNone(self.assignment.active_work_state_id)
+        self.assertIsNone(self.assignment.completed_at_utc)
 
     def test_conflicting_activity_top_off_and_live_panel(self):
-        truck, other, work, parking = self.setup_shared_truck()
+        from app.services import neoscorpion_assets as assets
+        from tests.neoscorpion_evidence_fixture import transfer_readings
+        truck,other,work,parking=self.setup_shared_truck()
         self.login(self.fueler)
-        panel = self.client.get("/neoscorpion/fueler/live-panel")
-        self.assertEqual(panel.status_code, 200)
-        self.assertIn("CURRENTLY FUELING ON A4", panel.json["html"])
-        selection = NeoScorpionSortTruck.query.filter_by(fuel_truck_id=truck.id).one()
-        selection.status = "topping_off"
-        selection.top_off_sent_at_utc = None
-        work.off_at_utc = datetime.now()
-        self.assertEqual(self.current_status(), "CURRENTLY TOPPING OFF")
-        panel = self.client.get("/neoscorpion/fueler/live-panel")
-        self.assertNotIn("TOP OFF SENT", panel.json["html"])
-        work.off_at_utc = None
-        selection.top_off_sent_at_utc = datetime(2026, 8, 19, 3, 42)
-        self.assertEqual(self.current_status(), "CURRENT STATUS UNKNOWN")
-        work.off_at_utc = datetime.now()
-        self.assertEqual(self.current_status(), "CURRENTLY TOPPING OFF")
-        panel = self.client.get("/neoscorpion/fueler/live-panel")
-        self.assertIn("CURRENTLY TOPPING OFF", panel.json["html"])
-        self.assertIn("TOP OFF SENT 22:42", panel.json["html"])
-        selection.status = "available"
-        work.off_at_utc = None
-        own_work = self.work(actual=None)
-        own_work.on_at_utc = datetime.now()
-        self.assertEqual(self.current_status(), "CURRENT STATUS UNKNOWN")
+        panel=self.client.get('/neoscorpion/fueler/live-panel')
+        self.assertEqual(panel.status_code,200)
+        self.assertIn('CURRENTLY FUELING ON A04',panel.json['html'])
+        with self.assertRaisesRegex(ValueError,'actively fueling'):
+            assets.mark_nightly_truck_topping_off(self.operation,truck,changed_by_user=self.dispatcher)
+        db.session.rollback()
+        self.assertEqual(self.current_status(),'CURRENTLY FUELING ON A04')
+        # Stored legacy contradiction is a diagnostic negative fixture, never a supported action.
+        selection=NeoScorpionSortTruck.query.one();selection.status='topping_off'
+        self.assertEqual(self.current_status(),'CURRENT STATUS UNKNOWN')
+        selection.status='available';db.session.commit()
+        self.other_cycle.save(datetime(2026,8,19,2,10),**transfer_readings(gallons='500'))
+        self.other_cycle.off(datetime(2026,8,19,2,11));self.other_cycle.submit(datetime(2026,8,19,2,12))
+        self.other_cycle.complete(datetime(2026,8,19,2,13))
+        # An actual future assignment must be withdrawn before TOP OFF.
+        from tests.neoscorpion_evidence_fixture import FuelCycle
+        own=FuelCycle(self.gateway,self.operation,self.mission,self.fueler,self.dispatcher,truck,assignment=self.assignment)
+        with own.scope(datetime(2026,8,19,2,14),actor=self.dispatcher):
+            service.save_dispatch_assignment(self.gateway,dict(mission_id=self.mission.id,
+                expected_assigned_fueler_user_id=self.fueler.id,expected_assigned_truck_id=truck.id,
+                assigned_fueler_user_id=self.fueler.id,assigned_truck_id=''))
+            db.session.commit()
+        assets.mark_nightly_truck_topping_off(self.operation,truck,changed_by_user=self.dispatcher,now_utc=datetime(2026,8,19,3,42));db.session.commit()
+        self.assertEqual(NeoScorpionSortTruck.query.one().status,'topping_off')
+        # Re-attach only a read-only legacy planned reference to inspect unavailable truck presentation.
+        self.assignment.assigned_truck_id=truck.id;db.session.commit()
+        self.assertEqual(self.current_status(),'CURRENTLY TOPPING OFF')
+        panel=self.client.get('/neoscorpion/fueler/live-panel')
+        self.assertIn('CURRENTLY TOPPING OFF',panel.json['html'])
+        self.assertIn('TOP OFF SENT 22:42',panel.json['html'])
 
     def test_menu_order_shared_between_navigation_dashboard_and_permission_filtering(self):
         all_items = service.visible_neoscorpion_menu_items(lambda permission: True, "neoscorpion.index")

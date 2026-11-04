@@ -570,7 +570,7 @@ class OperationalTimelineTest(unittest.TestCase):
         self.login(self.dispatcher)
         response=self.client.post("/neoscorpion/fuel-dispatch/reopen-off",data={
             "assignment_id":self.assignment.id,"expected_work_ref":old.id,"reopen_reason":"Stale visit"})
-        self.assertEqual(response.status_code,400)
+        self.assertEqual(response.status_code,409)  # Stale permanent Work identity, not ordinary validation.
         self.assertIsNone(new.off_at_utc)
         with self.assertRaises(service.FuelerDataConflict):
             service.mark_fueler_off(self.gateway,self.fueler,self.assignment.id,expected=baseline)

@@ -225,26 +225,30 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertIn("PENDING · MISSION DATA", visual["spear_next_status"])
 
     def test_recorded_release_allows_reuse_without_re_reserving_finished_work(self):
-        for boundary in ('off','ended_early','complete','fob'):
-            with self.subTest(boundary=boundary):
-                assignment=self.commitment()
-                owner=_row(99,assignment=assignment)
-                owner['fuel_work_state']=SimpleNamespace(off_at_utc=None,ended_early_at_utc=None)
-                if boundary in ('off','ended_early'):
-                    setattr(owner['fuel_work_state'],boundary+'_at_utc',NOW-timedelta(minutes=10))
-                else:
-                    setattr(assignment,'completed_at_utc' if boundary=='complete' else 'fuel_on_board_at_utc',NOW-timedelta(minutes=10))
-                    owner['administratively_complete']=True
-                plan=_plan([owner,_row(100)])
-                if boundary == 'off':
-                    self.assertFalse(plan.steps)
-                    continue
-                self.assertEqual(len(plan.steps),1)
-                step=plan.steps[0]
-                self.assertEqual((step.mission_id,step.fueler_id,step.truck_id),(100,1,10))
-                self.assertFalse(step.requires_resource_release)
-                self.assertTrue(step.automatic_eligible)
-                self.assertEqual(step.truck_location_provenance['location'],'Charlie')
+        from tests import test_neoscorpion_fueling_status as fixtures
+        from tests.neoscorpion_evidence_fixture import FuelCycle,transfer_readings
+        from app.services import neoscorpion as fuel
+        from app.models import NeoScorpionSortTruck
+        host=fixtures.FuelingStatusIntegrationTest();host.setUp();self.addCleanup(host.doCleanups)
+        truck=host.fixture._nightly_truck()
+        cycle=FuelCycle(host.gateway,host.operation,host.mission,host.fueler,host.dispatcher,truck)
+        cycle.assign(datetime(2026,8,19,2));cycle.park(datetime(2026,8,19,2),'C','C04')
+        cycle.on(datetime(2026,8,19,2,1));cycle.off(datetime(2026,8,19,2,10))
+        def plan():
+            context=fuel.fuel_dispatch_context(host.gateway)
+            return build_spear_plan([*context['rows'],_row(100)],operation=host.operation,
+                planning_settings=_PlanningSettings(),spear_settings=SpearSettings(),
+                nightly_fuelers=(host.fueler,),nightly_trucks=({'truck':truck,'selection':NeoScorpionSortTruck.query.one()},),now_utc=NOW)
+        self.assertFalse(plan().steps)  # Physical OFF frees truck; missing final data still occupies Fueler.
+        cycle.save(datetime(2026,8,19,2,11),**transfer_readings())
+        cycle.submit(datetime(2026,8,19,2,12));cycle.complete(datetime(2026,8,19,2,13))
+        step=plan().steps[0]
+        self.assertEqual((step.mission_id,step.fueler_id,step.truck_id),(100,host.fueler.id,truck.id))
+        self.assertFalse(step.requires_resource_release)
+        self.assertTrue(step.automatic_eligible)
+        self.assertEqual(step.truck_location_provenance['location'],'Charlie')
+        self.assertEqual(step.truck_location_provenance['source'],'last_physical_release')
+        self.assertEqual(step.fueler_location_provenance['source'],'last_confirmed_fueler_work_end')
 
     def test_free_resources_preferred_over_hypothetical_reuse_and_future_plans_labeled(self):
         plan=_plan([_row(100),_row(101)],trucks=(_truck(10),_truck(20)),fuelers=(_fueler(1),_fueler(2)))
@@ -258,18 +262,29 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertGreaterEqual(future.steps[1].projected_start_at_utc,future.steps[0].projected_complete_at_utc)
 
     def test_latest_recorded_release_sets_location_across_release_types(self):
-        older = _row(98, assignment=self.commitment())
-        older['parking_position'] = 'B06'
-        older['fuel_work_state'] = SimpleNamespace(off_at_utc=NOW-timedelta(minutes=30))
-        older['administratively_complete'] = True
-        newer = _row(99, assignment=self.commitment())
-        newer['parking_position'] = 'D07'
-        newer['assignment'].completed_at_utc = NOW-timedelta(minutes=5)
-        newer['administratively_complete'] = True
-        for rows in ((older, newer), (newer, older)):
-            step = _plan([*rows, _row(100)]).steps[0]
-            self.assertEqual(step.truck_location_provenance['location'], 'Delta')
-            self.assertEqual(step.fueler_location_provenance['location'], 'Delta')
+        from tests import test_neoscorpion_fueling_status as fixtures
+        from tests.neoscorpion_evidence_fixture import FuelCycle,transfer_readings
+        from app.services import neoscorpion as fuel
+        from app.models import NeoScorpionSortTruck
+        host=fixtures.FuelingStatusIntegrationTest();host.setUp();self.addCleanup(host.doCleanups)
+        truck=host.fixture._nightly_truck()
+        first=FuelCycle(host.gateway,host.operation,host.mission,host.fueler,host.dispatcher,truck)
+        first.assign(datetime(2026,8,19,2));first.park(datetime(2026,8,19,2),'B','B06')
+        first.finish(datetime(2026,8,19,2,1),datetime(2026,8,19,2,10),**transfer_readings(gallons='500'))
+        second=FuelCycle.create(host.gateway,host.operation,host.fueler,host.dispatcher,truck,flight='UPS902',tail='N492UP')
+        second.assign(datetime(2026,8,19,2,20));second.park(datetime(2026,8,19,2,20),'D','D07')
+        second.finish(datetime(2026,8,19,2,21),datetime(2026,8,19,2,30),**transfer_readings(gallons='500'))
+        rows=fuel.fuel_dispatch_context(host.gateway)['rows']
+        for ordered in (rows,list(reversed(rows))):
+            step=build_spear_plan([*ordered,_row(100)],operation=host.operation,
+                planning_settings=_PlanningSettings(),spear_settings=SpearSettings(),nightly_fuelers=(host.fueler,),
+                nightly_trucks=({'truck':truck,'selection':NeoScorpionSortTruck.query.one()},),now_utc=NOW).steps[0]
+            self.assertEqual(step.truck_location_provenance['location'],'Delta')
+            self.assertEqual(step.fueler_location_provenance['location'],'Delta')
+            self.assertEqual(step.truck_location_provenance['recorded_at_utc'],'2026-08-19T02:30:00')
+        # Current mission presentation cannot rewrite the frozen release location.
+        second.park(datetime(2026,8,19,2,40),'E','E03')
+        self.assertEqual(second.work.performance_context['resource_timing']['parking'],'D07')
 
     def test_occupied_truck_not_top_off_candidate_and_own_partial_assignment_kept(self):
         owner=_row(200,assignment=self.commitment(fueler=None))
@@ -741,7 +756,7 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
     def test_dispatch_rows_show_spear_recommendation_for_each_unassigned_resource(self):
         root = Path(__file__).resolve().parents[1]
         template = (
-            root / "app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html"
+            root / "app/templates/neonodes/neoscorpion/_dispatch_mission_rows.html"
         ).read_text(encoding="utf-8")
 
         self.assertIn(
@@ -927,12 +942,14 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
 
     def test_dispatch_renders_compact_readiness_and_collapsed_why_hook(self):
         root = Path(__file__).resolve().parents[1]
-        template = (root / "app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html").read_text(encoding="utf-8")
+        template = (root / "app/templates/neonodes/neoscorpion/_dispatch_spear.html").read_text(encoding="utf-8")
 
-        self.assertIn("SPEAR DATA READINESS", template)
-        self.assertIn("WAITING FOR DATA", template)
-        self.assertIn("<details class=\"neoscorpion-spear-why\"", template)
-        self.assertIn("WHY SPEAR?", template)
+        self.assertIn("row.spear_readiness_reasons", template)
+        self.assertIn("{{ reason.label }}", template)
+        details = (root / 'app/templates/neonodes/neoscorpion/_dispatch_spear.html').read_text(encoding='utf-8')
+        self.assertIn('<details class="neoscorpion-dispatch-spear-detail"', details)
+        self.assertIn('WHY SPEAR?', details)
+        self.assertNotIn('<details open',details)
 
     def test_dispatch_splash_requires_explicit_close_before_marking_seen(self):
         root = Path(__file__).resolve().parents[1]

@@ -24,7 +24,7 @@ class DetailsLayoutRenderTest(unittest.TestCase):
                 original=cases.Controls(case.html())
             finally:app.jinja_env.loader=loader;app.jinja_env.cache.clear()
             self.assertFalse(current.nested)
-            self.assertEqual(current.controls,original.controls)
+            case.assert_controls_preserved(original, current)
         compare();case.prepare();compare()
         case.target('40');case.plan();compare()
         from datetime import timedelta

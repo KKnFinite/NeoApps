@@ -578,6 +578,8 @@ def _neoscorpion_labels(path):
         return "TRUCK MANAGER", "TRUCKS"
     if path.startswith("/neoscorpion/settings"):
         return "SETTINGS", "SETTINGS"
+    if path == "/neoscorpion/reports" or path.startswith("/neoscorpion/reports/"):
+        return "REPORTS", "REPORTS"
     if path.startswith("/neoscorpion/history") or path.startswith(
         "/neoscorpion/completed-fuel"
     ):

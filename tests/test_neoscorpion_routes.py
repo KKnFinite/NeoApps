@@ -223,6 +223,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
                 "Dashboard",
                 "Fuel Dispatch",
                 "Fueling Board",
+                "Truck Driver",
                 "Truck Manager",
                 "Fueler",
                 "Quick Fuel",
@@ -369,7 +370,10 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS902", response.data)
         self.assertIn(b"N123UP", response.data)
         self.assertIn(b"N456UP", response.data)
-        self.assertIn(b"A300", response.data)
+        # Unknown synthetic tail cannot manufacture an aircraft type.
+        from tests.html_contracts import document
+        root=document(response)
+        self.assertIn('N123UP',root.text)
         self.assertIn(b"ONT", response.data)
         self.assertIn(b"EWR", response.data)
         self.assertIn(b"22:10", response.data)
@@ -379,7 +383,9 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"D07", response.data)
         self.assertIn(b'value="50.5"', response.data)
         self.assertIn(b'value="13.6"', response.data)
-        self.assertIn(b"14.1", response.data)
+        self.assertEqual(root.one(**{'data-dispatch-mission-id':str(mission.id)}).one(**{'data-dispatch-actual':None}).text,'-')
+        # Retained tail summary is unchanged, but is not a current verified Actual.
+        self.assertEqual(NeoScorpionTailFuelState.query.filter_by(tail_number='N123UP').one().fob_lbs,14100)
         self.assertIn(b"TRUCK 7", response.data)
         self.assertIn(b"3400 gal", response.data)
         self.assertIn(b"5,507 gal", response.data)
@@ -387,18 +393,18 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertNotIn(b"APU INCOMPLETE", response.data)
         self.assertNotIn(b">UNKNOWN<", response.data)
         self.assertNotIn(b">INCOMPLETE<", response.data)
-        self.assertIn(b">-</span>", response.data)
+        self.assertEqual(root.one(**{'data-dispatch-mission-id':str(mission.id)}).one(**{'data-dispatch-apu-effective':None}).text,'APU: -')
         self.assertNotIn(CALCULATION_NOT_CONFIGURED_MESSAGE.encode(), response.data)
 
         header = response.data.split(b"<thead>", 1)[1].split(b"</thead>", 1)[0]
         for earlier, later in (
             (b"Tail", b"Arrival"),
             (b"Arrival", b"Dest / Flight"),
-            (b"Dest / Flight", b"ETD / Parking"),
-            (b"ETD / Parking", b"Inbound"),
-            (b"Inbound", b"Required"),
-            (b"Required", b"Actual / APU"),
-            (b"Actual / APU", b"Neo Fuel"),
+            (b"Dest / Flight", b"Parking / ETD"),
+            (b"Parking / ETD", b"Inbound"),
+            (b"Inbound", b"Fuel Load"),
+            (b"Fuel Load", b"Neo Fuel"),
+            (b"Neo Fuel", b"Actual / APU"),
             (b"Neo Fuel", b"T/F / Est Gal"),
             (b"Status", b"Action"),
             (b"Action", b"Details"),
@@ -408,6 +414,9 @@ class NeoScorpionRoutesTest(unittest.TestCase):
     def test_fuel_dispatch_menu_overlay_and_compact_detail_hooks(self):
         root = Path(self.app.root_path)
         template = (root / "templates" / "neonodes" / "neoscorpion" / "fuel_dispatch.html").read_text(encoding="utf-8")
+        template += "\n" + "\n".join(p.read_text(encoding='utf-8') for p in
+            (root / 'templates/neonodes/neoscorpion').glob('_dispatch*.html'))
+        template += "\n" + (root / 'templates/neonodes/neoscorpion/_fuel_dispatch_panel.html').read_text(encoding='utf-8')
         menu = (root / "templates" / "neonodes" / "neoscorpion" / "_menu.html").read_text(encoding="utf-8")
         overlay = (root / "static" / "js" / "neoscorpion_menu_overlay.js").read_text(encoding="utf-8")
         dispatch_js = (root / "static" / "js" / "neoscorpion_fuel_dispatch_live.js").read_text(encoding="utf-8")
@@ -423,8 +432,10 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn('class="neoscorpion-dispatch-etd-parking"', template)
         self.assertNotIn("PARKING {{ row.parking_position", template)
         self.assertIn('class="neoscorpion-dispatch-actual-apu"', template)
-        self.assertIn('class="neoscorpion-dispatch-transfer-estimate"', template)
-        self.assertLess(template.index('{{ row.destination }}'), template.index('{{ row.mission.flight_number }}'))
+        self.assertIn('neoscorpion-dispatch-transfer-estimate ', template)
+        owned=(root / 'templates/neonodes/neoscorpion/_dispatch_mission_rows.html').read_text(encoding='utf-8')
+        flight=owned.split('<td class="neoscorpion-dispatch-flight">',1)[1].split('</td>',1)[0]
+        self.assertLess(flight.index('{{ row.destination }}'),flight.index('{{ row.mission.flight_number }}'))
         self.assertIn('data-dispatch-apu-editor', template)
         self.assertIn('data-dispatch-assignment-submit', template)
         self.assertNotIn('data-dispatch-board-toggle', template)
@@ -434,15 +445,15 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn('operational_shell_supports_board_view', shared_shell)
         self.assertIn('className = "neoscorpion-dispatch-combobox"', dispatch_js)
         self.assertIn("preserveDispatchScroll", dispatch_js)
-        self.assertIn(".neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:flex", css)
+        self.assertIn(".neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:block", css)
         self.assertIn("text-align:center", css)
         self.assertIn('name="assigned_fueler_user_id"', template)
         self.assertIn('name="assigned_truck_id"', template)
         self.assertNotIn('name="review_status"', template)
-        self.assertIn(".neoscorpion-dispatch-actual-apu { display: table-cell; }", css)
+        self.assertIn('<td class="neoscorpion-dispatch-actual-apu ', owned)
         self.assertNotIn(".neoscorpion-dispatch-actual-apu { display: grid;", css)
         self.assertIn(".neoscorpion-dispatch-primary-row {", css)
-        self.assertIn("border-bottom: 1px solid rgba(201, 208, 214, .16);", css)
+        self.assertIn("border-bottom: 1px solid rgba(240, 211, 122, .40);", css)
         self.assertIn('data-neoscorpion-menu-toggle aria-expanded="false"', menu)
         self.assertIn('data-neoscorpion-menu-scrim', menu)
         self.assertIn('event.key === "Escape"', overlay)
@@ -785,7 +796,10 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertEqual(truck.remaining_fuel_gallons, 6200)
         self.assertEqual(truck.vendor_driver_name, "Casey Vendor")
         self.assertIn(b"TRUCK 12", response.data)
-        self.assertIn(b"Casey Vendor", response.data)
+        # Master legacy name is retained; it is not a claimed current-sort driver.
+        from app.models import NeoScorpionTruckDriver
+        self.assertEqual(NeoScorpionTruckDriver.query.count(), 0)
+        self.assertNotIn(b'DRIVER: Casey Vendor', response.data)
 
     def test_settings_shell_saves_thresholds(self):
         self._login_approved_user(role="master")

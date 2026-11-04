@@ -71,7 +71,9 @@ class NeoScorpionResourceAvailabilityTest(unittest.TestCase):
 
     def test_finished_assignments_do_not_block(self):
         calendars = self._calendars([_record(1, fueler=10, off=NOW - timedelta(minutes=1))])
-        self.assertEqual(calendars, {})
+        self.assertEqual(set(calendars), {('fueler', 10)})
+        self.assertTrue(calendars[('fueler', 10)].unknown_commitments)
+        self.assertNotIn(('truck', 20), calendars)
 
     def test_manual_overlaps_are_preserved_and_union_is_busy(self):
         calendars = self._calendars([

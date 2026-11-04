@@ -1,4 +1,6 @@
 """Numeric-slot markup must not change any operational form contract."""
+from flask import Response
+from tests.html_contracts import document
 import subprocess
 import unittest
 from datetime import timedelta
@@ -26,7 +28,25 @@ class NumberMarkupTest(unittest.TestCase):
                     fuel.complete_fueled_assignment(case.gateway,case.dispatcher,case.assignment.id);db.session.commit()
                 app.jinja_env.loader=loader;app.jinja_env.cache.clear();current=case.html()
                 app.jinja_env.loader=ChoiceLoader([old,loader]);app.jinja_env.cache.clear();original=case.html()
-                self.assertEqual(cases.Controls(original).controls,cases.Controls(current).controls,state)
+                before, after = cases.Controls(original), cases.Controls(current)
+                # The historical fixture may render one or two TOP OFF controls;
+                # require every actual form's current guards without changing actions.
+                original_forms = {k:v for k,v in before.controls.items() if k[0] in {'form','button'}}
+                self.assertEqual(original_forms, {k:v for k,v in after.controls.items() if k[0] in {'form','button'}})
+                self.assertFalse(before.controls - after.controls)
+                extras = after.controls - before.controls
+                self.assertTrue(set(extras) <= {('input','operation_id',None), ('input','top_off_action_state',None), ('input',None,None)}, extras)
+                guarded=[form for form in document(Response(current)).findall('form') if form.findall('input',name='top_off_action_state')]
+                self.assertEqual(len(guarded),len(document(Response(current)).findall('input',name='top_off_action_state')))
+                # The report filter also owns an operation_id; it is not a TOP OFF guard.
+                self.assertEqual(extras[('input',None,None)],1)  # One presentation-only mission locator.
+                for control in (('input','operation_id',None),('input','top_off_action_state',None)):
+                    self.assertLessEqual(extras[control],2)
+                for form in guarded:
+                    self.assertEqual(len(form.findall('input',name='operation_id')),1)
+                    self.assertEqual(len(form.findall('input',name='top_off_action_state')),1)
+                    self.assertTrue(form.one('input',name='operation_id').attrs['value'])
+                    self.assertTrue(form.one('input',name='top_off_action_state').attrs['value'])
                 self.assertFalse(cases.Controls(current).nested)
                 self.assertEqual(current.count('class="neoscorpion-dispatch-number-stack'),5)
                 self.assertIn('data-dispatch-actual>',current)

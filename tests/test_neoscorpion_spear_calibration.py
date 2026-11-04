@@ -92,7 +92,7 @@ class SpearLiveCalibrationTest(unittest.TestCase):
         self.assertEqual(apply.steps[0].explanation["setup_minutes"], "2 min")
         self.assertEqual(apply.steps[0].explanation["pump_minutes"], "2.5 min")
         self.assertEqual(apply.steps[0].explanation["finishing_minutes"], "2 min")
-        self.assertEqual(observe.steps[0].projected_complete_at_utc - apply.steps[0].projected_complete_at_utc, timedelta(minutes=7.5))
+        self.assertEqual(observe.steps[0].projected_complete_at_utc - apply.steps[0].projected_complete_at_utc, timedelta(minutes=5.5))  # Physical OFF excludes post-OFF finishing.
         self.assertNotEqual(observe.token, apply.token)
         self.assertNotEqual(baseline.token, plan("apply", {}).token)
         for note in observe.steps[0].explanation["live_calibration"]:

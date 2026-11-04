@@ -57,7 +57,11 @@ class ApuTruckProjectionsTest(unittest.TestCase):
         self.assertEqual(row["truck_visual"]["projected_display"], "7,900 gal")
         self.assertEqual(after["sort_fuel_totals"], before["sort_fuel_totals"])
         self.assertEqual(service.fuel_report_context(self.gateway)["sort_fuel_totals"], report_before)
-        self.assertEqual(after["spear_plan"].token, before["spear_plan"].token)
+        # The safety fingerprint includes changed Work/APU inputs even when
+        # the executable steps are unchanged; a stale plan must be revalidated.
+        self.assertEqual(after['spear_plan'].steps, before['spear_plan'].steps)
+        self.assertNotEqual(after["spear_plan"].token, before["spear_plan"].token)
+        self.assertEqual(self.context()['spear_plan'].token, after['spear_plan'].token)
         self.assertIsNone(self.assignment.transfer_fuel_gallons)
         self.assertEqual(NeoScorpionSortTruck.query.one().current_gallons, 10_000)
         self.assertEqual(self.truck.remaining_fuel_gallons, 777)

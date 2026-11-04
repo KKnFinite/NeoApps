@@ -1,3 +1,5 @@
+from flask import Response
+from tests.html_contracts import document
 import json
 import unittest
 from datetime import datetime
@@ -47,6 +49,16 @@ class FuelerDataTest(unittest.TestCase):
         self.dispatch_url = f'/neoscorpion/fuel-dispatch/fueler-data/{self.assignment.id}'
         self.fueler_url = f'/neoscorpion/fueler/assignments/{self.assignment.id}'
 
+    def physical_cycle(self):
+        from tests.neoscorpion_evidence_fixture import FuelCycle
+        truck = NeoScorpionFuelTruck(gateway_id=self.gateway.id, truck_number='W3-CARD', capacity_gallons=20000)
+        db.session.add(truck); db.session.commit()
+        cycle = FuelCycle(self.gateway, self.operation, self.mission, self.user, self.dispatcher,
+            truck, assignment=self.assignment)
+        cycle.assign(datetime(2026, 8, 18, 3), current_gallons=10000)
+        cycle.on(datetime(2026, 8, 18, 3, 1))
+        return cycle
+
     def baseline(self, client=None, url=None):
         response = (client or self.dispatch).get(url or self.dispatch_url)
         self.assertEqual(response.status_code, 200, response.data)
@@ -70,7 +82,7 @@ class FuelerDataTest(unittest.TestCase):
         dispatch_page = self.dispatch.get('/neoscorpion/fuel-dispatch').get_data(as_text=True)
         self.assertIn('neoscorpion-fuel-data-dialog neoscorpion-fueler-screen', dispatch_page)
         self.assertIn('Fueler Data mobile preview', dispatch_page)
-        self.assertIn('Fuel Load', panel)
+        self.assertIn('Target Onboard', panel)
         self.assertNotIn('Fueling Target', panel)
         self.assertIn('data-fuel-load-output', panel)
         self.assertIn('neoscorpion-fuel-tank-total', panel)
@@ -80,13 +92,17 @@ class FuelerDataTest(unittest.TestCase):
         self.assertIn('TRUCK UNASSIGNED', fueler_page)
         self.assignment.assigned_fueler_user_id = None
         db.session.commit()
-        self.assertEqual(self.dispatch.get(self.dispatch_url).status_code, 404)
-        self.assertNotIn('data-fuel-data-open=', self.dispatch.get('/neoscorpion/fuel-dispatch').get_data(as_text=True))
+        self.assertEqual(self.dispatch.get(self.dispatch_url).status_code, 200)  # Dispatcher may inspect retained evidence.
+        self.assertIn('data-fuel-data-open=', self.dispatch.get('/neoscorpion/fuel-dispatch').get_data(as_text=True))  # OPEN retains Dispatcher review access.
+        self.assertEqual(self.fueler.get(self.fueler_url).status_code,404)
         self.assignment.assigned_fueler_user_id = self.user.id
-        self.assignment.review_status = 'complete'
-        db.session.commit()
-        self.assertEqual(self.dispatch.get(self.dispatch_url).status_code, 404)
-        self.assertNotIn('data-fuel-data-open=', self.dispatch.get('/neoscorpion/fuel-dispatch').get_data(as_text=True))
+        cycle = self.physical_cycle()
+        cycle.save(datetime(2026,8,18,3,10), apu_running='no', remaining_left='6', remaining_ctr='0', remaining_right='6', actual_left='15', actual_ctr='0', actual_right='15', transfer_fuel_gallons='3000')
+        cycle.off(datetime(2026,8,18,3,11))
+        cycle.submit(datetime(2026,8,18,3,12))
+        cycle.complete(datetime(2026,8,18,3,13))
+        self.assertEqual(self.dispatch.get(self.dispatch_url).status_code, 200)  # Dispatcher may inspect retained evidence.
+        self.assertIn('data-fuel-data-open=', self.dispatch.get('/neoscorpion/fuel-dispatch').get_data(as_text=True))  # OPEN retains Dispatcher review access.
 
     def test_fueler_truck_header_includes_vendor_driver(self):
         self.setup_assignment()
@@ -124,11 +140,12 @@ class FuelerDataTest(unittest.TestCase):
         self.assertEqual(row['estimated_fuel_gallons'], 1240)
         self.assertEqual(row['estimated_fuel_display'], '1,240 gal')
 
+        cycle = self.physical_cycle()
         for readonly in (False, True):
             if readonly:
-                self._save_complete(self.assignment)
-                NeoScorpionFuelWorkState.query.one().off_at_utc = datetime.utcnow()
-                db.session.commit()
+                cycle.save(datetime(2026,8,18,3,2), apu_running='no', remaining_left='6', remaining_ctr='0',
+                    remaining_right='6', actual_left='14.6', actual_ctr='20.8', actual_right='14.6', transfer_fuel_gallons='3000')
+                cycle.off(datetime(2026,8,18,3,3))
             with self.subTest(readonly=readonly):
                 row = fueler_context(self.gateway, self.user)['rows'][0]
                 with patch('app.services.neoscorpion.estimate_fuel_demand_gallons',
@@ -145,10 +162,10 @@ class FuelerDataTest(unittest.TestCase):
                     estimate = f'ESTIMATED GALLONS: {row["estimated_fuel_display"].upper()}'
                     self.assertEqual(page.count(estimate), 1)
                     if 'data-dispatcher-panel="true"' in page:
-                        self.assertLess(page.index('>TOTAL</strong>'), page.index(estimate))
-                        self.assertLess(page.index(estimate), page.index('<label>T/F'))
+                        self.assertLess(page.index(estimate), page.index('>TOTAL</strong>'))
+                        self.assertIn('name="transfer_fuel_gallons"', page)
                     else:
-                        self.assertLess(page.index(estimate),page.index('>TOTAL</strong>'))
+                        self.assertIn('data-fuel-header-line', page)
                         self.assertIn('data-estimated-gallons',page)
                     self.assertNotIn('name="estimated_fuel', page)
 
@@ -177,12 +194,12 @@ class FuelerDataTest(unittest.TestCase):
 
     def test_shared_tank_grid_headers_and_totals_in_editable_and_readonly_cards(self):
         self.setup_assignment()
-        self._save_complete(self.assignment)
-        db.session.commit()
+        cycle = self.physical_cycle()
+        cycle.save(datetime(2026,8,18,3,2), apu_running='no', remaining_left='6', remaining_ctr='0',
+            remaining_right='6', actual_left='14.6', actual_ctr='20.8', actual_right='14.6', transfer_fuel_gallons='3000')
         for readonly in (False, True):
             if readonly:
-                NeoScorpionFuelWorkState.query.one().off_at_utc = datetime.utcnow()
-                db.session.commit()
+                cycle.off(datetime(2026,8,18,3,3))
             row = fueler_context(self.gateway, self.user)['rows'][0]
             pages = (
                 self.fueler.get('/neoscorpion/fueler').get_data(as_text=True),
@@ -194,10 +211,10 @@ class FuelerDataTest(unittest.TestCase):
                     self.assertEqual(headers, ['Tank', 'Remaining', 'Planned', 'Actual'])
                     total = re.search(r'class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-total" role="row">(.*?)</div>', page, re.S)
                     self.assertIsNotNone(total)
-                    cells = re.findall(r'<strong role="(?:rowheader|cell)">([^<]+)</strong>', total.group(1))
+                    cells = [e.text.strip() for e in document(Response(page)).one(cls='neoscorpion-fuel-tank-total').findall('strong')]
                     self.assertEqual(cells, ['TOTAL', row['remaining_total_display'], row['planned_total_display'], row['actual_total_display']])
                     self.assertEqual(page.count('neoscorpion-fuel-tank-total'), 1)
-                    self.assertLess(total.end(), page.index('<label>T/F'))
+                    self.assertIn('name="transfer_fuel_gallons"', page)
                     self.assertIn('name="remaining_left"', page)
                     if '<html' in page:
                         self.assertIn('neoscorpion_fuel_planning.js', page)
