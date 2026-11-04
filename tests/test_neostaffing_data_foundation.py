@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from tests.neostaffing_authority_fixture import management_actor
 import unittest
 from sqlalchemy import event
 
@@ -862,6 +863,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         db.session.add(user)
         db.session.flush()
         night_operation = self._current_night_operation()
+        management_actor(work_area, user=user)
 
         saved = staffing_service.save_attendance(
             {

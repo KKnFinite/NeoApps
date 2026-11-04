@@ -429,8 +429,14 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Direct management assignment changes require", response.data)
-        self.assertEqual(StaffingLeadershipAssignment.query.count(), 0)
+        # Leadership assignment uses management.assign; Reports To has a
+        # separate FT/management identity guard, even for a PT Master.
+        self.assertEqual(StaffingLeadershipAssignment.query.count(), 1)
+        self.assertFalse(staffing_service.can_user_directly_edit_reporting_relationship(editor, "master"))
+        denied = self.client.post(f"/neostaffing/app-management/reporting/{subject.id}/update",
+            data={"reports_to_person_id": editor_person.id, "return_unit_id": work_area.id}, follow_redirects=True)
+        self.assertIn(b"Direct Reports To changes require", denied.data)
+        self.assertEqual(StaffingReportingRelationship.query.count(), 0)
 
     def test_direct_editor_assignment_persists_without_relationship_review(self):
         _sort, _operation, department, work_area = self._hierarchy("Route")
@@ -472,8 +478,8 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
         )
         self.assertNotIn(b"Management Relationships Affected", operational.data)
         self.assertIn(subject.full_name.encode(), operational.data)
-        self.assertIn(b"FULL TREE", operational.data)
-        self.assertIn(b"MANAGEMENT TREE", management.data)
+        self.assertIn(b'data-org-forest', operational.data)
+        self.assertIn(b'aria-label="Management reporting hierarchy"', management.data)
 
     def test_structural_move_route_renders_one_review_without_mutating(self):
         _sort, operation, source_department, work_area = self._hierarchy(

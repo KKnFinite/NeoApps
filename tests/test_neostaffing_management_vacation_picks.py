@@ -1,3 +1,4 @@
+from tests.html_contracts import csrf_token
 from datetime import date, datetime
 import re
 import unittest
@@ -570,10 +571,7 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         self._login(user)
         self.app.config["CSRF_PROTECT_TESTING"] = True
         page = self.client.get("/neostaffing/vacation-selection/management?year=2026")
-        token = re.search(
-            r'<meta name="csrf-token" content="([^"]+)">',
-            page.get_data(as_text=True),
-        ).group(1)
+        token = csrf_token(page)
         values = {
             "vacation_year": "2026",
             "staffing_person_id": str(senior.id),
@@ -748,7 +746,7 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         self._login(manager_user)
         self.app.config["CSRF_PROTECT_TESTING"] = True
         page = self.client.get(f"/neostaffing/vacation-selection/management?year={self.YEAR}")
-        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        token = csrf_token(page)
         values = {"vacation_year": self.YEAR, "staffing_person_id": person.id}
         self.assertEqual(self.client.post("/neostaffing/vacation-selection/management/split", data=values).status_code, 400)
         self.assertEqual(StaffingVacationWeekConversion.query.count(), 0)
@@ -1229,10 +1227,7 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         page = self.client.get(
             f"/neostaffing/vacation-selection/management?year={self.YEAR}"
         )
-        token = re.search(
-            r'<meta name="csrf-token" content="([^"]+)">',
-            page.get_data(as_text=True),
-        ).group(1)
+        token = csrf_token(page)
         values["csrf_token"] = token
         response = self.client.post(
             "/neostaffing/vacation-selection/management/change-request",

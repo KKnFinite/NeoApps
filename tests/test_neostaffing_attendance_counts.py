@@ -15,6 +15,7 @@ from app.models import (
 )
 from app.services import neostaffing as staffing_service
 from app.services.access_control import ensure_default_gateway_and_nodes
+from tests.neostaffing_authority_fixture import management_actor
 
 
 class NeoStaffingAttendanceCountsTest(unittest.TestCase):
@@ -119,6 +120,7 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
         )
 
     def test_phase_two_writes_new_statuses_through_shared_attendance_paths(self):
+        actor = management_actor(self.door)
         person = self._person("PHASE200", self.door)
         second_person = self._person("PHASE201", self.door)
         staffing_service.create_shift_flow_plan(
@@ -161,7 +163,7 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
                     "work_area_ids": [str(self.door.id)],
                     f"status_{person.id}": "scheduled_off",
                 },
-                None,
+                actor,
             )
             self.assertEqual(saved, 1)
             db.session.commit()
@@ -174,7 +176,7 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
                     f"status_{person.id}": "personal_leave",
                     f"status_{second_person.id}": "scheduled_off",
                 },
-                None,
+                actor,
                 [self.door.id],
             )
             self.assertEqual(saved, 2)
@@ -260,6 +262,7 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
         self.assertLessEqual(len(statements), 4)
 
     def test_operational_context_uses_snapshot_then_shift_flow_and_never_relocates_history(self):
+        actor = management_actor(self.door)
         person = self._person("OPS100", self.door)
         plan = staffing_service.create_shift_flow_plan(
             person,
@@ -301,7 +304,7 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
                     "sort_date_operation_id": str(self.operation.id),
                     f"status_{person.id}": "vacation",
                 },
-                None,
+                actor,
                 [self.door.id],
             )
             db.session.commit()
@@ -315,7 +318,7 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
                         "sort_date_operation_id": str(self.operation.id),
                         f"status_{person.id}": "here",
                     },
-                    None,
+                    actor,
                     [self.discharge.id],
                 )
 

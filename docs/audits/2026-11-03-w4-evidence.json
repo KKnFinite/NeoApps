@@ -1,0 +1,274 @@
+{
+  "starting_sha": "b5d5312a6ae4d5de600ba4e9c312def9bb5fc161",
+  "package": "W4",
+  "original_assigned_counts": {
+    "before": {
+      "passed": 0,
+      "failed": 24
+    },
+    "after": {
+      "passed": 24,
+      "failed": 0
+    }
+  },
+  "full_367_inventory_executed": false,
+  "new_schema": false,
+  "production_mutations": false,
+  "validation": {
+    "sqlite_parent_modules": {
+      "passed": 293,
+      "failed": 8,
+      "passing_subtests": 93,
+      "seconds": 149.04
+    },
+    "postgres": {
+      "passed": 33,
+      "failed": 0,
+      "seconds": 81.4
+    },
+    "browser": {
+      "methods_passed": 1,
+      "engines": [
+        "Chromium",
+        "WebKit"
+      ],
+      "widths": [
+        1440,
+        390
+      ],
+      "seconds": 16.88
+    },
+    "javascript": {
+      "node_test_runner_passed": 12,
+      "failed": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "tests.test_neostaffing_attendance_counts.NeoStaffingAttendanceCountsTest::test_operational_context_uses_snapshot_then_shift_flow_and_never_relocates_history",
+      "starting_result": "failed",
+      "classification": "Invalid fixture",
+      "evidence": "Attendance writer lacked an active linked management/leadership actor; canonical management fixture now reaches status, uniqueness, scope and historical snapshot assertions.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_attendance_counts.NeoStaffingAttendanceCountsTest::test_phase_two_writes_new_statuses_through_shared_attendance_paths",
+      "starting_result": "failed",
+      "classification": "Invalid fixture",
+      "evidence": "Attendance writer lacked an active linked management/leadership actor; canonical management fixture now reaches status, uniqueness, scope and historical snapshot assertions.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_data_foundation.NeoStaffingDataFoundationTest::test_daily_attendance_is_separate_from_employee_status_and_unique",
+      "starting_result": "failed",
+      "classification": "Invalid fixture",
+      "evidence": "Attendance writer lacked an active linked management/leadership actor; canonical management fixture now reaches status, uniqueness, scope and historical snapshot assertions.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_discipline.DisciplineWorkflowTest::test_sektor_native_employees_links_shared_accountability_without_sort",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Node employee screen has no central Accountability shortcut. Assert real native roster, no GET-created records, central active-leadership access and denial after leadership revocation; node retains its separate authority.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_management_review.NeoStaffingManagementReviewTest::test_direct_editor_assignment_persists_without_relationship_review",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Shared organizational tree replaced retired labels; assert real forest and accessible hierarchy, keeping persisted assignment and no relationship-review assertions.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_management_review.NeoStaffingManagementReviewTest::test_pt_supervisor_master_cannot_bypass_direct_management_authority",
+      "starting_result": "failed",
+      "classification": "Outdated authority expectation",
+      "evidence": "Existing management.assign permission permits leadership assignment independently of classification. Reports To has a separate identity guard: verify allowed assignment and denied PT Master reporting update with no relationship created. No permission code changed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_management_vacation_picks.NeoStaffingManagementVacationPicksTest::test_management_change_routes_enforce_csrf_and_render_pending_state",
+      "starting_result": "failed",
+      "classification": "Broken test harness",
+      "evidence": "Exact meta-tag regex rejected legitimate CSRF renewal attributes. Semantic token extraction now reaches existing missing-token, authorization, version/capacity and atomicity checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_management_vacation_picks.NeoStaffingManagementVacationPicksTest::test_management_pick_routes_enforce_csrf_and_server_authority",
+      "starting_result": "failed",
+      "classification": "Broken test harness",
+      "evidence": "Exact meta-tag regex rejected legitimate CSRF renewal attributes. Semantic token extraction now reaches existing missing-token, authorization, version/capacity and atomicity checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_management_vacation_picks.NeoStaffingManagementVacationPicksTest::test_management_split_route_requires_csrf",
+      "starting_result": "failed",
+      "classification": "Broken test harness",
+      "evidence": "Exact meta-tag regex rejected legitimate CSRF renewal attributes. Semantic token extraction now reaches existing missing-token, authorization, version/capacity and atomicity checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_attendance_defaults_to_logged_in_management_scope",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Parse actual selected work-area link including canonical Sort query; retain attendance actor scope and mutation/uniqueness assertions.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_attendance_route_preselects_scope_and_updates_existing_daily_record",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Parse actual selected work-area link including canonical Sort query; retain attendance actor scope and mutation/uniqueness assertions.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_final_composite_attention_drop_authorization_creation_and_conflict",
+      "starting_result": "failed",
+      "classification": "Broken test harness",
+      "evidence": "Exact meta-tag regex rejected legitimate CSRF renewal attributes. Semantic token extraction now reaches existing missing-token, authorization, version/capacity and atomicity checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_people_creation_flow_and_seniority_date_are_server_authoritative",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Load actual canonical shared employee-editor fragment instead of retired inline detail fields; retain correct employee, active assignment, seniority validation and server authority checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_people_detail_shows_only_active_canonical_assignments",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Load actual canonical shared employee-editor fragment instead of retired inline detail fields; retain correct employee, active assignment, seniority validation and server authority checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_people_management_assignment_catalog_carries_management_and_scope_types",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Catalog test verifies classification/scope membership, not a promised alphabetical classification order; compare exact members including duplicate counts.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_people_view_renders_filterable_roster_and_detail_panel",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Load actual canonical shared employee-editor fragment instead of retired inline detail fields; retain correct employee, active assignment, seniority validation and server authority checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_pt_supervisor_candidates_do_not_require_a_linked_user_account",
+      "starting_result": "failed",
+      "classification": "Outdated assertion",
+      "evidence": "Management heading is now the canonical organizational title. Preserve unlinked candidate inclusion and exclusion of inactive/hourly identities.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_shift_flow_final_door_move_requires_simulator_and_csrf",
+      "starting_result": "failed",
+      "classification": "Broken test harness",
+      "evidence": "Exact meta-tag regex rejected legitimate CSRF renewal attributes. Semantic token extraction now reaches existing missing-token, authorization, version/capacity and atomicity checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_vacation_selection.NeoStaffingVacationSelectionTest::test_qualifying_date_duplicate_authority_and_settings_csrf",
+      "starting_result": "failed",
+      "classification": "Broken test harness",
+      "evidence": "Exact meta-tag regex rejected legitimate CSRF renewal attributes. Semantic token extraction now reaches existing missing-token, authorization, version/capacity and atomicity checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_vacation_selection.NeoStaffingVacationSelectionTest::test_route_mutations_require_csrf_and_server_authority",
+      "starting_result": "failed",
+      "classification": "Broken test harness",
+      "evidence": "Exact meta-tag regex rejected legitimate CSRF renewal attributes. Semantic token extraction now reaches existing missing-token, authorization, version/capacity and atomicity checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_vacation_selection.NeoStaffingVacationSelectionTest::test_union_selection_route_requires_csrf_and_preserves_atomic_capacity",
+      "starting_result": "failed",
+      "classification": "Broken test harness",
+      "evidence": "Exact meta-tag regex rejected legitimate CSRF renewal attributes. Semantic token extraction now reaches existing missing-token, authorization, version/capacity and atomicity checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_ermac_week_reuses_retained_authorized_rows_without_warm_writes",
+      "starting_result": "failed",
+      "classification": "Outdated harness",
+      "evidence": "Operational context may resolve current authority; forbid writes/commits rather than a particular internal read helper. Retain historical Ermac row, scope, label and read-only SQL checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_week_shows_both_combo_halves_using_shared_authority",
+      "starting_result": "failed",
+      "classification": "Application defect",
+      "evidence": "Weekly node Sort-name filter excluded an explicitly authorized Combo partner. Existing person/Sort authorization now governs both configured halves without granting unrelated Sorts.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_week_uses_retained_slices_not_today_roster_and_keeps_nonhere",
+      "starting_result": "failed",
+      "classification": "Application defect and outdated harness",
+      "evidence": "D3 incorrectly re-filtered authorized retained rows by historical area. Weekly date was ignored. Remove obsolete roster-call prohibition while retaining read-only SQL/commit, current authority, historical labels and period-boundary assertions.",
+      "final_result": "passed"
+    }
+  ],
+  "outside_package_failures": [
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_approved_neostaffing_user_can_open_landing_menu",
+      "owner": "W5",
+      "result": "failed",
+      "already_in_r03j_inventory": true,
+      "failure": "AssertionError: b'href=\"/neostaffing/vacation-selection\"' unexpectedly found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_landing_hides_destinations_when_existing_thresholds_deny_them",
+      "owner": "W5",
+      "result": "failed",
+      "already_in_r03j_inventory": true,
+      "failure": "AssertionError: b'href=\"/neostaffing/requests\"' not found in b' neostaffing-launch-grid\" aria-label=\"NeoStaffing main menu\">\\n            \\n            <a class=\"neostaffing-menu-tile is-priority\" href=\"/neostaffing/people\"><span>PEOPLE</span><em>Ros"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_people_interaction_script_contracts_remain_parse_separated",
+      "owner": "W5",
+      "result": "failed",
+      "already_in_r03j_inventory": true,
+      "failure": "AssertionError: b\"x.oninput()});document.querySelectorAll('[data-people-smart-form]')\" not found in b'<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scal"
+    },
+    {
+      "id": "tests.test_neostaffing_routes.NeoStaffingRoutesTest::test_staffing_dashboard_sidebar_and_mobile_menu_share_ordered_destinations",
+      "owner": "W5",
+      "result": "failed",
+      "already_in_r03j_inventory": true,
+      "failure": "AssertionError: Lists differ: [b'/n[139 chars]ing/settings'] != [b'/n[139 chars]ing/staffing-groups', b'/neostaffing/requests'[82 chars]ngs']\n\nFirst differing element 5:\nb'/neostaffing/settings'\nb'/neostaffing/staffing-groups'\n\nSecond list contains 4"
+    },
+    {
+      "id": "tests.test_neostaffing_vacation_selection.NeoStaffingVacationSelectionTest::test_grandmaster_calendar_admin_and_context_queries_are_bounded",
+      "owner": "W2",
+      "result": "failed",
+      "already_in_r03j_inventory": true,
+      "failure": "AssertionError: 23 not less than or equal to 17"
+    },
+    {
+      "id": "tests.test_neostaffing_vacation_selection.NeoStaffingVacationSelectionTest::test_union_context_uses_bounded_queries_as_calendar_count_grows",
+      "owner": "W2",
+      "result": "failed",
+      "already_in_r03j_inventory": true,
+      "failure": "AssertionError: 14 not less than or equal to 9"
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_current_cleanup_mobile_and_time_only_contracts",
+      "owner": "W5",
+      "result": "failed",
+      "already_in_r03j_inventory": true,
+      "failure": "AssertionError: 'type=\"time\"' not found in '<!doctype html>\\n<html lang=\"en\">\\n\\n\\n\\n\\n\\n<head>\\n    <meta charset=\"utf-8\">\\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover\">\\n    <meta name"
+    },
+    {
+      "id": "tests.test_staffing_live_ux.LiveUxTest::test_dashboard_order_and_normal_half_width_live_counts",
+      "owner": "W5",
+      "result": "failed",
+      "already_in_r03j_inventory": true,
+      "failure": "AssertionError: Lists differ: ['ebm[36 chars], 'discharge', 'stats', 'live-counts', 'employees', 'settings'] != ['ebm[36 chars], 'discharge', 'settings', 'live-counts', 'employees']\n\nFirst differing element 5:\n'stats'\n'settings'\n\nFirst list contains "
+    }
+  ]
+}

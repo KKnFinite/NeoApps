@@ -58,6 +58,13 @@ def document(response):
     return parser.root
 
 
+def csrf_token(response):
+    """Read the shared token semantically, retaining renewal/CSP attributes."""
+    token = document(response).one("meta", name="csrf-token").attrs["content"]
+    assert token, "Expected a nonempty session-bound CSRF token"
+    return token
+
+
 def assert_mobile_drawer(test, response):
     test.assertEqual(response.status_code, 200)
     root = document(response)

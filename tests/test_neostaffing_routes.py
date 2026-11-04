@@ -1,3 +1,5 @@
+from tests.html_contracts import csrf_token, document
+from tests.neostaffing_contracts import employee_editor, selected_attendance_area
 from tests.css_contracts import stylesheet_source
 from datetime import date, datetime
 from pathlib import Path
@@ -310,7 +312,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         client = self._logged_in_client(simulator.username)
         self.app.config["CSRF_PROTECT_TESTING"] = True
         page = client.get("/neostaffing/shift-flow")
-        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        token = csrf_token(page)
         missing = client.post(
             f"/neostaffing/shift-flow/{person.id}/final-door",
             json={"final_door_work_area_id": door_two.id, "expected_version": staffing_service.shift_flow_revision(person, plan, staffing_service.assignment_service.shift_home(person))},
@@ -394,7 +396,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(f'data-roster-person="{person.id}"'.encode(), page.data)
         self.assertIn(f'/neostaffing/shift-flow?person_id={person.id}'.encode(), page.data)
         self.assertIn(b'NEEDS ASSIGNMENT', page.data)
-        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        token = csrf_token(page)
         missing_csrf = client.post(
             f"/neostaffing/shift-flow/{person.id}/final-composite",
             json={"final_door_id": areas["Door 24"].id, "band": "bm1", "expected_version": ""},
@@ -2000,7 +2002,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"E810", leadership.data)
         self.assertEqual(supervisor_selected.status_code, 200)
         self.assertIn(b"neostaffing-people-detail-drawer", supervisor_selected.data)
-        self.assertIn(b'value="E812"', supervisor_selected.data)
+        self.assertEqual(document(employee_editor(self,self.client,supervisor_selected,supervisor.id)).one('input',name='employee_id').attrs['value'],'E812')
         supervisor_roster = supervisor_selected.data.split(b"<tbody>", 1)[1].split(b"</tbody>", 1)[0]
         self.assertNotIn(b"E812", supervisor_roster)
         self.assertIn(b"Select an employee to view details.", unselected.data)
@@ -2066,6 +2068,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         supervisor_context = staffing_service.people_context({"person_id": supervisor.id})
 
+        hourly_response = employee_editor(self,self.client,hourly_response,hourly.id)
+        supervisor_response = employee_editor(self,self.client,supervisor_response,supervisor.id)
+        unassigned_response = employee_editor(self,self.client,unassigned_response,unassigned.id)
+
         self.assertEqual(hourly_response.status_code, 200)
         self.assertIn(b"Current Work Assignments", hourly_response.data)
         self.assertIn(
@@ -2082,7 +2088,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             ],
         )
         self.assertIn(b"Current Work Assignments", unassigned_response.data)
-        self.assertIn(b'<li class="is-unassigned">Unassigned</li>', unassigned_response.data)
+        self.assertIn(b'<li>Unassigned</li>', unassigned_response.data)
 
     def test_simulator_without_staffing_person_can_assign_and_remove_pt_supervisor(self):
         actor = self._user("staffing_unlinked_assignment_simulator")
@@ -2271,7 +2277,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"MANAGEMENT", page.data)
-        self.assertEqual(page.data.count(b"<h3>MANAGEMENT</h3>"), 1)
+        self.assertEqual(len(document(page).findall('h1',id='staffing-org-title')),1)
         self.assertNotIn(b">ASSIGN</button>", page.data)
         self.assertNotIn(b"#management-editor", page.data)
         self.assertNotIn(b"PTC-100", page.data)
@@ -2349,11 +2355,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 page.data,
             )
 
-        self.assertEqual(
+        self.assertCountEqual(
             [row["person"].employee_id for row in staffing_service.management_candidates_for_unit(work_area)],
             ["PEOPLE-20C", "PEOPLE-PT-SUP"],
         )
-        self.assertEqual(
+        self.assertCountEqual(
             [row["person"].employee_id for row in staffing_service.management_candidates_for_unit(department)],
             ["PEOPLE-20C", "PEOPLE-FT-SUP"],
         )
@@ -2652,10 +2658,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         page = self.client.get(f"/neostaffing/attendance?work_area_id={work_area.id}")
         self.assertEqual(page.status_code, 200)
-        self.assertIn(
-            f'class="neostaffing-attendance-scope-node is-selected" href="/neostaffing/attendance?work_area_id={work_area.id}"'.encode(),
-            page.data,
-        )
+        selected_attendance_area(self,page,work_area.id)
         self.assertIn(b"AT100", page.data)
 
         first = self.client.post(
@@ -2720,10 +2723,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         page = self.client.get("/neostaffing/attendance")
 
         self.assertEqual(page.status_code, 200)
-        self.assertIn(
-            f'class="neostaffing-attendance-scope-node is-selected" href="/neostaffing/attendance?work_area_id={work_area.id}"'.encode(),
-            page.data,
-        )
+        selected_attendance_area(self,page,work_area.id)
         self.assertIn(b"MS101", page.data)
 
     def test_attendance_operation_scope_includes_direct_and_nested_work_areas(self):
@@ -3296,10 +3296,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         edit_page = client.get(
             f"/neostaffing/people?work_area_id={work_area.id}&person_id={person.id}"
         )
-        self.assertIn(
-            b'name="seniority_date" value="02/03/2026" placeholder="MM/DD/YYYY" inputmode="numeric" maxlength="10" data-people-seniority-date',
-            edit_page.data,
-        )
+        editor=employee_editor(self,client,edit_page,person.id)
+        date_input=document(editor).one('input',name='seniority_date')
+        self.assertEqual(date_input.attrs['value'],'02/03/2026')
+        self.assertEqual(date_input.attrs['placeholder'],'MM/DD/YYYY')
+        self.assertEqual(date_input.attrs['inputmode'],'numeric')
+        self.assertEqual(date_input.attrs['maxlength'],'10')
         self.assertIn(b">02/03/2026</td>", edit_page.data)
 
         invalid_date = client.post(

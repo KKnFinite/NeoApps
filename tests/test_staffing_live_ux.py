@@ -126,8 +126,9 @@ class LiveUxTest(unittest.TestCase):
         db.session.commit()
         url = '/neosektor/manage-employees?area=ebm&view=all&mode=times'
         self.assertNotIn(f'data-timecard-id="{historical.id}"', self.client.get(url).get_data(as_text=True))
-        with patch('app.services.neostaffing.operational_manage_employees_context', side_effect=AssertionError('must not rebuild roster')):
+        with patch.object(db.session, 'commit', wraps=db.session.commit) as committed:
             response = self.client.get(url + '&period=week&date=2026-09-12')
+            committed.assert_not_called()
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn(f'data-timecard-id="{current.id}"', html)
@@ -138,8 +139,9 @@ class LiveUxTest(unittest.TestCase):
         self.assertIn(f'data-timecard-id="{historical.id}"', moved)
         self.assertIn('Call In', moved)
         self.assertNotIn(self.outsider.full_name, html)
-        self.assertIn('TODAY', html)
-        self.assertIn('THIS WEEK', html)
+        self.assertIn('aria-label="Time entry period"', html)
+        self.assertIn('>DAY</a>', html)
+        self.assertIn('>WEEK</a>', html)
         self.assertEqual(Slice.query.count(), 2)
         next_week = self.client.get(url + '&period=week&date=2026-09-13').get_data(as_text=True)
         self.assertNotIn('data-timecard-id=', next_week)
@@ -201,8 +203,9 @@ class LiveUxTest(unittest.TestCase):
             statements.append(sql.lstrip().lower())
         event.listen(db.engine, 'before_cursor_execute', capture)
         try:
-            with patch.object(staffing, 'operational_manage_employees_context', side_effect=AssertionError('not a historical roster')):
+            with patch.object(db.session, 'commit', wraps=db.session.commit) as committed:
                 response = self.client.get('/neoermac/door-view/manage-employees?mode=times&period=week&date=2026-09-12')
+                committed.assert_not_called()
         finally:
             event.remove(db.engine, 'before_cursor_execute', capture)
         self.assertEqual(response.status_code, 200)

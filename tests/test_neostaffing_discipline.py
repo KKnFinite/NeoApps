@@ -607,11 +607,22 @@ class DisciplineWorkflowTest(employee_fixture.SektorEmployeesTest):
         self.assertEqual(statements, [])
 
     def test_sektor_native_employees_links_shared_accountability_without_sort(self):
+        from tests.html_contracts import document
         page = self.client.get('/neosektor/manage-employees?area=ebm&view=all')
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b'href="/neostaffing/accountability">ACCOUNTABILITY</a>', page.data)
+        self.assertTrue(document(page).findall(**{'data-operational-manage-employees':None}))
+        self.assertIn(self.worker.full_name.encode(),page.data)
         self.assertNotIn(b'SAVE ATTENDANCE', page.data)
-        self.assertEqual(self.client.get('/neostaffing/accountability').status_code, 200)
+        # Central accountability uses actual active leadership; node attendance
+        # has its separate approved node/edit scope, not an in-content shortcut.
+        central=self.client.get('/neostaffing/accountability')
+        self.assertEqual(central.status_code,200)
+        self.assertIn(b'ACCOUNTABILITY',central.data)
+        self.assertEqual(Workday.query.count(),0)
+        self.leadership.active=False;db.session.commit()
+        self.assertEqual(self.client.get('/neostaffing/accountability').status_code,403)
+        self.assertEqual(self.client.get('/neosektor/manage-employees?area=ebm&view=all').status_code,200)
+        self.assertEqual(SortDateOperation.query.count(),0)
 
     def test_formal_history_master_only_idempotent_and_real_dates(self):
         self.fact()

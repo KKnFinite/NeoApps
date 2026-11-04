@@ -130,7 +130,7 @@ def sync_attendance(operation, statuses, assignments, user_id, *, as_of, units=N
         audit(row, user_id, None)
 
 
-def authorization(user, *, person_ids=None, node_workspace=None, node_area=None):
+def authorization(user, *, person_ids=None, node_workspace=None, node_area=None, work_area_ids=None):
     """Bounded shared leadership + configured-Combo union, no role fallback."""
     from app.services import neostaffing as staffing
     hierarchy = staffing._daily_attendance_hierarchy()
@@ -141,9 +141,15 @@ def authorization(user, *, person_ids=None, node_workspace=None, node_area=None)
         authority = node_attendance_authority(user, node_workspace, node_area)
     if not authority.work_area_ids:
         raise ValueError("Active NeoStaffing management leadership scope is required.")
+    # Node presentation scopes select current employees, not the historical
+    # attribution stored on their retained slices. Requested scope may only
+    # narrow actual authority. Combo partners are still resolved below.
+    current_areas = authority.work_area_ids
+    if work_area_ids is not None:
+        current_areas = current_areas.intersection(work_area_ids)
     scoped_people = select(StaffingWorkAssignment.person_id).where(
         StaffingWorkAssignment.active.is_(True),
-        StaffingWorkAssignment.work_area_unit_id.in_(authority.work_area_ids))
+        StaffingWorkAssignment.work_area_unit_id.in_(current_areas))
     query = db.session.query(StaffingWorkAssignment, StaffingPerson, StaffingComboWorkday).join(
         StaffingPerson, StaffingPerson.id == StaffingWorkAssignment.person_id).outerjoin(
         StaffingComboWorkday, StaffingComboWorkday.person_id == StaffingPerson.id).filter(
@@ -160,12 +166,12 @@ def authorization(user, *, person_ids=None, node_workspace=None, node_area=None)
             sort = sort_of(hierarchy["by_id"].get(assignment.work_area_unit_id), hierarchy["by_id"])
             if sort is None:
                 continue
-            if assignment.work_area_unit_id in authority.work_area_ids:
+            if assignment.work_area_unit_id in current_areas:
                 allowed.add((person_id, sort.id))
             if person.classification in FT_COMBO and combo:
                 pair = {combo.first_sort_id, combo.second_sort_id}
                 if sort.id in pair and any(
-                    other.work_area_unit_id in authority.work_area_ids
+                    other.work_area_unit_id in current_areas
                     and getattr(sort_of(hierarchy["by_id"].get(other.work_area_unit_id), hierarchy["by_id"]), "id", None) in pair
                     for other, _, _ in entries
                 ):
@@ -287,9 +293,10 @@ def read_rows(user, start, end, *, complete=False, person_ids=None, slice_ids=No
     """One date-bounded projection plus one segment read, never per-row lookups."""
     if end < start or (end - start).days > (28 if slice_ids is not None else 6):
         raise ValueError("Choose one day or Sunday–Saturday week.")
-    allowed = None if complete else authorization(user, person_ids=person_ids, node_workspace=node_workspace, node_area=node_area)
+    allowed = None if complete else authorization(user, person_ids=person_ids, node_workspace=node_workspace, node_area=node_area,
+        work_area_ids=work_area_ids if node_workspace is not None else None)
     query = Slice.query.filter(Slice.workday_date.between(start, end))
-    if work_area_ids is not None:
+    if work_area_ids is not None and node_workspace is None:
         query = query.filter(Slice.work_area_unit_id.in_(work_area_ids))
     if operation_id is not None:
         query = query.filter(Slice.sort_date_operation_id == operation_id)
@@ -410,7 +417,7 @@ def report_context(user, values, *, as_of, complete=False, node_workspace=None, 
         raise ValueError("Unknown timecard report.")
     page = max(1, int(values.get("page", 1)))
     query = Slice.query.filter(Slice.workday_date.between(start, end))
-    if work_area_ids is not None:
+    if work_area_ids is not None and node_workspace is None:
         query = query.filter(Slice.work_area_unit_id.in_(work_area_ids))
     if operation_id is not None:
         query = query.filter(Slice.sort_date_operation_id == operation_id)
@@ -419,7 +426,8 @@ def report_context(user, values, *, as_of, complete=False, node_workspace=None, 
         query = query.filter(Slice.sort_date_operation_id.in_(
             select(SortDateOperation.id).where(SortDateOperation.sort_name == sort_name)))
     if not complete:
-        query = query.filter(tuple_(Slice.person_id, Slice.sort_unit_id).in_(authorization(user, node_workspace=node_workspace, node_area=node_area)))
+        query = query.filter(tuple_(Slice.person_id, Slice.sort_unit_id).in_(authorization(user, node_workspace=node_workspace, node_area=node_area,
+            work_area_ids=work_area_ids if node_workspace is not None else None)))
     search = str(values.get("search", "")).strip()
     if search:
         query = query.join(StaffingPerson, StaffingPerson.id == Slice.person_id).filter(or_(

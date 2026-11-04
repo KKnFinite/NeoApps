@@ -1,3 +1,4 @@
+from tests.html_contracts import csrf_token
 from contextlib import ExitStack
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -1633,7 +1634,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self._login(grandmaster)
         self.app.config["CSRF_PROTECT_TESTING"] = True
         page = self.client.get(f"/neostaffing/vacation-selection/union?year={self.YEAR}")
-        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        token = csrf_token(page)
         week = vacation_service.vacation_year_weeks(self.YEAR)[10].week_ending.isoformat()
         values = {"vacation_year": self.YEAR, "staffing_person_id": first.id, "week_ending": week, "bank_type": "regular"}
         self.assertEqual(self.client.post(f"/neostaffing/vacation-selection/union/{calendar.id}/select", data=values).status_code, 400)
@@ -2044,10 +2045,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertIn(b"FLOATING HOLIDAYS", page.data)
         self.assertIn(b"Holiday", page.data)
         self.assertIn(b"Fixed date", page.data)
-        token = re.search(
-            r'<meta name="csrf-token" content="([^"]+)">',
-            page.get_data(as_text=True),
-        ).group(1)
+        token = csrf_token(page)
         missing = self.client.post(
             "/neostaffing/settings/floating-holidays",
             data={
@@ -2192,7 +2190,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.app.config["CSRF_PROTECT_TESTING"] = True
         page = self.client.get(f"/neostaffing/vacation-selection/union/new?year={self.YEAR}")
         self.assertEqual(page.status_code, 200, page.get_data(as_text=True))
-        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        token = csrf_token(page)
         values = {
             "vacation_year": self.YEAR,
             "name": "CSRF Calendar",
@@ -2214,7 +2212,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self._login(lower)
         self.app.config["CSRF_PROTECT_TESTING"] = True
         page = self.client.get(f"/neostaffing/vacation-selection/union?year={self.YEAR}")
-        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        token = csrf_token(page)
         values.update({"name": "Forged Calendar", "csrf_token": token})
         forged = self.client.post("/neostaffing/vacation-selection/union/new", data=values)
         self.assertEqual(forged.status_code, 302)
