@@ -1,0 +1,20 @@
+{% from "neonodes/neoscorpion/_spear_display.html" import spear_resources %}
+<div data-live-spear="truck-{{ truck.truck_id }}">
+                {% if truck.spear_recommendation %}
+                {% set spear = truck.spear_recommendation %}
+                <div class="neoscorpion-truck-spear">
+                    <strong>{{ 'SPEAR NEXT · AFTER CURRENT' if truck.spear_advisory_only else 'SPEAR RECOMMENDS' }}</strong>
+                    {{ spear_resources(spear, truck.spear_parking_position) }}
+                    {% if can_edit and not truck.spear_advisory_only %}
+                    <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_spear_action') }}" data-spear-action-form>
+                        <input type="hidden" name="spear_decision_reference" value="{{ (rows|selectattr('mission.id', 'equalto', spear.mission_id)|first).spear_decision_reference if spear is defined else '' }}"><input type="hidden" name="dispatcher_approval" value="{{ truck.spear_top_off_approval or '' }}"><input type="hidden" name="plan_token" value="{{ spear_plan.token }}">
+                        <input type="hidden" name="mission_id" value="{{ spear.mission_id or '' }}">
+                        <input type="hidden" name="truck_id" value="{{ spear.truck_id or '' }}">
+                        <button class="action-button" type="submit">{{ 'TOP OFF' if spear.action_type == 'top_off' else 'ASSIGN' }}</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% elif truck.spear_next_status %}
+                <div class="neoscorpion-truck-spear"><strong>SPEAR NEXT</strong><small>{{ truck.spear_next_status }}</small></div>
+                {% endif %}
+</div>

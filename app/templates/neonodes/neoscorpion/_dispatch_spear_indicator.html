@@ -1,0 +1,13 @@
+            {% if can_view_spear_settings %}
+            <a data-live-spear="indicator" class="neoscorpion-spear-indicator is-{{ spear_indicator.state }}" href="{{ url_for('neoscorpion.spear_settings') }}" title="{{ spear_indicator.detail }} · Open SPEAR Fleet Optimizer">
+                <span class="neoscorpion-spear-indicator-icon" aria-hidden="true"></span>
+                <span>{{ spear_indicator.label }}</span>
+                {% if spear_indicator.state in ['at-risk', 'late'] and spear_indicator.automation_enabled %}<small>AUTO</small>{% endif %}
+            </a>
+            {% else %}
+            <span data-live-spear="indicator" class="neoscorpion-spear-indicator is-{{ spear_indicator.state }}" title="{{ spear_indicator.detail }}">
+                <span class="neoscorpion-spear-indicator-icon" aria-hidden="true"></span>
+                <span>{{ spear_indicator.label }}</span>
+                {% if spear_indicator.state in ['at-risk', 'late'] and spear_indicator.automation_enabled %}<small>AUTO</small>{% endif %}
+            </span>
+            {% endif %}

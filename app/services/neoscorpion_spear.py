@@ -16,6 +16,7 @@ from app.services.neoscorpion_dispatch_planning import assignment_mission_timing
 from app.services.neoscorpion_spear_forecasts import physical_off_forecast
 from app.services.neoscorpion_learning_vault import require_learning_vault
 from app.services.neoscorpion_spear_calibration import calibrated_planning_settings
+from app.services.neoscorpion_participation import owner_id as work_fueler_owner
 from app.services.parking_rules import RAMP_OPTIONS, VALID_PARKING_POSITIONS
 from app.services.time_display import format_local_hhmm
 
@@ -534,6 +535,8 @@ def build_spear_plan(
                         "risk": risk,
                         "projected": projected,
                         "travel_minutes": travel,
+                        "fueler_travel_minutes": _travel_minutes(fueler_state[fueler_id].ramp,
+                            ramp, spear_settings.truck_minutes_per_ramp_move) / 2,
                         "truck_gallons_before": remaining,
                         "truck_location": _location_provenance(truck_state[truck_id]),
                         "fueler_location": _location_provenance(fueler_state[fueler_id]),
@@ -741,8 +744,15 @@ def _occupied_truck_recommendations(
         if ramp is None or timing.total_duration_minutes is None or demand is None:
             continue
         truck = usable_trucks[truck_id]["truck"]
-        current_gallons = int(usable_trucks[truck_id]["selection"].current_gallons)
-        feasible, remaining = _fuel_feasibility(current_gallons, int(truck.capacity_gallons), demand)
+        # The same canonical reservations used by the executable planner apply
+        # to advisory NEXT. Raw readings can include fuel already committed to
+        # OFF/retained visits; do not spend it twice or reserve it twice.
+        inventory_bases = row.get('inventory_projection_bases', {})
+        current_gallons = inventory_bases.get(truck_id, usable_trucks[truck_id]['selection'].current_gallons)
+        inventory_demand = _decimal_or_none(row.get('inventory_demand_gallons', demand))
+        if current_gallons is None or inventory_demand is None:
+            continue
+        feasible, remaining = _fuel_feasibility(int(current_gallons), int(truck.capacity_gallons), inventory_demand)
         if not feasible:
             continue
         work = row.get("fuel_work_state")
@@ -1022,7 +1032,7 @@ def _assignment_explanation(
             "ETA + 5" if timing.aircraft_ready_source == "eta_plus_buffer" else "Unknown"
         ),
         "truck_travel_minutes": _minutes_display(selected["travel_minutes"]),
-        "fueler_travel_minutes": _minutes_display(selected["travel_minutes"] / 2),
+        "fueler_travel_minutes": _minutes_display(selected["fueler_travel_minutes"]),
         "setup_minutes": _minutes_display(timing.setup_minutes),
         "pump_minutes": _minutes_display(timing.pump_minutes),
         "finishing_minutes": _minutes_display(timing.finishing_minutes),
@@ -1331,7 +1341,7 @@ def _current_resource_owners(rows):
     from app.services.neoscorpion_resource_timing import fueler_work_end
     for row in rows:
         outstanding=row.get('outstanding_segments')
-        pending=(item.physical_fueler_user_id for item in outstanding if fueler_work_end(item) is None) if outstanding is not None else row.get('pending_segment_fuelers',())
+        pending=(work_fueler_owner(item) for item in outstanding if fueler_work_end(item) is None) if outstanding is not None else row.get('pending_segment_fuelers',())
         for fueler_id in pending:
             if fueler_id is not None:
                 fuelers.setdefault(fueler_id, set()).add(row["mission"].id)
@@ -1345,7 +1355,7 @@ def _current_resource_owners(rows):
         if (assignment is not None and work is not None and row.get("fueling_on_trusted")
                 and not getattr(work, "off_at_utc", None) and not getattr(work, "ended_early_at_utc", None)):
             truck_id = getattr(work, "physical_truck_id", None) or assignment.assigned_truck_id
-            fueler_id = getattr(work, "physical_fueler_user_id", None) or assignment.assigned_fueler_user_id
+            fueler_id = work_fueler_owner(work) or assignment.assigned_fueler_user_id
             if truck_id is not None: trucks.setdefault(truck_id, set()).add(row["mission"].id)
             if fueler_id is not None and fueler_work_end(work) is None:
                 fuelers.setdefault(fueler_id, set()).add(row["mission"].id)
@@ -1410,7 +1420,7 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
             continue
         assignment = row["assignment"]
         for mapping, identifier in (
-            (fueler_state, getattr(work,'physical_fueler_user_id',None) or assignment.assigned_fueler_user_id),
+            (fueler_state, work_fueler_owner(work) or assignment.assigned_fueler_user_id),
             (truck_state, getattr(work,'physical_truck_id',None) or assignment.assigned_truck_id),
         ):
             end=fueler_work_end(work) if mapping is fueler_state else released_at(row)

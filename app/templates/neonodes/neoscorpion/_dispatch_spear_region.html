@@ -1,0 +1,5 @@
+{% from "neonodes/neoscorpion/_spear_calibration_display.html" import calibration_mode %}
+<section class="scorpion-console-region" data-console-region="spear" data-live-spear="mission-{{ row.mission.id }}" data-spear-available="{{ 'true' if spear_plan else 'false' }}"{% if not (row.assignment_recommendation_display or row.assignment_recommendation_reason_display or row.spear_last_decision_id or row.tail_mismatch or row.spear_risk or row.spear_readiness_reasons or row.spear_step or row.spear_problem or row.spear_ready) %} hidden{% endif %}>
+<h3>SPEAR DATA</h3>
+{% include "neonodes/neoscorpion/_dispatch_spear.html" %}
+</section>

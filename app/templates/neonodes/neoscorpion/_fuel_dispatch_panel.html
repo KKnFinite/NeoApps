@@ -25,44 +25,7 @@
     <div data-dispatch-board-header>
     {% if operation %}
     <div class="neoscorpion-dispatch-insights" aria-label="SPEAR and fueling performance">
-    <section class="neoscorpion-dispatch-insights-spear" aria-label="SPEAR">
-    <header class="neoscorpion-dispatch-section-head">
-        <h2>SPEAR</h2>
-        <span data-dispatch-preference-status role="status" aria-live="polite"></span>
-        <button type="button" class="action-button" data-dispatch-collapse="spear" aria-controls="dispatch-spear-data" aria-expanded="{{ 'false' if dispatch_preferences.spear_data_collapsed else 'true' }}" aria-label="{{ 'Expand' if dispatch_preferences.spear_data_collapsed else 'Collapse' }} SPEAR data">{{ 'EXPAND' if dispatch_preferences.spear_data_collapsed else 'COLLAPSE' }}</button>
-    </header>
-    <div id="dispatch-spear-data" data-dispatch-section="spear"{% if dispatch_preferences.spear_data_collapsed %} hidden{% endif %}>
-    {% if operation and spear_unavailable %}
-    <div class="neoscorpion-spear-fleet-status is-at-risk" data-spear-fleet-status>
-        SPEAR · UNAVAILABLE
-    </div>
-    {% elif operation and spear_plan %}
-    <div class="neoscorpion-spear-fleet-status{% if spear_plan.late_count %} is-late{% elif spear_plan.at_risk_count or spear_plan.unplanned_count %} is-at-risk{% elif spear_plan.waiting_for_data_count %} is-waiting{% endif %}" data-spear-fleet-status>
-        {{ spear_plan.status_text }}
-    </div>
-    <div class="neoscorpion-spear-readiness" data-spear-readiness>
-        <strong>SPEAR DATA READINESS</strong>
-        <span>{{ spear_plan.relevant_count - spear_plan.waiting_for_data_count }}/{{ spear_plan.relevant_count }} MISSIONS READY</span>
-        {% if spear_plan.waiting_for_data_count %}<span>{{ spear_plan.waiting_for_data_count }} WAITING FOR DATA</span>{% endif %}
-    </div>
-    {% if spear_whole_sort %}<details class="neoscorpion-spear-calibration" data-spear-whole-sort><summary>WHOLE-SORT · {{ spear_whole_sort.mode|upper }}{% if spear_whole_sort.fallback %} · SAFE FALLBACK{% endif %}</summary><div>
-        {% if spear_whole_sort.fallback %}<span>{{ spear_whole_sort.reason }}</span>{% else %}
-        <span>Strict earliest authoritative departure priority · {{ spear_whole_sort.evaluations }} evaluated schedules</span>
-        {% if spear_whole_sort.mode=='active' %}{% for change in spear_whole_sort.changes %}<span>{{ change }}</span>{% endfor %}{% else %}<span>SHADOW comparison only; current SPEAR recommendations remain authoritative.</span>{% endif %}
-        {% for truck_id, policy in spear_whole_sort.policies.items() %}<span>Truck {{ policy.truck_number or truck_id }} TOP OFF: {{ policy.minutes|round(1) }} MIN · {{ policy.source }} · {{ policy.sample_count }} samples / {{ policy.sort_count }} sorts · {{ policy.confidence }}</span>{% endfor %}
-        {% endif %}</div></details>{% endif %}
-    <details class="neoscorpion-spear-calibration" data-spear-calibration>
-        <summary>{{ spear_calibration.label }} · {{ spear_settings.live_calibration_mode|upper }}</summary>
-        <div>
-            <span>{{ calibration_mode(spear_settings.live_calibration_mode) }}</span>
-            {% for item in spear_calibration["items"] %}
-            <span><strong>{{ item.metric|replace('_', ' ')|title }} · {{ item.scope_key }}</strong> · {{ calibration_values(item, spear_settings.live_calibration_mode) }} · {{ item.samples }} samples · {{ item.excluded_samples }} excluded · {{ item.confidence }}</span>
-            {% else %}<span>Collecting qualifying completed current-sort work.</span>{% endfor %}
-        </div>
-    </details>
-    {% endif %}
-    </div>
-    </section>
+    {% include "neonodes/neoscorpion/_dispatch_spear_overview.html" %}
     {% set performance = fueling_performance|default({'fuelers': (), 'trucks': ()}) %}
     <section class="neoscorpion-dispatch-performance" aria-label="Fueling Statistics" data-fueling-performance>
         <header class="neoscorpion-dispatch-performance-header">
@@ -121,23 +84,7 @@
                     <div><span>Current</span><progress class="neoscorpion-truck-gauge" max="100" value="{{ truck.current_gauge_percent if truck.current_gauge_percent is not none else 0 }}"></progress></div>
                     <div><span>Projected</span><progress class="neoscorpion-truck-gauge neoscorpion-truck-gauge--projected{% if truck.projected_short %} is-short{% endif %}" max="100" value="{{ truck.projected_gauge_percent if truck.projected_gauge_percent is not none else 0 }}"></progress></div>
                 </div>{% else %}<small class="neoscorpion-calculation-warning">TRUCK INVENTORY UNVERIFIED · verify actual gallons before fuel-based recommendations.</small>{% endif %}
-                {% if truck.spear_recommendation %}
-                {% set spear = truck.spear_recommendation %}
-                <div class="neoscorpion-truck-spear">
-                    <strong>{{ 'SPEAR NEXT · AFTER CURRENT' if truck.spear_advisory_only else 'SPEAR RECOMMENDS' }}</strong>
-                    {{ spear_resources(spear, truck.spear_parking_position) }}
-                    {% if can_edit and not truck.spear_advisory_only %}
-                    <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_spear_action') }}" data-spear-action-form>
-                        <input type="hidden" name="spear_decision_reference" value="{{ (rows|selectattr('mission.id', 'equalto', spear.mission_id)|first).spear_decision_reference if spear is defined else '' }}"><input type="hidden" name="dispatcher_approval" value="{{ truck.spear_top_off_approval or '' }}"><input type="hidden" name="plan_token" value="{{ spear_plan.token }}">
-                        <input type="hidden" name="mission_id" value="{{ spear.mission_id or '' }}">
-                        <input type="hidden" name="truck_id" value="{{ spear.truck_id or '' }}">
-                        <button class="action-button" type="submit">{{ 'TOP OFF' if spear.action_type == 'top_off' else 'ASSIGN' }}</button>
-                    </form>
-                    {% endif %}
-                </div>
-                {% elif truck.spear_next_status %}
-                <div class="neoscorpion-truck-spear"><strong>SPEAR NEXT</strong><small>{{ truck.spear_next_status }}</small></div>
-                {% endif %}
+                {% include "neonodes/neoscorpion/_dispatch_truck_spear.html" %}
                 <div data-truck-card-actions>
                 {% if can_manage_assets and truck.status == "available" %}
                 <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>

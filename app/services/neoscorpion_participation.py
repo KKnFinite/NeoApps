@@ -21,9 +21,9 @@ def key(event):
 
 def owner_id(work):
     """Editing handoff is distinct from the immutable operator at physical ON."""
-    data=(work.performance_context or {}).get('participation') or {}
+    data=(getattr(work, 'performance_context', None) or {}).get('participation') or {}
     if data.get('handoff_fueler_id'): return data['handoff_fueler_id']
-    return getattr(work,'_audited_handoff_owner',work.physical_fueler_user_id)
+    return getattr(work,'_audited_handoff_owner',getattr(work, 'physical_fueler_user_id', None))
 
 
 def hydrate_legacy_owners(works):

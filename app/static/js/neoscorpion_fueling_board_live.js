@@ -10,6 +10,7 @@
     const status = root.querySelector("[data-fueling-board-refresh-status]");
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
+    let panelDigest = '';
 
     const fingerprint = (payload) => ({
         operationId: payload.operation_id == null ? "none" : String(payload.operation_id),
@@ -72,7 +73,8 @@
         if (force !== true && observed.operationId === operationId && observed.revision === revision) return;
 
         const panelResponse = await (window.NeoLiveRevision?.fetch || fetch)(panelUrl, {
-            cache: "no-store", credentials: "same-origin", headers: {Accept: "application/json"},
+            cache: "no-store", credentials: "same-origin", headers: {Accept: "application/json",
+                'X-Neo-Panel-Digest': force === true ? '' : panelDigest},
         });
         const payload = await panelResponse.json().catch(() => ({}));
         if (!panelResponse.ok || payload.ok !== true) throw new Error("Fueling Board update unavailable.");
@@ -81,9 +83,14 @@
         // Never render an older same-sort panel over an already observed revision.
         if (incoming.operationId !== observed.operationId || incoming.revision < observed.revision) return;
         if (incoming.operationId === operationId && incoming.revision < revision) return;
-        const template = document.createElement("template");
-        template.innerHTML = String(payload.html || "").trim();
-        reconcile(template.content.querySelector("[data-fueling-board-panel]"));
+        if (payload.unchanged !== true) {
+            const template = document.createElement("template");
+            template.innerHTML = String(payload.html || "").trim();
+            reconcile(template.content.querySelector("[data-fueling-board-panel]"));
+        }
+        // A deferred driver draft has not applied the entire server panel.
+        panelDigest = root.querySelector('[data-driver-dirty="true"], [data-driver-saving="true"]')
+            ? '' : (payload.panel_digest || '');
         operationId = incoming.operationId;
         revision = incoming.revision;
         root.dataset.operationId = operationId === "none" ? "" : operationId;

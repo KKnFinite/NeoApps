@@ -880,6 +880,7 @@
     let criticalRefreshKey = "";
     let criticalRefreshBusy = false;
     let criticalFingerprints = {};
+    let spearFingerprints = {};
 
     const applyCriticalCompletion = (nextPanel) => {
         const scrollState = typeof dispatchScroll === 'undefined' ? null
@@ -1258,6 +1259,73 @@
         }
     };
 
+    const refreshSpear = async () => {
+        if (reloading || criticalRefreshBusy || hasUnsavedControls() || preferenceSaving
+                || dispatcherCheckSaving || window.NeoScorpionFuelData?.isOpen()) return false;
+        reloading = true;
+        const generation = stateGeneration;
+        try {
+            const url = new URL(panelUrl, window.location.href);
+            url.searchParams.set('spear_only', '1');
+            url.searchParams.set('operation_id', operationId);
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {
+                cache: 'no-store', credentials: 'same-origin', headers: {
+                    Accept: 'application/json', 'X-Neo-Spear-Fingerprints': JSON.stringify(spearFingerprints)},
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true || !payload.spear_fragments) {
+                throw new Error(payload.error || 'SPEAR refresh unavailable.');
+            }
+            // A prediction cannot acknowledge an unapplied operational change.
+            if (!currentResponse(payload, generation) || Number(payload.revision || 0) !== revision
+                    || String(payload.tail_revision || '') !== tailRevision || hasUnsavedControls()
+                    || preferenceSaving || dispatcherCheckSaving || window.NeoScorpionFuelData?.isOpen()) return false;
+            const replacements = [];
+            for (const [key, html] of Object.entries(payload.spear_fragments)) {
+                const old = Array.from(root.querySelectorAll('[data-live-spear]'))
+                    .find(node => node.dataset.liveSpear === key);
+                // Completed missions deliberately have no active tail badge.
+                if (!old && key.startsWith('tail-')) continue;
+                const template = document.createElement('template');
+                template.innerHTML = String(html).trim();
+                const fresh = template.content.firstElementChild;
+                if (!old || fresh?.dataset.liveSpear !== key) throw new Error('SPEAR view changed; refreshing Dispatch.');
+                if (old.contains(document.activeElement)) return false;
+                const open = Array.from(old.querySelectorAll('details'), node => node.open);
+                fresh.querySelectorAll('details').forEach((node, index) => { node.open = open[index] ?? node.open; });
+                replacements.push([old, fresh]);
+            }
+            const saved = dispatchScroll.snapshot();
+            replacements.forEach(([old, fresh]) => old.replaceWith(fresh));
+            for (const [missionId, reference] of Object.entries(payload.spear_references || {})) {
+                root.querySelectorAll('[data-dispatch-sort-group]').forEach(group => {
+                    if (group.dataset.dispatchSortGroup === missionId) group.querySelectorAll(
+                        'input[name="spear_decision_reference"]').forEach(input => { input.value = reference; });
+                });
+            }
+            spearFingerprints = payload.spear_fingerprints || {};
+            root.dataset.spearPlanToken = payload.spear_plan_token || '';
+            root.dataset.spearAutomaticReference = payload.spear_automatic_reference || '';
+            root.dataset.spearAutomationEnabled = payload.spear_automation_enabled ? 'true' : 'false';
+            // Existing forms still use the server-validated current plan token.
+            root.querySelectorAll('[data-spear-action-form] input[name="plan_token"]')
+                .forEach(input => { input.value = payload.spear_plan_token || ''; });
+            stateGeneration += 1;
+            spearRenderedAt = Date.now();
+            renderSortControls(root);
+            protectedControls().forEach(control => {
+                if (!initialControlValues.has(control)) initialControlValues.set(control, controlValue(control));
+            });
+            dispatchScroll.restoreSnapshot(saved);
+            scheduleSpearAutomation();
+            return true;
+        } catch (error) {
+            setStatus(root.querySelector('[data-spear-fleet-status]'), 'SPEAR: ' + error.message, 'error');
+            pendingFuelDataRefresh = true;
+            return false;
+        } finally { reloading = false; }
+    };
+
     const reloadPage = async () => {
         // Protect personal saves from markup replacement without making them
         // operational dirty controls or delaying SPEAR automation.
@@ -1328,6 +1396,7 @@
             applyMissionSearch(root);
             adoptFingerprint(payload);
             criticalFingerprints = {};
+            spearFingerprints = {};
             root.dataset.spearPlanToken = payload.spear_plan_token || "";
             root.dataset.spearAutomaticReference = payload.spear_automatic_reference || "";
             root.dataset.spearAutomationEnabled = payload.spear_automation_enabled ? "true" : "false";
@@ -1354,12 +1423,14 @@
     });
 
     const handleChangedFingerprint = async (nextOperationId, nextRevision, nextTailRevision) => {
-        // Publish operational handoff first. Optional SPEAR planning must not
-        // hold the COMPLETE control behind an expensive full-panel request.
-        const critical = await refreshCriticalCompletion(nextOperationId, nextRevision, nextTailRevision);
-        if (!hasUnsavedControls()) {
+        // A clean screen needs one authoritative panel, not both critical and
+        // full copies of the same aircraft. Dirty/dialog states retain the
+        // independent handoff path, including when typing began in transit.
+        if (!hasUnsavedControls() && !window.NeoScorpionFuelData?.isOpen()
+                && !dispatcherCheckSaving && !preferenceSaving) {
             if (await reloadPage()) return true;
         }
+        const critical = await refreshCriticalCompletion(nextOperationId, nextRevision, nextTailRevision);
         // A dispatcher may have unsaved edits or an OPEN Fueler Data dialog.
         // Those states must not hide a newly valid COMPLETE action for minutes.
         pendingFuelDataRefresh = true;
@@ -1400,7 +1471,7 @@
             && Date.now() - spearRenderedAt >= spearRecalculationMs
             && !hasUnsavedControls()
         ) {
-            await reloadPage();
+            await refreshSpear();
         }
     };
 

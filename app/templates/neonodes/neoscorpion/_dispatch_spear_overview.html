@@ -1,0 +1,39 @@
+{% from "neonodes/neoscorpion/_spear_calibration_display.html" import calibration_mode, calibration_values %}
+    <section class="neoscorpion-dispatch-insights-spear" aria-label="SPEAR" data-live-spear="overview">
+    <header class="neoscorpion-dispatch-section-head">
+        <h2>SPEAR</h2>
+        <span data-dispatch-preference-status role="status" aria-live="polite"></span>
+        <button type="button" class="action-button" data-dispatch-collapse="spear" aria-controls="dispatch-spear-data" aria-expanded="{{ 'false' if dispatch_preferences.spear_data_collapsed else 'true' }}" aria-label="{{ 'Expand' if dispatch_preferences.spear_data_collapsed else 'Collapse' }} SPEAR data">{{ 'EXPAND' if dispatch_preferences.spear_data_collapsed else 'COLLAPSE' }}</button>
+    </header>
+    <div id="dispatch-spear-data" data-dispatch-section="spear"{% if dispatch_preferences.spear_data_collapsed %} hidden{% endif %}>
+    {% if operation and spear_unavailable %}
+    <div class="neoscorpion-spear-fleet-status is-at-risk" data-spear-fleet-status>
+        SPEAR · UNAVAILABLE
+    </div>
+    {% elif operation and spear_plan %}
+    <div class="neoscorpion-spear-fleet-status{% if spear_plan.late_count %} is-late{% elif spear_plan.at_risk_count or spear_plan.unplanned_count %} is-at-risk{% elif spear_plan.waiting_for_data_count %} is-waiting{% endif %}" data-spear-fleet-status>
+        {{ spear_plan.status_text }}
+    </div>
+    <div class="neoscorpion-spear-readiness" data-spear-readiness>
+        <strong>SPEAR DATA READINESS</strong>
+        <span>{{ spear_plan.relevant_count - spear_plan.waiting_for_data_count }}/{{ spear_plan.relevant_count }} MISSIONS READY</span>
+        {% if spear_plan.waiting_for_data_count %}<span>{{ spear_plan.waiting_for_data_count }} WAITING FOR DATA</span>{% endif %}
+    </div>
+    {% if spear_whole_sort %}<details class="neoscorpion-spear-calibration" data-spear-whole-sort><summary>WHOLE-SORT · {{ spear_whole_sort.mode|upper }}{% if spear_whole_sort.fallback %} · SAFE FALLBACK{% endif %}</summary><div>
+        {% if spear_whole_sort.fallback %}<span>{{ spear_whole_sort.reason }}</span>{% else %}
+        <span>Strict earliest authoritative departure priority · {{ spear_whole_sort.evaluations }} evaluated schedules</span>
+        {% if spear_whole_sort.mode=='active' %}{% for change in spear_whole_sort.changes %}<span>{{ change }}</span>{% endfor %}{% else %}<span>SHADOW comparison only; current SPEAR recommendations remain authoritative.</span>{% endif %}
+        {% for truck_id, policy in spear_whole_sort.policies.items() %}<span>Truck {{ policy.truck_number or truck_id }} TOP OFF: {{ policy.minutes|round(1) }} MIN · {{ policy.source }} · {{ policy.sample_count }} samples / {{ policy.sort_count }} sorts · {{ policy.confidence }}</span>{% endfor %}
+        {% endif %}</div></details>{% endif %}
+    <details class="neoscorpion-spear-calibration" data-spear-calibration>
+        <summary>{{ spear_calibration.label }} · {{ spear_settings.live_calibration_mode|upper }}</summary>
+        <div>
+            <span>{{ calibration_mode(spear_settings.live_calibration_mode) }}</span>
+            {% for item in spear_calibration["items"] %}
+            <span><strong>{{ item.metric|replace('_', ' ')|title }} · {{ item.scope_key }}</strong> · {{ calibration_values(item, spear_settings.live_calibration_mode) }} · {{ item.samples }} samples · {{ item.excluded_samples }} excluded · {{ item.confidence }}</span>
+            {% else %}<span>Collecting qualifying completed current-sort work.</span>{% endfor %}
+        </div>
+    </details>
+    {% endif %}
+    </div>
+    </section>

@@ -7297,6 +7297,7 @@ def _fuel_work_states_by_assignment_tail(assignments):
 
 def _fuel_start_records(operation, assignments, work_states, parking, selections):
     """Bounded current-sort evidence shared by the save gate and live views."""
+    from app.services.neoscorpion_participation import owner_id
     assignments = list(assignments)
     audits = db.session.query(NeoScorpionFuelAuditEntry.fuel_assignment_id,
         NeoScorpionFuelAuditEntry.new_value, NeoScorpionFuelAuditEntry.created_at).filter(
@@ -7368,7 +7369,7 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
                 historical_segment=True, truck_id=old_truck,
                 defuel_recovery_review=bool(old_work.physical_cycle_type == "defuel" and old_work.off_at_utc
                     and not old_work.ended_early_at_utc and not _truck_sumped_after(old_work,old_selection)),
-                fueler_id=facts.get("fueler_id") or old_work.manual_on_by_user_id,
+                fueler_id=owner_id(old_work),
                 on=None, confirmed_on=utc_naive(old_on), manual_on=utc_naive(old_work.manual_on_at_utc),
                 release=utc_naive(old_work.off_at_utc or old_work.ended_early_at_utc),
                 assigned_at=None, remaining_complete=False, remaining_at_on=False, premature_readings=False,
@@ -7454,7 +7455,8 @@ def _attach_fueling_start_state(rows, operation, assignments, work_states, parki
                 or item.off_at_utc or item.ended_early_at_utc or item.physical_transfer_gallons
                 or item.physical_transfer_review),
         ) for item in row["outstanding_segments"]]
-        row["pending_segment_fuelers"] = [item.physical_fueler_user_id for item in row["outstanding_segments"]
+        from app.services.neoscorpion_participation import owner_id
+        row["pending_segment_fuelers"] = [owner_id(item) for item in row["outstanding_segments"]
             if item.off_at_utc is not None and item.ended_early_at_utc is None]
         row["physical_segment_resources"] = [
             (item["fueler_id"],item["truck_id"]) for item in records

@@ -220,7 +220,7 @@ def _release_resources(rows, fuelers, trucks, now, settings, top_events, policie
             # An expired forecast never fabricates release or slides forward.
             for pool,identifier,end,is_truck in (
                 (trucks,getattr(segment,'physical_truck_id',None),off,True),
-                (fuelers,getattr(segment,'physical_fueler_user_id',None),release,False)):
+                (fuelers,legacy.work_fueler_owner(segment),release,False)):
                 if identifier not in pool:
                     continue
                 resource=pool[identifier]
@@ -534,7 +534,8 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
             risk=risk,truck_gallons_before=int(before),estimated_gallons=int(abs(c['demand'])),
             truck_gallons_after=int(before-c['demand']),reserve_gallons=settings.minimum_truck_reserve_gallons,
             truck_location=dict(location=truck['ramp'],source='physical calendar',confidence='conditional' if release else 'verified inventory / configured start'),
-            fueler_location=dict(ramp=fueler['ramp'],source='independent Fueler calendar'),early_staging_available=False,
+            fueler_location=dict(ramp=fueler['ramp'],location=fueler['ramp'],source='independent Fueler calendar',
+                confidence='conditional' if release else 'baseline'),early_staging_available=False,
             alternatives=alternatives,hard_constraint_notes=(reason,),live_calibration_mode=settings.live_calibration_mode,
             live_calibration=legacy._live_calibration_notes(calibrations or {},row.get('detailed_aircraft_type'),settings.live_calibration_mode),top_off_policy=policies[c['truck_id']])
         # A TOP OFF recommendation is an approval request, never an automatic

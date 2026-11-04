@@ -958,7 +958,10 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
 
         self.assertIn("data-spear-splash", template)
         self.assertIn("images/neoscorpion/spear-promo.png", template)
-        self.assertIn("can_view_spear_settings", template)
+        self.assertIn('_dispatch_spear_indicator.html', template)
+        indicator = (root / "app/templates/neonodes/neoscorpion/_dispatch_spear_indicator.html").read_text(encoding="utf-8")
+        self.assertIn("{% if can_view_spear_settings %}", indicator)
+        self.assertIn("url_for('neoscorpion.spear_settings')", indicator)
         self.assertTrue((root / "app/static/images/neoscorpion/spear-promo.png").is_file())
         self.assertIn("neoapps.neoscorpion.spear-splash.v1", script)
         self.assertIn("window.localStorage.getItem", script)

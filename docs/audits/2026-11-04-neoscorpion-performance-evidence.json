@@ -1,0 +1,297 @@
+{
+  "starting_sha": "ffe42989d6adce6130aaa32096a03a99c596f9d9",
+  "before": {
+    "dispatch": {
+      "bytes": 537671,
+      "html_bytes": 509538,
+      "median_ms": 49.72,
+      "queries": {
+        "selects": 85,
+        "writes": 0
+      }
+    },
+    "critical": {
+      "bytes": 521692,
+      "html_bytes": 492652,
+      "median_ms": 42.58,
+      "queries": {
+        "selects": 71,
+        "writes": 0
+      }
+    },
+    "fueler": {
+      "bytes": 490556,
+      "html_bytes": 463421,
+      "median_ms": 25.61,
+      "queries": {
+        "selects": 45,
+        "writes": 0
+      }
+    },
+    "board": {
+      "bytes": 90546,
+      "html_bytes": 84857,
+      "median_ms": 21.2,
+      "queries": {
+        "selects": 44,
+        "writes": 0
+      }
+    },
+    "driver": {
+      "bytes": 2190,
+      "html_bytes": 2024,
+      "median_ms": 19.42,
+      "queries": {
+        "selects": 50,
+        "writes": 0
+      }
+    }
+  },
+  "after_serial": {
+    "dispatch": {
+      "bytes": 539276,
+      "html_bytes": 511010,
+      "median_ms": 47.85,
+      "queries": {
+        "selects": 85,
+        "writes": 0
+      }
+    },
+    "spear": {
+      "bytes": 25057,
+      "html_bytes": 0,
+      "median_ms": 31.29,
+      "queries": {
+        "selects": 65,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 2875,
+        "ms": 31.58,
+        "selects": 65,
+        "writes": 0
+      }
+    },
+    "critical": {
+      "bytes": 523201,
+      "html_bytes": 494036,
+      "median_ms": 39.41,
+      "queries": {
+        "selects": 71,
+        "writes": 0
+      }
+    },
+    "fueler": {
+      "bytes": 490656,
+      "html_bytes": 463421,
+      "median_ms": 25.37,
+      "queries": {
+        "selects": 45,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 175,
+        "ms": 24.77,
+        "selects": 45,
+        "writes": 0
+      }
+    },
+    "board": {
+      "bytes": 90646,
+      "html_bytes": 84857,
+      "median_ms": 17.84,
+      "queries": {
+        "selects": 44,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 17.7,
+        "selects": 44,
+        "writes": 0
+      }
+    },
+    "driver": {
+      "bytes": 2290,
+      "html_bytes": 2024,
+      "median_ms": 17.06,
+      "queries": {
+        "selects": 50,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 16.68,
+        "selects": 50,
+        "writes": 0
+      }
+    },
+    "hanzo": {
+      "bytes": 126203,
+      "html_bytes": 120304,
+      "median_ms": 15.6,
+      "queries": {
+        "selects": 38,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 15.36,
+        "selects": 38,
+        "writes": 0
+      }
+    },
+    "hanzo_document": {
+      "bytes": 151738,
+      "html_bytes": 0,
+      "median_ms": 18.45,
+      "queries": {
+        "selects": 40,
+        "writes": 0
+      }
+    }
+  },
+  "signed_reference_workload": {
+    "dispatch": {
+      "bytes": 571976,
+      "html_bytes": 543710,
+      "median_ms": 51.08,
+      "queries": {
+        "selects": 90,
+        "writes": 0
+      }
+    },
+    "spear": {
+      "bytes": 41407,
+      "html_bytes": 0,
+      "median_ms": 34.91,
+      "queries": {
+        "selects": 70,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 19219,
+        "ms": 33.69,
+        "selects": 70,
+        "writes": 0
+      }
+    },
+    "critical": {
+      "bytes": 523201,
+      "html_bytes": 494036,
+      "median_ms": 39.07,
+      "queries": {
+        "selects": 71,
+        "writes": 0
+      }
+    },
+    "fueler": {
+      "bytes": 490656,
+      "html_bytes": 463421,
+      "median_ms": 25.36,
+      "queries": {
+        "selects": 45,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 175,
+        "ms": 24.16,
+        "selects": 45,
+        "writes": 0
+      }
+    },
+    "board": {
+      "bytes": 90646,
+      "html_bytes": 84857,
+      "median_ms": 18.18,
+      "queries": {
+        "selects": 44,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 17.48,
+        "selects": 44,
+        "writes": 0
+      }
+    },
+    "driver": {
+      "bytes": 2290,
+      "html_bytes": 2024,
+      "median_ms": 17.59,
+      "queries": {
+        "selects": 50,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 17.05,
+        "selects": 50,
+        "writes": 0
+      }
+    },
+    "hanzo": {
+      "bytes": 126203,
+      "html_bytes": 120304,
+      "median_ms": 15.78,
+      "queries": {
+        "selects": 38,
+        "writes": 0
+      },
+      "unchanged": {
+        "bytes": 151,
+        "ms": 15.43,
+        "selects": 38,
+        "writes": 0
+      }
+    },
+    "hanzo_document": {
+      "bytes": 151738,
+      "html_bytes": 0,
+      "median_ms": 18.08,
+      "queries": {
+        "selects": 40,
+        "writes": 0
+      }
+    }
+  },
+  "browser": {
+    "timed_spear_requests": [
+      "http://127.0.0.1:61077/neoscorpion/fuel-dispatch/live-panel?spear_only=1&operation_id=1"
+    ],
+    "dirty_completion_requests": [
+      "http://127.0.0.1:61077/neoscorpion/fuel-dispatch/live-panel?completion_only=1&delta=1&operation_id=1"
+    ],
+    "clean_refresh_requests": [
+      "http://127.0.0.1:61077/neoscorpion/fuel-dispatch/live-panel"
+    ],
+    "unchanged_panel_requests": 0,
+    "spear_refresh_ms": 66.89,
+    "completion_visible_ms": 69.4,
+    "hanzo_document_preserved": true,
+    "javascript_errors": []
+  },
+  "tests": {
+    "python_unique": 185,
+    "postgres_unique": 20,
+    "javascript": 49,
+    "chromium_workflows": 2,
+    "focused_failures": 0,
+    "full_system_suite_run": false
+  },
+  "historical_read_only": {
+    "completed_visits": 666,
+    "timed_positive_transfer": 664,
+    "participation_metadata": 28,
+    "usable_pre_off_forecasts": 12,
+    "median_absolute_likely_error_minutes": 2.064662283333333
+  },
+  "provenance": "Synthetic response bytes are uncompressed JSON/HTML. Signed-reference full/fragment and Hanzo document/fragment comparisons use the same final source. No production savings extrapolation.",
+  "production_settings_preserved": {
+    "recommendations": true,
+    "automation": false,
+    "whole_sort": "shadow",
+    "calibration": "observe",
+    "recalculation_minutes": 2
+  }
+}

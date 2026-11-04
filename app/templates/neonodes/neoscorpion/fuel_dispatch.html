@@ -41,19 +41,7 @@
         {% endwith %}
         <div class="neoscorpion-dispatch-heading">
             <h1>Fuel Dispatch</h1>
-            {% if can_view_spear_settings %}
-            <a class="neoscorpion-spear-indicator is-{{ spear_indicator.state }}" href="{{ url_for('neoscorpion.spear_settings') }}" title="{{ spear_indicator.detail }} · Open SPEAR Fleet Optimizer">
-                <span class="neoscorpion-spear-indicator-icon" aria-hidden="true"></span>
-                <span>{{ spear_indicator.label }}</span>
-                {% if spear_indicator.state in ['at-risk', 'late'] and spear_indicator.automation_enabled %}<small>AUTO</small>{% endif %}
-            </a>
-            {% else %}
-            <span class="neoscorpion-spear-indicator is-{{ spear_indicator.state }}" title="{{ spear_indicator.detail }}">
-                <span class="neoscorpion-spear-indicator-icon" aria-hidden="true"></span>
-                <span>{{ spear_indicator.label }}</span>
-                {% if spear_indicator.state in ['at-risk', 'late'] and spear_indicator.automation_enabled %}<small>AUTO</small>{% endif %}
-            </span>
-            {% endif %}
+            {% include "neonodes/neoscorpion/_dispatch_spear_indicator.html" %}
         </div>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
@@ -69,5 +57,5 @@
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_data.js', v=config.STATIC_ASSET_VERSION, scorpion='20261021-direct-entry-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_copy.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_tail_notes.js', scorpion='20261019-details-compact-v1') }}"></script>
-<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v='20261101-poll-v1', scorpion='20261030-report-actions-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v='20261104-scorpion-bandwidth-v1', scorpion='20261030-report-actions-v1') }}"></script>
 {% endblock %}

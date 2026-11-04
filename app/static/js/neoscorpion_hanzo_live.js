@@ -8,9 +8,12 @@
 
     const intervalMs = Number(root.dataset.refreshIntervalMs || 0);
     const revisionUrl = root.dataset.revisionUrl;
+    const panelUrl = root.dataset.panelUrl;
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
     let reloading = false;
+    let refreshing = false;
+    let panelDigest = '';
 
     const reload = () => {
         if (reloading) {
@@ -35,8 +38,34 @@
             ? "none"
             : String(payload.operation_id);
         const nextRevision = Number(payload.revision || 0);
-        if (nextOperationId !== operationId || nextRevision !== revision) {
+        if (nextOperationId !== operationId) {
             reload();
+        } else if (nextRevision !== revision && !refreshing) {
+            if (!panelUrl) { reload(); return; }
+            refreshing = true;
+            try {
+                const response = await (window.NeoLiveRevision?.fetch || fetch)(panelUrl, {
+                    cache: "no-store", credentials: "same-origin",
+                    headers: {Accept: 'application/json', 'X-Neo-Panel-Digest': panelDigest},
+                });
+                const panel = await response.json().catch(() => ({}));
+                if (!response.ok || panel.ok !== true) throw new Error(panel.error || 'Hanzo refresh unavailable.');
+                if (String(panel.operation_id ?? 'none') !== nextOperationId
+                        || Number(panel.revision || 0) < Math.max(nextRevision, revision)) return;
+                if (!panel.unchanged) {
+                    const template = document.createElement('template');
+                    template.innerHTML = String(panel.html || '').trim();
+                    const fresh = template.content.querySelector('[data-hanzo-panel]');
+                    const old = root.querySelector('[data-hanzo-panel]');
+                    if (!fresh || !old) { reload(); return; }
+                    const saved = [window.scrollX, window.scrollY];
+                    old.replaceWith(fresh);
+                    window.scrollTo(...saved);
+                }
+                panelDigest = panel.panel_digest || '';
+                revision = Number(panel.revision || 0);
+                root.dataset.revision = String(revision);
+            } finally { refreshing = false; }
         }
     };
 

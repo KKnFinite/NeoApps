@@ -1,4 +1,5 @@
 from app.services.neoscorpion_tail_notes import tail_notes_revision
+from app.services.neoscorpion_dispatch_fragments import panel_content, spear_fragments
 from app.services.neoscorpion_admin_forms import (SettingsConflict, guard_settings, admin_form_context, truck_integrity_message)
 from flask import send_file, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -318,15 +319,33 @@ def fuel_dispatch_live_panel():
     if not access["can_view"]:
         return _json_no_store({"ok": False, "error": "Access denied."}, 403)
     notes_revision = tail_notes_revision(gateway)
-    context = _dispatch_presentation_context(
-        gateway,
-        include_asset_choices=access["can_edit"],
-        include_spear=request.args.get("completion_only") != "1",
-    )
+    spear_only = request.args.get('spear_only') == '1'
+    if spear_only:
+        # The existing cadence still recalculates SPEAR, without operational
+        # controls, driver management or performance-report HTML.
+        context = fuel_dispatch_context(gateway, include_fueling_performance=False)
+        from app.services.neoscorpion_dispatch_preferences import dispatch_preferences
+        context['dispatch_preferences'] = dispatch_preferences(gateway, current_user)
+    else:
+        context = _dispatch_presentation_context(
+            gateway, include_asset_choices=access["can_edit"],
+            include_spear=request.args.get("completion_only") != "1",
+        )
     operation = context["operation"]
     spear_plan = context["spear_plan"]
     if request.args.get('operation_id') is not None and request.args['operation_id'] != str(operation.id if operation else 'none'):
         return _json_no_store({'ok': False, 'error': 'Current sort changed. Refresh the current operation.'}, 409)
+    if spear_only:
+        return _json_no_store({'ok': True, 'operation_id': operation.id if operation else None,
+            'revision': int(context.get('nightly_asset_revision') or 0),
+            'tail_revision': _dispatch_tail_revision(operation.id if operation else None),
+            'spear_plan_token': spear_plan.token if spear_plan else '',
+            'spear_automatic_reference': context.get('spear_automatic_reference', ''),
+            'spear_automation_enabled': bool(context['spear_settings'].automation_enabled
+                and context['spear_automatic_available']),
+            **spear_fragments(context, gateway, access,
+                request.headers.get('X-Neo-Spear-Fingerprints', ''),
+                settings_view=user_can(SETTINGS_VIEW_PERMISSION))})
     if request.args.get("completion_only") == "1" and request.args.get("delta") == "1":
         from app.services.neoscorpion_dispatch_fragments import critical_fragments
         return _json_no_store({"ok": True, "operation_id": operation.id if operation else None,
@@ -382,6 +401,19 @@ def hanzo_revision():
         return _json_no_store({"error": "Access denied."}, 403)
     fingerprint = fuel_assignments_live_revision(gateway)
     return _json_no_store(fingerprint)
+
+
+@bp.get('/hanzo/live-panel')
+@gateway_node_required('scorpion')
+def hanzo_live_panel():
+    if not permission_access(HANZO_VIEW_PERMISSION)['can_view']:
+        return _json_no_store({'ok': False, 'error': 'Access denied.'}, 403)
+    gateway = get_current_gateway()
+    context = hanzo_context(gateway)
+    operation = context['operation']
+    return _json_no_store({'ok': True, 'operation_id': operation.id if operation else None,
+        'revision': int(context['hanzo_revision'] or 0),
+        **panel_content(render_template('neonodes/neoscorpion/_hanzo_panel.html', gateway=gateway, **context))})
 
 
 @bp.post("/fuel-dispatch/autosave")
@@ -1317,11 +1349,11 @@ def fuel_assignments_live_panel():
             "operation_id": operation.id if operation else None,
             "revision": int(context.get("fuel_assignments_revision") or 0),
             "tail_notes_revision": notes_revision,
-            "html": render_template(
+            **panel_content(render_template(
                 "neonodes/neoscorpion/_fueler_panel.html",
                 can_edit=access["can_edit"],
                 **context,
-            ),
+            )),
         }
     )
 
@@ -1396,7 +1428,7 @@ def truck_driver_live_panel():
     operation=context["operation"]
     return _json_no_store({"ok":True,"operation_id":operation.id if operation else None,
         "revision":context["fuel_assignments_revision"],
-        "html":render_template("neonodes/neoscorpion/_truck_driver_panel.html",**context)})
+        **panel_content(render_template("neonodes/neoscorpion/_truck_driver_panel.html",**context))})
 
 
 @bp.get("/truck-driver/revision")
@@ -1419,7 +1451,7 @@ def fueling_board_live_panel():
         "ok": True,
         "operation_id": operation.id if operation else None,
         "revision": int(context["fuel_assignments_revision"] or 0),
-        "html": render_template("neonodes/neoscorpion/_fueling_board_panel.html", **context),
+        **panel_content(render_template("neonodes/neoscorpion/_fueling_board_panel.html", **context)),
     })
 
 

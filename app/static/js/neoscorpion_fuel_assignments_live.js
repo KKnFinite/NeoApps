@@ -21,6 +21,7 @@
     let audioContext = null;
     let controller = null;
     let stateGeneration = 0;
+    let panelDigest = '';
 
     const storageKey = (suffix, scopedOperationId = operationId) => (
         `neoscorpion:fuel-assignments:${suffix}:${currentUserId}:${scopedOperationId}`
@@ -177,6 +178,7 @@
     };
 
     const adoptFingerprint = (payload) => {
+        panelDigest = payload.panel_digest || '';
         const nextOperation = String(payload.operation_id ?? "none");
         if (nextOperation === operationId && Number(payload.revision || 0) < revision) return false;
         stateGeneration += 1;
@@ -224,7 +226,7 @@
             const response = await (window.NeoLiveRevision?.fetch || fetch)(panelUrl, {
                 cache: "no-store",
                 credentials: "same-origin",
-                headers: {"Accept": "application/json"},
+                headers: {"Accept": "application/json", "X-Neo-Panel-Digest": panelDigest},
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true) {
@@ -241,7 +243,8 @@
                 pendingRevision = Number(payload.revision || 0);
                 return false;
             }
-            applyPanel(payload);
+            if (payload.unchanged === true) adoptFingerprint(payload);
+            else applyPanel(payload);
             return true;
         } finally {
             refreshing = false;
