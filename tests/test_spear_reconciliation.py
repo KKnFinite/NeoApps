@@ -62,6 +62,16 @@ class SpearReconciliationTest(unittest.TestCase):
         with patch.object(service, 'datetime', Clock):
             service.reconcile(self.gateway_id)
 
+    def test_age_bounded_unresolved_retries_keep_late_evidence_eligible(self):
+        now = datetime(2027, 1, 1)
+        schedule = service._unresolved_retry_after
+        self.assertEqual(schedule(now, now), now + timedelta(minutes=5))
+        self.assertEqual(schedule(now - timedelta(hours=12), now), now + timedelta(minutes=5))
+        self.assertEqual(schedule(now - timedelta(days=1), now), now + timedelta(minutes=30))
+        self.assertEqual(schedule(now - timedelta(days=2), now), now + timedelta(minutes=30))
+        self.assertEqual(schedule(now - timedelta(days=3), now), now + timedelta(hours=6))
+        self.assertEqual(schedule(now - timedelta(days=30), now), now + timedelta(hours=6))
+
     def test_finalized_observations_have_zero_updates_across_due_intervals(self):
         row = self.decision()
         original_due = row.reconcile_after

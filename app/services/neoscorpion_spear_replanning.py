@@ -16,6 +16,7 @@ from app.services.neoscorpion_spear_optimizer import optimize, digest, VERSION
 _lock=RLock()
 _cache=OrderedDict()
 _history=OrderedDict()
+_last_snapshots=OrderedDict()
 _snapshots=OrderedDict()
 _snapshot_worker=False
 
@@ -94,7 +95,17 @@ def _material_changes(previous,plan):
         elif before.projected_complete_at_utc and step.projected_complete_at_utc and abs(
                 (before.projected_complete_at_utc-step.projected_complete_at_utc).total_seconds())>=180:
             changes.append(f'{step.flight_number}: projected physical OFF changed; protecting authoritative departure order')
+    new_ids={s.mission_id for s in plan.steps}
+    for removed_id in sorted(set(old)-new_ids):
+        changes.append(f'{removed_id}: previously planned mission no longer appears')
     return changes[:8]
+
+
+def _snapshot_due(previous, changes, last_snapshot_at, now):
+    """Retain meaningful plan evidence, with a bounded 30-minute checkpoint."""
+    if previous is None or changes or last_snapshot_at is None:
+        return True
+    return now < last_snapshot_at or now - last_snapshot_at >= timedelta(minutes=30)
 
 
 def _snapshot(context,plan,fingerprint,changes):
@@ -199,7 +210,13 @@ def enrich(context,baseline,planning,calibrations,now=None):
             changes=_material_changes(previous,candidate)
             candidate=replace(candidate,optimizer={**candidate.optimizer,'mode':settings.whole_sort_mode,
                 'changes':changes,'input_fingerprint':fingerprint,'baseline_token':baseline.token})
-            _snapshot(context,candidate,digest([fingerprint,candidate.token,candidate.optimizer.get('schedules')]),changes)
+            with _lock:
+                last_snapshot_at=_last_snapshots.get(key)
+            if _snapshot_due(previous,changes,last_snapshot_at,now):
+                _snapshot(context,candidate,digest([fingerprint,candidate.token,candidate.optimizer.get('schedules')]),changes)
+                with _lock:
+                    _last_snapshots[key]=now
+                    while len(_last_snapshots)>32:_last_snapshots.popitem(last=False)
             with _lock:
                 _cache[cachekey]=candidate
                 _history[key]=candidate

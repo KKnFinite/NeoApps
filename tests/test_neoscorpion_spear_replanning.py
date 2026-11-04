@@ -18,7 +18,7 @@ class ReplanningTest(unittest.TestCase):
     def setUp(self):
         self.fixture=fixtures.SpearLearningCaptureTest();self.fixture.setUp()
         self.addCleanup(self.fixture.tearDown)
-        live._cache.clear();live._history.clear()
+        live._cache.clear();live._history.clear();live._last_snapshots.clear()
         f=self.fixture
         f.mission.planned_datetime_utc=base.NOW+timedelta(hours=2)
         db.session.commit()
@@ -40,6 +40,16 @@ class ReplanningTest(unittest.TestCase):
         plan=self.enrich()
         self.assertEqual(plan.algorithm_version,VERSION)
         self.assertFalse(self.context['spear_whole_sort'].get('fallback',False))
+
+    def test_snapshot_evidence_keeps_changes_and_periodic_checkpoints(self):
+        now = base.NOW
+        previous = NS(steps=[NS(mission_id=77)])
+        self.assertTrue(live._snapshot_due(None, [], None, now))
+        self.assertTrue(live._snapshot_due(previous, ['changed'], now, now + timedelta(seconds=20)))
+        self.assertFalse(live._snapshot_due(previous, [], now, now + timedelta(minutes=2)))
+        self.assertTrue(live._snapshot_due(previous, [], now, now + timedelta(minutes=30)))
+        self.assertTrue(live._snapshot_due(previous, [], now, now - timedelta(minutes=1)))
+        self.assertTrue(live._material_changes(previous, NS(steps=[])))
 
     def test_cache_avoids_requeries_until_revision_or_periodic_reconciliation(self):
         with patch.object(live,'load_top_off_history',wraps=live.load_top_off_history) as history:

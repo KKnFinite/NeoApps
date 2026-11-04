@@ -388,6 +388,20 @@ def _same_outcome(existing, decision, payload):
         and sorted(original['exclusions']) == sorted(payload['exclusions']))
 
 
+def _unresolved_retry_after(created_at, now):
+    """Retry recent operational evidence promptly; age out fruitless historical polls.
+
+    Unresolved evidence stays eligible for later reconciliation, including late
+    physical events. This changes only the next read deadline, never records.
+    """
+    age = max(timedelta(0), now - created_at)
+    if age < timedelta(days=1):
+        return now + timedelta(minutes=5)
+    if age < timedelta(days=3):
+        return now + timedelta(minutes=30)
+    return now + timedelta(hours=6)
+
+
 def reconcile(gateway_id, *, limit=40):
     """Only captured decisions; exact cycle/tail/visit/resource event evidence, no invented history."""
     from app.models import NeoScorpionFuelAssignment, NeoScorpionFuelingEvent, NeoScorpionFuelWorkState
@@ -443,7 +457,7 @@ def reconcile(gateway_id, *, limit=40):
             and (not payload['work_id'] or e.fuel_work_state_id == payload['work_id'])
             and e.started_at_utc and item.created_at <= e.started_at_utc < next_at]
         if not terminal and not matching:
-            item.reconcile_after = now + timedelta(minutes=5)
+            item.reconcile_after = _unresolved_retry_after(item.created_at, now)
             continue
         exclusions = []
         if not matching:
@@ -456,7 +470,7 @@ def reconcile(gateway_id, *, limit=40):
             exclusions.extend([*math['fueler_reasons'], *math['truck_reasons']])
         # Nonterminal evidence can acquire its final physical event later.
         if not terminal and exclusions:
-            item.reconcile_after = now + timedelta(minutes=5)
+            item.reconcile_after = _unresolved_retry_after(item.created_at, now)
             continue
         record = dict(decision_id=item.id, event_ids=[e.id for e in matching], qualified=not exclusions,
             exclusions=sorted(set(exclusions)), comparison_conclusion='observed_only')
@@ -489,7 +503,7 @@ def reconcile(gateway_id, *, limit=40):
         if exact_sealed or closed_cycle:
             item.reconciled_at = now
         else:
-            item.reconcile_after = now + timedelta(minutes=5)
+            item.reconcile_after = _unresolved_retry_after(item.created_at, now)
     db.session.commit()
 
 
