@@ -469,7 +469,6 @@ def _is_public_asset_request():
 
 def register_request_guards(app):
     from app.services.neoscorpion_vendors import vendor_request_boundary
-    app.before_request(vendor_request_boundary)
 
     @app.before_request
     def retire_legacy_flight_api_auto_poll_client():
@@ -532,6 +531,10 @@ def register_request_guards(app):
             ),
             410,
         )
+
+    # Terminal obsolete clients do not reach authentication or vendor storage.
+    # Supported requests still pass the default-deny boundary before all views.
+    app.before_request(vendor_request_boundary)
 
     @app.before_request
     def force_required_password_change():

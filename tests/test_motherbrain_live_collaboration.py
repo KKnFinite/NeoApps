@@ -10,6 +10,7 @@ from sqlalchemy import event
 
 from app import create_app
 from app.extensions import db
+from tests.sql_contracts import RequestSql
 from app.models import (
     FlightApiReviewItem,
     Gateway,
@@ -1061,7 +1062,7 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
     @contextmanager
     def _capture_sql(self):
         capture = {
-            "statements": [],
+            "statements": RequestSql(),
             "selects": [],
             "writes": [],
             "kinds": Counter(),
@@ -1080,6 +1081,8 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
             normalized = " ".join(statement.split())
             kind = normalized.split(" ", 1)[0].upper()
             capture["statements"].append(normalized)
+            if normalized in capture["statements"].vendor_reads:
+                return
             capture["kinds"][kind] += 1
             if kind == "SELECT":
                 capture["selects"].append(normalized)
@@ -1096,6 +1099,7 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
         finally:
             event.remove(engine, "before_cursor_execute", before_cursor_execute)
             event.remove(engine, "commit", on_commit)
+        capture["statements"].assert_boundary(self)
 
     @staticmethod
     def _select_count(statements, table_name):

@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from sqlalchemy import event
+from tests.sql_contracts import RequestSql
 
 from app.extensions import db
 from app.models import NeoErmacUldRequest, NeoSektorUldOnTheWayEvent, SortDateOperation
@@ -52,7 +53,7 @@ class DischargeQueriesTest(unittest.TestCase):
                 return resolve() if namespace == 'gateway.discharge_operation_candidates' else original_cached(namespace, key, resolve)
             results = {}
             def measure(name, path, command=None, status=200):
-                sql, boundaries = [], []
+                sql, boundaries = RequestSql(), []
                 def capture(conn, cursor, statement, params, context, many):
                     sql.append(' '.join(statement.lower().split()))
                 def commit(conn):
@@ -68,6 +69,7 @@ class DischargeQueriesTest(unittest.TestCase):
                     finally:
                         event.remove(engine, 'before_cursor_execute', capture)
                         event.remove(engine, 'commit', commit)
+                sql.assert_boundary(self)
                 self.assertEqual(response.status_code, status, response.json if response.is_json else name)
                 counts = tuple(sum(s.startswith(('select ', 'with ')) if verb=='select' else s.startswith(verb+' ')
                                    for s in sql) for verb in ('select','update','insert','delete'))
@@ -115,7 +117,10 @@ class DischargeQueriesTest(unittest.TestCase):
                     failed_lookup = name in ('wrong_door','missing_id','stale_completed')
                     # The existing Employees navigation performs one scoped
                     # staffing_units read on HTML pages (not on state polls).
-                    baseline = (30+int(not current) if name=='cold_page' else
+                    # Current cold initialization has fewer reads than this
+                    # legacy budget. Its one compatibility AppAccess INSERT
+                    # and commit remain exact below; warm reads stay read-only.
+                    baseline = (24+int(not current) if name=='cold_page' else
                                 19+int(not current) if name=='page' else
                                 17+int(not current) if success else
                                 10 if failed_lookup else

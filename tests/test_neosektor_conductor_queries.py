@@ -5,6 +5,7 @@ from datetime import date, datetime, time
 from unittest.mock import patch
 
 from sqlalchemy import event, select
+from tests.sql_contracts import RequestSql
 
 from app.extensions import db
 from app.models import SortDateMission, User
@@ -80,7 +81,7 @@ class ConductorMutationQueriesTest(unittest.TestCase):
             results = {}
             for name, endpoint, command, status in cases:
                 before = stored()
-                sql, commits, rollbacks = [], [], []
+                sql, commits, rollbacks = RequestSql(), [], []
                 def capture(conn, cursor, statement, parameters, context, many):
                     sql.append(' '.join(statement.lower().split()))
                 def committed(conn):
@@ -101,6 +102,7 @@ class ConductorMutationQueriesTest(unittest.TestCase):
                         event.remove(engine, 'before_cursor_execute', capture)
                         event.remove(engine, 'commit', committed)
                         event.remove(engine, 'rollback', rolled_back)
+                sql.assert_boundary(self)
                 self.assertEqual(response.status_code, status, (name, response.json))
                 self.assertEqual(len(commits), int(status == 200), name)
                 after = stored()

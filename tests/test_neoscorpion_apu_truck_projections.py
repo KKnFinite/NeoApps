@@ -1,5 +1,7 @@
 """APU burn is a projection adjustment, never canonical or physical demand."""
 import unittest
+from collections import OrderedDict
+from unittest.mock import patch
 
 from sqlalchemy import event
 
@@ -9,6 +11,7 @@ from app.models import (
     NeoScorpionSettings, NeoScorpionSortTruck,
 )
 from app.services import neoscorpion as service
+from app.services import neoscorpion_spear_replanning as replanning
 from tests import test_neoscorpion_dispatch_planning as dispatch_fixture
 
 
@@ -169,7 +172,10 @@ class ApuTruckProjectionsTest(unittest.TestCase):
             self.work.apu_running = running
             db.session.commit()
             statements.clear()
-            service.fuel_dispatch_context(self.gateway)
+            # Compare like-for-like cold SPEAR state. A prior candidate skips
+            # its durable snapshot read; that cache effect is unrelated to APU.
+            with patch.object(replanning,'_cache',OrderedDict()), patch.object(replanning,'_history',OrderedDict()):
+                service.fuel_dispatch_context(self.gateway)
             self.assertFalse(any(s.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
                                  for s in statements))
             counts.append(len(statements))

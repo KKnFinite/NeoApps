@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from sqlalchemy import event, select
+from tests.sql_contracts import RequestSql
 
 from app.extensions import db
 from app.models import NeoSektorOperationalSetting, NeoSektorSortState
@@ -45,7 +46,7 @@ class BallmatConflictQueriesTest(unittest.TestCase):
                 for table in db.metadata.sorted_tables if table.name.startswith('neosektor_')}
 
     def fresh(self, path, payload, *, legacy=False):
-        sql, commits, rollbacks = [], [], []
+        sql, commits, rollbacks = RequestSql(), [], []
         with self.fixture.app.app_context():
             engine = db.engine
             def capture(conn, cursor, statement, parameters, context, executemany):
@@ -64,6 +65,7 @@ class BallmatConflictQueriesTest(unittest.TestCase):
                 event.remove(engine, "before_cursor_execute", capture)
                 event.remove(engine, "commit", committed)
                 event.remove(engine, "rollback", rolled_back)
+        sql.assert_boundary(self)
         return response, sql, commits, rollbacks
 
     def test_conflict_budgets_equivalence_no_writes_and_following_valid_request(self):

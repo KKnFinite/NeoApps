@@ -2109,14 +2109,14 @@ def reconcile_union_calendar_owners(vacation_year=None):
     return changed
 
 
-def official_calendar_carry_forward_candidates(user, today=None):
+def official_calendar_carry_forward_candidates(user, today=None, *, hierarchy=None, actor=None):
     """Return owned current-year Official calendars eligible for a Nov 1 copy."""
     today = _as_date(today or date.today())
     if today < date(today.year, 11, 1):
         return []
     source_year = today.year
     target_year = source_year + 1
-    hierarchy = vacation_hierarchy()
+    hierarchy = hierarchy if hierarchy is not None else vacation_hierarchy()
     sources = (
         StaffingVacationUnionCalendar.query.options(
             selectinload(StaffingVacationUnionCalendar.scopes),
@@ -2138,7 +2138,7 @@ def official_calendar_carry_forward_candidates(user, today=None):
         .all()
     )
     candidates = management_calendar_users(hierarchy=hierarchy) if sources else []
-    actor = vacation_actor(user, hierarchy)
+    actor = actor if actor is not None else vacation_actor(user, hierarchy)
     user_id = getattr(user, "id", None)
     target_keys = {_official_calendar_definition_key(row) for row in targets}
     result = []
@@ -5085,7 +5085,7 @@ def union_calendars_context(vacation_year, user, today=None):
             and (actor.is_grandmaster or actor.sideways_scope_ids)
         ),
         "carry_forward_candidates": official_calendar_carry_forward_candidates(
-            user, today=today
+            user, today=today, hierarchy=hierarchy, actor=actor
         ),
     }
 

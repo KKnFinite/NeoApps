@@ -6,6 +6,7 @@ import unittest
 from flask import g
 from sqlalchemy import event
 from app.extensions import db
+from tests.sql_contracts import RequestSql
 from app.models import StaffingPerson, StaffingWorkAssignment, StaffingChangeRequest, StaffingChangeRequestItem, StaffingLeadershipAssignment, StaffingTwentyCAffiliation, StaffingUnit, User
 from app.services import neostaffing_change_requests as service
 from tests import test_neostaffing_change_requests as fixtures
@@ -44,8 +45,8 @@ class ChangeRequestReadsTest(unittest.TestCase):
         actor = db.session.get(User,actor_id)
         self._login(actor)
         g.pop('_login_user',None); db.session.remove()
-        sql, hydrated = [], Counter()
-        def capture(_c,_cursor,statement,*args): sql.append(statement)
+        sql, hydrated = RequestSql(), Counter()
+        def capture(_c,_cursor,statement,parameters,*args): sql.append(statement,parameters)
         def loaded(session,obj): hydrated[type(obj).__name__] += 1
         event.listen(db.engine,'before_cursor_execute',capture)
         event.listen(db.session.session_factory,'loaded_as_persistent',loaded)
@@ -55,13 +56,16 @@ class ChangeRequestReadsTest(unittest.TestCase):
         finally:
             event.remove(db.engine,'before_cursor_execute',capture)
             event.remove(db.session.session_factory,'loaded_as_persistent',loaded)
+        sql.assert_boundary(self)
+        self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],1)
         counts = Counter(s.split()[0].upper() for s in sql)
         return dict(counts), dict(hydrated)
 
     def test_profile_pages(self):
         # Before: 22/22/20/20/20 reads respectively, 205 request/item rows,
         # 211 people and 206 work assignments even for empty My Purview.
-        budgets = dict(zip(self.actor_ids, (21, 21, 19, 15, 19)))
+        # Exactly one current My Alerts access-request permission read per page.
+        budgets = dict(zip(self.actor_ids, (22, 22, 20, 16, 20)))
         for actor in self.actor_ids:
             counts, hydrated = self.profile(self.actor_ids[actor], 'purview' if actor!='submitter_user' else 'all')
             print(actor, json.dumps({'sql':counts,'hydrated':hydrated},sort_keys=True))
@@ -79,7 +83,7 @@ class ChangeRequestReadsTest(unittest.TestCase):
         # The FT default is Routed: one skinny legacy-JSON matching projection
         # keeps its measured original 23-read budget (including routed retention
         # matching) while bounding full detail hydration.
-        self.assertLessEqual(counts.get('SELECT', 0) + counts.get('WITH', 0), 23)
+        self.assertLessEqual(counts.get('SELECT', 0) + counts.get('WITH', 0), 24)
         self.assertLessEqual(hydrated.get('StaffingChangeRequest', 0), 100)
 
     def visible_ids(self, user, **filters):

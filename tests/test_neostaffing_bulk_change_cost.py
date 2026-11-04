@@ -9,6 +9,7 @@ from flask import g
 from sqlalchemy import event
 
 from app.extensions import db
+from tests.sql_contracts import RequestSql
 from app.models import (StaffingPerson, StaffingWorkAssignment, User,
                         StaffingVacationManagementSelection, StaffingVacationManagementTurnState,
                         StaffingShiftFlowPlan)
@@ -56,7 +57,7 @@ class BulkChangeCostTest(unittest.TestCase):
         token = service.encode_workspace(workspace)
         g.pop('_login_user', None)
         db.session.remove()
-        sql, hydrated = [], Counter()
+        sql, hydrated = RequestSql(), Counter()
 
         def capture(_connection, _cursor, statement, parameters, _context, many):
             sql.append((statement, parameters, many))
@@ -72,6 +73,7 @@ class BulkChangeCostTest(unittest.TestCase):
         finally:
             event.remove(db.engine, 'before_cursor_execute', capture)
             event.remove(db.session.session_factory, 'loaded_as_persistent', loaded)
+        sql.assert_boundary(self)
         return response, sql, hydrated
 
     def test_stage_and_get_read_budget(self):
@@ -81,9 +83,11 @@ class BulkChangeCostTest(unittest.TestCase):
                 action='stage_person', extra={'person_id':self.employee_ids[0],
                     'change_work_area_unit_id':'1', 'work_area_unit_id':self.target_id})
             self.assertEqual(response.status_code, 200)
+            self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],1)
             counts = Counter(s.split()[0] for s, _, _ in sql)
             print(method, dict(counts), dict(hydrated))
-            self.assertEqual(counts['SELECT'], 15)
+            # My Alerts now checks access-request visibility once in the shell.
+            self.assertEqual(counts['SELECT'], 16)
             self.assertEqual(hydrated['StaffingPerson'], 119)
             self.assertEqual(hydrated['StaffingWorkAssignment'], 112)
             self.assertEqual(sum(counts[verb] for verb in ('UPDATE', 'INSERT', 'DELETE')), 0)
@@ -226,7 +230,8 @@ class BulkChangeCostTest(unittest.TestCase):
         print('STALE', dict(counts))
         # Base and fixed route both use 24 reads: rollback invalidates loaded
         # access/identity rows and the error page needs a fresh display snapshot.
-        self.assertLessEqual(counts['SELECT'], 24)
+        self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],1)
+        self.assertLessEqual(counts['SELECT'], 25)
         self.assertEqual(sum(counts[v] for v in ('INSERT', 'UPDATE', 'DELETE')), 0)
         db.session.remove()
         self.assertEqual(StaffingWorkAssignment.query.filter_by(person_id=ids[0], active=True).count(), 0)

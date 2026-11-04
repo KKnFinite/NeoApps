@@ -1131,7 +1131,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
 
         event.listen(db.engine, "before_cursor_execute", record)
         try:
-            context = vacation_service.union_calendars_context(self.YEAR, owner)
+            context = vacation_service.union_calendars_context(self.YEAR, owner, today=date(self.YEAR,9,15))
         finally:
             event.remove(db.engine, "before_cursor_execute", record)
         self.assertEqual(len(context["my_view_calendars"]), 5)
@@ -1744,7 +1744,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
 
         event.listen(db.engine, "before_cursor_execute", capture)
         try:
-            result = vacation_service.union_calendars_context(self.YEAR, user)
+            result = vacation_service.union_calendars_context(self.YEAR, user, today=date(self.YEAR,9,15))
         finally:
             event.remove(db.engine, "before_cursor_execute", capture)
 

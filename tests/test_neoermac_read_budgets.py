@@ -8,26 +8,31 @@ from flask import g
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 from app.extensions import db
-from app.models import (Gateway, NeoErmacBuildingLineup, SortDateOperation,
+from tests.sql_contracts import RequestSql
+from app.models import (Gateway, MasterFlightSchedule, NeoErmacBuildingLineup, SortDateOperation,
     StaffingUnit, StaffingPerson, StaffingWorkAssignment, StaffingShiftFlowPlan, StaffingDailyAttendance)
 from tests import test_neoermac_routes as fixtures
 from tests.neoermac_lineup_forms import lineup_form
 from tests.neoermac_pull_forms import pull_form
-from app.services.neoermac_building_lineup import get_building_lineup_rows
+from app.services.neoermac_building_lineup import (get_building_lineup_rows,
+    save_building_lineup_destination, lineup_field_name, lineup_original, slot_flight_value)
 
 
 class NeoErmacReadBudgetTest(unittest.TestCase):
     _add_master_departure = fixtures.NeoErmacRoutesTest._add_master_departure
     _add_operation_departure = fixtures.NeoErmacRoutesTest._add_operation_departure
-    _assign_lineup_destination = fixtures.NeoErmacRoutesTest._assign_lineup_destination
     _login_approved_user = fixtures.NeoErmacRoutesTest._login_approved_user
     tearDown = fixtures.NeoErmacRoutesTest.tearDown
 
     def setUp(self):
         fixtures.NeoErmacRoutesTest.setUp(self)
+        self.flight_ids={}
         for flight, dest in [('UPS501','SDF'), ('UPS502','ONT'), ('UPS503','PHX')]:
             self._add_master_departure(flight, dest)
-        mission = self._add_operation_departure('UPS501', 'SDF', tail='N501UP')
+            master=MasterFlightSchedule.query.filter_by(gateway_id=self.gateway.id,flight_number=flight).one()
+            self.flight_ids[dest]=master.id
+            mission=self._add_operation_departure(flight, dest, tail=f'N{flight[3:]}UP')
+            mission.master_flight_schedule_id=master.id
         self.operation_id = mission.sort_date_operation_id
         self.gateway_id = self.gateway.id
         self._assign_lineup_destination('green_runout', 'east_destination_1', 'SDF')
@@ -61,10 +66,20 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
         self.client.get('/neoermac/building-lineup')
         self.client.get('/neoermac/door-view/manage-employees')
 
+    def _assign_lineup_destination(self, runout, field, destination):
+        row=next(row for row in get_building_lineup_rows(self.gateway) if row.runout_key==runout)
+        token=lineup_field_name(row,field)
+        save_building_lineup_destination(self.gateway,token,str(self.flight_ids[destination]),
+            expected_original=lineup_original(self.gateway,token,slot_flight_value(row,field)))
+        db.session.commit()
+
+    def flight_form(self, gateway, field, destination):
+        return lineup_form(gateway,dict(field=field,destination=str(self.flight_ids[destination])))
+
     def measure(self, path, *, data=None):
         g.__dict__.clear();db.session.remove()
-        statements=[];commits=[];hydrated=Counter()
-        def sql(c, cursor, statement, *args): statements.append(statement)
+        statements=RequestSql();commits=[];hydrated=Counter()
+        def sql(c, cursor, statement, parameters, *args): statements.append(statement,parameters)
         def commit(c): commits.append(True)
         def load(session, obj):
             if type(obj) in (StaffingPerson,StaffingWorkAssignment,StaffingShiftFlowPlan):
@@ -76,9 +91,11 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
         finally:
             event.remove(db.engine,'before_cursor_execute',sql);event.remove(db.engine,'commit',commit)
             event.remove(Session,'loaded_as_persistent',load)
+        statements.assert_boundary(self)
         counts=Counter(s.lstrip().split()[0].upper() for s in statements)
         result={key:counts[key] for key in ('SELECT','INSERT','UPDATE','DELETE')}
-        result.update(commits=len(commits),hydrated=dict(hydrated),status=response.status_code)
+        result.update(commits=len(commits),hydrated=dict(hydrated),status=response.status_code,
+                      access_request_permission_reads=statements.permission_reads['neoapps.access_requests.view'])
         result['select_tables']=dict(Counter(re.search(r'\bFROM\s+(\w+)',s,re.I).group(1)
             for s in statements if s.lstrip().upper().startswith('SELECT') and re.search(r'\bFROM\s+(\w+)',s,re.I)))
         return response,result
@@ -88,7 +105,7 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
         _,results['Lineup GET']=self.measure('/neoermac/building-lineup')
         response,results['Lineup changed state']=self.measure('/neoermac/building-lineup/state?revision=old')
         _,results['Lineup unchanged state']=self.measure('/neoermac/building-lineup/state?revision='+response.get_json()['revision'])
-        form=lineup_form(db.session.get(Gateway,self.gateway_id),{'field':'lineup_green_runout_west_destination_1','destination':'ONT'})
+        form=self.flight_form(db.session.get(Gateway,self.gateway_id),'lineup_green_runout_west_destination_1','ONT')
         _,results['Lineup autosave']=self.measure('/neoermac/building-lineup/destination',data=form)
         form=pull_form(db.session.get(Gateway,self.gateway_id),{'door':'D1','destination':'SDF','pull_key':'pure','actual_pull':'01:45'})
         _,results['Door pull autosave']=self.measure('/neoermac/door-view/pull-autosave',data=form)
@@ -109,11 +126,12 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
             'Lineup autosave': (15, 0, 2, 0, 1),
             'Door pull autosave': (19, 1, 2, 0, 1),
             # Gateway-scoped door preferences no longer resolve an operation.
-            'Attendance GET': (20, 0, 0, 0, 0),
+            'Attendance GET': (21, 0, 0, 0, 0),
             'Cold Lineup GET': (19, 0, 0, 0, 0),
             'Repeated cold Lineup GET': (19, 0, 0, 0, 0),
         }
         results = self.profile()
+        self.assertEqual(results['Attendance GET']['access_request_permission_reads'],1)
         for path, budget in expected.items():
             with self.subTest(path=path):
                 metrics = results[path]
@@ -142,12 +160,12 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
                     self.assertEqual(NeoErmacBuildingLineup.query.count(), 0)
         gateway = db.session.get(Gateway, self.gateway_id)
         field = 'lineup_green_runout_east_destination_1'
-        form = lineup_form(gateway, {'field': field, 'destination': 'SDF'})
+        form = self.flight_form(gateway,field,'SDF')
         response, metrics = self.measure('/neoermac/building-lineup/destination', data=form)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(metrics['INSERT'], 12)
         self.assertEqual(NeoErmacBuildingLineup.query.count(), 12)
-        form = lineup_form(db.session.get(Gateway, self.gateway_id), {'field': field, 'destination': 'ONT'})
+        form = self.flight_form(db.session.get(Gateway, self.gateway_id),field,'ONT')
         response, metrics = self.measure('/neoermac/building-lineup/destination', data=form)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(metrics['INSERT'], 0)
@@ -170,12 +188,12 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
         self.assertFalse(response.get_json()['changed'])
         self.assertNotIn('state', response.get_json())
         gateway = db.session.get(Gateway, self.gateway_id)
-        form = lineup_form(gateway, {'field': 'lineup_green_runout_west_destination_1', 'destination': 'SDF'})
+        form = self.flight_form(gateway,'lineup_green_runout_west_destination_1','SDF')
         response, _ = self.measure('/neoermac/building-lineup/destination', data=form)
         self.assertEqual(response.status_code, 200)
         db.session.remove()
         self.assertEqual(response.get_json()['pull_times'],
-            get_destination_pull_times(db.session.get(Gateway, self.gateway_id), 'SDF'))
+            get_destination_pull_times(db.session.get(Gateway, self.gateway_id), str(self.flight_ids['SDF'])))
 
     def test_scoped_attendance_matches_unscoped_here_coming_overrides_and_counts(self):
         from app.services.neostaffing import operational_manage_employees_context

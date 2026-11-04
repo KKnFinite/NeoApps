@@ -8,6 +8,7 @@ from unittest.mock import patch
 from sqlalchemy import event
 
 from app.extensions import db
+from tests.sql_contracts import RequestSql
 from app.models import NeoSektorSortState, NeoSektorBallmatCount, NeoSektorOpenBayState
 from app.neonodes.neosektor import routes
 from app.services import gateway_matrix, neosektor_live_counts as live_counts
@@ -37,7 +38,7 @@ class BallmatMutationQueriesTest(unittest.TestCase):
                 return original_get(namespace, key)
 
             def measure(side, name, mode, position, metric="first", expected_status=200, version=None, **value):
-                statements = []
+                statements = RequestSql()
                 commits = []
                 previous_signal = db.session.query(NeoSektorSortState.updated_at).scalar()
 
@@ -61,6 +62,7 @@ class BallmatMutationQueriesTest(unittest.TestCase):
                     finally:
                         event.remove(engine, "before_cursor_execute", capture)
                         event.remove(engine, "commit", on_commit)
+                statements.assert_boundary(self)
                 self.assertEqual(response.status_code, expected_status, response.json)
                 counts = tuple(sum(sql.startswith(verb + " ") for sql in statements)
                                for verb in ("select", "insert", "update", "delete"))

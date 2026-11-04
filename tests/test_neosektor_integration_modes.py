@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app import create_app
 from app.extensions import db
+from tests.sql_contracts import RequestSql
 from app.models import (
     NeoSektorBallmatWaveCount,
     NeoSektorBayStatus,
@@ -1663,7 +1664,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 )
 
     def _capture_post_metrics(self, url, payload, *, commit_order=None):
-        statements = []
+        statements = RequestSql()
         commits = []
 
         def capture_statement(_conn, _cursor, statement, _params, _context, _many):
@@ -1683,6 +1684,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             event.remove(engine, "before_cursor_execute", capture_statement)
             event.remove(Session, "after_commit", capture_commit)
 
+        statements.assert_boundary(self)
         kinds = {
             kind: sum(
                 statement.lstrip().split(None, 1)[0].upper() == kind

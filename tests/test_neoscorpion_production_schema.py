@@ -309,6 +309,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
                 patch("app.services.neoscorpion_schema._verify_model_schema_contract")
             )
             identity=stack.enter_context(patch("app.services.neoscorpion_segment_schema.migrate_physical_segment_identity"))
+            continuation=stack.enter_context(patch("app.services.neoscorpion_continuation_schema.migrate_continuation_queue"))
             create_calls = [
                 stack.enter_context(patch.object(model.__table__, "create"))
                 for model in NEOSCORPION_MODEL_TABLES
@@ -317,6 +318,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             self.assertTrue(ensure_neoscorpion_production_schema(app))
             self.assertTrue(ensure_neoscorpion_production_schema(app))
             self.assertEqual(identity.call_count,2)
+            self.assertEqual(continuation.call_count,2)
 
         statements = "\n".join(
             str(call.args[0]) for call in connection.execute.call_args_list

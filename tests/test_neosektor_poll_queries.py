@@ -6,6 +6,7 @@ from datetime import date, datetime, time
 from unittest.mock import patch
 
 from sqlalchemy import event
+from tests.sql_contracts import RequestSql
 
 from app.extensions import db
 from app.models import SortDateMission, SortTimelineSettings, User
@@ -37,7 +38,7 @@ class PollQueriesTest(unittest.TestCase):
         self.fixture.tearDown()
 
     def measure(self, path, *, legacy=False, unchanged=False):
-        sql, commits = [], []
+        sql, commits = RequestSql(), []
         def capture(conn, cursor, statement, params, context, many):
             sql.append(' '.join(statement.lower().split()))
         def committed(conn):
@@ -55,6 +56,7 @@ class PollQueriesTest(unittest.TestCase):
             finally:
                 event.remove(engine, 'before_cursor_execute', capture)
                 event.remove(engine, 'commit', committed)
+        sql.assert_boundary(self)
         self.assertEqual(response.status_code, 200, response.json)
         self.assertFalse(commits)
         self.assertFalse(any(s.startswith(('insert ', 'update ', 'delete ')) for s in sql))

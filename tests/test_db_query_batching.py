@@ -18,6 +18,7 @@ from tests import test_neostaffing_notifications as fixtures
 def sql_work():
     counts = Counter(dict.fromkeys(("SELECT", "INSERT", "UPDATE", "DELETE", "COMMIT"), 0))
     counts.select_sql = []
+    counts.permission_keys = Counter()
     def statement(_conn, _cursor, sql, _params, _context, _many):
         verb = sql.lstrip().split(None, 1)[0].upper()
         if verb == "WITH":
@@ -26,6 +27,9 @@ def sql_work():
             counts[verb] += 1
         if verb == "SELECT":
             counts.select_sql.append(sql.lower())
+            if 'from permission_rules' in sql.lower():
+                values=_params.values() if isinstance(_params,dict) else _params
+                counts.permission_keys.update(value for value in values if isinstance(value,str))
     def commit(_conn):
         counts["COMMIT"] += 1
     engine = db.engine
@@ -73,6 +77,8 @@ class QueryBatchingTest(unittest.TestCase):
                 with sql_work() as metric:
                     response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+                self.assertEqual(sum('from neoscorpion_vendor_accounts' in s for s in metric.select_sql),1)
+                self.assertEqual(metric.permission_keys['neoapps.access_requests.view'],1)
                 results[f"{count}:{label}"] = dict(metric)
             # The explicit maintenance service still supports non-page callers.
             StaffingNotification.query.delete()
@@ -90,7 +96,9 @@ class QueryBatchingTest(unittest.TestCase):
             db.session.commit()
         print("STAFFING_COUNTS=" + json.dumps(results, sort_keys=True))
         budgets = {"navigation_supervisor": 5, "navigation_manager": 5, "ordinary_get": 18,
-                   "requests_get": 26, "requests_get_unchanged": 26, "notifications_get": 14, "materialize_new": 6, "materialize_unchanged": 6}
+                   # Full request counts include the mandatory vendor lookup,
+                   # current My Alerts permission and canonical request scope.
+                   "requests_get": 28, "requests_get_unchanged": 26, "notifications_get": 17, "materialize_new": 6, "materialize_unchanged": 6}
         for key, metric in results.items():
             label = key.split(":", 1)[1]
             self.assertLessEqual(metric["SELECT"], budgets[label], key)

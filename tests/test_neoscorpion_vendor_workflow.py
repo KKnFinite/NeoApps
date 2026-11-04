@@ -64,19 +64,25 @@ class VendorWorkflowTest(TestCase):
 
     def test_every_non_allowlisted_endpoint_is_default_denied(self):
         from flask import request
+        from app import PUBLIC_ASSET_ENDPOINTS,_is_public_asset_request
         from werkzeug.exceptions import Forbidden
         user,_account,_token=self.vendor()
-        allowed={'static','healthz','auth.portal_dashboard','neonodes.index','auth.login','auth.logout',
+        allowed={'healthz','auth.portal_dashboard','neonodes.index','auth.login','auth.logout',
             'auth.change_password','auth.forgot_password','auth.reset_password','auth.verify_email','auth.renew_csrf',
             'scorpion_vendor.account','scorpion_vendor.my_truck','scorpion_vendor.live',
             'scorpion_vendor.revision','scorpion_vendor.fuel_reading','scorpion_vendor.invitation'}
         checked=0
         for rule in self.fixture.app.url_map.iter_rules():
             if rule.endpoint in allowed:continue
-            with self.fixture.app.test_request_context('/'):
-                request.url_rule=rule
-                with patch.object(vendors,'current_user',user):
-                    with self.assertRaises(Forbidden,msg=rule.endpoint):vendors.vendor_request_boundary()
+            methods=('GET','HEAD','POST','PATCH','DELETE') if rule.endpoint in PUBLIC_ASSET_ENDPOINTS else ('GET',)
+            for method in methods:
+                with self.fixture.app.test_request_context('/',method=method):
+                    request.url_rule=rule
+                    with patch.object(vendors,'current_user',user):
+                        if _is_public_asset_request():
+                            self.assertIsNone(vendors.vendor_request_boundary())
+                        else:
+                            with self.assertRaises(Forbidden,msg=(rule.endpoint,method)):vendors.vendor_request_boundary()
             checked+=1
         self.assertGreater(checked,100)
 

@@ -1065,6 +1065,13 @@ class NeoScorpionRoutesTest(unittest.TestCase):
 
 
     def test_history_context_query_count_is_bounded_for_many_assignments(self):
+        for size in (1,30):
+            with self.subTest(assignments=size):
+                fixture=type(self)();fixture.setUp()
+                try:fixture._assert_history_query_budget(size)
+                finally:fixture.tearDown()
+
+    def _assert_history_query_budget(self,size):
         operation, first_mission = self._add_current_departure(
             flight_number="UPS700",
             tail_number="N700UP",
@@ -1077,7 +1084,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
                 review_status="complete",
             )
         ]
-        for index in range(1, 30):
+        for index in range(1, size):
             mission = SortDateMission(
                 sort_date=operation.sort_date,
                 gateway_code=operation.gateway_code,
@@ -1125,9 +1132,20 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         finally:
             event.remove(db.engine, "before_cursor_execute", capture)
 
-        self.assertEqual(len(context["completed_rows"]), 30)
-        # Four current-sort eligibility reads and seven batched history collections.
-        self.assertEqual(len(statements), 11)
+        self.assertEqual(len(context["completed_rows"]), size)
+        # Current-sort eligibility plus batched visit/provenance collections.
+        # New history predicates must not turn any of these into per-row reads.
+        expected={'sort_timeline_settings':1,'gateway_sort_matrix':2,'sort_date_operations':1,
+            'neoscorpion_fuel_assignments':1,'neoscorpion_fuel_work_states':2,'sort_date_tail_states':1,
+            'neoscorpion_tail_fuel_states':1,'neoscorpion_tail_notes':1,'sort_date_parking_assignments':1,
+            'neoscorpion_sort_trucks':1,'sort_date_missions':2,'sort_date_google_mission_links':1,
+            'neoscorpion_fuel_trucks':1,'neoscorpion_direct_entries':1,'neoscorpion_fuel_audit_entries':1,
+            'neoscorpion_fueling_events':1}
+        from collections import Counter
+        import re
+        tables=Counter(re.search(r'\bFROM\s+(\w+)',sql,re.I).group(1) for sql in statements)
+        self.assertEqual(dict(tables),expected)
+        self.assertEqual(len(statements),sum(expected.values()))
         self.assertEqual(sum("FROM neoscorpion_fuel_assignments " in sql for sql in statements), 1)
 
     def _login_approved_user(self, role="watcher"):

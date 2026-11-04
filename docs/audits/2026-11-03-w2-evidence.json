@@ -1,0 +1,450 @@
+{
+  "starting_sha": "241b42d3a597bc47642de84210121e7e73ca4de3",
+  "package": "W2",
+  "assigned_original_counts": {
+    "before": {
+      "passed": 0,
+      "failed": 34
+    },
+    "after": {
+      "passed": 34,
+      "failed": 0
+    }
+  },
+  "full_367_inventory_executed": false,
+  "production_mutations": false,
+  "schema_changes": false,
+  "cases": [
+    {
+      "id": "tests.test_db_query_batching.QueryBatchingTest::test_staffing_query_counts",
+      "starting_result": "failed",
+      "classification": "Attributed current notification/request scope",
+      "correction_and_evidence": "Assert one vendor and one My Alerts permission read on each HTTP request; preserve exact write/commit and six/eighteen population equality. Current 28-read first requests page and 17-read notifications path include active scope/navigation and request matching, not per-request-row queries.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_flight_api_import.FlightApiTestPageTest::test_stale_auto_poll_client_is_rejected_before_database_access",
+      "starting_result": "failed",
+      "classification": "Confirmed boundary ordering defect",
+      "correction_and_evidence": "Terminal obsolete-client guard was registered after vendor identity. Move terminal rejection first; supported clients retain vendor/authentication/CSRF enforcement.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_local_launch_navigation.LocalLaunchNavigationTest::test_public_assets_survive_user_loader_database_failure",
+      "starting_result": "failed",
+      "classification": "Confirmed application defect",
+      "correction_and_evidence": "D1: exact public GET/HEAD exemption now precedes identity/vendor resolution; public assets remain available with no SQL even when the user loader fails.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_local_launch_navigation.LocalLaunchNavigationTest::test_public_assets_with_login_cookie_do_no_auth_or_database_work",
+      "starting_result": "failed",
+      "classification": "Confirmed application defect",
+      "correction_and_evidence": "D1: exact public GET/HEAD exemption now precedes identity/vendor resolution; public assets remain available with no SQL even when the user loader fails.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_motherbrain_live_collaboration.MotherBrainLiveCollaborationTest::test_changed_planning_poll_reuses_shared_collections",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_motherbrain_live_collaboration.MotherBrainLiveCollaborationTest::test_initial_planning_pages_reuse_shared_collections",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_motherbrain_live_collaboration.MotherBrainLiveCollaborationTest::test_unchanged_planning_poll_has_bounded_security_and_revision_reads",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neoermac_read_budgets.NeoErmacReadBudgetTest::test_cold_pages_leave_lineup_defaults_transient_until_explicit_write",
+      "starting_result": "failed",
+      "classification": "Invalid identity fixture and attributed SQL",
+      "correction_and_evidence": "Destination text was sent where explicit master-flight IDs are required. Build linked current missions and canonical signed lineup writes; preserve cold GET no-writes, exact autosave writes, pull identity and hydration budgets. Attendance adds one asserted My Alerts permission read.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neoermac_read_budgets.NeoErmacReadBudgetTest::test_fresh_request_query_write_and_hydration_budgets",
+      "starting_result": "failed",
+      "classification": "Invalid identity fixture and attributed SQL",
+      "correction_and_evidence": "Destination text was sent where explicit master-flight IDs are required. Build linked current missions and canonical signed lineup writes; preserve cold GET no-writes, exact autosave writes, pull identity and hydration budgets. Attendance adds one asserted My Alerts permission read.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neoermac_read_budgets.NeoErmacReadBudgetTest::test_lineup_snapshot_payload_and_post_aggregation_times_match_fresh_reads",
+      "starting_result": "failed",
+      "classification": "Invalid identity fixture and attributed SQL",
+      "correction_and_evidence": "Destination text was sent where explicit master-flight IDs are required. Build linked current missions and canonical signed lineup writes; preserve cold GET no-writes, exact autosave writes, pull identity and hydration budgets. Attendance adds one asserted My Alerts permission read.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_apu_truck_projections.ApuTruckProjectionsTest::test_apu_projection_adds_no_queries_or_writes_to_board_read",
+      "starting_result": "failed",
+      "classification": "Invalid cold/warm benchmark",
+      "correction_and_evidence": "First SPEAR enrichment reads a durable prior snapshot; the next uses its in-memory history. Compare both APU states with isolated cold SPEAR caches: 53 SELECTs each, zero writes. Do not remove enrichment or change APU calculations.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_production_schema.NeoScorpionProductionSchemaTest::test_postgresql_ensure_is_bounded_and_idempotent",
+      "starting_result": "failed",
+      "classification": "Broken schema mock fixture",
+      "correction_and_evidence": "The generic Mock omitted the deployed continuation migration inspector. Stub that migrator alongside physical identity, assert both called twice, and retain advisory/lock-timeout/table/commit checks. Real PostgreSQL bootstrap remains exercised.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neoscorpion_routes.NeoScorpionRoutesTest::test_history_context_query_count_is_bounded_for_many_assignments",
+      "starting_result": "failed",
+      "classification": "Outdated query contract",
+      "correction_and_evidence": "Current history needs batched visit/provenance/arrival-link/direct-entry reads. Assert the exact 19-read table map at one and thirty assignments instead of retired eleven-read budget; no operational code change.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_conductor_queries.ConductorMutationQueriesTest::test_active_block_in_routing_keeps_mission_reads_and_identical_writes",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_conductor_queries.ConductorMutationQueriesTest::test_locked_operation_reuse_preserves_state_writes_and_conflicts",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_conflict_queries.BallmatConflictQueriesTest::test_conflict_budgets_equivalence_no_writes_and_following_valid_request",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_discharge_queries.DischargeQueriesTest::test_query_write_budgets_payloads_and_postcommit_scope_are_equivalent",
+      "starting_result": "failed",
+      "classification": "Outdated cold budget and SQL attribution",
+      "correction_and_evidence": "Require exactly one vendor lookup separately. Lower cold Discharge domain budget 30/31 to measured 24/25; preserve the existing one AppAccess INSERT/commit and every warm/poll/mutation/lock/rollback assertion, at two and fifty rows.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_integration_modes.NeoSektorIntegrationModesTest::test_tunnel_writes_reuse_one_operational_bundle",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_mutation_queries.BallmatMutationQueriesTest::test_locked_operation_candidates_save_one_read_with_identical_responses",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_mutation_queries.BallmatMutationQueriesTest::test_locked_side_join_saves_one_select_without_changing_writes_or_responses",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_mutation_queries.BallmatMutationQueriesTest::test_rollup_signal_reuse_removes_only_redundant_timestamp_write",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_poll_queries.PollQueriesTest::test_google_primary_read_contract",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_poll_queries.PollQueriesTest::test_mirror_polls_never_write_google_or_database",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_poll_queries.PollQueriesTest::test_missing_sektor_state_remains_read_only",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_poll_queries.PollQueriesTest::test_neo_only_current_sort_counts_and_modes",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neosektor_poll_queries.PollQueriesTest::test_paused_poll_still_skips_lifecycle_revision_and_state_work",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_bulk_change_cost.BulkChangeCostTest::test_hourly_status_changes_do_not_fan_out_management_reads",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_bulk_change_cost.BulkChangeCostTest::test_profile_ft_noop",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_bulk_change_cost.BulkChangeCostTest::test_profile_small_and_large",
+      "starting_result": "failed",
+      "classification": "Outdated SQL attribution",
+      "correction_and_evidence": "Keep every old operational read/write budget; separately assert exactly one SELECT scoped to vendor user_id. Nothing is mocked and no production guard is removed.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_bulk_change_cost.BulkChangeCostTest::test_stage_and_get_read_budget",
+      "starting_result": "failed",
+      "classification": "Attributed shell permission overhead",
+      "correction_and_evidence": "Assert the mandatory vendor read separately and exactly one neoapps.access_requests.view read. Rendered shell budgets add only that measured My Alerts read; stale writes remain zero and request detail hydration stays bounded.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_bulk_change_cost.BulkChangeCostTest::test_stale_post_performs_zero_writes",
+      "starting_result": "failed",
+      "classification": "Attributed shell permission overhead",
+      "correction_and_evidence": "Assert the mandatory vendor read separately and exactly one neoapps.access_requests.view read. Rendered shell budgets add only that measured My Alerts read; stale writes remain zero and request detail hydration stays bounded.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_change_request_reads.ChangeRequestReadsTest::test_profile_pages",
+      "starting_result": "failed",
+      "classification": "Attributed shell permission overhead",
+      "correction_and_evidence": "Assert the mandatory vendor read separately and exactly one neoapps.access_requests.view read. Rendered shell budgets add only that measured My Alerts read; stale writes remain zero and request detail hydration stays bounded.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_vacation_selection.NeoStaffingVacationSelectionTest::test_grandmaster_calendar_admin_and_context_queries_are_bounded",
+      "starting_result": "failed",
+      "classification": "Date-sensitive fixture and measured repeated reads",
+      "correction_and_evidence": "Original budgets assume the pre-November path but used wall-clock today. Pin their season explicitly; independently compare Oct31/Nov1 at one/five views. Reuse the same-call hierarchy/actor on November carry-forward, reducing 27 to 23 reads with unchanged projection, no writes and fresh revocation checks.",
+      "final_result": "passed"
+    },
+    {
+      "id": "tests.test_neostaffing_vacation_selection.NeoStaffingVacationSelectionTest::test_union_context_uses_bounded_queries_as_calendar_count_grows",
+      "starting_result": "failed",
+      "classification": "Date-sensitive fixture and measured repeated reads",
+      "correction_and_evidence": "Original budgets assume the pre-November path but used wall-clock today. Pin their season explicitly; independently compare Oct31/Nov1 at one/five views. Reuse the same-call hierarchy/actor on November carry-forward, reducing 27 to 23 reads with unchanged projection, no writes and fresh revocation checks.",
+      "final_result": "passed"
+    }
+  ],
+  "outside_package_failures": [
+    {
+      "id": "tests.test_neoscorpion_apu_truck_projections.ApuTruckProjectionsTest::test_recommended_allowance_changes_only_projected_inventory",
+      "owner": "W3",
+      "failure": "AssertionError: '35142617f2f72f235490cfa8' != '75db52cfc2bc5d52b4491428'\n- 35142617f2f72f235490cfa8\n+ 75db52cfc2bc5d52b4491428"
+    }
+  ],
+  "tests": {
+    "original": {
+      "passed": 34,
+      "failed": 0,
+      "passing_subtests": 268,
+      "seconds": 34.29
+    },
+    "security_and_w4": {
+      "passed": 127,
+      "failed": 0,
+      "passing_subtests": 537,
+      "seconds": 77.11
+    },
+    "affected_parent_modules": {
+      "passed": 130,
+      "failed": 1,
+      "passing_subtests": 209,
+      "seconds": 64.93
+    },
+    "postgres": {
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0,
+      "passing_subtests": 117,
+      "seconds": 84.55
+    },
+    "browser": {
+      "methods_passed": 1,
+      "engines": [
+        "Chromium",
+        "WebKit"
+      ],
+      "identities": [
+        "anonymous",
+        "regular",
+        "vendor",
+        "revoked"
+      ],
+      "seconds": 13.34
+    },
+    "additional_scaling": {
+      "passed": 2,
+      "failed": 0,
+      "seconds": 3.18
+    },
+    "javascript": {
+      "passed": 24,
+      "failed": 0
+    }
+  },
+  "measurements": {
+    "public_signed_in_assets": {
+      "before_selects": 2,
+      "after_selects": 0,
+      "writes": 0
+    },
+    "stale_flight_client": {
+      "before_selects": 1,
+      "after_selects": 0,
+      "writes": 0
+    },
+    "november_vacation": {
+      "populations": [
+        1,
+        5
+      ],
+      "before_selects": [
+        27,
+        27
+      ],
+      "after_selects": [
+        23,
+        23
+      ],
+      "writes": 0,
+      "commits": 0
+    },
+    "october_vacation": {
+      "selects": [
+        16,
+        16
+      ],
+      "writes": 0
+    },
+    "motherbrain": {
+      "populations": [
+        1,
+        50
+      ],
+      "changed_full_selects": [
+        16,
+        16
+      ],
+      "unchanged_full_selects": [
+        5,
+        5
+      ],
+      "writes": 0
+    },
+    "ermac": {
+      "hydrated_people": [
+        12,
+        112
+      ],
+      "full_selects": [
+        22,
+        22
+      ],
+      "writes": 0
+    },
+    "scorpion_history": {
+      "assignments": [
+        1,
+        30
+      ],
+      "service_selects": [
+        19,
+        19
+      ],
+      "writes": 0
+    },
+    "apu_board": {
+      "cold_service_selects": [
+        53,
+        53
+      ],
+      "writes": 0
+    },
+    "staffing_bulk": {
+      "populations": [
+        2,
+        100
+      ],
+      "full_selects": [
+        23,
+        23
+      ],
+      "lock_ctes": [
+        1,
+        1
+      ],
+      "update_statements": [
+        2,
+        2
+      ]
+    },
+    "staffing_status": {
+      "populations": [
+        2,
+        100
+      ],
+      "full_selects": [
+        21,
+        21
+      ],
+      "lock_ctes": [
+        1,
+        1
+      ],
+      "update_statements": [
+        1,
+        1
+      ]
+    },
+    "staffing_request_pages": {
+      "populations": [
+        1,
+        205
+      ],
+      "query_count_constant": true,
+      "detail_page_bound": 100
+    },
+    "sektor_discharge_cold": {
+      "populations": [
+        2,
+        50
+      ],
+      "current_full_selects": [
+        24,
+        24
+      ],
+      "insert_statements": 1,
+      "commits": 1,
+      "note": "Current full counts include one vendor SELECT; existing compatibility AppAccess initialization is preserved."
+    }
+  }
+}
