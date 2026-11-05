@@ -2,7 +2,32 @@
 
 from __future__ import annotations
 
-from flask import g, has_request_context
+from flask import g, has_request_context, request
+
+
+def operation_read_options():
+    """Avoid transferring unused provider history to these read-only screens.
+
+    All operation identity, chronology and revision fields remain loaded. An
+    unexpected consumer can still explicitly load the deferred history. Never
+    apply this to writes, other NeoNodes, lifecycle jobs or provider workflows.
+    """
+    if (has_request_context() and request.method in {'GET', 'HEAD'}
+            and request.endpoint in {
+                'neosektor.driver_routing', 'neosektor.tunnel_conductor',
+                'neosektor.ebm', 'neosektor.wbm', 'neosektor.ballmat_operations',
+                'neosektor.live_counts', 'neosektor.discharge',
+                'neosektor.driver_routing_state', 'neosektor.tunnel_conductor_state',
+                'neosektor.ballmat_state', 'neosektor.live_counts_state', 'neosektor.discharge_state',
+                'neoermac.door_view', 'neoermac.building_lineup',
+                'neoermac.upcoming_pulls', 'neoermac.view_outbound',
+                'neoermac.door_view_state', 'neoermac.building_lineup_state',
+                'neoermac.upcoming_pulls_state', 'neoermac.view_outbound_state',
+            }):
+        from sqlalchemy.orm import defer
+        from app.models import SortDateOperation
+        return (defer(SortDateOperation.flight_api_last_poll_snapshot_json),)
+    return ()
 
 # These handlers render private state but perform no operational mutation.
 # Reuse the same fresh, request-local authority projection as revision reads.

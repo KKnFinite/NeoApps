@@ -84,7 +84,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         signal_url = f'/neosektor/driver-routing/version?sort_date={day}&sort_name=night'
         canonical_url = '/neosektor/driver-routing/state'
-        initial, _ = fresh(canonical_url, 11)
+        initial, _ = fresh(canonical_url, 10)  # Parent/sort collection now share one read.
         self.assertEqual(initial["state"]["routing_watch"]["sort_date"], str(day))
         revision = initial["revision"]
         for changed in (False, True):
@@ -98,7 +98,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(after, before)
                 self.assertEqual(sum("from users" in s for s in sql), 1)
                 self.assertEqual(sum("neosektor_sort_states.updated_at" in s and "gateway_memberships" in s for s in sql), 1)
-                state, _ = fresh(canonical_url+'?revision='+revision, 11 if changed else 10)
+                state, _ = fresh(canonical_url+'?revision='+revision, 10 if changed else 9)
                 self.assertEqual(state["changed"], changed)
                 if changed:
                     self.assertNotEqual(after["version"], initial["state"]["routing_watch"]["version"])
@@ -348,7 +348,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.assertEqual(commits, 0)
             return response.get_json()
         self.assertEqual(measured(signal_url, 1)["version"], scope["version"])
-        self.assertFalse(measured(state_url + "?revision=" + initial["revision"], 9)["changed"])
+        self.assertFalse(measured(state_url + "?revision=" + initial["revision"], 8)["changed"])
         # Each existing write endpoint commits a signal with the routing inputs.
         changes = [
             ("ballmat/update?side=east", {"side": "east", "waves": {"first": {"count": 3}}}),
@@ -372,7 +372,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 # reload, as a fresh production request would (2 vs warm 1).
                 signal = measured(signal_url, 2)
                 self.assertNotEqual(signal["version"], previous)
-                current = measured(state_url + "?revision=" + revision, 10)
+                current = measured(state_url + "?revision=" + revision, 9)
                 self.assertTrue(current["changed"])
                 self.assertEqual(current["state"]["routing_watch"], {key: signal[key] for key in scope})
                 self.assertEqual(measured(signal_url, 1), signal)
@@ -4232,8 +4232,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         paths = (
             ("/neosektor/live-counts/state", 9),
-            ("/neosektor/driver-routing/state", 10),
-            ("/neosektor/tunnel-conductor/state", 10),
+            ("/neosektor/driver-routing/state", 9),
+            ("/neosektor/tunnel-conductor/state", 9),
             ("/neosektor/ballmat/state?side=east", 9),
             ("/neosektor/ballmat/state?side=west", 9),
         )
@@ -4266,10 +4266,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(sum("from neosektor_operational_settings " in s for s in old_settings_sql), 2)
                 self.assertEqual(sum("from neosektor_operational_settings " in s for s in reads), 1)
                 self.assertEqual(len(reads) + 6, sum(
-                    s.startswith("select") for s in separate_sql
+                    s.startswith(("select", "with")) for s in separate_sql
                 ))
                 self.assertEqual(len(reads) + 4, sum(
-                    s.startswith("select") for s in legacy_sql
+                    s.startswith(("select", "with")) for s in legacy_sql
                 ))
                 self.assertEqual(sum(s.startswith(
                     "select neosektor_sort_states.id as"
@@ -4561,8 +4561,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.client.get("/neosektor/live-counts")
         for path, budget in (
             ("/neosektor/live-counts/state", 8),
-            ("/neosektor/driver-routing/state", 9),
-            ("/neosektor/tunnel-conductor/state", 9),
+            ("/neosektor/driver-routing/state", 8),
+            ("/neosektor/tunnel-conductor/state", 8),
             ("/neosektor/ballmat/state?side=east", 8),
             ("/neosektor/ballmat/state?side=west", 8),
         ):

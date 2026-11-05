@@ -33,7 +33,11 @@ window.NeoSektorRoutingWatch = {
                 const url = new URL(versionUrl, window.location.href);
                 url.searchParams.set('sort_date', snapshot.sort_date);
                 url.searchParams.set('sort_name', snapshot.sort_name);
-                const response = await fetch(url, {cache: 'no-store', credentials: 'same-origin'});
+                // Reuse the existing same-session revision transport. Share only
+                // the opaque hint, never routing state or operational actions.
+                const request = window.NeoLiveRevision?.revision || window.NeoLiveRevision?.fetch || fetch;
+                const response = await request(url, {cache: 'no-store', credentials: 'same-origin'},
+                    1500, `${requested.sort_date}:${requested.sort_name}`);
                 const payload = await response.json();
                 if (!response.ok || !payload.ok || typeof payload.version !== 'string') throw new Error('Version check failed');
                 if (!active() || superseded() || payload.version === snapshot.version) return;
@@ -45,8 +49,10 @@ window.NeoSektorRoutingWatch = {
                 // Non-routing/no-op changes can leave the canonical revision
                 // unchanged. Acknowledge once, but never acknowledge a failure.
                 if (!superseded()) snapshot = {...snapshot, version: payload.version};
-            } catch (_) {
-                delay = 5000; // No fallback/full fetch merely because a hint failed.
+            } catch (error) {
+                delay = Number.isFinite(error?.retryAt)
+                    ? Math.max(5000, error.retryAt - Date.now()) : 5000;
+                // No fallback/full fetch merely because a hint failed.
             } finally {
                 checking = false;
                 schedule(delay);

@@ -8,6 +8,7 @@ from app.extensions import db
 from app.models import GatewaySortMatrix, SortDateOperation, SortTimelineSortSetting
 from app.services.operational_request_policy import (
     current_request_is_lightweight_live_state,
+    operation_read_options,
 )
 from app.services.request_cache import get_request_cached, request_cached, set_request_cached
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
@@ -180,7 +181,7 @@ def current_operations_for_gateway(gateway, now=None):
     def resolve_operations():
         if not current_request_is_lightweight_live_state():
             return (
-                SortDateOperation.query.filter(
+                SortDateOperation.query.options(*operation_read_options()).filter(
                     SortDateOperation.gateway_code == gateway.code,
                     SortDateOperation.archived_at_utc.is_(None),
                     SortDateOperation.sort_date.in_((current_date, previous_date)),
@@ -189,7 +190,7 @@ def current_operations_for_gateway(gateway, now=None):
             )
 
         rows = (
-            db.session.query(SortDateOperation, SortTimelineSortSetting)
+            db.session.query(SortDateOperation, SortTimelineSortSetting).options(*operation_read_options())
             .outerjoin(
                 SortTimelineSortSetting,
                 and_(

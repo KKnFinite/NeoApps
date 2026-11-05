@@ -162,10 +162,9 @@ class PollQueriesTest(unittest.TestCase):
                     self.assertEqual(legacy_sort_settings(self.fixture.gateway), {})
 
     def test_non_target_endpoints_keep_legacy_loading(self):
-        for path, method in (('/neosektor/driver-routing/state', 'GET'),
-                             ('/neosektor/tunnel-conductor/state', 'GET'),
+        for path, method in (('/neoscorpion/fueler', 'GET'),
                              ('/neosektor/live-counts', 'GET'),
-                             ('/neoermac/door-view/state', 'GET'),
+                             ('/neoermac/door-view', 'GET'),
                              ('/neosektor/ballmat/state', 'POST')):
             with self.fixture.app.test_request_context(path, method=method), patch.object(
                     operation_lifecycle, 'joinedload', side_effect=AssertionError('Out-of-scope eager load')):

@@ -13,6 +13,7 @@ from app.services.gateway_matrix import (
     current_gateway_local_datetime,
 )
 from app.services.request_cache import MISSING, get_request_cached, request_cached
+from app.services.operational_request_policy import operation_read_options
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
@@ -132,7 +133,7 @@ def current_existing_operational_sort_operations(
         )
         if operations is MISSING:
             operations = (
-                SortDateOperation.query.filter(
+                SortDateOperation.query.options(*operation_read_options()).filter(
                     SortDateOperation.archived_at_utc.is_(None),
                     db.or_(
                         SortDateOperation.gateway_id == gateway.id,
@@ -317,7 +318,12 @@ def _sort_settings_for_gateway(gateway):
     if (
         has_request_context()
         and request.method == "GET"
-        and request.endpoint in {"neosektor.live_counts_state", "neosektor.ballmat_state"}
+        and request.endpoint in {
+            "neosektor.live_counts_state", "neosektor.ballmat_state",
+            "neosektor.driver_routing_state", "neosektor.tunnel_conductor_state",
+            "neoermac.door_view_state", "neoermac.building_lineup_state",
+            "neoermac.upcoming_pulls_state", "neoermac.view_outbound_state",
+        }
     ):
         # These polls need the parent's sort collection for lifecycle selection.
         # Load that same relationship in one round trip, preserving parent/FK

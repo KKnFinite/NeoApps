@@ -3,7 +3,7 @@
     "use strict";
     const scope = document.querySelector('meta[name="live-poll-scope"]')?.content;
     const entries = new Map();
-    const fields = ['ok', 'current_operation', 'operation_id', 'revision', 'tail_revision', 'tail_notes_revision', 'can_edit'];
+    const fields = ['ok', 'current_operation', 'operation_id', 'revision', 'version', 'tail_revision', 'tail_notes_revision', 'can_edit'];
     const primitive = value => value === null || typeof value === 'boolean'
         || (typeof value === 'number' && Number.isFinite(value))
         || (typeof value === 'string' && value.length <= 160);
@@ -31,7 +31,11 @@
                 && data.value && Object.keys(data.value).every(key => fields.includes(key) && primitive(data.value[key]))
                 && (!data.key.includes('/fuel-dispatch/revision') || typeof data.value.can_edit === 'boolean')
                 && (!entry.value || entry.value.operation_id !== data.value.operation_id
-                    || Number(data.value.revision) >= Number(entry.value.revision))) {
+                    || Number(data.value.revision) >= Number(entry.value.revision)
+                    // Opaque routing versions are ordered by verified request
+                    // start time above, never by numeric/string version order.
+                    || (data.value.revision === undefined && entry.value.revision === undefined
+                        && typeof data.value.version === 'string' && typeof entry.value.version === 'string'))) {
             entry.at = data.at;
             entry.value = data.value;
         }
@@ -100,7 +104,9 @@
                 // A login redirect/403/error is never a shared successful fingerprint.
                 if (response.ok && !response.redirected && currentScope === scope) {
                     const value = await response.clone().json().catch(() => null);
-                    if (value && Object.prototype.hasOwnProperty.call(value, 'revision') && value.ok !== false) {
+                    if (value && (Object.prototype.hasOwnProperty.call(value, 'revision')
+                            || (target.pathname === '/neosektor/driver-routing/version'
+                                && typeof value.version === 'string')) && value.ok !== false) {
                         const safe = Object.fromEntries(fields.filter(k => Object.prototype.hasOwnProperty.call(value, k)).map(k => [k, value[k]]));
                         if (Object.values(safe).every(primitive)) {
                             entry.value = safe;

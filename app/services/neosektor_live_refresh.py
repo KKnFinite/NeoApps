@@ -67,11 +67,17 @@ def neosektor_state_revision(
         else None
     )
 
-    sort_state_ids = select(NeoSektorSortState.id).where(
+    # The UNION used to repeat this physical table lookup in every branch.
+    # One statement-local CTE preserves the exact scope and aggregate values;
+    # PostgreSQL can materialize the shared row once, without a process cache.
+    sort_state = select(NeoSektorSortState.id, NeoSektorSortState.updated_at).where(
         NeoSektorSortState.gateway_id == gateway.id,
         NeoSektorSortState.sort_date == sort_date,
         NeoSektorSortState.sort_name == sort_name,
-    )
+    ).cte("sektor_revision_sort")
+    # gateway/date/sort is unique. Scalar equality also keeps child lookups
+    # indexable without a separate semi-join; a missing row yields SQL NULL.
+    sort_state_id = select(sort_state.c.id).scalar_subquery()
     aggregate_queries = []
     timer_rows = []
     if mode == GOOGLE_PRIMARY:
@@ -88,46 +94,43 @@ def neosektor_state_revision(
         ]
         if scope == ROUTING_STATE_SCOPE:
             aggregate_queries.append(_aggregate_query(
-                "sort_state", NeoSektorSortState, NeoSektorSortState.id.in_(sort_state_ids)))
+                "sort_state", sort_state.c))
             aggregate_queries.append(
                 _aggregate_query(
                     "driver_routes",
                     NeoSektorDriverRouteSetting,
-                    NeoSektorDriverRouteSetting.sort_state_id.in_(sort_state_ids),
+                    NeoSektorDriverRouteSetting.sort_state_id == sort_state_id,
                 )
             )
     else:
         aggregate_queries = [
             _aggregate_query(
                 "ballmats", NeoSektorBallmatCount,
-                NeoSektorBallmatCount.sort_state_id.in_(sort_state_ids),
+                NeoSektorBallmatCount.sort_state_id == sort_state_id,
             ),
             _aggregate_query(
                 "sort_state",
-                NeoSektorSortState,
-                NeoSektorSortState.gateway_id == gateway.id,
-                NeoSektorSortState.sort_date == sort_date,
-                NeoSektorSortState.sort_name == sort_name,
+                sort_state.c,
             ),
             _aggregate_query(
                 "waves",
                 NeoSektorWaveState,
-                NeoSektorWaveState.sort_state_id.in_(sort_state_ids),
+                NeoSektorWaveState.sort_state_id == sort_state_id,
             ),
             _aggregate_query(
                 "wave_counts",
                 NeoSektorBallmatWaveCount,
-                NeoSektorBallmatWaveCount.sort_state_id.in_(sort_state_ids),
+                NeoSektorBallmatWaveCount.sort_state_id == sort_state_id,
             ),
             _aggregate_query(
                 "open_bays",
                 NeoSektorOpenBayState,
-                NeoSektorOpenBayState.sort_state_id.in_(sort_state_ids),
+                NeoSektorOpenBayState.sort_state_id == sort_state_id,
             ),
             _aggregate_query(
                 "bay_statuses",
                 NeoSektorBayStatus,
-                NeoSektorBayStatus.sort_state_id.in_(sort_state_ids),
+                NeoSektorBayStatus.sort_state_id == sort_state_id,
             ),
         ]
         if scope == ROUTING_STATE_SCOPE:
@@ -135,7 +138,7 @@ def neosektor_state_revision(
                 _aggregate_query(
                     "driver_routes",
                     NeoSektorDriverRouteSetting,
-                    NeoSektorDriverRouteSetting.sort_state_id.in_(sort_state_ids),
+                    NeoSektorDriverRouteSetting.sort_state_id == sort_state_id,
                 )
             )
         # Carry timer starts in the same round trip as the aggregate inputs.
@@ -149,7 +152,7 @@ def neosektor_state_revision(
                 literal(0).label("id_sum"),
                 literal(0).label("state_value"),
                 NeoSektorWaveState.all_up_started_at.label("latest_updated_at"),
-            ).where(NeoSektorWaveState.sort_state_id.in_(sort_state_ids))
+            ).where(NeoSektorWaveState.sort_state_id == sort_state_id)
         )
 
     if scope == ROUTING_STATE_SCOPE:

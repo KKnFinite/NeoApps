@@ -148,3 +148,37 @@ test('Dispatch peers carry fresh edit authority, never legacy permission-free hi
     await fresh.api.revision(url);
     assert.equal(other.requests,2);
 });
+
+test('routing hints share opaque versions at 1.5 seconds without sharing state or suppressing changes',async()=>{
+    const w=world(),tabs=[w.tab(),w.tab(),w.tab()];let requests=0,version='opaque-first';
+    for(const t of tabs)t.context.fetch=async()=>{
+        requests++;
+        return new Response(JSON.stringify({ok:true,version,state:{aircraft:'private'},html:'private'}),
+            {headers:{'X-Neo-Live-Scope':'user-gateway-session'}});
+    };
+    const url='/neosektor/driver-routing/version?sort_date=2026-09-09&sort_name=night';
+    for(let i=0;i<10;i++){
+        version='opaque-'+i;
+        const results=await Promise.all(tabs.map(t=>t.api.revision(url,{},1500,'2026-09-09:night')));
+        for(const r of results)assert.equal((await r.json()).version,version);
+        w.advance(1500);
+    }
+    assert.equal(requests,10);
+    assert.ok(w.messages.every(m=>!JSON.stringify(m).includes('private')));
+    tabs[0].listeners.pagehide();version='leader-closed';
+    assert.equal((await (await tabs[1].api.revision(url,{},1500,'2026-09-09:night')).json()).version,version);
+    assert.equal(requests,11);
+});
+
+test('version-only hints are not accepted from unrelated endpoints or without authenticated scope',async()=>{
+    const w=world(),a=w.tab(),b=w.tab();let calls=0;
+    for(const t of [a,b])t.context.fetch=async()=>{calls++;return new Response('{"ok":true,"version":"opaque"}',
+        {headers:{'X-Neo-Live-Scope':'user-gateway-session'}});};
+    await a.api.revision('/unrelated');await b.api.revision('/unrelated');assert.equal(calls,2);
+    assert.equal(w.messages.filter(m=>m.type==='revision').length,0);
+    const isolated=world(),one=isolated.tab(),two=isolated.tab();let unscoped=0;
+    for(const t of [one,two])t.context.fetch=async()=>{unscoped++;return new Response('{"ok":true,"version":"opaque"}');};
+    await one.api.revision('/neosektor/driver-routing/version');
+    await two.api.revision('/neosektor/driver-routing/version');
+    assert.equal(unscoped,2);assert.equal(isolated.messages.filter(m=>m.type==='revision').length,0);
+});

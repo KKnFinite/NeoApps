@@ -1022,7 +1022,13 @@ def driver_routing_version():
         sort_date, sort_name = routing_signal_scope(request.args)
     except ValueError:
         return _live_state_json({"ok": False, "error": "Invalid routing scope."}), 400
-    return _live_state_json({"ok": True, **read_routing_signal(get_current_gateway(), sort_date, sort_name)})
+    gateway = get_current_gateway()
+    response = _live_state_json({"ok": True, **read_routing_signal(gateway, sort_date, sort_name)})
+    # Bind successful hints to the same authenticated page/session partition.
+    # Errors never advertise a reusable hint; this grants no write authority.
+    from app.services.live_screen_refresh import live_poll_scope
+    response.headers['X-Neo-Live-Scope'] = live_poll_scope(gateway)
+    return response
 
 
 @memory_diagnostics("neosektor_live_state_response")

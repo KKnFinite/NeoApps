@@ -23,7 +23,7 @@ function harness() {
         }),
     });
     api.setEnabled(true);
-    return {api, timers, hints, full,
+    return {api, timers, hints, full, context,
         async next() { assert.equal(timers.size, 1); [...timers.values()][0].fn(); await tick(); },
         async hint(version, ok = true) {
             hints.at(-1).resolve({ok, json: async () => ({ok, ...signal(version)})}); await tick();
@@ -49,6 +49,17 @@ test('unchanged 1.5-second hints never load full state; changed signal fetches o
     await h.finish(signal('v2'));
     await h.next(); await h.hint('v2');
     assert.equal(h.full.length, 1);
+});
+
+test('watch uses existing scoped revision transport and honors its Retry-After deadline',async()=>{
+    const h=harness();let calls=0;
+    h.context.window.NeoLiveRevision={revision:async(url,options,interval,operation)=>{
+        calls++;assert.equal(interval,1500);assert.equal(operation,'2026-09-09:night');
+        assert.equal(options.credentials,'same-origin');assert.ok(url.pathname.endsWith('/version'));
+        throw Object.assign(new Error('throttled'),{retryAt:Date.now()+30000,status:429});
+    }};
+    await h.next();assert.equal(calls,1);assert.equal(h.full.length,0);
+    const delay=[...h.timers.values()][0].delay;assert.ok(delay>=29000&&delay<=30000);
 });
 
 test('normal safety-net fetch is single-flight and still runs for unchanged hints (Block-In/timers)', async () => {
