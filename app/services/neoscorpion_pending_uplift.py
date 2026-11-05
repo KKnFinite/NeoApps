@@ -241,16 +241,19 @@ def review_handoff(gateway,user,form,*,now_utc=None):
     return SimpleNamespace(changed=True,revision=int(asset.revision),pending=p)
 
 
-def attach_console(context):
+def attach_console(context, *, work_index=None, plans=None, events=None):
     """Read-only visit actions; source checks share canonical row validation."""
     from app.services import neoscorpion as fuel
     op=context.get('operation')
     if not op:return context
     owners={r['mission'].id:getattr(r['assignment'],'_parent_assignment',r['assignment']) for r in context['rows'] if r.get('assignment')}
-    index=fuel._fuel_work_states_by_assignment_tail(list(owners.values()))
+    index=work_index if work_index is not None else fuel._fuel_work_states_by_assignment_tail(list(owners.values()))
     by_owner={a.id:a for a in owners.values()}
+    owner_works=[w for w in fuel.all_work(index) if w.fuel_assignment_id in by_owner]
+    visits_by_owner={}
+    for work in owner_works:visits_by_owner.setdefault(work.fuel_assignment_id,[]).append(work)
     sources=[]
-    for work in fuel.all_work(index):
+    for work in owner_works:
         a=by_owner[work.fuel_assignment_id]
         if work.id==a.active_work_state_id or work.physical_finalized_at_utc or not work.physical_sequence_number:continue
         view,mission=fuel._segment_views(a,a.sort_date_mission,work)
@@ -261,13 +264,14 @@ def attach_console(context):
     source_rows=fuel._fuel_rows(op,[],projection_sources=sources,assignments_by_mission=owners,
         fuel_work_states_by_assignment_tail=index,apu_rates_by_aircraft_type=rates,
         nightly_truck_states_by_truck_id=selections,
-        lateral_imbalance_limits_by_aircraft_type=limits,status_settings=settings,
+        lateral_imbalance_limits_by_aircraft_type=limits,status_settings=settings,fueling_events=events,
         fuel_density_lbs_per_gallon=settings.fuel_density_lbs_per_gallon if settings else None) if sources else []
     by_assignment={}
     for source in source_rows:by_assignment.setdefault(source['assignment'].id,[]).append(source)
-    dependencies=NeoScorpionPendingUplift.query.filter_by(sort_date_operation_id=op.id,status='promoted').filter(
-        NeoScorpionPendingUplift.plan_kind.in_(CONTINUATIONS)).all()
-    works={w.id:w for w in fuel.all_work(index)}
+    dependencies=([p for p in plans if p.status=='promoted' and p.plan_kind in CONTINUATIONS] if plans is not None
+        else NeoScorpionPendingUplift.query.filter_by(sort_date_operation_id=op.id,status='promoted').filter(
+            NeoScorpionPendingUplift.plan_kind.in_(CONTINUATIONS)).all())
+    works={w.id:w for w in owner_works}
     for source in source_rows:
         source['continuation_plan']=next((p for p in dependencies if p.parent_work_state_id==source['physical_work_id']),None)
     for plan in dependencies:plan.console_child=works.get(plan.promoted_work_state_id)
@@ -289,7 +293,7 @@ def attach_console(context):
         if not row.get('administratively_complete') and row.get('is_off'):
             row['completion_progress'] = ('Fueler submitted — ready for Dispatcher COMPLETE.' if row['normal_completion_ready'] else
                 row.get('normal_completion_reason') or row.get('fueler_completion_reason') or 'Fueler COMPLETE ASSIGNMENT required.')
-        row['console_visits']=[w for w in fuel.all_work(index) if a and w.fuel_assignment_id==a.id]
+        row['console_visits']=list(visits_by_owner.get(a.id,())) if a else []
         row['console_visits'].sort(key=lambda w:(w.physical_cycle_number or 0,w.physical_sequence_number or 0,w.id))
         row['unverified_visit_count']=sum(1 for w in row['console_visits']
             if w.id!=row.get('physical_work_id') and not w.physical_finalized_at_utc and not w.ended_early_at_utc
@@ -304,7 +308,7 @@ def attach_console(context):
             visit.console_submission_valid=valid.get(visit.id,False)
             visit.console_on_trusted=trusted_on.get(visit.id,False)
     from app.services.neoscorpion_assignment_times import attach_assignment_times
-    return attach_assignment_times(context)
+    return attach_assignment_times(context, plans=plans, events=events)
 
 class PendingUpliftConflict(ValueError):
     pass
@@ -500,11 +504,11 @@ def promote_after_completion(gateway,user,operation,assignment,mission,now):
     if p is not None and p.plan_kind=='uplift':_attempt_promotion(gateway,user,operation,assignment,mission,p,now)
 
 
-def attach_pending(context):
+def attach_pending(context, *, plans=None):
     from app.services import neoscorpion as fuel
     operation=context.get('operation')
     if operation is None:return context
-    pending=NeoScorpionPendingUplift.query.filter_by(sort_date_operation_id=operation.id).filter(
+    pending=[p for p in plans if p.status in OUTSTANDING] if plans is not None else NeoScorpionPendingUplift.query.filter_by(sort_date_operation_id=operation.id).filter(
         NeoScorpionPendingUplift.status.in_(OUTSTANDING)).options(joinedload(NeoScorpionPendingUplift.proposed_truck),
         joinedload(NeoScorpionPendingUplift.proposed_fueler)).order_by(NeoScorpionPendingUplift.id).all()
     by_mission={}

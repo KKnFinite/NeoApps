@@ -322,14 +322,14 @@ def snapshot_resources(gateway,assignment,mission,work,settings,planning,now):
     return evidence
 
 
-def attach_resource_evidence(rows,operation,settings,planning,now):
+def attach_resource_evidence(rows,operation,settings,planning,now,*,truck_histories=None):
     """Shared read-only prospective availability; unresolved future order is unknown."""
     from app.services.neoscorpion_spear import effective_spear_settings
     from app.models import NeoScorpionSortTruck,NeoScorpionFuelTruck,SortDateParkingAssignment
     from app.extensions import db
     spear=effective_spear_settings(settings)
     visits,truncated=load_visits(operation)
-    histories={row[0]:(row[1],row[2]) for row in db.session.query(NeoScorpionSortTruck.fuel_truck_id,
+    histories=truck_histories if truck_histories is not None else {row[0]:(row[1],row[2]) for row in db.session.query(NeoScorpionSortTruck.fuel_truck_id,
         NeoScorpionSortTruck.availability_history,NeoScorpionFuelTruck.availability_history).join(NeoScorpionFuelTruck,
         NeoScorpionFuelTruck.id==NeoScorpionSortTruck.fuel_truck_id).filter(NeoScorpionSortTruck.sort_date_operation_id==operation.id).all()}
     from app.services.neoscorpion import _parking_assignment_rows

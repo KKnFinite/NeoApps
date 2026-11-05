@@ -1,6 +1,7 @@
 """Read-only assignment receipts. Effective activation/ON times are not sent times."""
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from app.models import (NeoScorpionFuelAuditEntry, NeoScorpionFuelingEvent, NeoScorpionPendingUplift,
                         NeoScorpionFuelTruck, User)
@@ -9,6 +10,34 @@ from app.services.time_display import format_local_hhmm
 
 
 FIELDS = (('fueler', 'assigned_fueler_user_id'), ('truck', 'assigned_truck_id'))
+
+
+def assignment_event_rows(operation):
+    """One current-Sort projection for totals, releases and sent-time receipts.
+
+    Receipt attribution needs five snapshot facts, never forecast arrays or
+    unrelated archived payloads. JSON types remain unchanged (no ID coercion).
+    """
+    from app.extensions import db
+    from sqlalchemy import func
+    model=NeoScorpionFuelingEvent
+    columns=[model.id,model.fuel_assignment_id,model.fuel_work_state_id,model.cycle_number,
+        model.transfer_fuel_gallons,model.fuel_truck_id,model.ended_at_utc,model.tail_number,model.fueler_user_id]
+    facts=('fueler_assigned_at','truck_assigned_at','fueler_id','truck_id','assignment_actor_id')
+    # SQLite's scalar JSON extraction can turn true/false into 1/0. A JSON
+    # array projection preserves original types in both supported databases.
+    projection=(func.json_extract(model.performance_snapshot, *('$.'+key for key in facts))
+        if db.engine.dialect.name=='sqlite' else
+        func.json_build_array(*(model.performance_snapshot[key] for key in facts)))
+    records=db.session.query(*columns,projection.label('receipt_facts')).filter(
+        model.sort_date_operation_id==operation.id).all()
+    events=[]
+    for row in records:
+        values=json.loads(row.receipt_facts) if isinstance(row.receipt_facts,str) else row.receipt_facts
+        if values is None:values=[None]*len(facts)  # SQL NULL legacy snapshot.
+        events.append(SimpleNamespace(**{column.key:getattr(row,column.key) for column in columns},
+            performance_snapshot=dict(zip(facts,values))))
+    return events
 
 
 def _resource_change(audit, field):
@@ -64,7 +93,7 @@ def _planned_times(plan, audits):
     return result
 
 
-def attach_assignment_times(context):
+def attach_assignment_times(context, *, plans=None, events=None):
     """Batch-resolve immutable visit facts/audits without writing on refresh.
 
     No created/updated/ON timestamp is ever used as an assignment timestamp.
@@ -84,7 +113,7 @@ def attach_assignment_times(context):
         NeoScorpionFuelAuditEntry.fuel_assignment_id.in_(owners),
         NeoScorpionFuelAuditEntry.field_name.in_([field for _, field in FIELDS] + ['pending_uplift']),
     ).order_by(NeoScorpionFuelAuditEntry.created_at, NeoScorpionFuelAuditEntry.id).all()
-    plans = NeoScorpionPendingUplift.query.filter(
+    plans = [p for p in plans if p.fuel_assignment_id in owners] if plans is not None else NeoScorpionPendingUplift.query.filter(
         NeoScorpionPendingUplift.sort_date_operation_id == op.id,
         NeoScorpionPendingUplift.fuel_assignment_id.in_(owners),
     ).all()
@@ -92,19 +121,21 @@ def attach_assignment_times(context):
     plan_times = {p.id: _planned_times(p, by_owner[p.fuel_assignment_id]) for p in plans}
     promoted = {p.promoted_work_state_id: p for p in plans if p.promoted_work_state_id}
     events_by_work = {}
-    for event in NeoScorpionFuelingEvent.query.filter(
-        NeoScorpionFuelingEvent.sort_date_operation_id == op.id,
-        NeoScorpionFuelingEvent.fuel_assignment_id.in_(owners),
-    ).all():
+    for event in assignment_event_rows(op) if events is None else events:
+        if event.fuel_assignment_id not in owners:continue
         events_by_work.setdefault(event.fuel_work_state_id, []).append(event)
-    names = {
-        'fueler': {u.id: u.display_name for u in User.query.filter(User.id.in_(
-            {a.assigned_fueler_user_id for a in owners.values() if a.assigned_fueler_user_id}
+    needed = ({a.assigned_fueler_user_id for a in owners.values() if a.assigned_fueler_user_id}
             | {_id(e.new_value) for e in audits if e.field_name == 'assigned_fueler_user_id'}
             | {w.physical_fueler_user_id for r in rows for w in r.get('console_visits', ())}
-            | {p.proposed_fueler_user_id for p in plans})).all()},
-        'truck': {t.id: t.truck_number for t in NeoScorpionFuelTruck.query.filter(
-            NeoScorpionFuelTruck.gateway_id == op.gateway_id).all()},
+            | {p.proposed_fueler_user_id for p in plans}) - {None}
+    users = {u.id:u for u in context.get('fuelers',())}
+    missing = needed - users.keys()
+    if missing:users.update((u.id,u) for u in User.query.filter(User.id.in_(missing)).all())
+    trucks = context.get('trucks')
+    if trucks is None:trucks=NeoScorpionFuelTruck.query.filter_by(gateway_id=op.gateway_id).all()
+    names = {
+        'fueler': {identifier:users[identifier].display_name for identifier in needed if identifier in users},
+        'truck': {t.id: t.truck_number for t in trucks},
     }
     zone = gateway_timezone(op.gateway)
 

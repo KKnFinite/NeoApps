@@ -2132,7 +2132,7 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
     if operation:
         for item in NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,kind='fuel',status='pending').all():
             pending.setdefault(item.fuel_truck_id,[]).append(item)
-        selections={s.fuel_truck_id:s for s in NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()}
+        selections=context['nightly_truck_states_by_truck_id']
         postings=dict(db.session.query(NeoScorpionFuelingEvent.fuel_truck_id,func.max(NeoScorpionFuelingEvent.id)).filter_by(
             sort_date_operation_id=operation.id).group_by(NeoScorpionFuelingEvent.fuel_truck_id).all())
     # Presentation-only pointers to existing truck controls: never duplicate

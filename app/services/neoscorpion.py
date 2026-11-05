@@ -438,7 +438,8 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
             )
             _attach_fueling_timing(context["rows"], context["operation"], context["settings"],
                                    configured_planning_settings, live_calibrations, context["spear_settings"],
-                                   jobs=learning_jobs, now_utc=learning_now)
+                                   jobs=learning_jobs, now_utc=learning_now,
+                                   truck_histories=context.get('_truck_availability_histories'))
             stage = "SPEAR plan"
             spear_plan = build_spear_plan(
                 context["rows"],
@@ -500,7 +501,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
 
 
 def _attach_fueling_timing(rows, operation, settings, planning=None, calibrations=None, spear=None, *, jobs=None, now_utc=None,
-                           review_learning=True):
+                           review_learning=True, truck_histories=None):
     planning = planning or assignment_planning_settings(operation.gateway, settings=settings)
     spear = spear or effective_spear_settings(settings)
     now_utc = now_utc or datetime.utcnow()
@@ -513,7 +514,7 @@ def _attach_fueling_timing(rows, operation, settings, planning=None, calibration
     if calibrations is None:
         calibrations = build_live_calibration(operation,planning,rows,jobs=jobs,now_utc=now_utc) if learning_needed else {}
     from app.services.neoscorpion_resource_timing import attach_resource_evidence
-    attach_resource_evidence(rows,operation,settings,planning,now_utc)
+    attach_resource_evidence(rows,operation,settings,planning,now_utc,truck_histories=truck_histories)
     for row in rows:
         prediction = physical_off_forecast(row, planning, settings=settings, jobs=jobs,
             mode=spear.live_calibration_mode, now_utc=now_utc, calibrations=calibrations)
@@ -710,18 +711,8 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
     )
     # Reuse the existing cycle lookup for totals; assignment T/F is a mirror of
     # completed events and must not be added to the physical event ledger.
-    fueling_events = (
-        db.session.query(
-            NeoScorpionFuelingEvent.id,
-            NeoScorpionFuelingEvent.fuel_work_state_id,
-            NeoScorpionFuelingEvent.cycle_number,
-            NeoScorpionFuelingEvent.transfer_fuel_gallons,
-        )
-        .filter(
-            NeoScorpionFuelingEvent.sort_date_operation_id == operation.id
-        )
-        .all()
-    )
+    from app.services.neoscorpion_assignment_times import assignment_event_rows
+    fueling_events = assignment_event_rows(operation)
     fueling_event_cycle_keys = {
         (event.fuel_work_state_id, int(event.cycle_number or 1))
         for event in fueling_events
@@ -743,6 +734,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         fuel_work_states_by_assignment_tail=fuel_work_states,
         nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
         fueling_event_cycle_keys=fueling_event_cycle_keys,
+        fueling_events=fueling_events,
         apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
         lateral_imbalance_limits_by_aircraft_type=(
             lateral_imbalance_limits_by_aircraft_type
@@ -824,11 +816,18 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "fuel_dispatch_refresh": refresh_setting,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         "nightly_truck_states_by_truck_id": nightly_truck_states_by_truck_id,
+        '_truck_availability_histories': {entry['truck'].id:(entry['selection'].availability_history,
+            entry['truck'].availability_history) for entry in asset_context['nightly_trucks']},
         **asset_context,
     }
     _clear_optional_dispatch_enrichment(context)
     from app.services.neoscorpion_pending_uplift import attach_pending,attach_console
-    return attach_console(attach_pending(context))
+    from app.models import NeoScorpionPendingUplift
+    plans = NeoScorpionPendingUplift.query.filter_by(sort_date_operation_id=operation.id).options(
+        joinedload(NeoScorpionPendingUplift.proposed_truck),
+        joinedload(NeoScorpionPendingUplift.proposed_fueler)).order_by(NeoScorpionPendingUplift.id).all()
+    return attach_console(attach_pending(context, plans=plans), work_index=fuel_work_states,
+        plans=plans, events=fueling_events)
 
 
 def _empty_spear_calibration():
@@ -899,9 +898,11 @@ def hanzo_context(gateway):
         lateral_imbalance_limits_by_aircraft_type,
     ) = _effective_aircraft_fuel_configuration(gateway.id)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+    start_evidence = {}
     rows = _fuel_rows(
         operation,
         missions,
+        start_evidence=start_evidence,
         status_settings=settings,
         fuel_density_lbs_per_gallon=(settings.fuel_density_lbs_per_gallon if settings else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON),
         planning_inbound_fallback_lbs=(settings.planning_inbound_fuel_fallback_lbs if settings else DEFAULT_PLANNING_INBOUND_FALLBACK_LBS),
@@ -914,7 +915,8 @@ def hanzo_context(gateway):
     )
     try:
         with db.session.begin_nested():
-            _attach_fueling_timing(rows, operation, settings, review_learning=False)
+            _attach_fueling_timing(rows, operation, settings, review_learning=False,
+                truck_histories=start_evidence.get('truck_histories'))
     except Exception:
         current_app.logger.exception("Hanzo fueling timing unavailable.")
     nicknames = fueler_nicknames(gateway, (row["assigned_fueler"] for row in rows))
@@ -957,11 +959,14 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
         NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY,
     )
     operational_name = operational_fueler_name(user, fueler_nicknames(gateway, [user]))
-    if not operation:
+    # Truck Driver uses -1 when no truck is claimed. No physical row can match
+    # this sentinel: retain fresh operation/configuration/revision metadata,
+    # without building fleet evidence merely to discard every row afterward.
+    if not operation or truck_id == -1:
         return {
-            "operation": None,
+            "operation": operation,
             "rows": [],
-            "fuel_assignments_revision": 0,
+            "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
             "fuel_assignments_refresh": refresh_setting,
             "settings": settings,
             "operational_fueler_name": operational_name,
@@ -1023,6 +1028,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
         NeoScorpionSortTruck.sort_date_operation_id == operation.id,
         NeoScorpionSortTruck.fuel_truck_id.in_(truck_ids),
     ).all() if truck_ids else [])
+    start_evidence = {}
     rows = _fuel_rows(
         operation,
         missions,
@@ -1039,6 +1045,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
         ),
         status_settings=settings,
         projection_sources=sources,
+        start_evidence=start_evidence,
         parking_by_tail=parking,
         nightly_truck_states_by_truck_id={item.fuel_truck_id:item for item in selections},
         assignments_by_mission=assignments_by_mission,
@@ -1053,7 +1060,8 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     try:
         with db.session.begin_nested():
             if include_timing:
-                _attach_fueling_timing(rows, operation, settings, review_learning=False)
+                _attach_fueling_timing(rows, operation, settings, review_learning=False,
+                    truck_histories=start_evidence.get('truck_histories'))
     except Exception:
         current_app.logger.exception("Fueling timing unavailable; retaining TIMING UNKNOWN.")
         for row in rows:
@@ -6371,6 +6379,7 @@ def _fuel_rows(
     start_evidence=None,
     nightly_truck_states_by_truck_id=None,
     fueling_event_cycle_keys=None,
+    fueling_events=None,
     apu_rates_by_aircraft_type=None,
     lateral_imbalance_limits_by_aircraft_type=None,
     fuel_density_lbs_per_gallon=None,
@@ -6395,11 +6404,17 @@ def _fuel_rows(
     if start_selections is None:
         start_selections = {selection.fuel_truck_id: selection for selection in
             NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()}
-    arrivals = _arrivals_by_tail(operation)
-    arrival_presence = arrival_presence_by_tail(operation)
+    arrival_missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id,
+        mission_type='arrival').order_by(SortDateMission.eta_datetime_utc.is_(None),
+            SortDateMission.eta_datetime_utc,SortDateMission.planned_datetime_utc,SortDateMission.flight_number).all()
+    arrivals = _arrivals_by_tail(operation, missions=arrival_missions)
+    arrival_presence = arrival_presence_by_tail(operation, arrivals=arrival_missions)
     if fuel_trucks is None:
         fuel_trucks = _fuel_trucks(operation.gateway or _gateway_stub(operation))
     trucks = {truck.id: truck for truck in fuel_trucks}
+    if start_evidence is not None:
+        start_evidence['truck_histories'] = {truck_id:(selection.availability_history,trucks[truck_id].availability_history)
+            for truck_id,selection in start_selections.items() if truck_id in trucks}
     # An empty current-tail WorkIndex can still retain an open physical visit.
     fuel_work_states = (fuel_work_states_by_assignment_tail
                         if fuel_work_states_by_assignment_tail is not None else {})
@@ -7196,7 +7211,7 @@ def _fuel_rows(
     if assignments:
         _attach_fueling_start_state(rows, operation, assignments, fuel_work_states, parking,
                                    start_selections, status_settings, now=now_utc,
-                                   evidence=start_evidence)
+                                   evidence=start_evidence, events=fueling_events)
     return rows
 
 
@@ -7322,7 +7337,7 @@ def _fuel_work_states_by_assignment_tail(assignments):
     return WorkIndex(assignments, work_states)
 
 
-def _fuel_start_records(operation, assignments, work_states, parking, selections):
+def _fuel_start_records(operation, assignments, work_states, parking, selections, *, events=None):
     """Bounded current-sort evidence shared by the save gate and live views."""
     from app.services.neoscorpion_participation import owner_id
     assignments = list(assignments)
@@ -7402,18 +7417,20 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
                 assigned_at=None, remaining_complete=False, remaining_at_on=False, premature_readings=False,
                 parking=parking.get(old_tail,("-",False))[0],
                 truck_available=bool(old_selection and old_selection.status == "available")))
-    releases = [dict(id=event.fuel_assignment_id, work_id=event.fuel_work_state_id, truck_id=event.fuel_truck_id,
-                    release=utc_naive(event.ended_at_utc), parking=parking.get(_normalize_tail(event.tail_number), ("-", False))[0])
-                for event in db.session.query(NeoScorpionFuelingEvent.fuel_assignment_id,
+    if events is None:
+        events = db.session.query(NeoScorpionFuelingEvent.fuel_assignment_id,
                     NeoScorpionFuelingEvent.fuel_truck_id, NeoScorpionFuelingEvent.ended_at_utc,
                     NeoScorpionFuelingEvent.tail_number, NeoScorpionFuelingEvent.fuel_work_state_id).filter(
                     NeoScorpionFuelingEvent.sort_date_operation_id == operation.id,
-                    NeoScorpionFuelingEvent.ended_at_utc.isnot(None)).all()]
+                    NeoScorpionFuelingEvent.ended_at_utc.isnot(None)).all()
+    releases = [dict(id=event.fuel_assignment_id, work_id=event.fuel_work_state_id, truck_id=event.fuel_truck_id,
+                    release=utc_naive(event.ended_at_utc), parking=parking.get(_normalize_tail(event.tail_number), ("-", False))[0])
+                for event in events if event.ended_at_utc is not None]
     return records, releases
 
 
-def _attach_fueling_start_state(rows, operation, assignments, work_states, parking, selections, settings, *, now, evidence=None):
-    records, releases = _fuel_start_records(operation, assignments.values(), work_states, parking, selections)
+def _attach_fueling_start_state(rows, operation, assignments, work_states, parking, selections, settings, *, now, evidence=None, events=None):
+    records, releases = _fuel_start_records(operation, assignments.values(), work_states, parking, selections, events=events)
     if evidence is not None:
         evidence.update(records=records, releases=releases)
     by_id = {record["id"]: record for record in records}
@@ -7809,9 +7826,9 @@ def _departure_missions(operation, *, include_load_planners=False):
     )
 
 
-def _arrivals_by_tail(operation):
+def _arrivals_by_tail(operation, *, missions=None):
     arrivals = {}
-    missions = (
+    missions = missions if missions is not None else (
         SortDateMission.query.filter(
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "arrival",
@@ -7830,6 +7847,8 @@ def _arrivals_by_tail(operation):
         .all()
     )
     for mission in missions:
+        if mission.arrival_status == 'cancelled':
+            continue
         tail_number = _normalize_tail(mission.assigned_tail_number)
         if tail_number and tail_number not in arrivals:
             arrivals[tail_number] = mission
