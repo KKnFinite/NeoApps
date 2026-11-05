@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}UCC | NeoSub-Zero{% endblock %}
+{% block title %}DUCC | NeoSub-Zero{% endblock %}
 {% block content %}
 {% set mobile_view = 'ramp' if request.args.get('view') == 'ramp' else 'staffing' %}
 {% set ramp_names = ramps|map(attribute='name')|list %}
 {% set requested_ramp = request.args.get('ramp', 'Alpha')|title %}
 {% set mobile_ramp = requested_ramp if requested_ramp in ramp_names else ramp_names|first|default('Alpha') %}
-<section class="neosubzero-shell neosubzero-ucc" data-subzero-ucc data-ucc-mobile-view="{{ mobile_view }}" data-ucc-selected-ramp="{{ mobile_ramp }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.ucc_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
+<div class="ucc-board-viewport"><section class="neosubzero-shell neosubzero-ucc" data-subzero-ucc data-ucc-mobile-view="{{ mobile_view }}" data-ucc-selected-ramp="{{ mobile_ramp }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.ucc_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
     <header class="neosubzero-head">
-        <div><p>NEOSUB-ZERO</p><h1>UCC</h1></div>
+        <div><p>NEOSUB-ZERO</p><h1>DUCC</h1></div>
         <div class="neosubzero-ucc-head-actions">
             <strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong>
             <button type="button" class="neosubzero-ucc-tv-enter" data-ucc-tv-enter>TV MODE</button>
@@ -100,6 +100,7 @@
         </div>
     </dialog>
     {% endif %}
-</section>
+</section></div>
 <script src="{{ url_for('static', live='20261101-poll-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261103-mobile-ramp-v1') }}" defer></script>
+<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='20261105-ducc-board-v1') }}" defer></script>
 {% endblock %}

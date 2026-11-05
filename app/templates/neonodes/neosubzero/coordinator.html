@@ -25,16 +25,17 @@
         <aside class="neosubzero-coordinator-list">
             <h2>{{ selected_ramp|upper }}</h2>
             {% for row in selected_rows %}
-            <a class="{{ 'selected' if row.mission_id == selected_mission_id else '' }}" href="{{ url_for('neosubzero.coordinator', ramp=selected_ramp, mission=row.mission_id) }}"><strong>{{ row.flight }}</strong><span>{{ row.tail }} · {{ row.departure_time }}</span><em>IN PROGRESS</em></a>
+            <a class="coordinator-aircraft state-{{ row.visual_state }} {{ 'selected' if row.mission_id == selected_mission_id else '' }}" href="{{ url_for('neosubzero.coordinator', ramp=selected_ramp, mission=row.mission_id) }}"><strong>{{ row.flight }}</strong><span>{{ row.tail }} · {{ row.departure_time }}</span><em>{{ row.visual_label }}</em></a>
             {% else %}<p>No active missions.</p>{% endfor %}
             <h3>COMPLETED</h3>
             {% for row in completed_rows %}
-            <a href="{{ url_for('neosubzero.coordinator', ramp=selected_ramp, mission=row.mission_id) }}"><strong>{{ row.flight }}</strong><span>{{ row.tail }} · {{ row.deice_status }}</span></a>
+            <a class="coordinator-aircraft state-{{ row.visual_state }} {{ 'selected' if row.mission_id == selected_mission_id else '' }}" href="{{ url_for('neosubzero.coordinator', ramp=selected_ramp, mission=row.mission_id) }}"><strong>{{ row.flight }}</strong><span>{{ row.tail }} · {{ row.deice_status }}</span></a>
             {% else %}<p>None completed.</p>{% endfor %}
         </aside>
         <main class="neosubzero-coordinator-detail">
             {% for row in selected_rows + completed_rows if row.mission_id == selected_mission_id %}
             <article class="neosubzero-departure-mission {{ 'is-terminal' if row.terminal else 'is-active' }}" data-subzero-mission data-terminal="{{ 'true' if row.terminal else 'false' }}">
+                <strong class="coordinator-status state-{{ row.visual_state }}">{{ row.visual_label }}</strong>
                 {% if row.terminal %}{{ terminal_summary(row, can_edit, 'coordinator', selected_ramp, true) }}{% endif %}
                 {{ mission_workspace(row, can_edit, 'coordinator', selected_ramp, true) }}
                 {{ team_controls(row, 'coordinator') }}

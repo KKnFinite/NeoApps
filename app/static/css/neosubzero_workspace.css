@@ -9,35 +9,43 @@
     --subzero-gone:#687480; --subzero-gone-border:#929ba4;
     --subzero-status-dark:#101b26; --subzero-status-light:#fff;
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-planned,.state-deice-planned,.state-pretreat-planned) {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-planned,.state-deice-planned,.state-pretreat-planned) {
     --aircraft-fill:var(--subzero-planned); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-planned-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-configured {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-configured {
     /* Black reaches 4.68:1 on the approved emerald; white is below 4.5:1. */
     --aircraft-fill:var(--subzero-configured); --aircraft-ink:#000; --aircraft-edge:var(--subzero-configured-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-deicing {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-deicing {
     --aircraft-fill:var(--subzero-deicing); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-deicing-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-fin,.state-finished) {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-fin,.state-finished) {
     --aircraft-fill:var(--subzero-fin); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-fin-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-radio-pending {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-radio-pending {
     --aircraft-fill:var(--subzero-radio-pending); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-radio-pending-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-negative {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-negative {
     --aircraft-fill:var(--subzero-negative); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-negative-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-gone,.state-cleared) {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-gone,.state-cleared) {
     --aircraft-fill:var(--subzero-gone); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-gone-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-planned,.state-deice-planned,.state-pretreat-planned,.state-configured,.state-deicing,.state-fin,.state-finished,.state-radio-pending,.state-negative,.state-gone,.state-cleared) {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-planned,.state-deice-planned,.state-pretreat-planned,.state-configured,.state-deicing,.state-fin,.state-finished,.state-radio-pending,.state-negative,.state-gone,.state-cleared) {
     background:var(--aircraft-fill); color:var(--aircraft-ink); border-color:var(--aircraft-edge);
 }
 .neosubzero-ucc .ucc-plane:is(.state-deice-planned,.state-pretreat-planned,.state-configured,.state-deicing,.state-finished,.state-radio-pending,.state-negative,.state-gone,.state-cleared) > :is(span,small) { color:inherit; }
 .neosubzero-ucc .ucc-plane .ucc-plane-icon { font-family:"Segoe UI Symbol","Apple Symbols",Arial,sans-serif; font-variant-emoji:text; }
 .neosubzero-ucc .ucc-plane:is(:hover,[aria-pressed="true"]) { box-shadow:inset 0 0 0 1px currentColor; }
 .neosubzero-ucc .ucc-plane:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+
+/* Coordinator cards and selected-aircraft indicators share the approved palette.
+   Forms retain their normal dark surface and all existing controls. */
+.neosubzero-coordinator .coordinator-aircraft :is(strong,span,em) { color:inherit; }
+.neosubzero-coordinator .coordinator-aircraft.selected,
+.neosubzero-coordinator .coordinator-aircraft:focus-visible { outline:2px solid #fff; outline-offset:1px; }
+.neosubzero-coordinator .coordinator-status { display:inline-block; padding:5px 9px; margin-bottom:8px; border:1px solid; border-radius:3px; font-size:.75rem; }
+.neosubzero-coordinator :is(.coordinator-aircraft,.coordinator-status).state-review { background:#342517; color:#ffd188; border-color:#b68b4e; }
 
 /* Navigation grouping only; collapsed links keep their accessible names. */
 .blueprint-neosubzero .subzero-nav-section {
@@ -71,6 +79,22 @@ body.blueprint-neosubzero.operational-shell-page > .shell > main.content {
 }
 /* Preserve TV's edge-to-edge board after the ordinary shell contract above. */
 body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { padding:0 !important; }
+
+/* Desktop DUCC uses the same operational Board View toggle as NeoScorpion.
+   Its existing board is fitted as a whole; no second ramp renderer or state. */
+.ucc-board-viewport { display:contents; }
+@media (min-width:901px) {
+    body.blueprint-neosubzero.operational-board-view:has([data-subzero-ucc]) { overflow:hidden; }
+    body.blueprint-neosubzero.operational-board-view .ucc-board-viewport { display:block; position:fixed; inset:0; z-index:100; overflow:hidden; background:#06101a; }
+    body.operational-board-view .ucc-board-viewport > .neosubzero-ucc { position:absolute; top:40px; left:8px; min-height:0; padding:8px; transform-origin:top left; }
+    body.operational-board-view .ucc-board-viewport .neosubzero-ucc > :is(.neosubzero-head,.neosubzero-nav) { display:none; }
+    body.blueprint-neosubzero.operational-board-view:has([data-subzero-ucc]) .operational-board-exit { width:auto; min-width:76px; padding:0 10px; font-size:11px; font-weight:700; }
+    body.operational-board-view .ucc-board-viewport .neosubzero-weather { padding:8px; margin-bottom:6px; }
+    body.operational-board-view .ucc-board-viewport .neosubzero-ucc-fluid { margin:4px 0; padding:5px 8px; }
+    body.operational-board-view .ucc-board-viewport .ucc-team summary small { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; }
+    body.operational-board-view .ucc-board-viewport .ucc-ramp-board { align-items:stretch; }
+    body.operational-board-view .ucc-board-viewport .ucc-aircraft-panel { position:relative; top:auto; }
+}
 
 /* Grid items may shrink with the workspace; wide tables scroll locally. */
 .blueprint-neosubzero .neosubzero-shell :is(section,article,form,fieldset,details,label),

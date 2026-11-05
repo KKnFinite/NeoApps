@@ -162,6 +162,9 @@ def _title_parts(path, ballmat_side):
     if path.startswith("/neostaffing"):
         return "NeoStaffing", "NeoStaffing"
 
+    if path == "/neosubzero/ucc":
+        return "DUCC", "NeoSub-Zero"
+
     for prefix, owner in (
         ("/neoreptile", "NeoReptile"),
         ("/neosubzero", "NeoSub-Zero"),

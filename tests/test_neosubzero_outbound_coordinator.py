@@ -378,7 +378,9 @@ class NeoSubZeroOutboundCoordinatorTest(unittest.TestCase):
                 **context,
                 **workspace,
             )
-        self.assertIn("IN PROGRESS", html)
+        # The active card now communicates its actual shared treatment status.
+        self.assertIn('coordinator-aircraft state-untreated', html)
+        self.assertIn('UNTREATED', html)
         self.assertIn("AIR-TO-GROUND SCRIPT", html)
         self.assertIn("Remote", html)
         self.assertNotIn("W&amp;B", html)

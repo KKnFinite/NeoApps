@@ -203,6 +203,10 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
     decorate_departure_rows_with_spray(operation, rows)
     from app.services.frost_inspections import decorate as decorate_inspections
     decorate_inspections(operation, rows)
+    # Coordinator uses the same read-only aircraft presentation as Operations.
+    from app.services.neosubzero_operations import departure_presentation
+    for row in rows:
+        row['visual_state'], row['visual_label'] = departure_presentation(row, tail_states.get(row['tail']))
     return {"operation": operation, "rows": rows, "fluid_settings": settings,"detached_radio":detached_radio}
 
 
