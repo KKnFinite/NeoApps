@@ -1,0 +1,5 @@
+<!-- Existing desktop DUCC Segoe UI Symbol U+2708 outline, normalized nose-up.
+     One vector prevents platform/emoji substitution; CSS supplies status color. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1771 1771">
+  <path transform="matrix(0 -1 1 0 170 1917)" d="M635 -84 844 617H433L308 479H146L249 720L146 956H308L431 821H842L635 1515L797 1527L1245 821H1813Q1856 821 1886.5 793Q1917 765 1917 720Q1917 699 1909 680.5Q1901 662 1886.5 647.5Q1872 633 1853 625Q1834 617 1813 617H1248L797 -96Z"/>
+</svg>

@@ -1,13 +1,15 @@
-{% macro aircraft(row, location) -%}
+{% macro aircraft(row, location, facing='up') -%}
 <button type="button" class="ucc-plane state-{{ row.visual_state }}" data-ucc-aircraft="{{ row.identity_key }}" aria-label="{{ row.tail }} {{ row.flight }}, {{ location }}, {{ row.visual_label }}">
-    <span class="ucc-plane-icon" aria-hidden="true">✈</span><strong>{{ row.tail }}</strong>
+    <span class="ucc-plane-icon facing-{{ facing }}" aria-hidden="true"></span><strong>{{ row.tail }}</strong>
     {% if row.flight or row.lane %}<span>{{ row.flight }}{% if row.lane %} · L{{ row.lane }}{% endif %}</span>{% endif %}<small>{{ row.visual_label }}</small>
 </button>
 {%- endmacro %}
 {% macro parking_place(place, positioned=true) -%}
 <div class="ucc-parking-place{% if positioned and place.grid_row %} ucc-grid-row-{{ place.grid_row }} ucc-grid-column-{{ place.grid_column }}{% endif %}" data-ucc-parking="{{ place.code }}">
     <b>{{ place.code }}</b>
-    {% for row in place.aircraft %}{{ aircraft(row, 'parking ' ~ place.code) }}{% else %}<span>EMPTY</span>{% endfor %}
+    {% set position = place.code[-2:]|int %}
+    {% set facing = 'right' if 1 <= position <= 4 else 'left' if 5 <= position <= 8 else 'up' %}
+    {% for row in place.aircraft %}{{ aircraft(row, 'parking ' ~ place.code, facing) }}{% else %}<span>EMPTY</span>{% endfor %}
 </div>
 {%- endmacro %}
 {% macro physical_ramp(ramp) -%}
