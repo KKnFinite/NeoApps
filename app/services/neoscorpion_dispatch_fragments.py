@@ -13,6 +13,45 @@ _CSRF = re.compile(r'(<input\b[^>]*\bname="csrf_token"[^>]*\bvalue=")[^"]*(")')
 _REFERENCE = re.compile(r'(<input\b[^>]*\bname="spear_decision_reference"[^>]*\bvalue=")[^"]*(")')
 _RANK = re.compile(r'\sdata-dispatch-(?:arrival|etd)-rank="[^"]*"')
 
+_DICT_ATTRIBUTES = frozenset(dir(dict)) | {'__dict__'}
+
+
+class _TemplateValues(dict):
+    """Request-local read-only dict with native attribute access for Jinja.
+
+    Jinja's dot syntax otherwise raises/catches AttributeError before every
+    dict lookup. Copy the finished dictionary, retaining original ORM references
+    and permission values. Preserve dict method-name precedence and JSON shape.
+    """
+    def __init__(self, values):
+        dict.__init__(self, values)
+        self.__dict__.update(
+            (key, value) for key, value in values.items()
+            if isinstance(key, str) and key.isidentifier()
+            and not key.startswith('_') and key not in _DICT_ATTRIBUTES
+        )
+
+    def _readonly(self, *args, **kwargs):
+        raise TypeError('Template presentation values are read-only.')
+
+    __setitem__ = __delitem__ = __setattr__ = __delattr__ = _readonly
+    clear = pop = popitem = setdefault = update = __ior__ = _readonly
+
+
+def template_context(context):
+    """Adapt only finished row/card dictionaries; no cache or data assembly."""
+    views = {}
+
+    def view(row):
+        if not isinstance(row, dict) or isinstance(row, _TemplateValues):
+            return row
+        if id(row) not in views:
+            views[id(row)] = _TemplateValues(row)
+        return views[id(row)]
+
+    return {**context, **{key: [view(row) for row in context[key]]
+                         for key in ('rows', 'truck_visuals') if key in context}}
+
 
 def _previous(supplied):
     try:
@@ -66,7 +105,7 @@ class DispatchParts:
             critical = self.critical_previous.get(old_critical_key, '-') if reuse else '-'
             if critical == '-':
                 template = '_nightly_assets.html' if key == 'assets' else '_dispatch_mission_rows.html'
-                values = {} if key == 'assets' else {'row':self.rows[old_critical_key]}
+                values = {} if key == 'assets' else {'row':_TemplateValues(self.rows[old_critical_key])}
                 body = current_app.jinja_env.get_template('neonodes/neoscorpion/' + template).render(
                     **dict(template_context.get_all(), **dict(self.arguments, **values)))
                 critical = _digest(body, self.scope, old_critical_key)
@@ -130,12 +169,17 @@ def critical_fragments(context, gateway, access, supplied, *, settings_view=Fals
         previous = {}
     if not isinstance(previous, dict):
         previous = {}
-    arguments = dict(context, gateway=gateway, can_view=access['can_view'],
+    arguments = dict(template_context(context), gateway=gateway, can_view=access['can_view'],
         can_edit=access['can_edit'], can_manage_assets=access['can_edit'], can_view_spear_settings=settings_view)
     # Resolve request/template context once, not once per aircraft. In particular
     # shared permission/navigation processors must not turn this into N+1 SQL.
     current_app.update_template_context(arguments)
     scope = _scope(context, gateway, access, settings_view)
+    if arguments['rows']:
+        # These macros use explicit row parameters and request helpers only.
+        # Match the full panel's once-per-render import, never a global module.
+        module = current_app.jinja_env.get_template('neonodes/neoscorpion/_fuel_status.html').make_module(arguments)
+        arguments.update(fuel_status=module.fuel_status, call_dispatch_ack=module.call_dispatch_ack)
     def render(template, **values):
         return current_app.jinja_env.get_template(template).render(**dict(arguments, **values))
     hashes, pieces = {}, []
@@ -149,7 +193,7 @@ def critical_fragments(context, gateway, access, supplied, *, settings_view=Fals
         if previous.get(key) != digest:
             pieces.append(html)
 
-    for row in context['rows']:
+    for row in arguments['rows']:
         fragment(str(row['mission'].id), 'neonodes/neoscorpion/_dispatch_mission_rows.html', row=row)
     assets = render('neonodes/neoscorpion/_nightly_assets.html')
     assets_hash = _digest(assets, scope, 'assets')

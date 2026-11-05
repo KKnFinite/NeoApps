@@ -1,5 +1,5 @@
 from app.services.neoscorpion_tail_notes import tail_notes_revision
-from app.services.neoscorpion_dispatch_fragments import panel_content, spear_fragments, DispatchParts
+from app.services.neoscorpion_dispatch_fragments import panel_content, spear_fragments, DispatchParts, template_context as dispatch_template_context
 from app.services.neoscorpion_admin_forms import (SettingsConflict, guard_settings, admin_form_context, truck_integrity_message)
 from flask import send_file, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -389,7 +389,7 @@ def fuel_dispatch_live_panel():
                     supplied=request.headers.get('X-Neo-Dispatch-Parts', ''),
                     critical_supplied=request.headers.get('X-Neo-Dispatch-Fingerprints', ''),
                     settings_view=user_can(SETTINGS_VIEW_PERMISSION)).render} if request.args.get('missions_delta') == '1' else {}),
-                **context,
+                **dispatch_template_context(context),
             ),
         }
     )
@@ -2239,7 +2239,7 @@ def _dispatch_response(gateway, access, status_code=200):
         can_manage_assets=access["can_edit"],
         can_view_spear_settings=user_can(SETTINGS_VIEW_PERMISSION),
         dispatch_parts=DispatchParts(context, gateway, access, settings_view=user_can(SETTINGS_VIEW_PERMISSION)).render,
-        **context,
+        **dispatch_template_context(context),
     )
     return response, status_code
 

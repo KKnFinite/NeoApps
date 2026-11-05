@@ -1,0 +1,1644 @@
+{
+  "starting_sha": "0194726a1b6c79a34ffe9405ec0eb839fcdbfb90",
+  "fixture": "25 synthetic missions: one canonical submitted physical visit; 24 planned assignments; providers blocked",
+  "sqlite_stages": {
+    "before": {
+      "legacy_full": {
+        "selects": 63,
+        "writes": 0,
+        "sql_ms": 2.1,
+        "context_ms": 28.91,
+        "render_ms": 13.36,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 1.14,
+        "spear_ms": 0.21,
+        "pre_context_ms": 1.65,
+        "request_ms": 46.42,
+        "response_bytes": 543978,
+        "python_peak_alloc_bytes_separate_run": 3295640
+      },
+      "unchanged_delta": {
+        "selects": 63,
+        "writes": 0,
+        "sql_ms": 1.77,
+        "context_ms": 29.97,
+        "render_ms": 19.31,
+        "fragment_body_ms": 13.11,
+        "context_html_bytes": 509479,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 0.05,
+        "spear_ms": 0.21,
+        "pre_context_ms": 1.83,
+        "request_ms": 52.19,
+        "response_bytes": 9370,
+        "python_peak_alloc_bytes_separate_run": 1464280
+      },
+      "unseeded_critical": {
+        "selects": 53,
+        "writes": 0,
+        "sql_ms": 1.19,
+        "context_ms": 17.26,
+        "render_ms": 13.89,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 1.08,
+        "spear_ms": 0,
+        "pre_context_ms": 1.73,
+        "request_ms": 41.0,
+        "response_bytes": 523935,
+        "python_peak_alloc_bytes_separate_run": 4908337
+      },
+      "seeded_critical": {
+        "selects": 53,
+        "writes": 0,
+        "sql_ms": 1.26,
+        "context_ms": 17.85,
+        "render_ms": 13.62,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 0.04,
+        "spear_ms": 0,
+        "pre_context_ms": 1.9,
+        "request_ms": 40.26,
+        "response_bytes": 2960,
+        "python_peak_alloc_bytes_separate_run": 1161569
+      }
+    },
+    "after": {
+      "legacy_full": {
+        "selects": 63,
+        "writes": 0,
+        "sql_ms": 1.82,
+        "context_ms": 28.65,
+        "render_ms": 10.54,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 1.14,
+        "spear_ms": 0.21,
+        "pre_context_ms": 1.67,
+        "request_ms": 44.0,
+        "response_bytes": 526978,
+        "python_peak_alloc_bytes_separate_run": 3614481
+      },
+      "unchanged_delta": {
+        "selects": 63,
+        "writes": 0,
+        "sql_ms": 1.79,
+        "context_ms": 29.6,
+        "render_ms": 16.11,
+        "fragment_body_ms": 10.27,
+        "context_html_bytes": 492479,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 0.06,
+        "spear_ms": 0.21,
+        "pre_context_ms": 1.72,
+        "request_ms": 49.36,
+        "response_bytes": 9370,
+        "python_peak_alloc_bytes_separate_run": 1763465
+      },
+      "unseeded_critical": {
+        "selects": 53,
+        "writes": 0,
+        "sql_ms": 1.2,
+        "context_ms": 17.29,
+        "render_ms": 11.27,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 1.06,
+        "spear_ms": 0,
+        "pre_context_ms": 1.67,
+        "request_ms": 39.05,
+        "response_bytes": 506935,
+        "python_peak_alloc_bytes_separate_run": 4705383
+      },
+      "seeded_critical": {
+        "selects": 53,
+        "writes": 0,
+        "sql_ms": 1.19,
+        "context_ms": 17.47,
+        "render_ms": 10.86,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 0.04,
+        "spear_ms": 0,
+        "pre_context_ms": 1.64,
+        "request_ms": 37.19,
+        "response_bytes": 2960,
+        "python_peak_alloc_bytes_separate_run": 1397120
+      }
+    }
+  },
+  "sqlite_screens": {
+    "before": {
+      "dispatch": {
+        "bytes": 543978,
+        "html_bytes": 514360,
+        "median_ms": 46.26,
+        "queries": {
+          "selects": 63,
+          "writes": 0
+        }
+      },
+      "spear": {
+        "bytes": 28798,
+        "html_bytes": 0,
+        "median_ms": 30.46,
+        "queries": {
+          "selects": 48,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 2891,
+          "ms": 30.23,
+          "selects": 48,
+          "writes": 0
+        }
+      },
+      "critical": {
+        "bytes": 523935,
+        "html_bytes": 494036,
+        "median_ms": 41.98,
+        "queries": {
+          "selects": 53,
+          "writes": 0
+        }
+      },
+      "fueler": {
+        "bytes": 490656,
+        "html_bytes": 463421,
+        "median_ms": 25.89,
+        "queries": {
+          "selects": 36,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 175,
+          "ms": 24.72,
+          "selects": 36,
+          "writes": 0
+        }
+      },
+      "board": {
+        "bytes": 90646,
+        "html_bytes": 84857,
+        "median_ms": 16.88,
+        "queries": {
+          "selects": 35,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 17.69,
+          "selects": 35,
+          "writes": 0
+        }
+      },
+      "driver": {
+        "bytes": 2290,
+        "html_bytes": 2024,
+        "median_ms": 4.95,
+        "queries": {
+          "selects": 18,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 4.93,
+          "selects": 18,
+          "writes": 0
+        }
+      },
+      "hanzo": {
+        "bytes": 126203,
+        "html_bytes": 120304,
+        "median_ms": 14.6,
+        "queries": {
+          "selects": 29,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 13.83,
+          "selects": 29,
+          "writes": 0
+        }
+      },
+      "hanzo_document": {
+        "bytes": 151748,
+        "html_bytes": 0,
+        "median_ms": 17.87,
+        "queries": {
+          "selects": 35,
+          "writes": 0
+        }
+      }
+    },
+    "after": {
+      "dispatch": {
+        "bytes": 526978,
+        "html_bytes": 497360,
+        "median_ms": 43.51,
+        "queries": {
+          "selects": 63,
+          "writes": 0
+        }
+      },
+      "spear": {
+        "bytes": 28798,
+        "html_bytes": 0,
+        "median_ms": 30.22,
+        "queries": {
+          "selects": 48,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 2891,
+          "ms": 30.67,
+          "selects": 48,
+          "writes": 0
+        }
+      },
+      "critical": {
+        "bytes": 506935,
+        "html_bytes": 477036,
+        "median_ms": 39.05,
+        "queries": {
+          "selects": 53,
+          "writes": 0
+        }
+      },
+      "fueler": {
+        "bytes": 490656,
+        "html_bytes": 463421,
+        "median_ms": 24.44,
+        "queries": {
+          "selects": 36,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 175,
+          "ms": 107.78,
+          "selects": 36,
+          "writes": 0
+        }
+      },
+      "board": {
+        "bytes": 90646,
+        "html_bytes": 84857,
+        "median_ms": 16.63,
+        "queries": {
+          "selects": 35,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 17.91,
+          "selects": 35,
+          "writes": 0
+        }
+      },
+      "driver": {
+        "bytes": 2290,
+        "html_bytes": 2024,
+        "median_ms": 5.16,
+        "queries": {
+          "selects": 18,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 4.68,
+          "selects": 18,
+          "writes": 0
+        }
+      },
+      "hanzo": {
+        "bytes": 126203,
+        "html_bytes": 120304,
+        "median_ms": 14.57,
+        "queries": {
+          "selects": 29,
+          "writes": 0
+        },
+        "unchanged": {
+          "bytes": 151,
+          "ms": 14.09,
+          "selects": 29,
+          "writes": 0
+        }
+      },
+      "hanzo_document": {
+        "bytes": 151748,
+        "html_bytes": 0,
+        "median_ms": 18.12,
+        "queries": {
+          "selects": 35,
+          "writes": 0
+        }
+      }
+    }
+  },
+  "changed_mission": {
+    "before": {
+      "unchanged_delta": {
+        "bytes": 9370,
+        "html_bytes": 7831,
+        "selects": 63,
+        "writes": 0,
+        "median_ms": 51.01,
+        "sent_groups": [],
+        "reuse_count": 28
+      },
+      "unchanged_critical": {
+        "bytes": 2960,
+        "html_bytes": 219,
+        "selects": 53,
+        "writes": 0,
+        "median_ms": 39.64,
+        "sent_groups": [],
+        "reuse_count": 0
+      },
+      "changed_critical": {
+        "bytes": 28389,
+        "html_bytes": 24264,
+        "selects": 53,
+        "writes": 0,
+        "median_ms": 38.31,
+        "sent_groups": [],
+        "reuse_count": 0
+      },
+      "changed_delta": {
+        "bytes": 34864,
+        "html_bytes": 31947,
+        "selects": 63,
+        "writes": 0,
+        "median_ms": 52.08,
+        "sent_groups": [
+          "mission-1"
+        ],
+        "reuse_count": 27
+      },
+      "subsequent_unchanged_delta": {
+        "bytes": 9370,
+        "html_bytes": 7831,
+        "selects": 63,
+        "writes": 0,
+        "median_ms": 51.09,
+        "sent_groups": [],
+        "reuse_count": 28
+      }
+    },
+    "after": {
+      "unchanged_delta": {
+        "bytes": 9370,
+        "html_bytes": 7831,
+        "selects": 63,
+        "writes": 0,
+        "median_ms": 49.16,
+        "sent_groups": [],
+        "reuse_count": 28
+      },
+      "unchanged_critical": {
+        "bytes": 2960,
+        "html_bytes": 219,
+        "selects": 53,
+        "writes": 0,
+        "median_ms": 37.13,
+        "sent_groups": [],
+        "reuse_count": 0
+      },
+      "changed_critical": {
+        "bytes": 27709,
+        "html_bytes": 23584,
+        "selects": 53,
+        "writes": 0,
+        "median_ms": 37.12,
+        "sent_groups": [],
+        "reuse_count": 0
+      },
+      "changed_delta": {
+        "bytes": 34184,
+        "html_bytes": 31267,
+        "selects": 63,
+        "writes": 0,
+        "median_ms": 49.25,
+        "sent_groups": [
+          "mission-1"
+        ],
+        "reuse_count": 27
+      },
+      "subsequent_unchanged_delta": {
+        "bytes": 9370,
+        "html_bytes": 7831,
+        "selects": 63,
+        "writes": 0,
+        "median_ms": 48.1,
+        "sent_groups": [],
+        "reuse_count": 28
+      }
+    }
+  },
+  "claimed_driver": {
+    "before": {
+      "bytes": 92692,
+      "selects": 47,
+      "writes": 0,
+      "median_ms": 20.66
+    },
+    "after": {
+      "bytes": 92692,
+      "selects": 47,
+      "writes": 0,
+      "median_ms": 19.33
+    }
+  },
+  "postgres_stages": {
+    "before": {
+      "legacy_full": {
+        "selects": 63,
+        "writes": 0,
+        "sql_ms": 15.73,
+        "context_ms": 42.98,
+        "render_ms": 13.13,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 1.16,
+        "spear_ms": 0.22,
+        "pre_context_ms": 2.75,
+        "request_ms": 61.85,
+        "response_bytes": 543978,
+        "python_peak_alloc_bytes_separate_run": 3279937
+      },
+      "unchanged_delta": {
+        "selects": 63,
+        "writes": 0,
+        "sql_ms": 16.49,
+        "context_ms": 45.61,
+        "render_ms": 18.79,
+        "fragment_body_ms": 12.62,
+        "context_html_bytes": 509479,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 0.06,
+        "spear_ms": 0.22,
+        "pre_context_ms": 3.07,
+        "request_ms": 70.18,
+        "response_bytes": 9370,
+        "python_peak_alloc_bytes_separate_run": 1403562
+      },
+      "unseeded_critical": {
+        "selects": 53,
+        "writes": 0,
+        "sql_ms": 11.08,
+        "context_ms": 26.6,
+        "render_ms": 13.96,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 1.13,
+        "spear_ms": 0,
+        "pre_context_ms": 2.88,
+        "request_ms": 52.0,
+        "response_bytes": 523935,
+        "python_peak_alloc_bytes_separate_run": 4888066
+      },
+      "seeded_critical": {
+        "selects": 53,
+        "writes": 0,
+        "sql_ms": 11.09,
+        "context_ms": 26.85,
+        "render_ms": 13.37,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 0.04,
+        "spear_ms": 0,
+        "pre_context_ms": 2.55,
+        "request_ms": 50.16,
+        "response_bytes": 2960,
+        "python_peak_alloc_bytes_separate_run": 1140400
+      }
+    },
+    "after": {
+      "legacy_full": {
+        "selects": 63,
+        "writes": 0,
+        "sql_ms": 16.51,
+        "context_ms": 44.75,
+        "render_ms": 10.94,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 1.14,
+        "spear_ms": 0.23,
+        "pre_context_ms": 3.16,
+        "request_ms": 62.27,
+        "response_bytes": 526978,
+        "python_peak_alloc_bytes_separate_run": 3565533
+      },
+      "unchanged_delta": {
+        "selects": 63,
+        "writes": 0,
+        "sql_ms": 14.87,
+        "context_ms": 43.16,
+        "render_ms": 16.63,
+        "fragment_body_ms": 10.58,
+        "context_html_bytes": 492479,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 0.05,
+        "spear_ms": 0.22,
+        "pre_context_ms": 2.95,
+        "request_ms": 64.84,
+        "response_bytes": 9370,
+        "python_peak_alloc_bytes_separate_run": 1746873
+      },
+      "unseeded_critical": {
+        "selects": 53,
+        "writes": 0,
+        "sql_ms": 11.78,
+        "context_ms": 27.8,
+        "render_ms": 11.6,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 1.08,
+        "spear_ms": 0,
+        "pre_context_ms": 2.99,
+        "request_ms": 51.77,
+        "response_bytes": 506935,
+        "python_peak_alloc_bytes_separate_run": 4941123
+      },
+      "seeded_critical": {
+        "selects": 53,
+        "writes": 0,
+        "sql_ms": 13.21,
+        "context_ms": 30.23,
+        "render_ms": 11.4,
+        "fragment_body_ms": 0,
+        "context_html_bytes": 0,
+        "connections": 1,
+        "transactions": 1,
+        "json_ms": 0.05,
+        "spear_ms": 0,
+        "pre_context_ms": 3.22,
+        "request_ms": 53.06,
+        "response_bytes": 2960,
+        "python_peak_alloc_bytes_separate_run": 1369718
+      }
+    }
+  },
+  "production": {
+    "starting_sha": "0194726a1b6c79a34ffe9405ec0eb839fcdbfb90",
+    "starting_deployment": "dep-dblt16c9v7es73butb40",
+    "render_window": {
+      "start": "2026-11-03T00:00:00Z",
+      "end": "2026-11-05T01:00:00Z"
+    },
+    "bandwidth_unit": "provider mb",
+    "daily_bandwidth": {
+      "2026-11-03": 3795.4824596,
+      "2026-11-04": 3574.2800785,
+      "2026-11-05": 5.6710835
+    },
+    "hourly_bandwidth": [
+      {
+        "timestamp": "2026-11-03T00:00:00Z",
+        "value": 31.670803
+      },
+      {
+        "timestamp": "2026-11-03T01:00:00Z",
+        "value": 9.382347
+      },
+      {
+        "timestamp": "2026-11-03T02:00:00Z",
+        "value": 9.425457
+      },
+      {
+        "timestamp": "2026-11-03T03:00:00Z",
+        "value": 12.494737
+      },
+      {
+        "timestamp": "2026-11-03T04:00:00Z",
+        "value": 240.74942
+      },
+      {
+        "timestamp": "2026-11-03T05:00:00Z",
+        "value": 786.27277
+      },
+      {
+        "timestamp": "2026-11-03T06:00:00Z",
+        "value": 715.9003
+      },
+      {
+        "timestamp": "2026-11-03T07:00:00Z",
+        "value": 845.87744
+      },
+      {
+        "timestamp": "2026-11-03T08:00:00Z",
+        "value": 655.70526
+      },
+      {
+        "timestamp": "2026-11-03T09:00:00Z",
+        "value": 216.3619
+      },
+      {
+        "timestamp": "2026-11-03T10:00:00Z",
+        "value": 116.13745
+      },
+      {
+        "timestamp": "2026-11-03T11:00:00Z",
+        "value": 19.31371
+      },
+      {
+        "timestamp": "2026-11-03T12:00:00Z",
+        "value": 7.2320614
+      },
+      {
+        "timestamp": "2026-11-03T13:00:00Z",
+        "value": 9.7964325
+      },
+      {
+        "timestamp": "2026-11-03T14:00:00Z",
+        "value": 7.3015327
+      },
+      {
+        "timestamp": "2026-11-03T15:00:00Z",
+        "value": 11.327857
+      },
+      {
+        "timestamp": "2026-11-03T16:00:00Z",
+        "value": 8.146812
+      },
+      {
+        "timestamp": "2026-11-03T17:00:00Z",
+        "value": 9.67108
+      },
+      {
+        "timestamp": "2026-11-03T18:00:00Z",
+        "value": 14.969024
+      },
+      {
+        "timestamp": "2026-11-03T19:00:00Z",
+        "value": 17.857468
+      },
+      {
+        "timestamp": "2026-11-03T20:00:00Z",
+        "value": 10.951422
+      },
+      {
+        "timestamp": "2026-11-03T21:00:00Z",
+        "value": 15.625342
+      },
+      {
+        "timestamp": "2026-11-03T22:00:00Z",
+        "value": 13.29362
+      },
+      {
+        "timestamp": "2026-11-03T23:00:00Z",
+        "value": 10.018214
+      },
+      {
+        "timestamp": "2026-11-04T00:00:00Z",
+        "value": 18.51581
+      },
+      {
+        "timestamp": "2026-11-04T01:00:00Z",
+        "value": 13.034479
+      },
+      {
+        "timestamp": "2026-11-04T02:00:00Z",
+        "value": 32.216217
+      },
+      {
+        "timestamp": "2026-11-04T03:00:00Z",
+        "value": 105.662674
+      },
+      {
+        "timestamp": "2026-11-04T04:00:00Z",
+        "value": 233.74635
+      },
+      {
+        "timestamp": "2026-11-04T05:00:00Z",
+        "value": 603.4005
+      },
+      {
+        "timestamp": "2026-11-04T06:00:00Z",
+        "value": 649.98083
+      },
+      {
+        "timestamp": "2026-11-04T07:00:00Z",
+        "value": 853.5678
+      },
+      {
+        "timestamp": "2026-11-04T08:00:00Z",
+        "value": 659.70197
+      },
+      {
+        "timestamp": "2026-11-04T09:00:00Z",
+        "value": 151.6204
+      },
+      {
+        "timestamp": "2026-11-04T10:00:00Z",
+        "value": 112.63999
+      },
+      {
+        "timestamp": "2026-11-04T11:00:00Z",
+        "value": 13.759345
+      },
+      {
+        "timestamp": "2026-11-04T12:00:00Z",
+        "value": 8.00838
+      },
+      {
+        "timestamp": "2026-11-04T13:00:00Z",
+        "value": 10.140941
+      },
+      {
+        "timestamp": "2026-11-04T14:00:00Z",
+        "value": 7.851898
+      },
+      {
+        "timestamp": "2026-11-04T15:00:00Z",
+        "value": 5.323865
+      },
+      {
+        "timestamp": "2026-11-04T16:00:00Z",
+        "value": 5.282052
+      },
+      {
+        "timestamp": "2026-11-04T17:00:00Z",
+        "value": 5.3773165
+      },
+      {
+        "timestamp": "2026-11-04T18:00:00Z",
+        "value": 19.550037
+      },
+      {
+        "timestamp": "2026-11-04T19:00:00Z",
+        "value": 10.051884
+      },
+      {
+        "timestamp": "2026-11-04T20:00:00Z",
+        "value": 19.38055
+      },
+      {
+        "timestamp": "2026-11-04T21:00:00Z",
+        "value": 8.868832
+      },
+      {
+        "timestamp": "2026-11-04T22:00:00Z",
+        "value": 17.800728
+      },
+      {
+        "timestamp": "2026-11-04T23:00:00Z",
+        "value": 8.79723
+      },
+      {
+        "timestamp": "2026-11-05T00:00:00Z",
+        "value": 5.6710835
+      }
+    ],
+    "peak_cpu": 0.15071337,
+    "peak_memory_bytes": 364171260,
+    "request_status_counts": [
+      {
+        "status": "200",
+        "total": 82767
+      },
+      {
+        "status": "302",
+        "total": 409
+      },
+      {
+        "status": "304",
+        "total": 28706
+      },
+      {
+        "status": "400",
+        "total": 71
+      },
+      {
+        "status": "401",
+        "total": 13
+      },
+      {
+        "status": "404",
+        "total": 175
+      },
+      {
+        "status": "409",
+        "total": 4
+      },
+      {
+        "status": "429",
+        "total": 1032
+      },
+      {
+        "status": "499",
+        "total": 103
+      },
+      {
+        "status": "500",
+        "total": 1
+      }
+    ],
+    "historical_live_panel_hour": {
+      "window": [
+        "2026-11-04T06:00:00Z",
+        "2026-11-04T07:00:00Z"
+      ],
+      "pages": 6,
+      "complete": true,
+      "unique_logs": 566,
+      "endpoints": {
+        "/neoscorpion/fuel-dispatch/live-panel": {
+          "requests": 202,
+          "bytes": 127888127,
+          "max_bytes": 673037,
+          "statuses": {
+            "200": 202
+          }
+        },
+        "/neoscorpion/fuel-dispatch/live-panel?completion_only=1&delta=1&operation_id=85": {
+          "requests": 202,
+          "bytes": 97779706,
+          "max_bytes": 566521,
+          "statuses": {
+            "200": 202
+          }
+        },
+        "/neoscorpion/fueler/live-panel": {
+          "requests": 106,
+          "bytes": 1594766,
+          "max_bytes": 37512,
+          "statuses": {
+            "200": 106
+          }
+        },
+        "/neoscorpion/fueling-board/live-panel": {
+          "requests": 56,
+          "bytes": 853004,
+          "max_bytes": 19048,
+          "statuses": {
+            "200": 56
+          }
+        }
+      }
+    },
+    "post_phase4_dispatch_logs": {
+      "start": "2026-11-05T00:42:44Z",
+      "end": "2026-11-05T01:03:00Z",
+      "matching_logs": 0,
+      "has_more": false
+    },
+    "http_path_metrics_available": false,
+    "neon_idle": {
+      "observed_utc": "2026-11-05T01:09:26Z",
+      "current_state": "idle",
+      "suspended_at": "2026-11-05T01:09:01Z",
+      "suspend_timeout_seconds": 300,
+      "prior_snapshot_utc": "2026-11-05T01:03:35Z",
+      "prior_open_connections": 2,
+      "prior_idle_in_transaction": 0
+    },
+    "neon_cu_transfer_measurements_available": false,
+    "background_cycles": [
+      {
+        "time": "2026-11-05T01:00:48.10172715Z",
+        "message": "INFO NeoApps memory diagnostic operation=archive_delivery_cycle pid=63 python=3.14.3 rss_before_bytes=174055424 rss_after_bytes=266199040 rss_delta_bytes=92143616 high_water_bytes=266199040 elapsed_seconds=48.1 error=None"
+      },
+      {
+        "time": "2026-11-05T01:10:01.628504546Z",
+        "message": "INFO NeoApps memory diagnostic operation=archive_delivery_cycle pid=63 python=3.14.3 rss_before_bytes=265830400 rss_after_bytes=265945088 rss_delta_bytes=114688 high_water_bytes=265945088 elapsed_seconds=1.627 error=None"
+      }
+    ]
+  },
+  "tests": {
+    "sqlite": [
+      {
+        "id": "tests/test_neoscorpion_rendering.py::TemplateValuesTest::test_data_keys_cannot_grant_markup_trust",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rendering.py::TemplateValuesTest::test_many_items_keep_distinct_missions_and_shared_request_local_aliases",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rendering.py::TemplateValuesTest::test_native_values_keep_mapping_lookup_missing_values_and_json_shape",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rendering.py::TemplateValuesTest::test_read_only_copies_keep_original_orm_identity_and_refresh_each_call",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rendering.py::RenderingCanonicalTest::test_critical_imports_request_bound_status_macros_once_for_25_missions",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rendering.py::RenderingCanonicalTest::test_full_and_critical_html_match_without_the_attribute_adapter",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rendering.py::RenderingCanonicalTest::test_static_indent_removal_never_changes_saved_note_whitespace_or_escaping",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_changed_mission_and_added_mission_are_full_canonical_groups",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_critical_seed_does_not_add_database_roundtrips",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_deleted_mission_and_reordering_have_complete_authoritative_manifest",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_edit_revocation_never_reuses_previously_writable_controls",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_identical_full_snapshot_reuses_missions_and_assets",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_initial_snapshot_seeds_critical_fingerprints_without_another_request",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_invalid_or_foreign_fingerprints_fall_back_to_complete_authorized_markup",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_only_transport_renewals_and_explicit_order_metadata_are_normalized",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_stale_operation_rejects_before_optional_planning_or_rendering",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_dispatch_delta.py::DispatchDeltaTest::test_wrong_sort_and_revoked_view_return_no_operational_fragments",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_bad_fingerprint_input_cannot_hide_authorized_content",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_digest_does_not_bypass_authorization",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_fueler_board_and_driver_omit_identical_private_panels",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_fueler_changed_reading_cannot_be_hidden_by_prior_digest",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_identical_spear_fragments_omit_unchanged_markup",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_readonly_spear_does_not_offer_operational_actions",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_sort_and_permission_checks_apply_before_fragment_delivery",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_spear_keeps_actor_bound_learning_references_without_archive_io",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_bandwidth.py::NeoScorpionBandwidthTest::test_spear_recalculates_without_operational_forms_or_history",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase4.py::Phase4Test::test_completed_event_totals_and_releases_survive_shared_projection",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase4.py::Phase4Test::test_event_projection_preserves_typed_receipt_facts_without_forecast_payload",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase4.py::Phase4Test::test_fresh_requests_and_independent_resource_fallback_preserve_changes",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase4.py::Phase4Test::test_null_legacy_snapshot_does_not_create_attribution_or_crash",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase4.py::Phase4Test::test_projection_never_promotes_malformed_legacy_fact_types",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase4.py::Phase4Test::test_shared_reads_preserve_full_dispatch_markup_with_less_sql",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase4.py::Phase4Test::test_unclaimed_driver_does_not_build_fleet_evidence",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase4.py::Phase4Test::test_unclaimed_driver_matches_slow_filtered_context_and_claim_recovers_work",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_bounded_header_omits_unchanged_rows_without_a_large_query_url",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_changed_mission_is_sent_and_next_identical_poll_is_empty",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_complete_form_and_full_initial_page_keep_canonical_identity",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_csrf_renewal_normalizes_checksum_only",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_invalid_fingerprint_input_cannot_hide_work_or_crash",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_no_optional_spear_or_database_writes",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_readonly_cannot_receive_complete_form",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_scope_is_opaque_and_separates_user_session_and_gateway",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_ten_identical_critical_polls_omit_unchanged_mission_and_assets_markup",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_without_view_permission_no_fragment_is_returned",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_dispatch_refresh_fragments.py::DispatchFragmentsTest::test_wrong_sort_is_rejected_without_rendered_work",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase2.py::Phase2LiveTest::test_apply_keeps_verified_learning_and_spear_observe_keeps_review",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase2.py::Phase2LiveTest::test_cold_private_reads_do_not_provision_or_rewrite_access",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase2.py::Phase2LiveTest::test_input_reuse_is_get_local_and_transaction_invalidated",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase2.py::Phase2LiveTest::test_new_private_read_paths_enforce_revocation_on_every_request",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase2.py::Phase2LiveTest::test_observe_panels_are_identical_without_reloading_learning_review",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase2.py::Phase2LiveTest::test_scoped_policy_never_exempts_unsafe_or_other_endpoints",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_phase2.py::ArchiveOriginTest::test_origin_metadata_is_preserved_and_strictly_validated",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_truck_driver.py::TruckDriverTest::test_board_all_aircraft_layouts_missing_and_measured_zero",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_truck_driver.py::TruckDriverTest::test_conflict_stale_write_dispatcher_override_and_clear",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_truck_driver.py::TruckDriverTest::test_current_upcoming_off_and_completed_readings_are_canonical",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_truck_driver.py::TruckDriverTest::test_new_tables_bootstrap_idempotence_and_database_uniqueness",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_truck_driver.py::TruckDriverTest::test_permissions_readonly_and_sort_guard",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_truck_driver.py::TruckDriverTest::test_repeated_tail_visits_use_independent_reading_and_event_owners",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_truck_driver.py::TruckDriverTest::test_selection_persistence_switch_and_idempotent_audit",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_fueler_submission.py::SubmissionTest::test_complete_assignment_cannot_invent_physical_on",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_fueler_submission.py::SubmissionTest::test_complete_assignment_requires_separate_physical_off",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_fueler_submission.py::SubmissionTest::test_missing_apu_tf_hold_and_actor_block_submission",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_fueler_submission.py::SubmissionTest::test_off_without_actual_and_submission_required_before_dispatcher_complete",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_fueler_submission.py::SubmissionTest::test_pre_on_assign_unassign_keeps_controls_and_preparation_then_locks_on",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_fueler_submission.py::SubmissionTest::test_required_correction_invalidates_notes_preserve_and_resubmit_is_safe",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_fueler_submission.py::SubmissionTest::test_required_target_increase_and_revert_preserves_submitted_source_for_review",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_fueler_submission.py::SubmissionTest::test_truck_only_unassign_does_not_allocate_work_or_remove_selectors",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_w1_live_authority.py::RevisionSecurity::test_current_sort_foreign_gateway_assignment_and_work_ownership",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_w1_live_authority.py::RevisionSecurity::test_no_sort_schema_is_additive_and_revision_is_read_only",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_w1_live_authority.py::RevisionSecurity::test_real_denials_revocation_and_anonymous",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_w1_live_authority.py::RevisionSecurity::test_revision_query_count_does_not_grow_with_fifty_missions",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_anonymous_session_cannot_renew",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_cross_origin_or_cross_site_cannot_renew",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_expired_page_renews_without_changing_session_nonce",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_fresh_token_still_cannot_cross_sessions",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_future_proof_is_rejected_and_renewal_is_read_only",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_independent_tabs_and_overnight_renewal",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_logout_and_relogin_do_not_reauthorize_old_page",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_password_change_session_invalidation_prevents_renewal",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_renewal_does_not_grant_revoked_application_access",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_renewal_performs_no_database_writes",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_renewal_requires_original_signed_session_proof",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_required_password_change_still_blocks_operational_mutations",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_csrf_renewal.py::CsrfRenewalTest::test_vendor_can_renew_without_gaining_operational_authority",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_actual_wsgi_entrypoint_on_render_enables_headers_without_database_startup",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_confirmed_inline_style_conflicts_use_csp_safe_markup_and_state",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_each_response_nonce_is_fresh_and_only_explicit_template_scripts_receive_it",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_local_http_does_not_enable_hsts_or_csp_by_default",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_owned_templates_have_no_inline_handlers_styles_or_untrusted_script_grants",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_production_hsts_requires_https_app_base_url",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_production_https_response_has_hsts_csp_and_existing_security_headers",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_render_runtime_without_optional_environment_names_enforces_headers",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_representative_portal_gateway_auth_and_staffing_pages_render_with_csp",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_security_headers.py::SecurityHeadersTest::test_run_entrypoint_uses_the_same_runtime_environment_resolver",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningMathTest::test_calendar_cutoff_includes_thirty_dates_across_dst",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningMathTest::test_observe_apply_minimum_outliers_and_duplicate_visit",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningMathTest::test_old_qualified_data_has_less_influence_without_deleting_samples",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningMathTest::test_recent_evidence_has_more_weight_and_extreme_outlier_is_rejected",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningMathTest::test_test_incomplete_untrusted_and_multi_fueler_samples_are_excluded",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningMathTest::test_top_off_window_recency_observe_apply_and_independent_enable",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningMathTest::test_unmarked_legacy_origin_still_requires_and_accepts_canonical_proof",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningMathTest::test_window_and_future_samples_are_excluded",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningDatabaseTest::test_canonical_completed_cycles_produce_rolling_candidates",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningDatabaseTest::test_real_completed_test_visit_is_excluded_without_history_writes",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rolling_learning.py::RollingLearningDatabaseTest::test_shared_history_apply_wrap_service_reset_and_automation_preserved",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_activation_rejected_during_sort_never_automatic",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_cache_avoids_requeries_until_revision_or_periodic_reconciliation",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_completed_work_calibration_tuple_keys_are_stable_and_replan",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_failure_keeps_manual_and_existing_spear_without_canonical_writes",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_fingerprint_failure_retains_existing_spear_not_unavailable",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_material_external_changes_invalidate_without_fueling_revision",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_positive_duration_settings_backward_compatibility_and_controls_independent",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_shadow_keeps_one_current_source_active_uses_new_planner",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_snapshot_evidence_keeps_changes_and_periodic_checkpoints",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_spear_replanning.py::ReplanningTest::test_versioned_snapshot_idempotent_and_immutable",
+        "failed": false,
+        "skipped": false
+      }
+    ],
+    "sqlite_passed": 115,
+    "sqlite_subtests_passed": 301,
+    "postgres_passed_unique": 22,
+    "postgres_final_rendering": [
+      {
+        "id": "tests/test_neoscorpion_rendering_postgres.py::RenderingPostgresTest::test_critical_imports_request_bound_status_macros_once_for_25_missions",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rendering_postgres.py::RenderingPostgresTest::test_full_and_critical_html_match_without_the_attribute_adapter",
+        "failed": false,
+        "skipped": false
+      },
+      {
+        "id": "tests/test_neoscorpion_rendering_postgres.py::RenderingPostgresTest::test_static_indent_removal_never_changes_saved_note_whitespace_or_escaping",
+        "failed": false,
+        "skipped": false
+      }
+    ],
+    "postgres_modules": [
+      "tests/test_neoscorpion_rendering_postgres.py",
+      "tests/test_neoscorpion_dispatch_delta_postgres.py",
+      "tests/test_neoscorpion_phase4_postgres.py"
+    ],
+    "javascript_passed": 30,
+    "chromium_passed_unique": 3,
+    "skipped": 0,
+    "chromium_receipts": {
+      "browser/two-session-receipt.json": {
+        "completion_visible_ms": 133.61,
+        "unchanged_node_preserved": true,
+        "draft_preserved": true,
+        "event_rows": 1,
+        "current_gallons": 7000,
+        "added_removed_reordered": true,
+        "mobile_no_overflow": true,
+        "responses": [
+          {
+            "url": "http://127.0.0.1:56196/neoscorpion/fuel-dispatch/live-panel?completion_only=1&delta=1&operation_id=1",
+            "status": 200,
+            "bytes": 54472
+          },
+          {
+            "url": "http://127.0.0.1:56196/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+            "status": 200,
+            "bytes": 59045
+          },
+          {
+            "url": "http://127.0.0.1:56196/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+            "status": 200,
+            "bytes": 73070
+          },
+          {
+            "url": "http://127.0.0.1:56196/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+            "status": 200,
+            "bytes": 53391
+          },
+          {
+            "url": "http://127.0.0.1:56196/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+            "status": 200,
+            "bytes": 53391
+          },
+          {
+            "url": "http://127.0.0.1:56196/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+            "status": 200,
+            "bytes": 30508
+          },
+          {
+            "url": "http://127.0.0.1:56196/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+            "status": 200,
+            "bytes": 20288
+          },
+          {
+            "url": "http://127.0.0.1:56196/neoscorpion/fuel-dispatch/live-panel?missions_delta=1",
+            "status": 200,
+            "bytes": 16305
+          }
+        ],
+        "errors": []
+      },
+      "browser/race-receipt.json": {
+        "dialog_preserved": true,
+        "atomic_fallback": true,
+        "revoked_controls_disabled": true,
+        "draft_preserved": true,
+        "errors": []
+      },
+      "browser-existing/receipt.json": {
+        "timed_spear_requests": [
+          "http://127.0.0.1:58802/neoscorpion/fuel-dispatch/live-panel?spear_only=1&operation_id=1"
+        ],
+        "dirty_completion_requests": [
+          "http://127.0.0.1:58802/neoscorpion/fuel-dispatch/live-panel?completion_only=1&delta=1&operation_id=1"
+        ],
+        "clean_refresh_requests": [
+          "http://127.0.0.1:58802/neoscorpion/fuel-dispatch/live-panel?missions_delta=1"
+        ],
+        "unchanged_panel_requests": 0,
+        "spear_refresh_ms": 64.79,
+        "completion_visible_ms": 66.53,
+        "hanzo_document_preserved": true,
+        "javascript_errors": []
+      }
+    }
+  },
+  "limitations": [
+    "SQLite timing does not model Neon network latency",
+    "Flask test-client timings exclude response transmission",
+    "Request-scoped row adaptation adds approximately 0.3 MB peak allocation to seeded/delta rendering",
+    "No comparable busy post-Phase-4 Sort; production cost/CU/transfer savings not measured",
+    "Endpoint HTTP metrics unavailable; historical access-log window is pre-Phase-3",
+    "No new early-exit fingerprint or query reduction; canonical contexts and cross-mission dependencies retained"
+  ],
+  "unrelated_untracked_preserved": {
+    "app/static/images/neoscorpion/spear_intelligent_operations_dashboard.png": true,
+    "docs/audits/2026-10-14-neorain-keyed-prototype.md": true,
+    "docs/audits/2026-10-21-neoscorpion-user-flow-audit.md": true,
+    "integrations/neorain_google_prototype/Code.gs": true,
+    "integrations/neorain_google_prototype/Core.js": true,
+    "integrations/neorain_google_prototype/Editor.html": true,
+    "integrations/neorain_google_prototype/HostedTests.gs": true,
+    "integrations/neorain_google_prototype/README.md": true,
+    "integrations/neorain_google_prototype/appsscript.json": true,
+    "integrations/neorain_google_prototype/build-fixtures.mjs": true,
+    "tests/browser/test_neorain_google_prototype.py": true,
+    "tests/js/neorain_google_prototype.test.cjs": true
+  }
+}
