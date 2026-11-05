@@ -74,6 +74,17 @@ class CoordinatorBoardTest(unittest.TestCase):
             case.ready(page, '/neosubzero/ucc')
             expect(page).to_have_title('DUCC | NeoSub-Zero')
             expect(page.locator('.neosubzero-head h1')).to_have_text('DUCC')
+            for width in (1280,1440,1920,2560):
+                page.set_viewport_size({'width':width,'height':1080})
+                self.check_desktop_layout(page)
+                if width in (1440,1920):
+                    page.screenshot(path=str(EVIDENCE/f'{engine}-desktop-{width}.png'),full_page=True)
+            for state, color in COLORS.items():
+                plane = page.locator(f'[data-ucc-aircraft="{ids[state]}"]')
+                expect(plane).to_have_css('background-color','rgb(9, 23, 33)')
+                expect(plane.locator('.ucc-plane-icon')).to_have_css('color',palette.rgb(color))
+                expect(plane.locator('.ucc-plane-status')).to_be_hidden()
+                expect(plane.locator('.ucc-plane-etd')).to_be_visible()
             page.locator('[data-operational-sidebar] [data-operational-board-toggle]').click()
             expect(page.locator('body')).to_have_class(re.compile('operational-board-view'))
             expect(page.locator('.operational-board-exit')).to_have_text('GO BACK')
@@ -116,12 +127,29 @@ class CoordinatorBoardTest(unittest.TestCase):
             page.locator('[data-ucc-view="ramp"]').click()
             expect(page.locator('[data-ucc-ramp]:visible')).to_have_count(1)
             expect(page.locator('.neosubzero-weather')).to_be_hidden()
+            for state,color in COLORS.items():
+                expect(page.locator(f'[data-ucc-aircraft="{ids[state]}"]')).to_have_css('background-color',palette.rgb(color))
             page.set_viewport_size({'width':1920,'height':1080})
             expect(page.locator('body')).to_have_class(re.compile('operational-board-view'))
             expect(page.locator('[data-ucc-ramp]:visible')).to_have_count(6)
             page.locator('.operational-board-exit').click()
+            # TV baseline is the wall display, with this still-unsaved editor
+            # collapsed. Collapsing never discards its input or changes work.
+            editor.locator(':scope > summary').click()
+            expect(draft).to_have_value('UNSAVED BOARD DRAFT')
             page.locator('[data-ucc-tv-enter]').click()
             expect(page.locator('body')).to_have_class(re.compile('neosubzero-ucc-tv-mode'))
+            page.wait_for_function('''() => document.querySelector('[data-subzero-ucc]').getBoundingClientRect().bottom<=innerHeight''')
+            self.check_desktop_layout(page)
+            self.assertLessEqual(page.evaluate('document.documentElement.scrollHeight-innerHeight'),1)
+            self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
+            fonts=page.evaluate('''() => {
+                const root=document.querySelector('[data-subzero-ucc]'),scale=root.getBoundingClientRect().width/root.offsetWidth;
+                return {tails:Math.min(...[...root.querySelectorAll('.ucc-plane strong')].map(e=>parseFloat(getComputedStyle(e).fontSize)*scale)),names:Math.min(...[...root.querySelectorAll('.ucc-team summary small')].map(e=>parseFloat(getComputedStyle(e).fontSize)*scale))};
+            }''')
+            self.assertGreaterEqual(fonts['tails'],12)
+            self.assertGreaterEqual(fonts['names'],11)
+            page.screenshot(path=str(EVIDENCE/f'{engine}-tv-desktop.png'))
             page.locator('[data-ucc-tv-exit]').click()
             expect(page.locator('[data-operational-topbar]')).to_be_visible()
             with case.app.app_context():
@@ -132,6 +160,28 @@ class CoordinatorBoardTest(unittest.TestCase):
             if browser:
                 browser.close()
             case.tearDownClass()
+
+    def check_desktop_layout(self, page):
+        # Equal physical dimensions, four staffing summaries above each diagram,
+        # and a single real weather strip rather than duplicated mobile markup.
+        page.wait_for_function('''() => {
+            const ramps=[...document.querySelectorAll('[data-ucc-ramp]')];
+            return ramps.every(r=>r.querySelector('.ucc-staffing-grid').getBoundingClientRect().bottom<=r.querySelector('.ucc-ramp-diagram').getBoundingClientRect().top+1);
+        }''')
+        geometry = page.evaluate('''() => {
+            const rect=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom};};
+            return {ramps:[...document.querySelectorAll('[data-ucc-ramp]')].slice(0,5).map(r=>({ramp:rect(r),diagram:rect(r.querySelector('.ucc-ramp-diagram')),teams:r.querySelectorAll('.ucc-team').length})),
+                weather:rect(document.querySelector('.neosubzero-weather')),upcoming:rect(document.querySelector('[data-ucc-upcoming]')),
+                remote:rect(document.querySelector('[data-ucc-ramp="Remote"]')),
+                overflow:document.documentElement.scrollWidth-innerWidth};
+        }''')
+        self.assertLessEqual(geometry['overflow'],1)
+        self.assertLessEqual(abs(geometry['weather']['y']-geometry['upcoming']['y']),1)
+        for key in ('width','height','y'):
+            values=[r['diagram'][key] for r in geometry['ramps']]
+            self.assertLessEqual(max(values)-min(values),1,(key,geometry))
+        self.assertTrue(all(r['teams']==4 for r in geometry['ramps']))
+        self.assertGreaterEqual(geometry['remote']['y'],max(r['ramp']['bottom'] for r in geometry['ramps']))
 
     def test_chromium_coordinator_and_board(self):
         self.exercise('chromium')

@@ -1,0 +1,107 @@
+/* Desktop DUCC only. The mobile staffing/ramp lens keeps its existing layout. */
+.ucc-staffing-grid { display:contents; }
+.ucc-plane-etd { display:none; }
+@media (min-width:901px) {
+    .blueprint-neosubzero .neosubzero-ucc {
+        display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px;
+    }
+    .neosubzero-ucc > .neosubzero-head { grid-column:1 / -1; grid-row:1; margin:0; }
+    .neosubzero-ucc > .neosubzero-nav { grid-column:1 / -1; grid-row:2; margin:0; }
+    .neosubzero-ucc .neosubzero-weather {
+        grid-column:1 / 5; grid-row:3; display:grid;
+        grid-template-columns:minmax(0,1fr) minmax(0,3fr); gap:5px 12px;
+        margin:0; padding:8px 0; background:none; border:0; border-bottom:1px solid #294352;
+    }
+    .neosubzero-ucc .neosubzero-weather > header { grid-column:1; grid-row:1; display:block; padding:0; margin:0; border:0; }
+    .neosubzero-ucc .neosubzero-weather > header :is(p,h2) { margin:0; font-size:.65rem; }
+    .neosubzero-ucc .neosubzero-weather-source { font-size:.56rem; }
+    .neosubzero-ucc .neosubzero-weather-current { grid-column:1; grid-row:2; display:block; margin:0; padding:0; border:0; }
+    .neosubzero-ucc .neosubzero-weather-primary { padding:0; border:0; }
+    .neosubzero-ucc .neosubzero-weather-primary > strong { font-size:2rem; line-height:1.1; }
+    .neosubzero-ucc .neosubzero-weather-primary :is(span,small) { font-size:.65rem; }
+    .neosubzero-ucc .neosubzero-weather-current dl { grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 8px; margin:4px 0 0; }
+    .neosubzero-ucc .neosubzero-weather-current dt { font-size:.55rem; }
+    .neosubzero-ucc .neosubzero-weather-current dd { font-size:.72rem; }
+    .neosubzero-ucc .neosubzero-weather > .neosubzero-weather-forecast-head { grid-column:2; grid-row:1; margin:0; padding-left:10px; border-left:1px solid #294352; display:flex; flex-wrap:wrap; gap:3px; align-content:start; }
+    .neosubzero-ucc .neosubzero-weather-current-sort { grid-column:2; grid-row:2; display:grid; grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:4px; padding-left:10px; border-left:1px solid #294352; }
+    .neosubzero-ucc .neosubzero-weather-current-sort > article { min-width:0; padding:3px; border:0; background:none; }
+    .neosubzero-ucc .neosubzero-weather-hour-priority { display:flex; flex-wrap:wrap; gap:3px 8px; }
+    .neosubzero-ucc .neosubzero-weather-hour-priority b { font-size:.78rem; }
+    .neosubzero-ucc .neosubzero-weather-hour-priority small { display:none; }
+    .neosubzero-ucc .neosubzero-weather-hour-priority em { white-space:normal; overflow:visible; text-overflow:clip; }
+    .neosubzero-ucc .neosubzero-weather-hour-secondary { gap:2px 6px; margin-top:3px; }
+    .neosubzero-ucc .neosubzero-weather-hour-secondary > span:not(:nth-child(4)) { display:none; }
+    .neosubzero-ucc .neosubzero-weather > .neosubzero-weather-note { grid-column:1 / -1; margin:0; }
+    .neosubzero-ucc [data-ucc-live-board],.neosubzero-ucc .ucc-ramp-board { display:contents; }
+    .neosubzero-ucc .neosubzero-ucc-upcoming {
+        grid-column:5; grid-row:3; min-width:0; margin:0; padding:8px 0 8px 10px;
+        background:none; border:0; border-left:1px solid #294352; border-bottom:1px solid #294352;
+    }
+    .neosubzero-ucc .neosubzero-ucc-upcoming .neosubzero-weather-forecast { display:grid; grid-template-columns:1fr; gap:5px; }
+    .neosubzero-ucc .neosubzero-ucc-upcoming .neosubzero-weather-forecast > article { padding:3px 0; border:0; border-top:1px solid #294352; background:none; grid-template-columns:1.3fr 1fr 1fr; }
+    .neosubzero-ucc .neosubzero-ucc-upcoming article > :is(span:nth-child(3),span:nth-child(4),span:nth-child(6)) { display:none; }
+    .neosubzero-ucc .neosubzero-ucc-upcoming article > em { white-space:normal; overflow:visible; text-overflow:clip; }
+    .neosubzero-ucc .neosubzero-ucc-upcoming article :is(b,small,em) { font-size:.6rem; }
+    .neosubzero-ucc .neosubzero-weather-forecast-head { font-size:.6rem; }
+    .neosubzero-ucc .neosubzero-weather-forecast-head strong { font-size:.64rem; }
+    .neosubzero-ucc > .neosubzero-ucc-fluid { grid-column:1 / -1; grid-row:4; padding:4px 0; margin:0; border:0; border-bottom:1px solid #294352; background:none; font-size:.72rem; }
+    .neosubzero-ucc .ucc-feedback { grid-column:1 / -1; grid-row:5; }
+    .neosubzero-ucc .ucc-current-link { grid-column:1 / -1; grid-row:6; }
+    .neosubzero-ucc .ucc-board-heading { grid-column:1 / -1; grid-row:7; margin:0; }
+    .neosubzero-ucc .ucc-aircraft-panel { grid-column:1 / -1; grid-row:8; }
+    .neosubzero-ucc .ucc-location-exceptions { grid-column:1 / -1; grid-row:9; }
+    .neosubzero-ucc .ucc-ramp {
+        grid-row:10; min-width:0; padding:4px; border:0; border-top:2px solid #72bddf;
+        background:#091721; align-self:start;
+    }
+    .neosubzero-ucc [data-ucc-ramp="Alpha"] { grid-column:1; }
+    .neosubzero-ucc [data-ucc-ramp="Bravo"] { grid-column:2; }
+    .neosubzero-ucc [data-ucc-ramp="Charlie"] { grid-column:3; }
+    .neosubzero-ucc [data-ucc-ramp="Delta"] { grid-column:4; }
+    .neosubzero-ucc [data-ucc-ramp="Echo"] { grid-column:5; }
+    .neosubzero-ucc [data-ucc-ramp="Remote"] { grid-column:1; grid-row:11; }
+    .neosubzero-ucc .ucc-ramp > header { padding:2px 0 5px; border:0; }
+    .neosubzero-ucc .ucc-ramp h2 { font-size:1rem; }
+    .neosubzero-ucc .ucc-ramp .ucc-treatment-layout { display:flex; flex-direction:column; gap:6px; padding:0; }
+    .neosubzero-ucc .ucc-staffing-grid { order:-1; display:grid; width:100%; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 6px; align-content:start; }
+    .neosubzero-ucc .ucc-ramp:not([data-ucc-ramp="Remote"]) .ucc-staffing-grid { min-height:var(--ucc-staffing-height,0px); }
+    .neosubzero-ucc .ucc-team { border:0; border-bottom:1px solid #294352; border-radius:0; background:none; }
+    .neosubzero-ucc .ucc-team > summary { padding:4px 0; gap:4px; }
+    .neosubzero-ucc .ucc-ramp .ucc-team { grid-area:auto; }
+    .neosubzero-ucc .ucc-ramp .ucc-team[open] { grid-column:1 / -1; }
+    .neosubzero-ucc .ucc-ramp:not([data-ucc-ramp="Remote"]) .ucc-team > summary { min-height:var(--ucc-staffing-row-height,72px); box-sizing:border-box; }
+    .neosubzero-ucc .ucc-team summary strong { font-size:.82rem; }
+    .neosubzero-ucc .ucc-team summary small { font-size:.75rem; line-height:1.25; white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; }
+    .neosubzero-ucc .ucc-ramp-diagram { width:100%; }
+    .neosubzero-ucc .ucc-parking-grid { grid-template-rows:repeat(4,var(--ucc-parking-row-height,108px)); }
+    .neosubzero-ucc .ucc-parking-place { border:0; background:none; padding:3px 1px; }
+    .neosubzero-ucc .ucc-deice-pad,.neosubzero-ucc .ucc-deice-waiting { background:none; padding:3px 1px; }
+    .blueprint-neosubzero .neosubzero-ucc .ucc-plane,.blueprint-neosubzero .neosubzero-ucc .ucc-plane:is(:hover,[aria-pressed="true"]) {
+        background:#091721; color:#e2eef5; border-color:transparent; gap:2px; padding:3px 0;
+    }
+    .blueprint-neosubzero .neosubzero-ucc .ucc-plane .ucc-plane-icon { color:var(--aircraft-fill,#b6e1f9); font-size:1.65rem; }
+    .neosubzero-ucc .ucc-plane strong,.neosubzero-ucc .ucc-ramp-diagram .ucc-plane strong { font-size:clamp(.72rem,.78vw,.95rem); line-height:1.2; }
+    .neosubzero-ucc .ucc-plane > .ucc-plane-flight { color:inherit; font-size:.7rem; }
+    .neosubzero-ucc .ucc-plane > .ucc-plane-etd { display:block; color:#a9c4d7; font-size:.72rem; }
+    .neosubzero-ucc .ucc-plane :is(.ucc-plane-status,.ucc-plane-lane) { display:none; }
+    .neosubzero-ucc .ucc-plane:focus-visible { outline:2px solid #fff; }
+    .neosubzero-ucc .ucc-queue-exception { border-top:1px solid #83683b; }
+
+    /* Existing TV presentation uses the same board, with weather compressed
+       before the shared viewport fitter reduces any operational typography. */
+    body.neosubzero-ucc-tv-mode:has([data-subzero-ucc]) { overflow:hidden; }
+    body.neosubzero-ucc-tv-mode .ucc-board-viewport { display:block; position:fixed; inset:0; overflow:hidden; background:#06101a; }
+    body.neosubzero-ucc-tv-mode .ucc-board-viewport > .neosubzero-ucc { position:absolute; top:28px; left:8px; padding:6px; min-height:0; gap:3px; transform-origin:top left; }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-current { display:grid; grid-template-columns:minmax(65px,.7fr) minmax(0,1.3fr); gap:6px; align-items:start; }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc > .neosubzero-head { height:0; min-height:0; margin:0; padding:0; }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc > .neosubzero-head > div:first-child,
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc-head-actions > strong { display:none; }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc-tv-exit { position:absolute; top:-22px; right:0; }
+    body.neosubzero-ucc-tv-mode .ucc-board-heading { display:none; }
+    body.neosubzero-ucc-tv-mode .ucc-parking-grid { grid-template-rows:repeat(4,var(--ucc-parking-row-height,92px)); }
+    .neosubzero-ucc[data-ucc-weather-density="compact"] :is(.neosubzero-weather-hour-secondary,.neosubzero-weather-primary > small) { display:none; }
+    .neosubzero-ucc[data-ucc-weather-density="compact"] .neosubzero-ucc-upcoming article > span:nth-child(n+2) { display:none; }
+    .neosubzero-ucc[data-ucc-weather-density="minimal"] :is(.neosubzero-weather-hour-secondary,.neosubzero-weather-primary > small,.neosubzero-weather-hour-priority em) { display:none; }
+    .neosubzero-ucc[data-ucc-weather-density="minimal"] .neosubzero-ucc-upcoming article > :is(span:nth-child(n+2),em) { display:none; }
+    .neosubzero-ucc[data-ucc-weather-density="minimal"] .neosubzero-weather-current-sort { grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); }
+}

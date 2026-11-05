@@ -1,14 +1,15 @@
 {% macro aircraft(row, location, facing='up') -%}
 <button type="button" class="ucc-plane state-{{ row.visual_state }}" data-ucc-aircraft="{{ row.identity_key }}" aria-label="{{ row.tail }} {{ row.flight }}, {{ location }}, {{ row.visual_label }}">
     <span class="ucc-plane-icon facing-{{ facing }}" aria-hidden="true"></span><strong>{{ row.tail }}</strong>
-    {% if row.flight or row.lane %}<span>{{ row.flight }}{% if row.lane %} · L{{ row.lane }}{% endif %}</span>{% endif %}<small>{{ row.visual_label }}</small>
+    {% if row.flight or row.lane %}<span class="ucc-plane-flight">{{ row.flight }}{% if row.lane %}<span class="ucc-plane-lane"> · L{{ row.lane }}</span>{% endif %}</span>{% endif %}
+    <span class="ucc-plane-etd">{{ row.etd or '—' }}</span><small class="ucc-plane-status">{{ row.visual_label }}</small>
 </button>
 {%- endmacro %}
 {% macro parking_place(place, positioned=true) -%}
 <div class="ucc-parking-place{% if positioned and place.grid_row %} ucc-grid-row-{{ place.grid_row }} ucc-grid-column-{{ place.grid_column }}{% endif %}" data-ucc-parking="{{ place.code }}">
     <b>{{ place.code }}</b>
     {% set position = place.code[-2:]|int %}
-    {% set facing = 'right' if 1 <= position <= 4 else 'left' if 5 <= position <= 8 else 'up' %}
+    {% set facing = 'up' if place.code.startswith('R') else 'right' if 1 <= position <= 4 else 'left' if 5 <= position <= 8 else 'up' %}
     {% for row in place.aircraft %}{{ aircraft(row, 'parking ' ~ place.code, facing) }}{% else %}<span>EMPTY</span>{% endfor %}
 </div>
 {%- endmacro %}
@@ -56,6 +57,7 @@
     <header><h2>{{ ramp.name|upper }}</h2><span class="ucc-desktop-label">{{ ramp.aircraft|length }} aircraft</span></header>
     <div class="ucc-treatment-layout">
         {{ physical_ramp(ramp) }}
+        <div class="ucc-staffing-grid">
         {% for slot in ramp.slots %}
         <details class="ucc-team position-{{ slot.position }}" data-ucc-editor="{{ ramp.name }}-{{ slot.position }}">
             <summary><b>{{ slot.position }}</b><span><strong>{{ slot.truck_number or 'NO TRUCK' }}</strong><small title="{{ slot.roles.driver.person.full_name if slot.roles.driver.person else 'Unassigned' }}">D · {{ slot.roles.driver.person.full_name if slot.roles.driver.person else 'Unassigned' }}</small><small title="{{ slot.roles.flyer.person.full_name if slot.roles.flyer.person else 'Unassigned' }}">F · {{ slot.roles.flyer.person.full_name if slot.roles.flyer.person else 'Unassigned' }}</small></span>{% if can_edit %}<em>EDIT</em>{% endif %}</summary>
@@ -78,6 +80,7 @@
             </form></details>{% endif %}
             </div>
         </details>{% endfor %}
+        </div>
     </div>
     {% if ramp.exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>DEICE CAPACITY REVIEW · {{ ramp.exceptions|length }} unplaced</strong><p>Three throat positions maximum: 10, Middle, 9. Confirm actual location and correct the departure queue.</p>{% for row in ramp.exceptions %}{{ aircraft(row, 'unplaced; deice capacity review') }}{% endfor %}</div>{% endif %}
     {% if ramp.location_exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>LOCATION REVIEW · AFTER BLOCK-OUT</strong>{% for row in ramp.location_exceptions %}{{ aircraft(row, 'location unconfirmed after Block-Out') }}{% endfor %}</div>{% endif %}

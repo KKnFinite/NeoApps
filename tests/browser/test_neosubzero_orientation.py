@@ -72,7 +72,7 @@ class AircraftOrientationTest(unittest.TestCase):
                     self.assertEqual(len(snapshots),4 if ramp == 'Remote' else 9 if ramp == 'Charlie' else 8)
                     for row in snapshots:
                         number = int(row['parking'][-2:])
-                        self.assertEqual(row['transform'],RIGHT if number <= 4 else LEFT if number <= 8 else UP,row)
+                        self.assertEqual(row['transform'],UP if ramp == 'Remote' else RIGHT if number <= 4 else LEFT if number <= 8 else UP,row)
                         self.assertIn('/static/images/neosubzero/ducc-aircraft.svg',row['mask'])
                         self.assertEqual(row['glyph'],'')
                         self.assertEqual(row['cardTransform'],'none')

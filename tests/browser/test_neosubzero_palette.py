@@ -114,7 +114,13 @@ class PaletteBrowserTest(unittest.TestCase):
                     else:
                         plane=ducc.locator(f'[data-ucc-aircraft="{ids[status]}"]')
                         expect(plane).to_have_class(re.compile('state-'+ducc_state))
-                        self.check_color(planes[ids[status]],hex_color)
+                        if width > 900:
+                            # Desktop DUCC now colors only the shared airplane;
+                            # its card and labels remain a readable dark surface.
+                            expect(plane).to_have_css('background-color','rgb(9, 23, 33)')
+                            expect(plane.locator('.ucc-plane-icon')).to_have_css('color',rgb(hex_color))
+                        else:
+                            self.check_color(planes[ids[status]],hex_color)
                 self.assertLessEqual(ducc.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
                 measurements.append(dict(engine=engine,screen='ducc',width=width,planes=planes))
                 if width in (390,1920):ducc.screenshot(path=str(EVIDENCE/f'{engine}-ducc-{width}.png'),full_page=True)
@@ -122,9 +128,9 @@ class PaletteBrowserTest(unittest.TestCase):
             for status,(ducc_state,hex_color) in PALETTE.items():
                 if ducc_state is None:continue
                 plane=ducc.locator(f'[data-ucc-aircraft="{ids[status]}"]')
-                plane.hover();expect(plane).to_have_css('background-color',rgb(hex_color))
+                plane.hover();expect(plane).to_have_css('background-color','rgb(9, 23, 33)')
                 plane.click();expect(plane).to_have_attribute('aria-pressed','true')
-                expect(plane).to_have_css('background-color',rgb(hex_color))
+                expect(plane).to_have_css('background-color','rgb(9, 23, 33)')
                 ducc.keyboard.press('Tab');plane.focus();expect(plane).to_have_css('outline-style','solid')
                 expect(plane).to_have_css('outline-width','2px')
             with case.app.app_context():

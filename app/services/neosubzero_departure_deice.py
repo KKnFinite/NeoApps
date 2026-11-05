@@ -421,6 +421,8 @@ def _departure_row(
     base_local = timing.get("base_planned_departure_time")
     display_time = adjusted or base_local
     time_label = "ETD" if adjusted and base_local and adjusted != base_local else "STD"
+    # Same read-only ETD source as Operations; never changes schedule authority.
+    estimated_departure = mission.eta_datetime_utc or (mission.planned_datetime_utc + timedelta(minutes=timing.get('effective_window_minutes') or 0) if mission.planned_datetime_utc else None)
     tail = _tail(mission.assigned_tail_number)
     pretreat_complete = bool(tail_state and tail_state.pretreat_status)
     collapse_state = _collapse_state(
@@ -489,6 +491,7 @@ def _departure_row(
         "ramp": _ramp_name(getattr(parking, "ramp_code", None)),
         "departure_time": _format_local_time_value(display_time, mission.timezone),
         "departure_time_label": time_label,
+        "etd": format_local_hhmm(estimated_departure, mission.timezone or None) or '—',
         "tail_status": tail_operational_status_label(
             tail_operational_status(tail_state, assignment=parking)
         )
