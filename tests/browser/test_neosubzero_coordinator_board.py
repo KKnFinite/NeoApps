@@ -181,7 +181,13 @@ class CoordinatorBoardTest(unittest.TestCase):
             values=[r['diagram'][key] for r in geometry['ramps']]
             self.assertLessEqual(max(values)-min(values),1,(key,geometry))
         self.assertTrue(all(r['teams']==4 for r in geometry['ramps']))
-        self.assertGreaterEqual(geometry['remote']['y'],max(r['ramp']['bottom'] for r in geometry['ramps']))
+        remote = page.locator('[data-ucc-ramp="Remote"]')
+        if page.locator('body').evaluate('e=>e.classList.contains("neosubzero-ucc-tv-mode")'):
+            expect(remote).to_be_hidden()
+            expect(page.locator('[data-ucc-ramp]:visible')).to_have_count(5)
+        else:
+            expect(remote).to_be_visible()
+            self.assertGreaterEqual(geometry['remote']['y'],max(r['ramp']['bottom'] for r in geometry['ramps']))
 
     def test_chromium_coordinator_and_board(self):
         self.exercise('chromium')

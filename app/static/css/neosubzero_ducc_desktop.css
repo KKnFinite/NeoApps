@@ -51,8 +51,8 @@
     .neosubzero-ucc .ucc-aircraft-panel { grid-column:1 / -1; grid-row:8; }
     .neosubzero-ucc .ucc-location-exceptions { grid-column:1 / -1; grid-row:9; }
     .neosubzero-ucc .ucc-ramp {
-        grid-row:10; min-width:0; padding:4px; border:0; border-top:2px solid #72bddf;
-        background:#091721; align-self:start;
+        grid-row:10; min-width:0; padding:4px; border:2px solid #72a7bf; border-top-color:#9ad8f1;
+        background:#091721; align-self:stretch;
     }
     .neosubzero-ucc [data-ucc-ramp="Alpha"] { grid-column:1; }
     .neosubzero-ucc [data-ucc-ramp="Bravo"] { grid-column:2; }
@@ -68,6 +68,12 @@
     .neosubzero-ucc .ucc-team { border:0; border-bottom:1px solid #294352; border-radius:0; background:none; }
     .neosubzero-ucc .ucc-team > summary { padding:4px 0; gap:4px; }
     .neosubzero-ucc .ucc-ramp .ucc-team { grid-area:auto; }
+    /* Physical clockwise order: upper left 1, lower left 2,
+       lower right 3, upper right 4. Keep canonical slot IDs unchanged. */
+    .neosubzero-ucc .ucc-staffing-grid > .position-1 { order:1; }
+    .neosubzero-ucc .ucc-staffing-grid > .position-4 { order:2; }
+    .neosubzero-ucc .ucc-staffing-grid > .position-2 { order:3; }
+    .neosubzero-ucc .ucc-staffing-grid > .position-3 { order:4; }
     .neosubzero-ucc .ucc-ramp .ucc-team[open] { grid-column:1 / -1; }
     .neosubzero-ucc .ucc-ramp:not([data-ucc-ramp="Remote"]) .ucc-team > summary { min-height:var(--ucc-staffing-row-height,72px); box-sizing:border-box; }
     .neosubzero-ucc .ucc-team summary strong { font-size:.82rem; }
@@ -87,12 +93,35 @@
     .neosubzero-ucc .ucc-plane:focus-visible { outline:2px solid #fff; }
     .neosubzero-ucc .ucc-queue-exception { border-top:1px solid #83683b; }
 
-    /* Existing TV presentation uses the same board, with weather compressed
-       before the shared viewport fitter reduces any operational typography. */
+    /* TV uses the full viewport. Remote remains available in ordinary DUCC. */
     body.neosubzero-ucc-tv-mode:has([data-subzero-ucc]) { overflow:hidden; }
     body.neosubzero-ucc-tv-mode .ucc-board-viewport { display:block; position:fixed; inset:0; overflow:hidden; background:#06101a; }
     body.neosubzero-ucc-tv-mode .ucc-board-viewport > .neosubzero-ucc { position:absolute; top:28px; left:8px; padding:6px; min-height:0; gap:3px; transform-origin:top left; }
-    body.neosubzero-ucc-tv-mode .neosubzero-weather-current { display:grid; grid-template-columns:minmax(65px,.7fr) minmax(0,1.3fr); gap:6px; align-items:start; }
+    body.neosubzero-ucc-tv-mode [data-ucc-ramp="Remote"] { display:none; }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather { grid-template-columns:minmax(0,1.2fr) minmax(0,2fr); }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-current { display:grid; grid-template-columns:minmax(65px,.6fr) minmax(0,1.4fr); gap:8px; align-items:start; }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc .neosubzero-weather-current-sort {
+        grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); grid-auto-flow:row; grid-auto-columns:auto; align-content:start;
+    }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-primary > strong { font-size:clamp(3.5rem,3.2vw,5rem); }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-primary :is(span,small) { font-size:clamp(.85rem,1vw,1.5rem); }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-current dt { font-size:clamp(.7rem,.75vw,1.1rem); }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-current dd { font-size:clamp(1.3rem,1.15vw,1.8rem); line-height:1.2; }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather > header :is(p,h2),
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-source,
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-forecast-head,
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-forecast-head strong { font-size:clamp(.7rem,.8vw,1.2rem); }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-current-sort > article > time,
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-hour-priority b { font-size:clamp(1.2rem,1.1vw,1.65rem); }
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-hour-priority em,
+    body.neosubzero-ucc-tv-mode .neosubzero-weather-hour-secondary { font-size:clamp(.7rem,.8vw,1.2rem); }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc-upcoming article :is(b,small,em) { font-size:clamp(1rem,.85vw,1.3rem); }
+    body.neosubzero-ucc-tv-mode .ucc-ramp h2 { font-size:clamp(1rem,1.25vw,2rem); }
+    body.neosubzero-ucc-tv-mode .ucc-team summary strong { font-size:clamp(.85rem,1vw,1.6rem); }
+    body.neosubzero-ucc-tv-mode .ucc-team summary small { font-size:clamp(.8rem,.9vw,1.4rem); }
+    body.neosubzero-ucc-tv-mode .ucc-plane strong,
+    body.neosubzero-ucc-tv-mode .ucc-ramp-diagram .ucc-plane strong { font-size:clamp(.85rem,1vw,1.7rem); }
+    body.neosubzero-ucc-tv-mode .ucc-plane > :is(.ucc-plane-flight,.ucc-plane-etd) { font-size:clamp(.75rem,.85vw,1.4rem); }
     body.neosubzero-ucc-tv-mode .neosubzero-ucc > .neosubzero-head { height:0; min-height:0; margin:0; padding:0; }
     body.neosubzero-ucc-tv-mode .neosubzero-ucc > .neosubzero-head > div:first-child,
     body.neosubzero-ucc-tv-mode .neosubzero-ucc-head-actions > strong { display:none; }

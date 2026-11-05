@@ -45,16 +45,27 @@
         const availableWidth = Math.max(1, window.innerWidth - 16);
         const availableHeight = Math.max(1, window.innerHeight - (tv ? 36 : 48));
         if (tv) {
-            root.style.width = `${availableWidth}px`;
+            // Fit the same operational board to BOTH axes. Scaling a viewport-
+            // wide canvas by height alone leaves an empty right-hand gutter.
+            // Remote is presentation-hidden by TV CSS, never removed from data.
+            let width = availableWidth;
             root.dataset.uccWeatherDensity = "normal";
-            alignRamps();
-            let height = root.scrollHeight;
-            for (const density of ["compact", "minimal"]) {
-                if (height <= availableHeight) break;
-                root.dataset.uccWeatherDensity = density;
-                height = root.scrollHeight;
+            let height;
+            for (let pass = 0; pass < 8; pass++) {
+                root.style.width = `${width}px`;
+                alignRamps();
+                height = Math.max(root.scrollHeight, root.getBoundingClientRect().height, 1);
+                const ratio = height * availableWidth / width / availableHeight;
+                if (ratio <= 1.001 || pass === 7) break;
+                width *= Math.min(1.5, ratio * 1.002);
             }
-            root.style.transform = `scale(${Math.min(1, availableHeight / Math.max(1, height))})`;
+            const scale = Math.min(availableWidth / width, availableHeight / height);
+            // Share spare vertical space equally across the four physical rows,
+            // keeping all five ramps aligned instead of a large empty footer.
+            const spare = Math.max(0, availableHeight / scale - height - 2);
+            const rowHeight = parseFloat(root.style.getPropertyValue("--ucc-parking-row-height"));
+            root.style.setProperty("--ucc-parking-row-height", `${rowHeight + spare / 4}px`);
+            root.style.transform = `scale(${scale})`;
             return;
         }
         delete root.dataset.uccWeatherDensity;

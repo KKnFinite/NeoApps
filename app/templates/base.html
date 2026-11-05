@@ -93,7 +93,7 @@
     {% endif %}
     {% if request.blueprint == 'neosubzero' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_workspace.css', v='20261105-ducc-desktop-v2') }}">
-    {% if request.endpoint == 'neosubzero.ucc' %}<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261105-ducc-desktop-v2') }}">{% endif %}
+    {% if request.endpoint == 'neosubzero.ucc' %}<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261105-ducc-tv-legibility-v3') }}">{% endif %}
     {% endif %}
     {% if uses_operational_shell and operational_shell_supports_board_view %}
     <script nonce="{{ csp_nonce() }}">
