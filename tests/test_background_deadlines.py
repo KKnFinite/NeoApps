@@ -33,6 +33,8 @@ class DeadlineTest(unittest.TestCase):
             NEOSCORPION_LEARNING_VAULT_ENDPOINT='https://isolated.invalid', NEOSCORPION_LEARNING_VAULT_ACCESS_KEY_ID='x',
             NEOSCORPION_LEARNING_VAULT_SECRET_ACCESS_KEY='x', FROST_AUTO_COLLECTION=True)
         self.gateway_id = self.fixture.gateway.id
+        from tests.frost_schedule_fixture import configure
+        configure(self.fixture.gateway)  # Explicit all-hour schedule for clock/receipt tests.
         db.session.delete(self.fixture.operation)
         self.actor = User(username='deadline-fixture', password_hash='no-login-fixture')
         db.session.add(self.actor)

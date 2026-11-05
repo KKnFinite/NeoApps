@@ -42,6 +42,7 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
     from app.services import frost_auto as auto, frost_departures as departures
     at = at or utcnow()
     due, deadlines = {}, [safety_deadline(at)]
+    next_frost_capture = None
     gateways = db.session.execute(select(Gateway.id, Gateway.code)).all()
     latest_audit = db.session.scalar(select(func.max(Audit.id))) or 0
     def add(gateway, kind, deadline):
@@ -114,18 +115,24 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
             if discovery is not None and not discovery.get('discovery_complete'):
                 research('departures', at)
         if current_app.config.get('FROST_AUTO_COLLECTION', True) is True:
-            hour = at.replace(minute=0, second=0, microsecond=0)
-            row = db.session.execute(select(Task.status, Task.retry_at).where(Task.gateway_id == gateway_id,
-                Task.kind == 'auto_capture', Task.version == auto.VERSION,
-                Task.identity == auto.identity(at.replace(tzinfo=timezone.utc)))).first()
-            if row is None:
-                research('auto', at)
-            elif row.status in ('pending', 'retry', 'staged', 'archive_retry'):
-                research('auto', row.retry_at)
-            research('auto', hour + timedelta(hours=1))
+            schedule=auto.Schedule.load(db.session.get(Gateway,gateway_id))
+            aware=at.replace(tzinfo=timezone.utc)
+            if schedule.eligible(aware):
+                row = db.session.execute(select(Task.status, Task.retry_at).where(Task.gateway_id == gateway_id,
+                    Task.kind == 'auto_capture', Task.version == auto.VERSION,
+                    Task.identity == auto.identity(aware))).first()
+                if row is None:
+                    research('auto', at)
+                elif row.status in ('pending', 'retry', 'staged', 'archive_retry'):
+                    research('auto', row.retry_at)
+            next_capture=schedule.next_capture(aware)
+            if next_capture and (next_frost_capture is None or next_capture < next_frost_capture):
+                next_frost_capture = next_capture
+            research('auto', next_capture.replace(tzinfo=None) if next_capture else None)
             research('auto', minimum(Task.retry_at, Task.gateway_id == gateway_id,
                 Task.kind == 'auto_capture', Task.version == auto.VERSION,
                 Task.status.in_(('staged', 'archive_retry'))))
+    g.frost_next_capture_at = next_frost_capture
     return due, min(deadlines)
 
 
@@ -265,7 +272,8 @@ class ArchiveDeadlines:
                     if safety:
                         self.safety = safety_deadline(after)
                     next_due = min(next_due, self.safety)
-                    frost_hour = (after.replace(minute=0,second=0,microsecond=0)+timedelta(hours=1)).isoformat()+'Z'
+                    next_frost = g.get('frost_next_capture_at')
+                    frost_hour = next_frost.isoformat() if next_frost else 'not scheduled'
                     self.app.logger.info('Archive deadline cycle complete: groups=%s next_utc=%s next_frost_hour_utc=%s',
                         sum(len(kinds) for kinds in due.values()), next_due.isoformat()+'Z',
                         frost_hour if self.app.config.get('FROST_AUTO_COLLECTION',True) is True else 'disabled')

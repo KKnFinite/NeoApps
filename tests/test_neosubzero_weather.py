@@ -85,7 +85,7 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         self.assertEqual(current["sky"], "BKN 1,800 · OVC 3,500")
         self.assertEqual(current_weather_theme(current), "snow")
 
-    def test_preliminary_frost_risk_is_conservative_and_explainable(self):
+    def test_retired_heuristic_never_claims_a_model_prediction(self):
         low = preliminary_frost_risk(
             temperature_f=48,
             dewpoint_spread_f=14,
@@ -107,15 +107,13 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
             wind_mph=3,
             conditions="Clear",
         )
-        self.assertEqual((low["level"], medium["level"], high["level"]), ("LOW", "MEDIUM", "HIGH"))
-        self.assertIn("dew-point spread", high["rationale"])
-        self.assertEqual(
-            high["explanation"],
-            "30°F · spread 2°F · RH 92% · light wind · clear",
-        )
-        self.assertIn("at/below freezing", high["explanation_reasons"])
+        for result in (low,medium,high,preliminary_frost_risk()):
+            self.assertEqual(result['level'],'UNAVAILABLE')
+            self.assertIsNone(result['score'])
+            self.assertFalse(result['physical_frost_probability'])
+            self.assertIn('not a trained FROST prediction',result['explanation'])
 
-    def test_preliminary_frost_trend_compares_the_next_hour(self):
+    def test_legacy_heuristic_levels_cannot_become_prediction_trends(self):
         rows = preliminary_frost_trends(
             (
                 {"time": "0100", "frost_risk": {"level": "LOW"}},
@@ -126,13 +124,9 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         )
         self.assertEqual(
             [row["frost_risk"]["trend_label"] for row in rows],
-            [
-                "Risk rising → MEDIUM at 0200",
-                "Risk steady",
-                "Risk falling → LOW at 0400",
-                "",
-            ],
+            ["", "", "", ""],
         )
+        self.assertTrue(all(row['frost_risk']['level']=='UNAVAILABLE' for row in rows))
 
     def test_current_theme_uses_observation_not_forecast_conditions(self):
         metar = [{
@@ -277,7 +271,7 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         self.assertEqual([hour["time"] for hour in cards[0]["hours"]], ["1800", "0100"])
         self.assertEqual(
             cards[0]["hours"][0]["frost_risk"]["trend_label"],
-            "Risk rising → HIGH at 0100",
+            "",
         )
         self.assertEqual(cards[0]["hours"][-1]["frost_risk"]["trend_label"], "")
         self.assertTrue(all(len(card["hours"]) == 1 for card in cards[1:]))

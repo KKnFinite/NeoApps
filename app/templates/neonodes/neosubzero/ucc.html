@@ -35,7 +35,6 @@
             <div><p>KRFD · ACTUAL OBSERVATION</p><h2 id="subzero-weather-heading">WEATHER OPERATIONS</h2></div>
             <div class="neosubzero-weather-source">
                 <span>{{ weather.sources.current }} · {{ weather.current.observed_at_label }}{% if weather.current.stale %} · STALE{% endif %}</span>
-                <button type="button" data-frost-explanation-toggle aria-pressed="{{ 'true' if frost_risk_explanations_enabled else 'false' }}">WHY {{ 'ON' if frost_risk_explanations_enabled else 'OFF' }}</button>
             </div>
         </header>
         <div class="neosubzero-weather-current">
@@ -62,18 +61,13 @@
         {% if weather.current_sort %}
         <div class="neosubzero-weather-current-sort" aria-label="Current sort hourly weather">
             {% for hour in weather.current_sort.hours %}
-            <article class="frost-{{ hour.frost_risk.level|lower }}">
+            <article>
                 <time>{{ hour.time }}</time>
                 <div class="neosubzero-weather-hour-priority">
-                    <span title="Preliminary rule-based indicator: {{ hour.frost_risk.rationale }}">
-                        <small>FROST RISK · PRELIMINARY</small><b>{{ hour.frost_risk.level }}</b>
-                        {% if hour.frost_risk.trend_label %}<em>{{ hour.frost_risk.trend_label }}</em>{% endif %}
-                    </span>
                     <span><small>PRECIPITATION</small><b>{{ hour.probability }}</b><em>{{ hour.condition }}</em></span>
                     <span><small>TEMPERATURE</small><b>{{ hour.temperature }}</b></span>
                 </div>
                 <div class="neosubzero-weather-hour-secondary">
-                    <span class="is-frost-reason" {% if not frost_risk_explanations_enabled %}hidden{% endif %}>{{ hour.frost_risk.explanation }}</span>
                     <span>DEW {{ hour.dewpoint }}</span><span>SPREAD {{ hour.spread }}</span>
                     <span>RH {{ hour.humidity }}</span><span>{{ hour.wind }}{% if hour.gust != '-' %} · {{ hour.gust }}{% endif %}</span>
                     <span>{{ hour.condition }}</span>

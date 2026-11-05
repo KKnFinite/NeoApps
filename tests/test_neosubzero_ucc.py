@@ -523,9 +523,10 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIn(b"ACTIVE PRECIPITATION", page.data)
         self.assertIn(b"CURRENT SORT \xc2\xb7 HOURLY WEATHER", page.data)
         self.assertIn(b"2300", page.data)
-        self.assertIn(b"FROST RISK \xc2\xb7 PRELIMINARY", page.data)
-        self.assertIn(b"Risk rising \xe2\x86\x92 HIGH at 0000", page.data)
-        self.assertIn(b"28\xc2\xb0F \xc2\xb7 spread 3\xc2\xb0F \xc2\xb7 light wind \xc2\xb7 chance snow", page.data)
+        # Even a legacy HIGH/rising payload must never become a DUCC model alert.
+        self.assertNotIn(b"FROST RISK", page.data)
+        self.assertNotIn(b"Risk rising", page.data)
+        self.assertNotIn(b'class="frost-high"', page.data)
         self.assertIn(b"UPCOMING OPERATIONAL SORT WINDOWS", page.data)
         self.assertIn(b"28\xc2\xb0F", page.data)
         self.assertIn(b"CHANCE SNOW", page.data)
@@ -677,7 +678,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         ):
             default_page = client.get("/neosubzero/ucc")
         self.assertIn(b'data-frost-explanations="on"', default_page.data)
-        self.assertIn(b"data-frost-explanation-toggle", default_page.data)
+        self.assertNotIn(b"data-frost-explanation-toggle", default_page.data)
         self.assertIn(b"/neosubzero/ucc/frost-explanation-preference", default_page.data)
 
         saved = client.post(

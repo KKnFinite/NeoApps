@@ -1,7 +1,7 @@
 <section class="frost-research frost-model-admin" aria-labelledby="frost-auto-title">
     <h2 id="frost-auto-title">AUTO COLLECTION</h2>
     <p><strong data-auto-field="state">{{ auto_collection.state }}</strong></p>
-    <p>Hourly UTC slots on the existing NeoApps delivery heartbeat. No workstation, browser, active sort or nightly SubZero entry is required. Service outages and resource suspensions are recorded, not backfilled as forecasts.</p>
+    <p>Hourly UTC slots during configured RFD Sort windows and active operating days, using the gateway timezone. No workstation, browser or spray entry is required. Outside those hours only committed archive retries continue. Service outages and resource suspensions are recorded, never backfilled as forecasts.</p>
     <dl class="frost-auto-metrics">
         {% for key,label in [('last_attempt','Last attempt (UTC)'),('last_success','Last capture (UTC)'),('last_archive','Last off-site verified (UTC)'),('last_scored','Last research score (UTC)'),('next_capture','Next hourly slot (UTC)'),('missed','Missed intervals'),('failed','Failed intervals'),('pending','Pending/retrying intervals'),('archived','Verified snapshots'),('scored','Research scores · H0 / H1 / H3 / H6'),('unavailable','Unavailable model inputs'),('research_models','Private frozen models registered'),('xchange_matches','Xchange RecordIDs linked to forecasts'),('awaiting_outcomes','Forecast periods awaiting Xchange evidence')] %}
         <div><dt>{{ label }}</dt><dd data-auto-field="{{ key }}">{{ auto_collection[key] if auto_collection[key] is not none else 'Not yet' }}</dd></div>

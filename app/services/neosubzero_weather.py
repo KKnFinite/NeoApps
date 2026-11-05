@@ -173,127 +173,24 @@ def parse_aviation_weather_metar(payload):
 
 
 def preliminary_frost_risk(
-    *,
-    temperature_f=None,
-    dewpoint_spread_f=None,
-    relative_humidity=None,
-    wind_mph=None,
-    conditions="",
+    *, temperature_f=None, dewpoint_spread_f=None, relative_humidity=None,
+    wind_mph=None, conditions="",
 ):
-    """Return a conservative, explainable frost signal for one forecast hour.
+    """Compatibility shape only: weather heuristics are not model predictions.
 
-    This intentionally small rule set is isolated so a future RFD historical
-    model can replace it without changing the UCC presentation contract.
+    Frozen experimental H0/H1/H3/H6 scores are displayed from verified research
+    evidence in FROST, never inferred from a DUCC weather forecast.
     """
-    temperature = _number(temperature_f)
-    spread = _number(dewpoint_spread_f)
-    humidity = _number(relative_humidity)
-    wind = _number(wind_mph)
-    condition_text = str(conditions or "").casefold()
-    score = 0
-    reasons = []
-
-    if temperature is not None:
-        if temperature <= 32:
-            score += 3
-            reasons.append("at/below freezing")
-        elif temperature <= 36:
-            score += 2
-            reasons.append("near freezing")
-        elif temperature <= 40:
-            score += 1
-    if spread is not None:
-        if spread <= 2:
-            score += 3
-            reasons.append("very tight dew-point spread")
-        elif spread <= 5:
-            score += 2
-            reasons.append("tight dew-point spread")
-        elif spread <= 8:
-            score += 1
-    if humidity is not None:
-        if humidity >= 90:
-            score += 2
-            reasons.append("very humid")
-        elif humidity >= 80:
-            score += 1
-            reasons.append("humid")
-    if wind is not None:
-        if wind <= 5:
-            score += 1
-            reasons.append("light wind")
-        elif wind >= 15:
-            score -= 1
-    if temperature is not None and temperature <= 40 and any(
-        token in condition_text for token in ("clear", "sunny", "few clouds")
-    ):
-        score += 1
-        reasons.append("limited cloud cover")
-    elif any(token in condition_text for token in ("overcast", "cloudy")):
-        score -= 1
-        reasons.append("cloud cover limits cooling")
-    if any(token in condition_text for token in ("freezing fog", "frost")):
-        score = max(score, 7)
-        reasons.append("freezing fog/frost reported")
-    elif any(token in condition_text for token in ("fog", "mist")) and (
-        temperature is None or temperature <= 36
-    ):
-        score += 2
-        reasons.append("cold fog/mist")
-
-    level = "HIGH" if score >= 7 else "MEDIUM" if score >= 4 else "LOW"
-    normalized_reasons = tuple(dict.fromkeys(reasons))
-    return {
-        "level": level,
-        "score": score,
-        "rationale": ", ".join(normalized_reasons) or "limited frost signals",
-        # Future NeoFrost output can provide the same normalized reason list
-        # and display text without changing the persisted WHY preference/UI.
-        "explanation_reasons": normalized_reasons,
-        "explanation": _frost_explanation(
-            temperature,
-            spread,
-            humidity,
-            wind,
-            conditions,
-        ),
-    }
+    return dict(level="UNAVAILABLE", score=None, physical_frost_probability=False,
+        rationale="No verified experimental model score is attached to this weather hour.",
+        explanation="UNAVAILABLE — weather conditions are not a trained FROST prediction.",
+        explanation_reasons=())
 
 
 def preliminary_frost_trends(hours):
-    """Annotate hourly temporary frost results with their next-hour direction."""
-    ranks = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
-    rows = []
-    source = tuple(hours or ())
-    for index, row in enumerate(source):
-        copied = dict(row)
-        risk = dict(copied.get("frost_risk") or {})
-        trend = None
-        if index + 1 < len(source):
-            next_row = source[index + 1]
-            current_rank = ranks.get(risk.get("level"))
-            next_rank = ranks.get(
-                (next_row.get("frost_risk") or {}).get("level")
-            )
-            if current_rank is not None and next_rank is not None:
-                trend = (
-                    "rising"
-                    if next_rank > current_rank
-                    else "falling"
-                    if next_rank < current_rank
-                    else "steady"
-                )
-        risk["trend"] = trend
-        if trend in {"rising", "falling"}:
-            next_risk = next_row.get("frost_risk") or {}
-            risk["trend_label"] = (
-                f"Risk {trend} → {next_risk.get('level')} at {next_row.get('time')}"
-            )
-        else:
-            risk["trend_label"] = f"Risk {trend}" if trend else ""
-        copied["frost_risk"] = risk
-        rows.append(copied)
-    return tuple(rows)
+    """Do not turn legacy heuristic levels into apparent prediction trends."""
+    return tuple(dict(row, frost_risk=dict(preliminary_frost_risk(), trend=None, trend_label=""))
+        for row in (hours or ()))
 
 
 def current_weather_theme(current):

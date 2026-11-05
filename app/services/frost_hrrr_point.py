@@ -14,6 +14,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError
 
 from app.services import frost_forecast as clock, frost_weather as weather, frost_vault as vault
+from app.services.frost_resources import Deferred
 
 VERSION='krfd-hrrr-light-v1'
 VARIABLES=(('2m_above_ground','TMP','K'),('2m_above_ground','DPT','K'),
@@ -48,7 +49,7 @@ def numbers(raw,meta,indices,*,guard=None):
     Decode at most one <=1 MiB block at a time; read requested shuffled scalars
     directly instead of constructing the 18/48 x 150 x 150 scientific array.
     """
-    if guard and not guard():raise RuntimeError('HRRR decoding deferred for resource protection.')
+    if guard and not guard():raise Deferred('HRRR decoding deferred for resource protection.')
     dtype=meta['dtype'];formats={'<f2':'e','<f4':'f','<f8':'d','<i8':'q'}
     if dtype not in formats or meta['order']!='C' or meta.get('filters'):raise ValueError('Unsupported HRRR array.')
     size=struct.calcsize(formats[dtype]);expected=math.prod(meta['chunks'] or [1])*size
@@ -69,7 +70,7 @@ def numbers(raw,meta,indices,*,guard=None):
     if table_end>len(raw):raise ValueError('Truncated HRRR block table.')
     from lz4.block import decompress
     for block in sorted({i*size//blocksize for i in indices}):
-        if guard and not guard():raise RuntimeError('HRRR decoding deferred for resource protection.')
+        if guard and not guard():raise Deferred('HRRR decoding deferred for resource protection.')
         length=min(blocksize,nbytes-block*blocksize)
         pos=struct.unpack_from('<I',raw,16+4*block)[0]
         if not table_end<=pos<len(raw):raise ValueError('Invalid HRRR block offset.')
@@ -127,7 +128,7 @@ class Source:
         allowed=(re.fullmatch(r'https://hrrrzarr.s3.amazonaws.com/sfc/\d{8}/\d{8}_\d{2}z_fcst.zarr/[A-Za-z0-9_./]+',url) or
             re.fullmatch(r'https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.\d{8}/conus/hrrr.t\d{2}z.wrfsfcf\d{2}.grib2',url))
         if not allowed or '..' in url:raise ValueError('Unverified HRRR URL.')
-        if not self.guard():raise RuntimeError('HRRR deferred: 75% / 128 MiB memory protection.')
+        if not self.guard():raise Deferred('HRRR deferred: 75% / 128 MiB memory protection.')
         remaining=self.deadline-time.monotonic()
         if remaining<=0 or self.calls>=80:raise TimeoutError('HRRR capture request/time budget exhausted.')
         self.calls+=1
@@ -138,7 +139,7 @@ class Source:
             if response.headers.get('Content-Encoding') not in (None,'identity'):raise ValueError('Unexpected HRRR HTTP encoding.')
             if not head:
                 while True:
-                    if not self.guard():raise RuntimeError('HRRR transfer deferred for resource protection.')
+                    if not self.guard():raise Deferred('HRRR transfer deferred for resource protection.')
                     if time.monotonic()>self.deadline:raise TimeoutError('HRRR transfer deadline exceeded.')
                     part=response.read1(min(65536,maximum+1-length))
                     if not part:break
@@ -146,6 +147,7 @@ class Source:
                     if length>maximum:raise ValueError('HRRR source size exceeded.')
                     parts.append(part)
             raw=b''.join(parts)
+            del parts  # Do not retain a second body during archival/verification.
             receipt=dict(url=url,method='HEAD' if head else 'GET',retrieved_at_utc=self.now().isoformat(),
                 sha256=vault.digest(raw),bytes=len(raw),last_modified=response.headers.get('Last-Modified'),etag=response.headers.get('ETag'))
         self.bytes+=len(raw)
@@ -194,6 +196,7 @@ def read_point(client,cycle,hours):
             missing.append(dict(variable=name,http_status=error.code));continue
         offsets=[(h-1)*22500+77*150+80 for h in hours]
         data=numbers(raw,definition,offsets,guard=getattr(client,'guard',None))
+        del raw  # The next variable's admission must not retain the prior tile.
         series[name]=[value if math.isfinite(value) and value!=definition.get('fill_value') else None for value in data]
     point=dict(schema=VERSION,cycle_at_utc=cycle.isoformat(),station=weather.STATION,point=POINT,
         forecast_hours=hours,series=series,missing=missing,source_receipts=sorted(client.receipts,key=lambda r:(r['method'],r['url'])))

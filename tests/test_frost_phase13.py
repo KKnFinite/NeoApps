@@ -26,6 +26,8 @@ class AutoTest(ArchiveAccessTest):
         self.f.app.config.update(NEOSCORPION_LEARNING_VAULT_BUCKET='isolated',NEOSCORPION_LEARNING_VAULT_PROVIDER='r2',
             NEOSCORPION_LEARNING_VAULT_ENDPOINT='https://isolated.invalid',NEOSCORPION_LEARNING_VAULT_ACCESS_KEY_ID='x',
             NEOSCORPION_LEARNING_VAULT_SECRET_ACCESS_KEY='x',FROST_AUTO_COLLECTION=True)
+        from tests.frost_schedule_fixture import configure
+        configure(self.f.gateway)  # This fixture explicitly enables every hour.
         from app.services.frost_weather import STATION
         self.source=dict(station=STATION,cutoff_at_utc=self.t.isoformat(),observations=[],sources=[],nws_forecasts=[],native_forecasts=[])
         self.acquire=patch.object(auto,'acquire',side_effect=lambda:dict(self.source,cutoff_at_utc=self.t.isoformat()))
@@ -40,7 +42,7 @@ class AutoTest(ArchiveAccessTest):
         return helper
 
     def test_hourly_without_sort_or_browser_restart_idempotency_and_unknown(self):
-        # Existing canonical fixtures are irrelevant; collection never reads their sort.
+        # An operational mission/browser is unnecessary; configured hours are required.
         self.assertEqual(self.tick(),1);self.assertEqual(self.tick(),0);self.provider.assert_called_once()
         state=auto.status(self.f.gateway.id)
         self.assertEqual((state['archived'],state['scored'],state['unavailable'],state['awaiting_outcomes']),(1,0,8,1))
