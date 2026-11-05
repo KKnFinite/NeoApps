@@ -5,7 +5,7 @@
     <details><summary>RECENT HOURLY COVERAGE · {{ auto_collection.recent|length }} slots</summary>
         <div class="frost-capture-list">
         {% for item in auto_collection.recent %}
-            <article><strong>{{ item.slot }} UTC</strong> · {{ item.state|upper }} · {{ item.scored }} scores · {{ item.unavailable }} unavailable · {{ item.deferrals }} resource deferrals
+            <article><strong>{{ item.slot }} UTC</strong> · WEATHER {{ item.weather_state }} · PREDICTIONS {{ item.prediction_state }} · ARCHIVE {{ item.archive_state }} · {{ item.unavailable }} unavailable · {{ item.deferrals }} resource deferrals
             <span>{{ item.matches }} treatment links{% if not item.matches %} · OUTCOME UNKNOWN{% endif %}</span>
             {% if item.error %}<span>{{ item.error }}</span>{% endif %}
             {% for error in item.quality %}<span>{{ error }}</span>{% endfor %}

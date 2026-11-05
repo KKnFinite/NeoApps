@@ -15,6 +15,7 @@ from urllib.error import HTTPError
 
 from app.services import frost_forecast as clock, frost_weather as weather, frost_vault as vault
 from app.services.frost_resources import Deferred
+from app.services.frost_resources import deadline_error
 
 VERSION='krfd-hrrr-light-v1'
 VARIABLES=(('2m_above_ground','TMP','K'),('2m_above_ground','DPT','K'),
@@ -85,7 +86,7 @@ def numbers(raw,meta,indices,*,guard=None):
             part=part if amount==partsize else decompress(part,uncompressed_size=partsize)
             if len(part)!=partsize:raise ValueError('HRRR decoded size mismatch.')
             parts.append(part)
-        decoded=b''.join(parts);del parts
+        decoded=b''.join(parts);del parts,part
         for i in (i for i in indices if i*size//blocksize==block):
             offset=i*size-block*blocksize
             scalar=bytes(decoded[j*(length//size)+offset//size] for j in range(size)) if flags&1 else decoded[offset:offset+size]
@@ -130,7 +131,8 @@ class Source:
         if not allowed or '..' in url:raise ValueError('Unverified HRRR URL.')
         if not self.guard():raise Deferred('HRRR deferred: 75% / 128 MiB memory protection.')
         remaining=self.deadline-time.monotonic()
-        if remaining<=0 or self.calls>=80:raise TimeoutError('HRRR capture request/time budget exhausted.')
+        if remaining<=0:raise deadline_error('HRRR capture time budget exhausted.')
+        if self.calls>=80:raise TimeoutError('HRRR capture request budget exhausted.')
         self.calls+=1
         maximum=64*1024 if url.endswith('/.zmetadata') else MAX_SOURCE if url.endswith('/0.4.7') else 32*1024
         with build_opener(NoRedirect).open(Request(url,method='HEAD' if head else 'GET',headers={'User-Agent':'NeoApps KRFD research'}),timeout=min(5,remaining)) as response:
@@ -140,7 +142,7 @@ class Source:
             if not head:
                 while True:
                     if not self.guard():raise Deferred('HRRR transfer deferred for resource protection.')
-                    if time.monotonic()>self.deadline:raise TimeoutError('HRRR transfer deadline exceeded.')
+                    if time.monotonic()>self.deadline:raise deadline_error('HRRR transfer deadline exceeded.')
                     part=response.read1(min(65536,maximum+1-length))
                     if not part:break
                     length+=len(part)
@@ -152,7 +154,7 @@ class Source:
                 sha256=vault.digest(raw),bytes=len(raw),last_modified=response.headers.get('Last-Modified'),etag=response.headers.get('ETag'))
         self.bytes+=len(raw)
         if len(raw)>maximum or self.bytes>18*1024**2:raise ValueError('HRRR transfer budget exceeded.')
-        if time.monotonic()>self.deadline:raise TimeoutError('HRRR capture deadline exceeded.')
+        if time.monotonic()>self.deadline:raise deadline_error('HRRR capture deadline exceeded.')
         receipt=self.retain(raw,receipt)
         self.receipts.append(receipt)
         return raw,receipt

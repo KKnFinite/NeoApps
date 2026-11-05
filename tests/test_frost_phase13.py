@@ -17,6 +17,9 @@ from app.services import frost_documents as documents,frost_xchange as xchange,f
 class AutoTest(ArchiveAccessTest):
     def setUp(self):
         super().setUp();self.store=MemoryR2()
+        # Fail-fast resource tests use a zero wait allowance; bounded cooperative
+        # waiting/resumption is covered with real concurrent requests separately.
+        self.enterContext(patch.object(auto.priority,'MAX_WAIT_SECONDS',0))
         self.t=datetime.now(timezone.utc).replace(minute=20,second=0,microsecond=0)+timedelta(hours=1)
         self.time=patch.object(auto,'now',side_effect=lambda:self.t);self.time.start();self.addCleanup(self.time.stop)
         self.transport=patch('app.services.neoscorpion_learning_vault._r2_client',return_value=self.store)
