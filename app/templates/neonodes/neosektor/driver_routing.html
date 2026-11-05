@@ -89,7 +89,7 @@
 </section>
 
 <script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20261101-poll-v1') }}"></script>
-<script src="{{ url_for('static', filename='js/neosektor_routing_watch.js', watch='20261104-hint-share-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_routing_watch.js', watch='20261105-cadence-v1') }}"></script>
 <script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-driver-routing]");
@@ -219,6 +219,7 @@
         versionUrl: {{ url_for('neosektor.driver_routing_version')|tojson }},
         initial: {{ state.routing_watch|tojson }},
         fetchState: fetchRoutingState,
+        requestRefresh: () => refreshController.refreshNow(),
     });
     setRefreshStatus(initialRefreshStatus);
     document.addEventListener("visibilitychange", () => {

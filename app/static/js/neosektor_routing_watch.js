@@ -1,6 +1,6 @@
 /* Driver-only invalidation hints; all routing remains in the canonical fetch. */
 window.NeoSektorRoutingWatch = {
-    create({versionUrl, initial, fetchState}) {
+    create({versionUrl, initial, fetchState, requestRefresh}) {
         let snapshot = initial;
         let generation = 0;
         let enabled = false, stopped = false, checking = false;
@@ -45,7 +45,11 @@ window.NeoSektorRoutingWatch = {
                 // it; only fetch again if it did not deliver a fresh snapshot.
                 if (fullRequest) await fullRequest;
                 if (!active() || superseded()) return;
-                await refresh();
+                // Hints invalidate state; they do not bypass the canonical
+                // controller's minimum cadence, visibility or Retry-After.
+                // A deferred/failed refresh must leave this hint outstanding.
+                const refreshed = requestRefresh ? await requestRefresh() : await refresh();
+                if (refreshed === false) return;
                 // Non-routing/no-op changes can leave the canonical revision
                 // unchanged. Acknowledge once, but never acknowledge a failure.
                 if (!superseded()) snapshot = {...snapshot, version: payload.version};
