@@ -70,6 +70,11 @@ def actual_passes(operation, *, activity='all', tail=''):
                 row['weather_label']={'with_start':'Operator context captured with START',
                     'with_end':'Recorded with END; pass-start weather unverified',
                     'start_not_snapshotted':'START weather not captured'}.get(row['weather_provenance'],row['weather_provenance'])
+                if kind == 'departure':
+                    from app.services.frost_treatment_observation import ACTION, project
+                    observation = max((a for a in row['audits'] if a.action == ACTION),key=lambda a:a.id,default=None)
+                    if observation:
+                        row['physical_condition_observation'] = project(observation)
                 row['copy_text'] = pass_text(row)
                 result.append(row)
     return sorted(result, key=lambda r: (r['start_utc'], r['tail'], r['activity'], r['pass_number'], r['id']))
@@ -111,18 +116,31 @@ def archive_payload(row):
     fields = ('id', 'activity', 'tail', 'flight', 'original_mission_id', 'pass_number', 'type', 'fluid',
               'concentration', 'surface', 'ramp', 'location', 'reason', 'temperature', 'dew_point',
               'precipitation', 'weather_provenance', 'notes')
-    return dict(schema_version='subzero-spray/v1', record_type='actual_fluid_application',
+    payload = dict(schema_version='subzero-spray/v1', record_type='actual_fluid_application',
         gateway_id=operation_gateway_id(op), gateway=op.gateway_code, operation_id=op.id,
         sort_date=op.sort_date.isoformat(), sort_name=op.sort_name,
         **{key: row[key] for key in fields}, start_utc=row['start_utc'].isoformat(), end_utc=row['end_utc'].isoformat() if row['end_utc'] else None,
         revision_utc=max([row['parent'].updated_at]+[r.updated_at for r in row['records']]).isoformat(),
         participants=[evidence_values(r) for r in row['records']],
         audit_provenance=[evidence_values(a) for a in row['audits']])
+    if row.get('physical_condition_observation'):
+        payload['physical_condition_observation'] = row['physical_condition_observation']
+    return payload
 
 
 def learning_context(payload):
     """Treatment context only. No spray-derived positive or negative frost label."""
-    return dict(schema_version='neofrost-treatment-context/v1', record_type='unlabeled_treatment_context',
+    context = dict(schema_version='neofrost-treatment-context/v1', record_type='unlabeled_treatment_context',
         source_id=payload['id'], operation_id=payload['operation_id'], tail=payload['tail'],
         treatment=payload, frost_observed=None, training_eligible=False,
         exclusion='Spray application is not an explicit frost observation.')
+    observation = payload.get('physical_condition_observation')
+    if observation:
+        from app.services.frost_treatment_observation import interpretation
+        classification = interpretation(payload.get('reason'),observation)
+        context.update(physical_condition_observation=observation,
+            physical_condition_classification=classification,
+            frost_observed=classification.get('physical_frost_confirmed'),
+            learning_eligible=False,outcome_validation_eligible=False,
+            exclusion=observation['exclusion'])
+    return context

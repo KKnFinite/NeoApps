@@ -21,6 +21,7 @@
 <p>TEMP {{ pass.temperature or '—' }} · DEW {{ pass.dew_point or '—' }} · PRECIP {{ pass.precipitation or '—' }} · REASON {{ pass.reason or 'NOT RECORDED' }}</p>
 <small>Weather/context: {{ pass.weather_label }} · Original mission {{ pass.original_mission_id or 'NOT RECORDED' }}</small>
 {% if pass.notes %}<p>{{ pass.notes }}</p>{% endif %}
+{% if pass.physical_condition_observation %}<p><strong>{{ pass.physical_condition_observation.statement }}</strong> · Observer #{{ pass.physical_condition_observation.observer_user_id }} · {{ pass.physical_condition_observation.observed_at_utc }}. Separate physical observation; official reason unchanged. TESTING — excluded from training and outcome validation.</p>{% endif %}
 {% for record in pass.records %}<div class="sz-contribution"><b>TRUCK {{ record.truck_number_snapshot }}</b><span>DRIVER {{ record.driver_name_snapshot or 'NOT RECORDED' }}</span><span>FLYER {{ record.flyer_name_snapshot or 'NOT RECORDED' }}</span><strong class="{{ 'sz-missing' if record.gallons is none else '' }}">{{ record.gallons if record.gallons is not none else 'GALLONS NOT ENTERED' }}</strong></div>{% else %}<p class="sz-missing">PARTICIPATION NOT RECORDED — COORDINATOR REVIEW</p>{% endfor %}
 </article>{% else %}{% if operation %}<p>No actual spray applications match this report.</p>{% endif %}{% endfor %}
 <details class="sz-correction"><summary>TRUCK EVIDENCE &amp; AUDITED CORRECTIONS</summary>

@@ -115,7 +115,7 @@ def operations_mutate():
     current = legacy.current_neosubzero_operation(gateway)
     mode = request.form.get('mode')
     target = request.form.get('target')
-    if mode not in available_modes() or (target == url_for('neosubzero.pretreat_mutate') and mode != 'pretreat') or (target == url_for('neosubzero.departure_deice_mutate') and mode != 'outbound'):
+    if mode not in available_modes() or (target == url_for('neosubzero.pretreat_mutate') and mode != 'pretreat') or (target in (url_for('neosubzero.departure_deice_mutate'),url_for('neosubzero.frost_treatment_observation_mutate')) and mode != 'outbound'):
         return jsonify(ok=False, error='Choose an authorized action for this operational mode.'), 403
     if current is None or request.form.get('operation_id', type=int) != current.id:
         return jsonify(ok=False, error='The current sort changed. Your draft was kept; open current operations.'), 409
@@ -136,9 +136,10 @@ def operations_mutate():
     handlers = {url_for('neosubzero.' + endpoint): getattr(legacy, endpoint) for endpoint in (
         'pretreat_mutate', 'departure_deice_mutate', 'truck_mutate', 'spray_gallons_mutate',
         'spray_reason_mutate', 'application_context_mutate')}
-    from app.neonodes.neosubzero.release2_routes import participation_mutate,team_mutate,frost_inspection_mutate
+    from app.neonodes.neosubzero.release2_routes import participation_mutate,team_mutate,frost_inspection_mutate,frost_treatment_observation_mutate
     handlers.update({url_for('neosubzero.participation_mutate'):participation_mutate,url_for('neosubzero.team_mutate'):team_mutate})
     handlers[url_for('neosubzero.frost_inspection_mutate')]=frost_inspection_mutate
+    handlers[url_for('neosubzero.frost_treatment_observation_mutate')]=frost_treatment_observation_mutate
     handler = handlers.get(request.form.get('target'))
     if handler is None:
         db.session.rollback()

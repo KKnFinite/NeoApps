@@ -53,6 +53,24 @@
     <p><span>Reason for Application</span><strong>{{ row.reason_for_application }}</strong></p>
     {% endif %}
 </div>
+{{ frost_treatment_observation(row, can_edit, board, selected_ramp) }}
+{% endmacro %}
+
+{% macro frost_treatment_observation(row, can_edit, board, selected_ramp='') %}
+{% set observation = row.frost_treatment_observation %}
+{% if observation %}
+<p data-frost-treatment-observation><strong>{{ observation.statement }}</strong><br>Observer #{{ observation.observer_user_id }} · {{ observation.observed_at_utc }} · Separate from official Reason for Application.<br>TESTING — excluded from FROST training and outcome validation.</p>
+{% endif %}
+{% if (row.frost_observation_available or (observation and observation.state == 'absent')) and can_edit and user_can('neosubzero.coordinator.edit') and not row.ownership_review %}
+<form method="post" action="{{ url_for('neosubzero.frost_treatment_observation_mutate') }}" data-subzero-operational-form class="neosubzero-inspection-form">
+    {{ mutation_identity(row, board, selected_ramp) }}
+    <input type="hidden" name="expected_observation_id" value="{{ observation.source_audit_id if observation else '' }}">
+    {% if row.frost_observation_available %}<label><input type="checkbox" name="no_frost_present" value="yes" {% if observation and observation.state == 'absent' %}checked{% endif %}>NO FROST PRESENT — FLIGHT CREW REQUESTED TREATMENT</label>{% else %}<p>The current official reason is not FROST. You may withdraw the earlier observation without changing that reason.</p>{% endif %}
+    {% if observation %}<label>Correction reason<input name="correction_reason" maxlength="500" placeholder="Required only when changing this observation"></label>{% endif %}
+    <button type="submit">{{ 'WITHDRAW PREVIOUS OBSERVATION' if not row.frost_observation_available else 'SAVE OBSERVATION CORRECTION' if observation else 'SAVE OPTIONAL OBSERVATION' }}</button>
+    <small>Optional. Unchecked means UNKNOWN, not confirmed frost. Official reason, FIN and CLEAR are unchanged.</small>
+</form>
+{% endif %}
 {% endmacro %}
 
 {% macro terminal_summary(row, can_edit, board, selected_ramp='', open=false) %}

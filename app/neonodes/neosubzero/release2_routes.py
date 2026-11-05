@@ -66,6 +66,30 @@ def frost_inspection_mutate():
         return _result(str(exc) if isinstance(exc,ValueError) else 'Inspection conflicted. Keep your draft and reload current values.',error=True)
 
 
+@bp.route('/frost-treatment-observation', methods=['POST'])
+@gateway_node_required('subzero')
+def frost_treatment_observation_mutate():
+    if not user_can('neosubzero.coordinator.edit') or request.form.get('board') not in ('coordinator','outbound'):
+        return 'Access denied.',403
+    from app.services.frost_treatment_observation import save
+    error = False
+    try:
+        operation = locked_operation(legacy.get_current_gateway())
+        mission = locked_mission(operation)
+        event = departure_event_for_tail(operation,mission,lock=True)
+        save(operation,mission,event,request.form,actor_id=current_user.id)
+        db.session.commit()
+        message = 'OBSERVATION SAVED. Official reason and treatment unchanged.'
+    except (ValueError,IntegrityError) as exc:
+        db.session.rollback()
+        error = True
+        message = str(exc) if isinstance(exc,ValueError) else 'Observation conflicted. Reload current values before saving.'
+    if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept',''):
+        return _result(message,error=error)
+    flash(message,'error' if error else 'success')
+    return redirect(legacy._subzero_return_url(request.form.get('board'),request.form))
+
+
 @bp.route('/participation',methods=['POST'])
 @gateway_node_required('subzero')
 def participation_mutate():

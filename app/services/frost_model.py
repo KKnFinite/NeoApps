@@ -89,6 +89,10 @@ def from_observations(at, observations):
 
 def training_label(row):
     """Other explicit departure causes are comparators, NOT frost-absence labels."""
+    # Prospective SubZero testing observations are permanently excluded, even
+    # if a caller also supplies the official Frost reason classification.
+    if row.get('record_type') == 'unlabeled_treatment_context' or row.get('testing_phase') is True or row.get('physical_condition_observation'):
+        return None
     if row.get('requires_review') or row.get('revision_conflict'):
         return None
     evidence = row.get('classification') or {}
