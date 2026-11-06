@@ -1,4 +1,5 @@
 <section class="neoscorpion-panel" data-fuel-assignments-panel>
+        <p class="neoscorpion-break-notice" data-fueler-break-notice role="status"{% if not fueler_on_break %} hidden{% endif %}>YOU ARE ON BREAK</p>
         <div class="neoscorpion-panel-head">
             <span>{{ operational_fueler_name }} · My Fuel Assignments</span>
             <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }}{% else %}No current sort{% endif %}</strong>

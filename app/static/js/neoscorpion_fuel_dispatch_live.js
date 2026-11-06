@@ -918,6 +918,17 @@
         const nextPreferences = nextPanel.matches?.('[data-dispatch-preferences]')
             ? nextPanel : nextPanel.querySelector('[data-dispatch-preferences]');
         if (currentPreferences && nextPreferences) {
+            if (typeof nextPreferences.dataset.onBreakFuelerIds === 'string') {
+                currentPreferences.dataset.onBreakFuelerIds = nextPreferences.dataset.onBreakFuelerIds;
+                const onBreak = new Set(nextPreferences.dataset.onBreakFuelerIds.split(',').filter(Boolean));
+                root.querySelectorAll('[data-nightly-fueler-option]').forEach(option => {
+                    const paused = onBreak.has(option.value);
+                    option.disabled = paused;
+                    option.classList.toggle('is-fueler-on-break', paused);
+                    const name = option.textContent.replace(/ \(ON BREAK\)$/, '');
+                    option.textContent = name + (paused ? ' (ON BREAK)' : '');
+                });
+            }
             currentPreferences.dataset.readyAssignmentPulse = nextPreferences.dataset.readyAssignmentPulse;
             const percent = Number(nextPreferences.dataset.missionRowHeightPercent || 100);
             const height = Number.isInteger(percent) && percent >= 75 && percent <= 150 ? percent : 100;
@@ -1192,8 +1203,11 @@
                 const oldValue = currentDetails?.querySelector(selector), newValue = nextDetails?.querySelector(selector);
                 if (oldValue && newValue && oldValue.outerHTML !== newValue.outerHTML && !oldValue.contains(document.activeElement)) oldValue.replaceWith(newValue.cloneNode(true));
             });
-            const oldTail = currentRow.querySelector(".neoscorpion-dispatch-tail strong");
-            const newTail = nextRow.querySelector(".neoscorpion-dispatch-tail strong");
+            const oldTail = currentRow.querySelector('[data-dispatch-tail-number]') || currentRow.querySelector(".neoscorpion-dispatch-tail strong");
+            const newTail = nextRow.querySelector('[data-dispatch-tail-number]') || nextRow.querySelector(".neoscorpion-dispatch-tail strong");
+            const oldNote = currentRow.querySelector('[data-tail-note-indicator]');
+            const newNote = nextRow.querySelector('[data-tail-note-indicator]');
+            if (oldNote && newNote && oldNote.dataset.tailNoteTail === newNote.dataset.tailNoteTail) oldNote.hidden = newNote.hidden;
             const previousWarning = currentStack.querySelector("[data-dispatch-tail-change-warning]");
             if (oldTail && newTail && oldTail.textContent.trim() !== newTail.textContent.trim()) {
                 const warning = previousWarning || document.createElement("small");
@@ -1243,6 +1257,11 @@
                     if(status)status.textContent='STATE CHANGED — refresh this request before submitting.';
                 }
                 incoming.delete(item.dataset.assetsUnit);
+                if (fresh) item.querySelectorAll('[data-fueler-break-form]').forEach(form => {
+                    const next = Array.from(fresh.querySelectorAll('[data-fueler-break-form]'))
+                        .find(n => n.elements.user_id.value === form.elements.user_id.value);
+                    if (next && !lifecycleSaving && form.outerHTML !== next.outerHTML) form.replaceWith(next.cloneNode(true));
+                });
             });
             incoming.forEach(item=>{
                 const slot=item.dataset.assetsUnit.startsWith('account-')?'[data-assets-account-list]':item.dataset.assetsUnit.startsWith('truck-')?'[data-assets-truck-list]':null;

@@ -53,7 +53,7 @@ test("critical completion appears under a dirty Dispatch without replacing edita
     incoming.querySelector = selector => selector === '[data-dispatch-completion-slot]' ? action : null;
     const makeRow = stack => ({dataset:{dispatchMissionId:"45"}, querySelector(selector) {
         if (selector === ".neoscorpion-dispatch-action-stack") return stack;
-        if (selector === '[data-neoscorpion-dispatch-details]' || selector === '[data-dispatch-action-count]' || selector === '[data-mobile-dispatch-action-count]') return null;
+        if (selector === '[data-neoscorpion-dispatch-details]' || selector === '[data-dispatch-action-count]' || selector === '[data-mobile-dispatch-action-count]' || selector === '[data-tail-note-indicator]') return null;
         return {textContent:"N168UP"};
     }});
     const actual = makeRow(original), next = makeRow(incoming);

@@ -45,7 +45,8 @@ def inputs(context,calibrations):
         trucks.append([t.id,t.capacity_gallons,t.is_active,t.is_out_of_service,s.status,
             s.current_gallons,s.inventory_verified,s.inventory_epoch,s.top_off_sent_at_utc])
     return digest([sorted(rows,key=lambda r:r[0]),sorted(trucks),
-        sorted(f.id for f in context['nightly_assignment_fuelers']),asdict(context['spear_settings']),calibrations,
+        sorted(f.id for f in context['nightly_assignment_fuelers']),
+        sorted(context.get('nightly_on_break_fueler_ids',())),asdict(context['spear_settings']),calibrations,
         next((r['spear_physical_visits'] for r in context['rows'] if 'spear_physical_visits' in r),[])])
 
 
@@ -205,6 +206,7 @@ def enrich(context,baseline,planning,calibrations,now=None):
             pairs,events=load_top_off_history(context['operation'],now_utc=now)
             candidate=optimize(context['rows'],operation=context['operation'],planning_settings=planning,
                 spear_settings=settings,nightly_fuelers=context['nightly_assignment_fuelers'],
+                on_break_fueler_ids=context.get('nightly_on_break_fueler_ids',()),
                 nightly_trucks=context['nightly_trucks'],now_utc=now,calibrations=calibrations,
                 top_off_pairs=pairs,top_events=events,previous=_summary(previous) if previous else {},fingerprint=digest([fingerprint,[(s.id,r.id,r.occurred_at_utc) for s,r in pairs]]))
             changes=_material_changes(previous,candidate)

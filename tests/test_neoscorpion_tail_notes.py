@@ -10,6 +10,20 @@ from tests import test_neoscorpion_dispatch_planning as fixtures
 
 
 class TailNotesTest(unittest.TestCase):
+    def test_tail_indicator_uses_saved_meaningful_text_and_correct_tail(self):
+        from tests.test_neoscorpion_breaks import Tags
+        self.fixture._mission('UPS101','N432UP',25000,1)
+        self.fixture._mission('UPS102','N433UP',25000,2);db.session.commit()
+        for version,notes,visible in ((0,'  \n ',False),(1,'Saved aircraft note',True),(2,'',False)):
+            self.assertEqual(self.save(notes=notes,version=version).status_code,200)
+            for url in ('/neoscorpion/fuel-dispatch','/neoscorpion/fuel-dispatch/live-panel',
+                        '/neoscorpion/fuel-dispatch/live-panel?completion_only=1'):
+                response=self.client.get(url)
+                html=response.json['html'] if response.is_json else response.get_data(as_text=True)
+                marks={a['data-tail-note-tail']:a for tag,a in Tags(html).tags if 'data-tail-note-indicator' in a}
+                self.assertEqual('hidden' not in marks['N432UP'],visible)
+                self.assertIn('hidden',marks['N433UP'])
+
     def setUp(self):
         self.fixture = fixtures.NeoScorpionDispatchPlanningTest(); self.fixture.setUp()
         self.addCleanup(self.fixture.tearDown)

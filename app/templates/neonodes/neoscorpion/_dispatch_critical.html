@@ -1,5 +1,5 @@
 {# Only application-owned templates supply these already-rendered fragments. #}
-<section class="neoscorpion-panel" data-dispatch-preferences data-mission-row-height-percent="{{ settings.mission_row_height_percent|default(100) }}" data-ready-assignment-pulse="{{ '1' if settings.ready_assignment_pulse_enabled|default(true) else '0' }}">
+<section class="neoscorpion-panel" data-dispatch-preferences data-on-break-fueler-ids="{{ nightly_on_break_fueler_ids|sort|join(',') }}" data-mission-row-height-percent="{{ settings.mission_row_height_percent|default(100) }}" data-ready-assignment-pulse="{{ '1' if settings.ready_assignment_pulse_enabled|default(true) else '0' }}">
 {{ assets_html }}
 <table class="neoscorpion-dispatch-table--compact"><tbody>{{ rows_html }}</tbody></table>
 </section>

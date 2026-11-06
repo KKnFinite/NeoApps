@@ -25,6 +25,9 @@
                 credentials: 'same-origin', headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}});
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true) throw new Error(payload.error || 'Unable to save Tail Notes.');
+            root.querySelectorAll('[data-tail-note-indicator]').forEach(indicator => {
+                if (indicator.dataset.tailNoteTail === payload.note.tail) indicator.hidden = !payload.note.notes.trim();
+            });
             root.querySelectorAll('[data-tail-note-form]').forEach(other => {
                 if (other.elements.tail_number.value !== payload.note.tail) return;
                 const field = other.elements.notes;

@@ -147,6 +147,7 @@ def nightly_asset_context(
         "nightly_asset_readiness": readiness,
         "nightly_asset_readiness_label": readiness_label,
         "nightly_fuelers": nightly_fuelers,
+        "nightly_on_break_fueler_ids": {selection.user_id for selection, _user in selected_fuelers if selection.on_break},
         "eligible_nightly_fuelers": eligible_fuelers,
         "nightly_trucks": nightly_trucks,
         "available_nightly_trucks": available_trucks,
@@ -247,6 +248,7 @@ def _empty_nightly_asset_context():
         "nightly_asset_readiness": "not_set",
         "nightly_asset_readiness_label": "ASSETS NOT SET",
         "nightly_fuelers": [],
+        "nightly_on_break_fueler_ids": set(),
         "eligible_nightly_fuelers": [],
         "nightly_trucks": [],
         "available_nightly_trucks": [],
@@ -300,6 +302,33 @@ def select_nightly_fueler(operation, user):
         )
     )
     state = _record_change(state, locked_operation.id)
+    db.session.flush()
+    return _changed(state)
+
+
+def fueler_on_break(operation, user_id):
+    if operation is None:
+        return False
+    return bool(db.session.query(NeoScorpionSortFueler.on_break).filter_by(
+        sort_date_operation_id=getattr(operation, "id", operation), user_id=user_id).scalar())
+
+
+def set_nightly_fueler_break(operation, user, on_break, expected_on_break):
+    """Change availability only; existing physical work and personnel stay intact."""
+    if on_break not in {"0", "1"} or expected_on_break not in {"0", "1"}:
+        raise ValueError("Refresh the Fueler break controls before continuing.")
+    locked, state = _lock_operation_and_state(operation)
+    selected = NeoScorpionSortFueler.query.filter_by(sort_date_operation_id=locked.id,
+        user_id=_entity_id(user, "fueler")).populate_existing().first()
+    if selected is None:
+        raise ValueError("That Fueler is no longer selected for tonight.")
+    requested = on_break == "1"
+    if selected.on_break == requested:
+        return _unchanged(state)
+    if selected.on_break != (expected_on_break == "1"):
+        raise ValueError("Fueler break status changed. Refresh and try again.")
+    selected.on_break = requested
+    state = _record_change(state, locked.id)
     db.session.flush()
     return _changed(state)
 

@@ -385,7 +385,11 @@ def save_pending_uplift(gateway,user,form,*,now_utc=None):
         elif action=='save':
             target=fuel.display_thousands_to_lbs(form.get('required_fuel'))
             if target is None or target<=0:raise ValueError('Enter a positive TOTAL Required Fuel target.')
-            fueler_id=fuel._int_or_none(form.get('proposed_fueler_user_id'));truck_id=fuel._int_or_none(form.get('proposed_truck_id'))
+            # Native forms omit a selected disabled ON BREAK option. Preserve
+            # the saved proposal for validation; only an explicit blank clears it.
+            fueler_id=(fuel._int_or_none(form.get('proposed_fueler_user_id'))
+                if 'proposed_fueler_user_id' in form else p.proposed_fueler_user_id)
+            truck_id=fuel._int_or_none(form.get('proposed_truck_id'))
             _planning_resources(gateway,operation,fueler_id,truck_id)
             p.required_fuel_lbs=target;p.proposed_fueler_user_id=fueler_id;p.proposed_truck_id=truck_id
         elif action=='retry':

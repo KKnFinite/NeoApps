@@ -57,6 +57,16 @@
             <div class="neoscorpion-assets-rows">
                 {% for row in nightly_fuelers %}
                 <div class="neoscorpion-assets-row">
+                    {% if can_manage_assets %}
+                    <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-fueler-break-form>{{ csrf_field() }}
+                        <input type="hidden" name="action" value="set_fueler_break">
+                        <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                        <input type="hidden" name="user_id" value="{{ row.user.id }}">
+                        <input type="hidden" name="expected_on_break" value="{{ '1' if row.selection.on_break else '0' }}">
+                        <input type="hidden" name="on_break" value="{{ '0' if row.selection.on_break else '1' }}">
+                        <button class="action-button secondary" type="submit">{{ 'OFF BREAK' if row.selection.on_break else 'BREAK' }}</button>
+                    </form>
+                    {% endif %}
                     <span>
                         <strong>{{ row.user.display_name }}</strong>
                         <small>{{ row.user.username }}{% if not row.user.is_active %} / INACTIVE{% endif %}</small>

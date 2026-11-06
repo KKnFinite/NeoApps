@@ -13,7 +13,7 @@
         <label>TOTAL Required Fuel, K lbs<input class="neoscorpion-inline-input" name="required_fuel" inputmode="decimal" value="{{ row.pending_uplift_target_input }}" required></label>
         <label>Planned Fueler<select name="proposed_fueler_user_id"><option value="">Unassigned</option>
         {% if pending.proposed_fueler and pending.proposed_fueler_user_id not in nightly_assignment_fueler_ids %}<option value="{{ pending.proposed_fueler_user_id }}" selected>{{ pending.proposed_fueler.display_name }} (Review eligibility)</option>{% endif %}
-        {% for fueler in nightly_assignment_fuelers %}<option value="{{ fueler.id }}" {% if fueler.id==pending.proposed_fueler_user_id %}selected{% endif %}>{{ fueler.display_name }}</option>{% endfor %}</select></label>
+        {% with selected_fueler_id=pending.proposed_fueler_user_id %}{% include "neonodes/neoscorpion/_fueler_options.html" %}{% endwith %}</select></label>
         <label>Planned Truck<select name="proposed_truck_id"><option value="">Unassigned</option>
         {% if pending.proposed_truck and pending.proposed_truck_id not in nightly_trucks|map(attribute='truck.id')|list %}<option value="{{ pending.proposed_truck_id }}" selected>{{ pending.proposed_truck.truck_number }} (Review availability)</option>{% endif %}
         {% for entry in nightly_trucks %}{% set truck=entry.truck %}<option value="{{ truck.id }}" {% if truck.id==pending.proposed_truck_id %}selected{% endif %}>{{ truck.truck_number }}{% if entry.selection.status!='available' %} ({{ entry.selection.status|replace('_',' ') }}){% endif %}</option>{% endfor %}</select></label>

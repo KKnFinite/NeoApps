@@ -305,7 +305,8 @@ def _release_resources(rows, fuelers, trucks, now, settings, top_events, policie
 
 def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuelers,
              nightly_trucks, now_utc, calibrations=None, top_off_pairs=(), top_events=(),
-             previous=None, fingerprint='', max_evaluations=MAX_EVALUATIONS, max_seconds=MAX_SECONDS):
+             previous=None, fingerprint='', max_evaluations=MAX_EVALUATIONS, max_seconds=MAX_SECONDS,
+             on_break_fueler_ids=()):
     now=legacy._utc_naive(now_utc)
     start_clock=monotonic()
     rows=tuple(rows)
@@ -431,6 +432,7 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
         assigned_f=getattr(assignment,'assigned_fueler_user_id',None)
         tids=[assigned_t] if assigned_t else sorted(trucks)
         fids=[assigned_f] if assigned_f else sorted(fuelers)
+        fids=[f for f in fids if f not in on_break_fueler_ids or (f == assigned_f and not row.get('_pending_id'))]
         earliest=max(now, timing.aircraft_ready_utc)
         generated=[]
         ranked=[]

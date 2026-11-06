@@ -149,6 +149,7 @@ class NeoScorpionSortFueler(db.Model):
         nullable=False,
     )
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    on_break = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

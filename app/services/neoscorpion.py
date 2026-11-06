@@ -369,7 +369,11 @@ def neoscorpion_live_revision(gateway):
 
 def fuel_assignments_live_revision(gateway):
     """Backward-compatible name for the shared NeoScorpion fingerprint."""
-    return neoscorpion_live_revision(gateway)
+    result = neoscorpion_live_revision(gateway)
+    from app.services.neoscorpion_assets import fueler_on_break
+    result["fueler_on_break"] = fueler_on_break(
+        result["operation_id"], getattr(current_user, "id", None))
+    return result
 
 
 def _fuel_assignments_revision_for_operation(operation):
@@ -448,6 +452,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
                 planning_settings=configured_planning_settings,
                 spear_settings=context["spear_settings"],
                 nightly_fuelers=context["nightly_assignment_fuelers"],
+                on_break_fueler_ids=context["nightly_on_break_fueler_ids"],
                 nightly_trucks=context["nightly_trucks"],
                 now_utc=datetime.utcnow(),
                 calibrations=live_calibrations,
@@ -960,6 +965,8 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
         NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY,
     )
     operational_name = operational_fueler_name(user, fueler_nicknames(gateway, [user]))
+    from app.services.neoscorpion_assets import fueler_on_break
+    on_break = fueler_on_break(operation, user.id)
     # Truck Driver uses -1 when no truck is claimed. No physical row can match
     # this sentinel: retain fresh operation/configuration/revision metadata,
     # without building fleet evidence merely to discard every row afterward.
@@ -971,6 +978,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
             "fuel_assignments_refresh": refresh_setting,
             "settings": settings,
             "operational_fueler_name": operational_name,
+            "fueler_on_break": on_break,
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         }
 
@@ -1102,6 +1110,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
         "fuel_assignments_refresh": refresh_setting,
         "settings": settings,
         "operational_fueler_name": operational_name,
+        "fueler_on_break": on_break,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
     }
 
@@ -1903,7 +1912,10 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
         or expected_truck_id != current_truck_id
     ):
         raise ValueError("Fuel assignment changed. Reload Fuel Dispatch and try again.")
-    requested_fueler_id = _int_or_none(form.get("assigned_fueler_user_id"))
+    # A selected disabled (on-break) option is omitted by native FormData.
+    # Omission retains the current Fueler; an explicit blank still unassigns.
+    requested_fueler_id = (_int_or_none(form.get("assigned_fueler_user_id"))
+        if "assigned_fueler_user_id" in form else current_fueler_id)
     requested_truck_id = _int_or_none(form.get("assigned_truck_id"))
 
     fueler_change_requested = requested_fueler_id != current_fueler_id
@@ -5183,6 +5195,7 @@ def _assignment_resume_blocker(
             gateway,
             operation,
             assignment.assigned_fueler_user_id,
+            allow_on_break=True,
         )
     except ValueError as exc:
         return str(exc)
@@ -7966,7 +7979,7 @@ def _assignments_by_mission(operation):
     }
 
 
-def _validate_nightly_fueler_assignment(gateway, operation, user_id):
+def _validate_nightly_fueler_assignment(gateway, operation, user_id, *, allow_on_break=False):
     selected = (
         db.session.query(NeoScorpionSortFueler, User)
         .join(User, User.id == NeoScorpionSortFueler.user_id)
@@ -7975,10 +7988,13 @@ def _validate_nightly_fueler_assignment(gateway, operation, user_id):
             NeoScorpionSortFueler.user_id == user_id,
             User.is_active.is_(True),
         )
+        .populate_existing()
         .first()
     )
     if selected is None:
         raise ValueError("That fueler is no longer selected for tonight.")
+    if selected[0].on_break and not allow_on_break:
+        raise ValueError("That Fueler is ON BREAK. Select an available Fueler or take them OFF BREAK first.")
     if not eligible_nightly_fueler_users(gateway, active_users=[selected[1]]):
         raise ValueError("That fueler no longer has Fuel Assignments access.")
 

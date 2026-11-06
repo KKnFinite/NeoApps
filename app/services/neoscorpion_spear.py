@@ -333,9 +333,11 @@ def build_spear_plan(
     nightly_trucks,
     now_utc,
     calibrations=None,
+    on_break_fueler_ids=(),
 ):
     """Plan the remaining sort from already-bounded canonical dispatch data."""
     now_utc = _utc_naive(now_utc) or datetime.utcnow()
+    on_break_fueler_ids = frozenset(on_break_fueler_ids)
     rows = tuple(rows)
     if not spear_settings.recommendations_enabled:
         return _plan((), {}, {}, status_text="SPEAR: RECOMMENDATIONS OFF")
@@ -464,7 +466,8 @@ def build_spear_plan(
 
         fueler_ids = tuple(identifier for identifier in
             ((assigned_fueler,) if fueler_valid else () if assigned_fueler is not None and assigned_truck is None else tuple(fuelers))
-            if not occupied_fuelers.get(identifier, set()) - {mission_id})
+            if not occupied_fuelers.get(identifier, set()) - {mission_id}
+            and (identifier not in on_break_fueler_ids or identifier == assigned_fueler))
         truck_ids = tuple(identifier for identifier in
             ((assigned_truck,) if truck_valid else () if assigned_truck is not None and assigned_fueler is None else tuple(usable_trucks))
             if not occupied_trucks.get(identifier, set()) - {mission_id})
@@ -642,6 +645,7 @@ def build_spear_plan(
     occupied_truck_next = _occupied_truck_recommendations(
         rows, steps=steps, operation=operation, planning_settings=planning_settings,
         spear_settings=spear_settings, fuelers=fuelers, usable_trucks=usable_trucks,
+        on_break_fueler_ids=on_break_fueler_ids,
         fueler_state=initial_fueler_state, truck_state=initial_truck_state,
         occupied_fuelers=occupied_fuelers, occupied_trucks=occupied_trucks,
         now_utc=now_utc,
@@ -711,7 +715,7 @@ def priority_rows(settings):
 def _occupied_truck_recommendations(
     rows, *, steps, operation, planning_settings, spear_settings, fuelers,
     usable_trucks, fueler_state, truck_state, occupied_fuelers,
-    occupied_trucks, now_utc,
+    occupied_trucks, now_utc, on_break_fueler_ids=(),
 ):
     """Forecast one non-executable next job per occupied truck from this sort."""
     result = {
@@ -818,7 +822,7 @@ def _occupied_truck_recommendations(
                 fuel_short.add(truck_id)
                 continue
             for fueler_id in fuelers:
-                if fueler_id in planned_fuelers:
+                if fueler_id in planned_fuelers or fueler_id in on_break_fueler_ids:
                     continue
                 if fueler_id in occupied_fuelers:
                     fueler = forecast_fuelers.get(fueler_id)

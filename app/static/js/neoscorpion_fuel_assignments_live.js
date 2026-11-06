@@ -275,6 +275,9 @@
             ? "none"
             : String(payload.operation_id);
         const nextRevision = Number(payload.revision || 0);
+        // Availability notices are independent of operational forms and drafts.
+        const breakNotice = root.querySelector('[data-fueler-break-notice]');
+        if (breakNotice && typeof payload.fueler_on_break === 'boolean') breakNotice.hidden = !payload.fueler_on_break;
         pendingTailNotesRevision = Number(payload.tail_notes_revision || 0);
         if (nextOperationId !== operationId || nextRevision !== revision || pendingTailNotesRevision !== tailNotesRevision) {
             await refreshForChange(nextOperationId, nextRevision);

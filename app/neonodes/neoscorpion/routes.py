@@ -2404,6 +2404,13 @@ def _apply_nightly_asset_action(gateway, operation, form):
     action = (form.get("action") or "").strip()
     if action == "set_islands":
         return set_nightly_fuel_island_count(operation, form.get("fuel_island_count"))
+    if action == "set_fueler_break":
+        if str(operation.id) != form.get("operation_id"):
+            raise ValueError("The active sort changed. Refresh tonight's assets before continuing.")
+        from app.services.neoscorpion_assets import set_nightly_fueler_break
+        return set_nightly_fueler_break(operation,
+            _positive_form_id(form.get("user_id"), "fueler"),
+            form.get("on_break"), form.get("expected_on_break"))
     if action == "add_fueler":
         user_id = _positive_form_id(form.get("user_id"), "fueler")
         eligible_ids = {user.id for user in eligible_nightly_fueler_users(gateway)}

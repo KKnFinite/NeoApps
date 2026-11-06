@@ -15,14 +15,15 @@ function harness() {
             closest: () => ({querySelector: () => label})};
     };
     const form = make('N432UP', 'saved'), duplicate = make('N432UP', 'saved'), other = make('N433UP', 'other');
+    const indicators = [{dataset:{tailNoteTail:'N432UP'},hidden:true},{dataset:{tailNoteTail:'N433UP'},hidden:true}];
     const root = {addEventListener: (name, callback) => events[name] = callback,
-        querySelectorAll: () => [form, duplicate, other]};
+        querySelectorAll: selector => selector==='[data-tail-note-indicator]' ? indicators : [form, duplicate, other]};
     const context = {document: {querySelector: () => root}, Event: class {},
         FormData: class { constructor(form) { this.tail = form.elements.tail_number.value; this.notes = form.elements.notes.value; } },
         fetch: (url, options) => new Promise(resolve => requests.push({url, options, resolve}))};
     vm.runInNewContext(source, context);
     const submit = () => events.submit({target: {closest: () => form}, preventDefault(){}});
-    return {form, duplicate, other, requests, submit, events,
+    return {form, duplicate, other, requests, submit, events, indicators,
         resolve(ok = true, notes = 'new', version = 1) {requests.at(-1).resolve({ok, json: async () => ok
             ? {ok: true, note: {tail: 'N432UP', notes, version, editor: 'Dispatcher', updated_at: '2026-10-16T06:00:00Z'}}
             : {ok: false, error: 'Tail Notes changed in another window.'}});}};
@@ -39,6 +40,8 @@ test('saved notes reconcile the same tail only and retain independent drafts', a
     assert.equal(h.duplicate.elements.notes.value, 'independent draft');
     assert.equal(h.other.elements.notes.value, 'other');
     assert.equal(h.form.status.textContent, 'SAVED');
+    assert.equal(h.indicators[0].hidden,false);
+    assert.equal(h.indicators[1].hidden,true);
 });
 test('typing while a save is in flight remains an unsaved draft and cannot be overwritten', async () => {
     const h = harness(); h.form.elements.notes.value = 'new';
@@ -67,4 +70,5 @@ test('clear submits an empty tail note through the same versioned save path', as
     h.resolve(true, ''); await saving;
     assert.equal(h.form.elements.notes.defaultValue, '');
     assert.equal(h.form.elements.expected_version.value, '1');
+    assert.equal(h.indicators[0].hidden,true);
 });

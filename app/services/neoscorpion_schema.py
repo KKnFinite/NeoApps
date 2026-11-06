@@ -76,6 +76,7 @@ NEOSCORPION_MODEL_TABLES = (
 )
 
 NEOSCORPION_ADDITIVE_COLUMNS = {
+    "neoscorpion_sort_fuelers": {"on_break": "BOOLEAN NOT NULL DEFAULT FALSE"},
     "neoscorpion_pending_uplifts": {
         "plan_kind": "VARCHAR(16) NOT NULL DEFAULT 'uplift'",
         "handoff_snapshot": "JSON",
