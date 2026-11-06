@@ -74,6 +74,7 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                 expected=('rgb(143, 255, 168)','rgb(255, 240, 176)','rgb(213, 216, 222)')
                 for board in (False,True):
                     if board:page.locator('[data-operational-board-toggle]:visible').click()
+                    expect(page.locator('[data-spear-readiness]')).to_contain_text('2/4 MISSIONS READY')
                     for i in range(3):
                         row(i).scroll_into_view_if_needed()
                         expect(row(i)).to_be_visible()

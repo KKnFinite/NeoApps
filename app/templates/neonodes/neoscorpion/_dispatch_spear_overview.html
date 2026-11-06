@@ -14,10 +14,12 @@
     <div class="neoscorpion-spear-fleet-status{% if spear_plan.late_count %} is-late{% elif spear_plan.at_risk_count or spear_plan.unplanned_count %} is-at-risk{% elif spear_plan.waiting_for_data_count %} is-waiting{% endif %}" data-spear-fleet-status>
         {{ spear_plan.status_text }}
     </div>
+    {% set ready_count = rows|selectattr('spear_ready')|map(attribute='mission.id')|unique|list|length %}
+    {% set waiting_count = spear_plan.relevant_count - ready_count %}
     <div class="neoscorpion-spear-readiness" data-spear-readiness>
         <strong>SPEAR DATA READINESS</strong>
-        <span>{{ spear_plan.relevant_count - spear_plan.waiting_for_data_count }}/{{ spear_plan.relevant_count }} MISSIONS READY</span>
-        {% if spear_plan.waiting_for_data_count %}<span>{{ spear_plan.waiting_for_data_count }} WAITING FOR DATA</span>{% endif %}
+        <span>{{ ready_count }}/{{ spear_plan.relevant_count }} MISSIONS READY</span>
+        {% if waiting_count %}<span>{{ waiting_count }} WAITING FOR DATA / ARRIVAL</span>{% endif %}
     </div>
     {% if spear_whole_sort %}<details class="neoscorpion-spear-calibration" data-spear-whole-sort><summary>WHOLE-SORT · {{ spear_whole_sort.mode|upper }}{% if spear_whole_sort.fallback %} · SAFE FALLBACK{% endif %}</summary><div>
         {% if spear_whole_sort.fallback %}<span>{{ spear_whole_sort.reason }}</span>{% else %}
