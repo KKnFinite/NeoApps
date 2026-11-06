@@ -220,7 +220,7 @@
                     <section class="scorpion-fueler-apu"><h2 class="scorpion-fueler-section-title">APU</h2>{{ apu_controls }}</section>
                     <dl class="scorpion-fueler-calculated"><div><dt>Target Onboard</dt><dd data-fuel-load-output>{{ row.fuel_load_display }}</dd></div><div><dt>NEO Fuel</dt><dd data-neo-fuel-output>{{ row.neo_fuel_display }}</dd></div></dl>
                     <label>T/F
-                        <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" min="0" placeholder="Gallons">
+                        <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" min="0" max="17000" pattern="0*([0-9]{1,4}|1[0-6][0-9]{3}|17000)" placeholder="Gallons">
                     </label>
                     <label class="neoscorpion-fueler-notes">{{ 'Dispatcher Notes' if direct_entry else 'Notes' }}
                         <textarea name="notes" rows="2">{{ row.fueler_notes }}</textarea>

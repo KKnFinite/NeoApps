@@ -78,6 +78,7 @@ from app.services.neoscorpion_assets import (
     verify_nightly_truck_inventory,
 )
 from app.services.neoscorpion_quick_fuel import calculate_quick_fuel
+from app.services.neoscorpion_transfer_fuel import TransferFuelValidationError
 from app.services.neoscorpion_dispatch_checks import DispatcherCheckConflict, save_dispatcher_check
 from app.services.permission_rules import (
     permission_access,
@@ -194,7 +195,10 @@ def quick_fuel():
 @gateway_node_required("scorpion")
 def quick_fuel_calculate():
     # Calculator only: no Sort, assignment, fuel event, or inventory write.
-    return _json_no_store(calculate_quick_fuel(get_current_gateway(), request.form))
+    try:
+        return _json_no_store(calculate_quick_fuel(get_current_gateway(), request.form))
+    except TransferFuelValidationError as exc:
+        return _json_no_store({"ok": False, "error": str(exc), "issues": [str(exc)]}, 400)
 
 
 @bp.route("/fuel-dispatch", methods=["GET", "POST"])
@@ -1011,6 +1015,10 @@ def fueler():
             return _fueler_response(gateway, access, status_code=403)
         try:
             result = save_fueler_entry(gateway, current_user, request.form, require_expected=True)
+        except TransferFuelValidationError as exc:
+            db.session.rollback()
+            # Do not rebuild a SPEAR/operational panel for a rejected T/F input.
+            return _json_no_store({"ok": False, "error": str(exc)}, 400)
         except FuelerDataConflict as exc:
             db.session.rollback()
             return _fuel_data_payload(gateway, int(request.form.get("assignment_id", 0)), False,

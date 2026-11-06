@@ -14,6 +14,7 @@ from app.models import (NeoScorpionDirectEntry, NeoScorpionFuelAssignment,
     NeoScorpionFuelWorkState, NeoScorpionFuelingEvent, NeoScorpionFuelAuditEntry,
     NeoScorpionFuelCycleHistory, NeoScorpionPendingUplift, SortDateMission)
 from app.services.live_collaboration import entity_version
+from app.services.neoscorpion_transfer_fuel import parse_transfer_fuel_gallons
 from app.services.neoscorpion_assets import lock_nightly_asset_scope_for_mutation, record_nightly_operational_change
 
 
@@ -91,6 +92,7 @@ def history_assignment_ids(assignments):
 
 
 def parse_entry(gateway, operation, mission, form, now):
+    transfer = parse_transfer_fuel_gallons(form.get('transfer_fuel_gallons'))
     from app.services import neoscorpion as fuel
     layout = fuel.tank_layout_for_tail(mission.assigned_tail_number)
     aircraft = fuel.detailed_aircraft_type_for_tail(mission.assigned_tail_number)
@@ -124,12 +126,6 @@ def parse_entry(gateway, operation, mission, form, now):
         raise ValueError('A valid recommended or applied manual APU allowance is required.')
     if running is True and allowance > tanks[source]['actual_lbs']:
         raise ValueError('APU allowance exceeds the measured source tank fuel.')
-    raw_tf = (form.get('transfer_fuel_gallons') or '').strip()
-    if raw_tf and (not raw_tf.isascii() or not raw_tf.isdigit()):
-        raise ValueError('T/F must be blank or a nonnegative whole number of gallons.')
-    transfer = int(raw_tf) if raw_tf else None
-    if transfer is not None and transfer > 2_147_483_647:
-        raise ValueError('T/F is outside the supported range.')
     # Freeze the configured planner inputs and calculated evidence. Later
     # Settings changes cannot reinterpret this completed attestation.
     limits = fuel._effective_aircraft_fuel_configuration(gateway.id)[1]
@@ -154,6 +150,7 @@ def complete_entry(gateway, user, mission_id, form, *, now_utc=None):
     from app.services.permission_rules import user_can
     if not user_can('neoscorpion.fuel_dispatch.edit', user):
         raise PermissionError('Dispatcher permission is required.')
+    parse_transfer_fuel_gallons(form.get('transfer_fuel_gallons'))
     now = now_utc or datetime.utcnow()
     try:
         expected = serializer().loads(form.get('direct_entry_token', ''), max_age=12*60*60)

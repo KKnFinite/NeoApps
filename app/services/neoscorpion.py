@@ -13,6 +13,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
 from app.services.request_cache import request_cached
+from app.services.neoscorpion_transfer_fuel import parse_transfer_fuel_gallons
 from app.models import (
     MasterFlightSchedule,
     NeoScorpionAircraftFuelSetting,
@@ -2401,6 +2402,8 @@ def _bind_physical_segment(assignment, mission, work, *, legacy=False):
 
 
 def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, require_expected=False):
+    # Reject invalid entry before locks, audit changes, autoflush or SPEAR work.
+    entered_transfer = parse_transfer_fuel_gallons(form.get("transfer_fuel_gallons"))
     expected = _fueler_expected(form, required=require_expected)
     operation = current_sort_operation(gateway)
     if not operation:
@@ -2498,7 +2501,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         elif key == "apu_override_enabled":
             submitted[key] = form.get(key) == "1"
         elif key == "transfer_fuel_gallons":
-            submitted[key] = _int_or_none(form.get(key))
+            submitted[key] = entered_transfer
         elif key == "notes":
             submitted[key] = (form.get(key) or "").strip()
         elif key == "apu_source_tank_code":
@@ -2676,7 +2679,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
     target_apu_lbs = target_apu_allowance_lbs
     target_notes = ((form.get("notes") or "").strip() if "notes" in form
                     else ((fuel_work_state.notes or "") if fuel_work_state else ""))
-    target_transfer_gallons = (_int_or_none(form.get("transfer_fuel_gallons"))
+    target_transfer_gallons = (entered_transfer
                                if "transfer_fuel_gallons" in form else assignment.transfer_fuel_gallons)
 
     targets = {

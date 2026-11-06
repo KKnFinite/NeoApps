@@ -18,6 +18,7 @@ from app.services.neoscorpion import (
 )
 from app.services.neoscorpion_dispatch_planning import estimate_fuel_demand_gallons
 from app.services.neoscorpion_fuel_planning import plan_fuel_by_tank
+from app.services.neoscorpion_transfer_fuel import parse_transfer_fuel_gallons
 
 
 def _reading(form, name, issues):
@@ -47,6 +48,7 @@ def _departure_utc(value, gateway, issues):
 
 def calculate_quick_fuel(gateway, form, *, now_utc=None):
     """Return only derived values; never create operational records."""
+    transfer = parse_transfer_fuel_gallons(form.get("transfer_fuel_gallons"))
     now_utc = now_utc or datetime.utcnow()
     tail = (form.get("tail_number") or "").strip().upper()
     aircraft_type = detailed_aircraft_type_for_tail(tail)
@@ -138,10 +140,6 @@ def calculate_quick_fuel(gateway, form, *, now_utc=None):
         estimate = None
     if estimate is None and uplift is not None:
         issues.append("Configure a valid fuel density to estimate gallons.")
-    transfer_text = (form.get("transfer_fuel_gallons") or "").strip()
-    transfer = int(transfer_text) if re.fullmatch(r"\d+", transfer_text) else None
-    if transfer_text and transfer is None:
-        issues.append("Transfer Fuel must be whole gallons.")
 
     return {
         "ok": True, "tail": tail, "aircraft_type": aircraft_type,

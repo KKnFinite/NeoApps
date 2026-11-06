@@ -41,7 +41,7 @@
                 <div><dt>Estimated Gallons</dt><dd data-quick-total="estimated_gallons">—</dd></div>
                 <div class="neoscorpion-fuel-total-primary"><dt>Neo Fuel</dt><dd data-quick-total="neo_fuel">—</dd></div>
             </dl>
-            <label data-quick-transfer hidden>Transfer Fuel · GAL<input name="transfer_fuel_gallons" inputmode="numeric" placeholder="GAL" aria-label="Transfer Fuel gallons"></label>
+            <label data-quick-transfer hidden>Transfer Fuel · GAL<input name="transfer_fuel_gallons" inputmode="numeric" min="0" max="17000" pattern="0*([0-9]{1,4}|1[0-6][0-9]{3}|17000)" placeholder="GAL" aria-label="Transfer Fuel gallons"></label>
             <p class="neoscorpion-helper" data-quick-transfer-output hidden>TRANSFER FUEL —</p>
             <div class="neoscorpion-calculation-warning" data-quick-issues role="status" aria-live="polite">Enter a tail number to begin.</div>
         </form>
