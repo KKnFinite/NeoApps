@@ -312,6 +312,11 @@ def save_employee_editor(person, values):
     if home and person.active:
         save_shift_flow_plan(person, values, home.work_area)
     update_person(person, values)
+    if 'deice_trained' in values:
+        from flask_login import current_user
+        from app.services.neosubzero_staffing import save_employee_deice_training
+        save_employee_deice_training(person, values.get('deice_trained'), actor_id=current_user.id,
+                                     expected_version=values.get('expected_deice_version', ''))
     db.session.flush()
     return person
 

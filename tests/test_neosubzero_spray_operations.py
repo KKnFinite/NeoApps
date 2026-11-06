@@ -63,6 +63,9 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
         self.gateway = Gateway(code="RFD", name="RFD", is_active=True)
         db.session.add(self.gateway)
         db.session.flush()
+        from app.services.neosubzero_trucks import manage_truck
+        for number in ('T-17','T-99','12','44','18','7','31','1','2','3','55'):
+            manage_truck(self.gateway,'add_truck',{'truck_number':number},actor_id=None)
         self.operation = SortDateOperation(
             sort_date=date(2026, 8, 31),
             gateway_id=self.gateway.id,

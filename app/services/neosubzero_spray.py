@@ -51,6 +51,7 @@ def set_neosubzero_ucc_truck(
     *,
     user_id=None,
     assignment=None,
+    retained_number=None,
 ):
     """Stage the current truck for one ramp position without committing."""
     ramp, position = _slot(ramp, position_number)
@@ -60,7 +61,13 @@ def set_neosubzero_ucc_truck(
     from app.models import SortDateOperation
     from app.services.neosubzero_ucc import validate_ucc_truck_unique
     SortDateOperation.query.filter_by(id=operation.id).with_for_update().one()
-    validate_ucc_truck_unique(operation,truck,assignment)
+    from app.services.neosubzero_trucks import validate_registered_truck, normalize_truck
+    try:
+        truck = (normalize_truck(truck) if truck and truck == retained_number else
+                 validate_registered_truck(operation, truck, existing=getattr(assignment, 'truck_number', None)))
+        validate_ucc_truck_unique(operation,truck,assignment)
+    except ValueError as exc:
+        raise NeoSubZeroSprayError(str(exc)) from exc
     if assignment is not None and (
         assignment.sort_date_operation_id != operation.id
         or assignment.ramp != ramp
@@ -76,6 +83,8 @@ def set_neosubzero_ucc_truck(
             position_number=position,
         )
         db.session.add(assignment)
+    elif assignment.truck_number == (truck or None):
+        return assignment
     assignment.truck_number = truck or None
     assignment.updated_by_user_id = user_id
     return assignment

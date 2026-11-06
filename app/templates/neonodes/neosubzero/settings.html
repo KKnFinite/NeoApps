@@ -8,6 +8,11 @@
     {% include "neonodes/neosubzero/_nav.html" %}
     {% if can_edit %}<p><a href="{{ url_for('neosubzero.frost_vault') }}">FROST VAULT · SOURCE EVIDENCE</a></p>{% endif %}
 
+    <section class="neosubzero-settings" aria-labelledby="subzero-truck-settings">
+        <h2 id="subzero-truck-settings">MANAGE DEICE TRUCKS</h2>
+        {% if can_edit %}<form method="post" class="neosubzero-settings-grid"><input type="hidden" name="action" value="add_truck"><label>Truck number<input name="truck_number" maxlength="32" required></label><button type="submit">ADD TRUCK</button></form>{% endif %}
+        <ul class="subzero-truck-registry">{% for truck in registered_trucks %}<li><strong>{{ truck.number }}</strong> · {{ 'ACTIVE' if truck.active else 'INACTIVE' }}{% if can_edit %}<form method="post" data-confirm-message="{{ 'Deactivate' if truck.active else 'Reactivate' }} truck {{ truck.number }}? Historical assignments will be preserved."><input type="hidden" name="action" value="{{ 'deactivate_truck' if truck.active else 'activate_truck' }}"><input type="hidden" name="truck_id" value="{{ truck.id }}"><input type="hidden" name="expected_version" value="{{ entity_version(truck) }}"><input type="hidden" name="confirm" value="yes"><button type="submit">{{ 'DEACTIVATE' if truck.active else 'REACTIVATE' }}</button></form>{% endif %}</li>{% else %}<li>No registered trucks.</li>{% endfor %}</ul>
+    </section>
     <section class="neosubzero-settings" aria-labelledby="subzero-fluid-settings">
         <h2 id="subzero-fluid-settings">DEICE FLUIDS</h2>
         <form method="post" class="neosubzero-settings-grid">

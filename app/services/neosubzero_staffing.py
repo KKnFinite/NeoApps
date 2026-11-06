@@ -26,6 +26,44 @@ class NeoSubZeroStaffingError(ValueError):
     """Safe operator-facing qualification/callout validation error."""
 
 
+def employee_deice_context(person):
+    qualification = StaffingPersonQualification.query.filter_by(person_id=person.id, qualification_key=DEICE_QUALIFICATION_KEY).one_or_none() if person else None
+    return dict(qualified=bool(qualification and qualification.active), version=entity_version(qualification), eligible=deice_training_eligible(person) if person else True)
+
+
+def deice_training_eligible(person):
+    """An eligible work-area path permits qualification editing, never grants it."""
+    if person is None or not person.active:
+        return False
+    units = _staffing_units_by_id(active_only=True)
+    areas = StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).all()
+    allowed = {'ramp', 'aviation services', 'cargo', 'unload/load', 'unload / load', 'unload', 'load'}
+    for assignment in areas:
+        unit, seen = units.get(assignment.work_area_unit_id), set()
+        while unit and unit.id not in seen:
+            if _normalized(unit.name) in allowed:
+                return True
+            seen.add(unit.id)
+            unit = units.get(unit.parent_id)
+    return False
+
+
+def save_employee_deice_training(person, value, *, actor_id, expected_version=None):
+    if str(value) not in {'yes', 'no'}:
+        raise NeoSubZeroStaffingError('Choose YES or NO for DEICE TRAINED.')
+    person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
+    row = StaffingPersonQualification.query.filter_by(person_id=person.id, qualification_key=DEICE_QUALIFICATION_KEY).populate_existing().with_for_update().one_or_none()
+    if expected_version is not None and expected_version != entity_version(row):
+        raise NeoSubZeroStaffingError('Deice qualification changed. Reopen the employee editor.')
+    qualified = value == 'yes'
+    if qualified == bool(row and row.active):
+        return row
+    if qualified and not deice_training_eligible(person):
+        raise NeoSubZeroStaffingError('DEICE TRAINED is available for active Ramp, Aviation Services, Cargo and Unload/Load employees.')
+    person.updated_at = datetime.utcnow()
+    return set_staffing_person_qualification(person, DEICE_QUALIFICATION_KEY, qualified, user_id=actor_id, qualification=row)
+
+
 def neosubzero_qualification_people(search="", *, limit=250):
     """Return a bounded active-person projection for qualification management."""
     normalized_search = str(search or "").strip().casefold()

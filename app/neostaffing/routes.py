@@ -538,6 +538,7 @@ def shift_flow():
 @bp.route("/people/employee-editor")
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def employee_editor():
+    from app.services.neosubzero_staffing import employee_deice_context
     person_id = request.args.get("person_id", type=int)
     person = _get_person(person_id) if person_id else None
     home = staffing_service.assignment_service.shift_home(person) if person else None
@@ -554,6 +555,7 @@ def employee_editor():
     transfer_sources = staffing_service.assignment_service.flow_assignments(person, active_only=True) if person else []
     return render_template("neostaffing/_employee_editor.html", person=person,
         home=home, plan=person.shift_flow_plan if person else None,
+        deice_training=employee_deice_context(person),
         flow_version=staffing_service.shift_flow_revision(person, person.shift_flow_plan, home) if home else "",
         person_version=staffing_service.entity_version(person) if person else "",
         create_in_shift=create_in_shift, areas=areas, assignment_display=assignment_display,
@@ -2324,6 +2326,9 @@ def create_person():
             if not user_can(MANAGEMENT_ASSIGN_PERMISSION):
                 raise ValueError("You do not have permission to assign management.")
         staffing_service.create_initial_person_assignments(person, units)
+        if 'deice_trained' in request.form:
+            from app.services.neosubzero_staffing import save_employee_deice_training
+            save_employee_deice_training(person, request.form.get('deice_trained'), actor_id=current_user.id)
 
         if creation_flow == "management":
             # 20C creates affiliations and formally reports only to Primary. The legacy

@@ -6,6 +6,7 @@ from app.models import (
     NeoSubZeroCalloutAssignment,
     NeoSubZeroUccAssignment,
     NeoSubZeroUccTruckAssignment,
+    NeoSubZeroTruck,
     NeoSubZeroPretreatState,
     NeoSubZeroSprayRecord,
     NeoSubZeroSetting,
@@ -69,6 +70,7 @@ NEOSUBZERO_TABLES = (
     NeoSubZeroCalloutAssignment.__table__,
     NeoSubZeroUccAssignment.__table__,
     NeoSubZeroUccTruckAssignment.__table__,
+    NeoSubZeroTruck.__table__,
     NeoSubZeroSprayRecord.__table__,
     NeoSubZeroUserPreference.__table__,
     NeoSubZeroOperationContext.__table__,
@@ -106,6 +108,8 @@ def _missing_optional_columns(connection):
 def verify_neosubzero_schema_contract(connection):
     """Fail a pre-deploy bootstrap if the live SubZero model columns are absent."""
     inspector = inspect(connection)
+    if not inspector.has_table(NeoSubZeroTruck.__tablename__) or set(NeoSubZeroTruck.__table__.columns.keys()) - {column['name'] for column in inspector.get_columns(NeoSubZeroTruck.__tablename__)}:
+        raise RuntimeError('NeoSubZero permanent truck registry schema is missing.')
     for table in (NeoSubZeroOperationContext.__table__,NeoSubZeroAuditEntry.__table__,NeoSubZeroArchiveDelivery.__table__,FrostDocument.__table__,FrostDocumentAudit.__table__,FrostHistoryTask.__table__,FrostModelArtifact.__table__,FrostModelRelease.__table__):
         if not inspector.has_table(table.name) or set(table.columns.keys()) - {column['name'] for column in inspector.get_columns(table.name)}:
             raise RuntimeError('NeoSubZero schema missing required table/columns: '+table.name)

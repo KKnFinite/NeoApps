@@ -593,7 +593,7 @@ def truck_mutate():
             sort_date_operation_id=locked_operation.id,
             ramp=ramp,
             position_number=position,
-        ).with_for_update().one_or_none()
+        ).populate_existing().with_for_update().one_or_none()
         expected_version = str(request.form.get("expected_version") or "").strip()
         if (truck and (not expected_version or version_conflict(truck, expected_version))) or (truck is None and expected_version):
             raise NeoSubZeroSprayError(
@@ -604,7 +604,9 @@ def truck_mutate():
                 validate_ucc_truck_unique(locked_operation, request.form.get("truck_number"), truck)
             except NeoSubZeroUccError as exc:
                 raise NeoSubZeroSprayError(str(exc)) from exc
-        set_neosubzero_ucc_truck(
+        from app.services.neosubzero_evidence import evidence_values, audit_change
+        before_truck = evidence_values(truck)
+        truck = set_neosubzero_ucc_truck(
             locked_operation,
             ramp,
             position,
@@ -612,6 +614,10 @@ def truck_mutate():
             user_id=current_user.id,
             assignment=truck,
         )
+        db.session.flush()
+        after_truck = evidence_values(truck)
+        if before_truck != after_truck:
+            audit_change(locked_operation, 'ucc_truck', actor_id=current_user.id, before=before_truck, after=after_truck)
         db.session.commit()
         if board == "ucc" and _ucc_json_request():
             return jsonify(ok=True, message="UCC truck saved.")
@@ -995,6 +1001,8 @@ def qualifications():
 @bp.route("/departure-deice/mutate", methods=["POST"])
 @gateway_node_required("subzero")
 def departure_deice_mutate():
+    if request.form.get('action') == 'undo_clear' and not user_can('neosubzero.coordinator.edit'):
+        return 'Access denied.', 403
     if request.form.get('action') == 'radio_complete' and not user_can('neosubzero.coordinator.edit'):
         return 'Access denied.',403
     board = str(request.form.get("board") or "").strip().lower()
@@ -1113,6 +1121,7 @@ def pretreat_mutate():
 @bp.route("/settings", methods=["GET", "POST"])
 @gateway_node_required("subzero")
 def settings():
+    from app.services.neosubzero_trucks import manage_truck, registered_trucks
     access = permission_access("neosubzero.settings.view", "neosubzero.settings.edit")
     if not access["can_view"]:
         flash("Access denied.", "error")
@@ -1133,6 +1142,10 @@ def settings():
                 )
                 changed = True
                 message = "DEICE FLUID SETTINGS SAVED."
+            elif action in {'add_truck', 'activate_truck', 'deactivate_truck'}:
+                manage_truck(gateway, action, request.form, actor_id=current_user.id)
+                changed = True
+                message = 'DEICE TRUCK REGISTRY SAVED.'
             else:
                 raise ValueError("Choose a valid Settings action.")
             if changed:
@@ -1153,6 +1166,8 @@ def settings():
         "neonodes/neosubzero/settings.html",
         can_edit=access["can_edit"],
         fluid_settings=neosubzero_fluid_settings(gateway),
+        registered_trucks=registered_trucks(gateway),
+        entity_version=entity_version,
     )
 
 

@@ -12,6 +12,7 @@ from app.extensions import db
 from app.models import (
     StaffingLeadershipAssignment,
     StaffingPerson,
+    StaffingPersonQualification,
     StaffingReportingRelationship,
     StaffingTwentyCAffiliation,
     StaffingUnit,
@@ -43,6 +44,7 @@ WORKSPACE_SALT = "neostaffing-bulk-change-v1"
 LIVE_DATA_CHANGED_MESSAGE = "Live Data Changed - Review Required"
 
 PERSON_FIELDS = (
+    "deice_trained",
     "employee_id",
     "first_name",
     "last_name",
@@ -76,6 +78,8 @@ class BulkChangeDataBundle:
     """Bounded, request-local snapshot used for staging and final validation."""
 
     def __init__(self, *, lock=False, fresh=False):
+        self.deice_qualifications = _load_rows(StaffingPersonQualification.query.filter_by(qualification_key='deice').order_by(StaffingPersonQualification.id), lock, fresh)
+        self.deice_by_person = {row.person_id: row for row in self.deice_qualifications}
         self.units = _load_rows(StaffingUnit.query.order_by(StaffingUnit.id), lock, fresh)
         self.people = _load_rows(StaffingPerson.query.order_by(StaffingPerson.id), lock, fresh)
         self.work_assignments = _load_rows(
@@ -578,6 +582,10 @@ def apply_workspace(workspace, user):
         person = ref_to_person[ref]
         if person.id not in non_management_ids or person.id in retained_management_ids:
             reconcile_management_person_state(person, today=today)
+    from app.services.neosubzero_staffing import save_employee_deice_training
+    for ref, staged in workspace['people'].items():
+        if 'deice_trained' in staged.get('changes', {}):
+            save_employee_deice_training(ref_to_person[ref], 'yes' if simulation['states'][ref]['deice_trained'] else 'no', actor_id=user.id)
     return {
         "people": changed_people,
         "unit_changes": len(workspace["units"]),
@@ -648,6 +656,7 @@ def _simulate(workspace, bundle):
         assignment = bundle.work_by_person.get(person.id)
         relationship = bundle.relationship_by_person.get(person.id)
         states[f"p:{person.id}"] = {
+            "deice_trained": bool(bundle.deice_by_person.get(person.id) and bundle.deice_by_person[person.id].active),
             "ref": f"p:{person.id}",
             "is_new": False,
             "person_id": person.id,
@@ -921,6 +930,7 @@ def _stage_existing_person(workspace, values, bundle, user):
     ref = f"p:{person.id}"
     changes = dict(workspace["people"].get(ref, {}).get("changes", {}))
     source = {
+        "deice_trained": bool(bundle.deice_by_person.get(person.id) and bundle.deice_by_person[person.id].active),
         "employee_id": person.employee_id,
         "first_name": person.first_name,
         "last_name": person.last_name,
@@ -1551,6 +1561,10 @@ def _normalize_new_person(values, bundle):
 
 
 def _normalize_person_field(field, value, bundle):
+    if field == 'deice_trained':
+        if value not in {'yes', 'no'}:
+            raise ValueError('Choose YES or NO for DEICE TRAINED.')
+        return value == 'yes'
     if field == "employee_id":
         return staffing_service.validate_employee_id(value)
     if field in {"first_name", "last_name"}:
@@ -1578,6 +1592,7 @@ def _normalize_person_field(field, value, bundle):
 
 def _bundle_revision(bundle):
     payload = {
+        'deice_qualifications': [[row.id, row.person_id, row.active, _timestamp(row.updated_at)] for row in bundle.deice_qualifications],
         "units": [
             [row.id, row.parent_id, row.unit_type, row.name, bool(row.active), _timestamp(row.updated_at)]
             for row in bundle.units
@@ -1665,6 +1680,8 @@ def _field_label(field):
 
 
 def _display_value(field, value, bundle):
+    if field == 'deice_trained':
+        return 'YES' if value else 'NO'
     if field == "work_area_unit_id":
         return bundle.unit_path(value) if value else "Unassigned"
     if field == "classification":

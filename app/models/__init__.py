@@ -52,6 +52,7 @@ from app.models.neosubzero_setting import NeoSubZeroSetting
 from app.models.neosubzero_callout_assignment import NeoSubZeroCalloutAssignment
 from app.models.neosubzero_ucc_assignment import NeoSubZeroUccAssignment
 from app.models.neosubzero_ucc_truck_assignment import NeoSubZeroUccTruckAssignment
+from app.models.neosubzero_truck import NeoSubZeroTruck
 from app.models.neosubzero_spray_record import NeoSubZeroSprayRecord
 from app.models.neosubzero_operation_context import NeoSubZeroOperationContext
 from app.models.neosubzero_audit_entry import NeoSubZeroAuditEntry
@@ -205,6 +206,7 @@ __all__ = [
     "NeoSubZeroCalloutAssignment",
     "NeoSubZeroUccAssignment",
     "NeoSubZeroUccTruckAssignment",
+    "NeoSubZeroTruck",
     "NeoSubZeroSprayRecord",
     "NeoSubZeroOperationContext",
     "NeoSubZeroAuditEntry",

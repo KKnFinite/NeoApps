@@ -720,7 +720,9 @@ class NeoStaffingBulkChangeTest(unittest.TestCase):
             self._service_call(bulk_service.apply_workspace, workspace, self.ft_editor_user)
         finally:
             event.remove(db.engine, "before_cursor_execute", count_selects)
-        self.assertLessEqual(select_count, 20)
+        # The shared DEICE qualification snapshot adds one bounded SELECT to
+        # each apply validation pass; it is independent of roster size.
+        self.assertLessEqual(select_count, 22)
         db.session.rollback()
 
     def _stage_person_name(self, workspace, person, first_name, user):
