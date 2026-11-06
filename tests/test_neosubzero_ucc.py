@@ -167,7 +167,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIsNone(alpha["throat"])
         self.assertEqual(alpha["parking_positions"][2]["aircraft"][0]["event"].id, event.id)
 
-    def test_configured_aircraft_wins_over_multiple_planned_queue_rows(self):
+    def test_configuration_does_not_occupy_pad_or_overtake_physical_queue(self):
         planned_two = self._departure("5X201", "N201", "SLC", 3)
         configured = self._departure("5X202", "N202", "DEN", 4)
         db.session.add_all(
@@ -198,14 +198,15 @@ class NeoSubZeroUccTest(unittest.TestCase):
         configured.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1, 30)
         db.session.commit()
         alpha = self._ramp_context("Alpha")
-        self.assertEqual(alpha["throat"]["mission_id"], configured.id)
+        self.assertEqual(alpha["throat"]["mission_id"], planned_two.id)
+        self.assertIsNone(alpha["pad"])
         self.assertEqual(
             [row["mission_id"] for row in alpha["waiting_queue"]],
-            [planned_two.id, self.alpha.id],
+            [planned_two.id, configured.id, self.alpha.id],
         )
         self.assertEqual(
             [row["queue_position"] for row in alpha["waiting_queue"]],
-            [1, 2],
+            [1, 2, 3],
         )
 
     def test_coordinator_selection_never_changes_universal_throat(self):
@@ -264,7 +265,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
 
         event.status = "finished"
         db.session.commit()
-        finished = self._ramp_context("Alpha")["throat"]
+        finished = self._ramp_context("Alpha")["pad"]
         self.assertEqual(finished["mission_id"], self.alpha.id)
         self.assertEqual(finished["visual_label"], "FINISHED / AWAITING CLEARANCE")
 
@@ -287,7 +288,8 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit()
         alpha = self._ramp_context("Alpha")
         self.assertEqual(alpha["throat"]["mission_id"], next_mission.id)
-        self.assertEqual(alpha["waiting_queue"], ())
+        self.assertEqual(len(alpha["waiting_queue"]), 1)
+        self.assertIsNone(alpha["pad"])
 
     def test_parking_position_and_pretreat_configuration_do_not_imply_throat(self):
         pretreat = NeoSubZeroPretreatState(
@@ -535,7 +537,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertNotIn(b'neosubzero-weather-ambient', page.data)
         self.assertNotIn(b'data-weather-theme=', page.data)
         self.assertNotIn(b"/neosubzero/ucc/weather-preference", page.data)
-        self.assertIn(b"THROAT", page.data)
+        self.assertIn(b"DEICE PAD", page.data)
         self.assertIn(b'data-ucc-deice-pad', page.data)
         self.assertNotIn(b"WAITING QUEUE", page.data)
         self.assertEqual(denied.status_code, 403)
@@ -883,8 +885,8 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit();ramp=self._ramp_context('Alpha')
         stand=next(p for p in ramp['parking_positions'] if p['code']=='A10')
         self.assertEqual(stand['aircraft'],())
-        self.assertEqual(ramp['pad']['mission_id'],self.alpha.id)
-        self.assertEqual(ramp['waiting_queue'][0]['mission_id'],waiting.id)
+        self.assertIsNone(ramp['pad'])
+        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']], [self.alpha.id, waiting.id])
         self.assertEqual([row['mission_id'] for row in ramp['parking_exceptions']],[parked.id])
 
     def test_off_sort_still_shows_five_empty_ramps_without_future_records(self):
@@ -963,7 +965,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         context=neosubzero_ucc_context(self.gateway,self.operation)
         self.assertNotIn("FUTURE-TAIL",{row["tail"] for ramp in context["ramps"] for row in ramp["aircraft"]})
 
-    def test_three_throat_places_automatic_clear_advance_and_capacity_review(self):
+    def test_four_waiting_places_and_separate_pad_capacity_review(self):
         missions = [self.alpha]
         for i in range(4):
             mission = self._departure(f"5X30{i}", f"N30{i}", "DEN", 4)
@@ -974,16 +976,16 @@ class NeoSubZeroUccTest(unittest.TestCase):
             self._deice_event(mission, "deice_planned")
         db.session.commit()
         ramp = self._ramp_context("Alpha")
-        self.assertEqual(ramp['pad']['mission_id'],missions[0].id)
-        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[1:3]])
-        self.assertEqual([r["mission_id"] for r in ramp["exceptions"]], [m.id for m in missions[3:]])
+        self.assertIsNone(ramp['pad'])
+        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[:4]])
+        self.assertEqual([r["mission_id"] for r in ramp["exceptions"]], [m.id for m in missions[4:]])
         self.assertTrue(all(not p["aircraft"] for p in ramp["parking_positions"]))
         ramp["throat"]["event"].status = "cleared"
         db.session.commit()
         ramp = self._ramp_context("Alpha")
-        self.assertEqual(ramp['pad']['mission_id'],missions[1].id)
-        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[2:4]])
-        self.assertEqual([r['mission_id'] for r in ramp['exceptions']], [missions[4].id])
+        self.assertIsNone(ramp['pad'])
+        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[1:5]])
+        self.assertEqual([r['mission_id'] for r in ramp['exceptions']], [])
 
     def test_queue_correction_uses_existing_events_stale_guard_and_audit(self):
         second = self._departure("5X400", "N400", "DEN", 4)
@@ -1002,6 +1004,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
             reorder_ucc_queue(self.gateway, self.operation, "Alpha", second.id, "back", expected_version=version, user_id=None)
         ramp["throat"]["event"].status = "configured"
         ramp["throat"]["event"].configured_at_utc = datetime(2026, 9, 1, 1)
+        ramp["throat"]["event"].pass1_started_at_utc = datetime(2026, 9, 1, 1)
         db.session.commit()
         with self.assertRaisesRegex(NeoSubZeroUccError, "active deice"):
             reorder_ucc_queue(self.gateway, self.operation, "Alpha", second.id, "back", expected_version=self._ramp_context("Alpha")["queue_version"], user_id=None)

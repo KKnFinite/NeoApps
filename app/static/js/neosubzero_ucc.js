@@ -3,6 +3,7 @@
 
     const root = document.querySelector("[data-subzero-ucc]");
     if (!root) return;
+    root.dataset.uccInlineReady = 'true';
 
     let forms = Array.from(root.querySelectorAll("[data-ucc-assignment-form]"));
     const dialog = root.querySelector("[data-ucc-move-dialog]");
@@ -272,6 +273,16 @@
             form.requestSubmit();
         });
     });
+    root.querySelectorAll('[data-ucc-auto-save]').forEach((form) => {
+        if (form.dataset.autoSaveBound) return;
+        form.dataset.autoSaveBound = 'true';
+        form.addEventListener('change', () => {
+            const select = form.querySelector('select');
+            const text = form.querySelector('[data-ucc-selected-text]');
+            if (text) text.textContent = select.selectedOptions[0]?.textContent || '';
+            form.requestSubmit();
+        });
+    });
 
     root.querySelectorAll("[data-ucc-drag-assignee]").forEach((handle) => {
         if (handle.dataset.uccDragBound) return;
@@ -379,6 +390,7 @@
             if (deferred) {
                 root.querySelectorAll("[data-ucc-ramp]").forEach((ramp) => {
                     const newRamp = next.querySelector(`[data-ucc-ramp="${CSS.escape(ramp.dataset.uccRamp)}"]`);
+                    ramp.dataset.uccRelevant = newRamp?.dataset.uccRelevant || 'false';
                     const replacement = newRamp?.querySelector(".ucc-ramp-diagram");
                     const diagram = ramp.querySelector(".ucc-ramp-diagram");
                     if (diagram && replacement) diagram.replaceWith(replacement);
@@ -435,6 +447,8 @@
         root.dataset.saving = "true";
         const buttons = Array.from(form.querySelectorAll('button[type="submit"]'));
         const body = new FormData(form);
+        const selects = Array.from(root.querySelectorAll('[data-ucc-live-board] select:not(:disabled)'));
+        selects.forEach(select => { select.disabled = true; });
         if (event.submitter?.name) body.set(event.submitter.name, event.submitter.value);
         buttons.forEach((button) => { button.disabled = true; });
         notify("Saving UCC…");
@@ -460,6 +474,7 @@
             window.clearTimeout(timeout);
             delete root.dataset.saving;
             buttons.forEach((button) => { button.disabled = false; });
+            selects.forEach(select => { select.disabled = false; });
             if (accepted) {
                 if (form.contains(document.activeElement)) document.activeElement.blur();
                 try { await refreshBoard(); } catch (error) { notify("Saved, but " + error.message, true); }

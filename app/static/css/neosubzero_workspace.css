@@ -126,6 +126,9 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
 }
 
 /* Mobile DUCC is a lens on the existing desktop diagram, not a second board. */
+.subzero-truck-registry { list-style:none; padding:0; display:grid; gap:5px; }
+.subzero-truck-registry li { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.subzero-truck-registry form { margin:0 0 0 auto; }
 .ucc-mobile-controls,.neosubzero-mobile-ramp-link { display:none; }
 .neosubzero-coordinator-tools { display:contents; }
 .neosubzero-radio-pending { padding:10px; margin-bottom:8px; border:2px solid var(--subzero-radio-pending-border); background:var(--subzero-radio-pending); color:var(--subzero-status-dark); }

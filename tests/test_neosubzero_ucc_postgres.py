@@ -118,7 +118,7 @@ class UccPostgresTest(unittest.TestCase):
         self.assertIsNone(event.ucc_queue_order)
         self.assertIsNone(event.ucc_queue_history)
 
-    def test_pad_plus_three_survives_commits_and_clear_without_replacing_events(self):
+    def test_separate_pad_and_four_waiters_survive_clear_without_replacing_events(self):
         from datetime import datetime
         from app.services.neosubzero_departure_deice import mutate_departure_deice
         f=self.fixture
@@ -134,13 +134,64 @@ class UccPostgresTest(unittest.TestCase):
             events.append(f._deice_event(mission,'deice_planned'))
         db.session.commit();ids=[event.id for event in events]
         before=neosubzero_ucc_context(f.gateway,f.operation)['ramps'][0]
-        self.assertEqual(before['pad']['mission_id'],missions[0].id)
-        self.assertEqual([row['mission_id'] for row in before['waiting_queue']],[m.id for m in missions[1:3]])
-        events[0].status='finished';events[0].pass1_ended_at_utc=datetime(2026,9,1,1,5)
+        self.assertIsNone(before['pad'])
+        self.assertEqual([row['mission_id'] for row in before['waiting_queue']],[m.id for m in missions])
+        actor=f._user('pg-pad-coordinator','grandmaster')
+        mutate_departure_deice(f.operation,missions[0],'save_treatment',dict(treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:00',pass1_end='22:05'),event=events[0],actor_id=actor.id)
         mutate_departure_deice(f.operation,missions[0],'clear',{},event=events[0]);db.session.commit()
         db.session.expire_all()
         after=neosubzero_ucc_context(f.gateway,f.operation)['ramps'][0]
-        self.assertEqual(after['pad']['mission_id'],missions[1].id)
-        self.assertEqual([row['queue_position'] for row in after['waiting_queue']],[1,2])
+        self.assertEqual(after['pad']['mission_id'],missions[0].id)
+        self.assertEqual([row['queue_position'] for row in after['waiting_queue']],[1,2,3])
+        self.assertEqual(events[0].radio_state,'pending')
+        mutate_departure_deice(f.operation,missions[0],'radio_complete',{},event=events[0],actor_id=actor.id);db.session.commit()
+        after=neosubzero_ucc_context(f.gateway,f.operation)['ramps'][0]
+        self.assertIsNone(after['pad']);self.assertEqual(after['throat']['mission_id'],missions[1].id)
         self.assertEqual([event.id for event in NeoSubZeroDepartureDeiceEvent.query.order_by(NeoSubZeroDepartureDeiceEvent.id)],ids)
-        self.assertEqual(db.session.get(NeoSubZeroDepartureDeiceEvent,ids[0]).pass1_ended_at_utc,datetime(2026,9,1,1,5))
+        self.assertIsNotNone(db.session.get(NeoSubZeroDepartureDeiceEvent,ids[0]).pass1_ended_at_utc)
+
+    def test_registry_bootstrap_is_additive_and_preserves_sort_assignments(self):
+        from app.models import NeoSubZeroTruck
+        f=self.fixture
+        db.session.add(NeoSubZeroUccTruckAssignment(sort_date_operation_id=f.operation.id,ramp='Alpha',position_number=1,truck_number='HISTORICAL'))
+        db.session.commit();db.session.remove()
+        with db.engine.begin() as connection: NeoSubZeroTruck.__table__.drop(connection)
+        with patch.dict(f.app.config,{'TESTING':False}):
+            self.assertTrue(ensure_neosubzero_pretreat_table(f.app))
+            self.assertTrue(ensure_neosubzero_pretreat_table(f.app))
+        self.assertEqual(NeoSubZeroTruck.query.count(),0)
+        self.assertEqual(NeoSubZeroUccTruckAssignment.query.one().truck_number,'HISTORICAL')
+
+    def test_same_registered_truck_cannot_win_two_concurrent_positions(self):
+        from app.services.neosubzero_trucks import manage_truck
+        from app.services.neosubzero_spray import set_neosubzero_ucc_truck, NeoSubZeroSprayError
+        f=self.fixture
+        manage_truck(f.gateway,'add_truck',{'truck_number':'CONCURRENT-TRUCK'},actor_id=None);db.session.commit()
+        def assign(index, operation):
+            try: set_neosubzero_ucc_truck(operation,('Alpha','Bravo')[index],1,'CONCURRENT-TRUCK')
+            except (NeoSubZeroSprayError,ValueError) as exc: raise NeoSubZeroUccError(str(exc)) from exc
+        self.assertCountEqual(self.race(assign),['saved','conflict'])
+        db.session.expire_all()
+        self.assertEqual(NeoSubZeroUccTruckAssignment.query.filter_by(truck_number='CONCURRENT-TRUCK').count(),1)
+
+    def test_shared_employee_qualification_is_locked_and_stale_grants_roll_back(self):
+        from threading import Barrier
+        from app.models import StaffingPerson, StaffingPersonQualification, StaffingUnit
+        from app.services.neosubzero_staffing import save_employee_deice_training
+        f=self.fixture
+        area=f._unit('work_area','Ramp',StaffingUnit.query.filter_by(name='Aviation Services').one())
+        person=f._person('PG-TRAINED','Qualified','Employee',area);db.session.commit();pid=person.id
+        barrier=Barrier(2);db.session.remove()
+        def worker(_index):
+            with f.app.app_context():
+                person=db.session.get(StaffingPerson,pid)
+                barrier.wait(timeout=10)
+                try:
+                    save_employee_deice_training(person,'yes',actor_id=None,expected_version='')
+                    db.session.commit();return 'saved'
+                except ValueError:
+                    db.session.rollback();return 'conflict'
+                finally:db.session.remove()
+        with ThreadPoolExecutor(max_workers=2) as pool: results=list(pool.map(worker,(0,1)))
+        self.assertCountEqual(results,['saved','conflict'])
+        self.assertEqual(StaffingPersonQualification.query.filter_by(person_id=pid,qualification_key='deice',active=True).count(),1)

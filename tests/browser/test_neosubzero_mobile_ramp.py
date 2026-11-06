@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from playwright.sync_api import expect
 from app.extensions import db
-from app.models import SortDateMission,SortDateOperation,SortDateParkingAssignment,NeoSubZeroDepartureDeiceEvent
+from app.models import Gateway,SortDateMission,SortDateOperation,SortDateParkingAssignment,NeoSubZeroDepartureDeiceEvent
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
 from tests.browser import test_neosubzero_ucc as fixtures
 
@@ -31,6 +31,8 @@ class MobileRampBrowserTest(unittest.TestCase):
                 db.session.add(SortDateParkingAssignment(sort_date_operation_id=operation.id,
                     tail_number=extra.assigned_tail_number,ramp_code='A',position_code='A06'))
                 fixture._deice_event(extra,'deice_planned');extra_id=extra.id
+                from app.services.neosubzero_trucks import manage_truck
+                manage_truck(db.session.get(Gateway,operation.gateway_id),'add_truck',{'truck_number':'MOBILE-10'},actor_id=None)
                 set_neosubzero_ucc_truck(operation,'Alpha',1,'MOBILE-10')
                 db.session.commit()
             browser=getattr(case.pw,engine).launch()
@@ -43,8 +45,7 @@ class MobileRampBrowserTest(unittest.TestCase):
             expect(page.locator('.neosubzero-weather-ambient,[data-weather-motion-toggle]')).to_have_count(0)
             # A real staffing draft survives switching mode and critical refresh.
             editor=page.locator('[data-ucc-editor="Alpha-1"]')
-            editor.locator(':scope > summary').click()
-            draft=editor.locator('[name="truck_number"]');draft.fill('UNSAVED MOBILE DRAFT')
+            draft=editor.locator('[name="truck_number"]');draft.evaluate('(e)=>{e.value="UCC-831";e.dispatchEvent(new Event("input",{bubbles:true}))}')
             page.locator('[data-ucc-view="ramp"]').click()
             root=page.locator('[data-subzero-ucc]')
             alpha=page.locator('[data-ucc-ramp="Alpha"]')
@@ -74,18 +75,19 @@ class MobileRampBrowserTest(unittest.TestCase):
             expect(page.locator('[data-ucc-ramp="Remote"] [data-ucc-deice-pad]')).to_have_count(0)
             page.locator('[data-ucc-ramp-select="Alpha"]').click()
             # Authoritative Block-Out changes arrive through the normal revision
-            # endpoint. Four aircraft produce three positions plus review.
+            # endpoint. Four aircraft fill the four waiting spaces; no spray is inferred.
             with case.app.app_context():
                 for index,mid in enumerate([*case.missions[:3],extra_id]):
                     mission=db.session.get(SortDateMission,mid)
                     mission.actual_block_out_datetime_utc=datetime(2026,10,23,5,index)
                     mission.actual_block_out_source='manual'
                 db.session.commit()
-            expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[0]),timeout=10000)
-            expect(alpha.locator('[data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))
-            expect(alpha.locator('[data-ucc-queue-position="2"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[2]))
-            expect(alpha).to_contain_text('DEICE CAPACITY REVIEW')
-            expect(alpha.locator('[data-ucc-queue-position="3"]')).to_have_count(0)
+            expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_count(0,timeout=10000)
+            expect(alpha.locator('[data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[0]))
+            expect(alpha.locator('[data-ucc-queue-position="2"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))
+            expect(alpha.locator('[data-ucc-queue-position="3"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[2]))
+            expect(alpha.locator('[data-ucc-queue-position="4"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(extra_id))
+            expect(alpha.locator('.ucc-queue-exception')).to_have_count(0)
             expect(root).to_have_attribute('data-ucc-mobile-view','ramp')
             expect(root).to_have_attribute('data-ucc-selected-ramp','Alpha')
             page.screenshot(path=str(EVIDENCE/f'{engine}-queued.png'),full_page=True)
@@ -120,13 +122,13 @@ class MobileRampBrowserTest(unittest.TestCase):
             expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[0]))
             with coordinator.expect_navigation():coordinator.locator('button[name="action"][value="radio_complete"]').click()
             expect(alpha.locator('[data-ucc-aircraft="%s"]'%case.missions[0])).to_have_count(0,timeout=10000)
-            expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))
-            expect(alpha.locator('[data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[2]))
-            expect(alpha.locator('[data-ucc-queue-position="2"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(extra_id))
+            expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_count(0)
+            expect(alpha.locator('[data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))
+            expect(alpha.locator('[data-ucc-queue-position="2"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[2]))
+            expect(alpha.locator('[data-ucc-queue-position="3"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(extra_id))
             page.screenshot(path=str(EVIDENCE/f'{engine}-clear-advanced.png'),full_page=True)
             page.locator('[data-ucc-view="staffing"]').click()
-            expect(draft).to_have_value('UNSAVED MOBILE DRAFT')
-            expect(editor).to_have_attribute('open','')
+            expect(draft).to_have_value('UCC-831')
             page.locator('[data-ucc-view="ramp"]').click()
             page.locator('[data-ucc-ramp-select="Echo"]').click()
             page.reload()
@@ -139,7 +141,7 @@ class MobileRampBrowserTest(unittest.TestCase):
             page.screenshot(path=str(EVIDENCE/f'{engine}-desktop.png'),full_page=True)
             viewer=browser.new_context(viewport={'width':375,'height':844},service_workers='block')
             read=viewer.new_page();case.login(read,'drawer-watcher');case.ready(read,'/neosubzero/ucc?view=ramp&ramp=Alpha')
-            read.locator('[data-ucc-deice-pad] [data-ucc-aircraft]').click()
+            read.locator('[data-ucc-queue-position="1"] [data-ucc-aircraft]').click()
             expect(read.locator('[data-ucc-info]')).to_be_visible()
             expect(read.locator('[data-ucc-queue-form], [data-ucc-drag-assignee]')).to_have_count(0)
             with case.app.app_context():

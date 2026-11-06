@@ -1,4 +1,4 @@
-/* Desktop DUCC only. The mobile staffing/ramp lens keeps its existing layout. */
+/* Shared physical DUCC geometry; existing mobile staffing/ramp lenses remain. */
 .ucc-staffing-grid { display:contents; }
 .ucc-plane-etd { display:none; }
 @media (min-width:901px) {
@@ -97,7 +97,7 @@
     body.neosubzero-ucc-tv-mode:has([data-subzero-ucc]) { overflow:hidden; }
     body.neosubzero-ucc-tv-mode .ucc-board-viewport { display:block; position:fixed; inset:0; overflow:hidden; background:#06101a; }
     body.neosubzero-ucc-tv-mode .ucc-board-viewport > .neosubzero-ucc { position:absolute; top:28px; left:8px; padding:6px; min-height:0; gap:3px; transform-origin:top left; }
-    body.neosubzero-ucc-tv-mode [data-ucc-ramp="Remote"] { display:none; }
+    body.neosubzero-ucc-tv-mode [data-ucc-ramp="Remote"][data-ucc-relevant="false"] { display:none; }
     body.neosubzero-ucc-tv-mode .neosubzero-weather { grid-template-columns:minmax(0,1.2fr) minmax(0,2fr); }
     body.neosubzero-ucc-tv-mode .neosubzero-weather-current { display:grid; grid-template-columns:minmax(65px,.6fr) minmax(0,1.4fr); gap:8px; align-items:start; }
     body.neosubzero-ucc-tv-mode .neosubzero-ucc .neosubzero-weather-current-sort {
@@ -133,4 +133,106 @@
     .neosubzero-ucc[data-ucc-weather-density="minimal"] :is(.neosubzero-weather-hour-secondary,.neosubzero-weather-primary > small,.neosubzero-weather-hour-priority em) { display:none; }
     .neosubzero-ucc[data-ucc-weather-density="minimal"] .neosubzero-ucc-upcoming article > :is(span:nth-child(n+2),em) { display:none; }
     .neosubzero-ucc[data-ucc-weather-density="minimal"] .neosubzero-weather-current-sort { grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); }
+}
+
+/* One physical projection: outside crews, separate pad, four waiting spaces. */
+.blueprint-neosubzero .neosubzero-ucc .ucc-ramp {
+    border:1px solid #55758b; border-radius:12px; background:#081824;
+    padding:6px; min-width:0;
+}
+.blueprint-neosubzero .neosubzero-ucc .ucc-treatment-layout {
+    display:flex; flex-direction:column; gap:5px; padding:0; position:relative;
+}
+.blueprint-neosubzero .neosubzero-ucc .ucc-staffing-grid {
+    order:-1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-template-rows:repeat(2,minmax(var(--ucc-staffing-row-height,0px),auto));
+    gap:5px 4px; align-items:start; min-height:0;
+}
+.blueprint-neosubzero .neosubzero-ucc .ucc-team {
+    border:0; border-radius:0; background:none; min-width:0; grid-area:auto; text-align:left;
+}
+.blueprint-neosubzero .neosubzero-ucc .ucc-team.position-1 { grid-column:1; grid-row:1; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-team.position-2 { grid-column:1; grid-row:2; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-team.position-4 { grid-column:3; grid-row:1; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-team.position-3 { grid-column:3; grid-row:2; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-team.is-mirrored { text-align:right; }
+.neosubzero-ucc .ucc-team-controls { display:grid; gap:3px; }
+.neosubzero-ucc[data-ucc-inline-ready="true"] .ucc-legacy-save { display:none; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-team form { display:block; margin:0; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-team .ucc-pill {
+    display:block; position:relative; border:1px solid #36546b; border-radius:12px;
+    background:#102633; padding:4px 12px 4px 5px; min-height:25px;
+    box-sizing:border-box; overflow:hidden; color:#dcecf5; font-size:.73rem; line-height:1.25;
+}
+.neosubzero-ucc .ucc-pill::after { content:'⌄'; position:absolute; right:4px; top:4px; color:#8aabbe; pointer-events:none; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-pill select {
+    position:absolute; inset:0; width:100%; max-width:100%; min-width:0; height:100%; min-height:0;
+    box-sizing:border-box; opacity:0; cursor:pointer;
+}
+.neosubzero-ucc .ucc-pill span { display:block; overflow-wrap:anywhere; pointer-events:none; }
+.blueprint-neosubzero .neosubzero-ucc:not([data-ucc-inline-ready="true"]) .ucc-pill select { position:static; opacity:1; height:auto; min-height:28px; }
+.neosubzero-ucc:not([data-ucc-inline-ready="true"]) .ucc-pill span { display:none; }
+.neosubzero-ucc .ucc-pill:focus-within { outline:2px solid #b6e1f9; outline-offset:1px; }
+.neosubzero-ucc .ucc-pill:has(select:disabled) { opacity:.65; }
+.neosubzero-ucc .ucc-team-readonly { display:none; gap:3px; font-size:.78rem; overflow-wrap:anywhere; }
+.neosubzero-ucc .ucc-team:not(:has(.ucc-team-controls)) .ucc-team-readonly { display:grid; }
+.neosubzero-ucc .ucc-team-controls details { position:relative; font-size:.65rem; }
+.neosubzero-ucc .ucc-team-controls details > summary { display:block; list-style:none; padding:2px 0; font-size:.6rem; color:#96b8cf; cursor:pointer; overflow-wrap:anywhere; }
+.neosubzero-ucc .ucc-team-controls details > summary::-webkit-details-marker { display:none; }
+.neosubzero-ucc .ucc-team-controls details:not([open]) > :not(summary) { display:none; }
+.neosubzero-ucc .ucc-team-controls details[open] > form { position:absolute; z-index:5; width:190px; padding:8px; background:#102839; border:1px solid #55758b; border-radius:8px; }
+.neosubzero-ucc .is-mirrored details[open] > form { right:0; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-deice-pad {
+    display:flex; position:absolute; left:calc((100% + 4px) / 3); top:0;
+    width:calc((100% - 8px) / 3); min-width:0;
+    min-height:108px; height:var(--ucc-staffing-height,150px); box-sizing:border-box;
+    flex-direction:column; align-items:center; justify-content:center; gap:7px;
+    background:none; border:1px dashed #496477; border-radius:10px; padding:4px 1px;
+}
+.neosubzero-ucc .ucc-deice-pad > b { font-size:.62rem; text-align:center; color:#9ab5c7; }
+.neosubzero-ucc .ucc-pad-outline {
+    width:3rem; height:3rem; opacity:.25; background:#95b1c5;
+    -webkit-mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
+    mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat; transform:none;
+}
+.blueprint-neosubzero .neosubzero-ucc .ucc-parking-grid {
+    grid-template-rows:repeat(4,minmax(var(--ucc-parking-row-height,108px),auto)); background:none; gap:4px;
+}
+.blueprint-neosubzero .neosubzero-ucc :is(.ucc-parking-place,.ucc-deice-waiting) {
+    display:flex; flex-direction:column; gap:3px; padding:3px 0; background:none; border:0;
+}
+.blueprint-neosubzero .neosubzero-ucc :is(.ucc-parking-place,.ucc-deice-waiting) > b {
+    font-size:.65rem; line-height:1.15; color:#a1c3d9; text-align:center;
+}
+.blueprint-neosubzero .neosubzero-ucc .ucc-plane,
+.blueprint-neosubzero .neosubzero-ucc .ucc-plane:is(:hover,[aria-pressed="true"]) {
+    background:#091721; color:#dce9f2; border:1px solid #304353; border-radius:8px;
+    display:flex; flex-direction:column; align-items:center; gap:2px; padding:4px 1px;
+    width:100%; box-sizing:border-box; min-width:0;
+}
+.blueprint-neosubzero .neosubzero-ucc .ucc-plane .ucc-plane-icon { color:var(--aircraft-fill,#b6e1f9); font-size:2rem; flex:none; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-plane strong { font-size:.76rem; line-height:1.15; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-plane .ucc-plane-position { font-size:.65rem; line-height:1.15; color:#a1c3d9; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-plane > .ucc-plane-flight { font-size:.66rem; line-height:1.15; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-plane > .ucc-plane-etd { display:block; font-size:.63rem; line-height:1.2; color:#afc8d9; }
+.blueprint-neosubzero .neosubzero-ucc .ucc-plane :is(.ucc-plane-status,.ucc-plane-lane) { display:none; }
+body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-controls { display:none; }
+body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
+@media (min-width:901px) {
+    .blueprint-neosubzero .neosubzero-ucc .ucc-ramp-board { grid-template-columns:repeat(5,minmax(0,1fr)); gap:7px; }
+    .blueprint-neosubzero .neosubzero-ucc [data-ucc-ramp="Remote"] { grid-column:1 / -1; width:min(100%,420px); }
+    .blueprint-neosubzero .neosubzero-ucc [data-ucc-ramp="Remote"] .ucc-staffing-grid { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,auto); }
+    .blueprint-neosubzero .neosubzero-ucc [data-ucc-ramp="Remote"] :is(.position-3,.position-4) { grid-column:2; }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { font-size:clamp(.9rem,1.05vw,1.6rem); }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-plane .ucc-plane-icon { font-size:2.2rem; }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-plane strong { font-size:clamp(.9rem,.95vw,1.5rem); }
+    body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-plane > :is(.ucc-plane-flight,.ucc-plane-etd) { font-size:clamp(.75rem,.8vw,1.2rem); }
+}
+@media (max-width:900px) {
+    .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="staffing"] .ucc-deice-pad { display:none; }
+    .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="staffing"] .ucc-staffing-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="staffing"] :is(.position-3,.position-4) { grid-column:2; }
+    .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-staffing-grid { grid-template-rows:auto; min-height:0; }
+    .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-deice-pad { height:110px; min-height:110px; }
+    .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp-diagram.is-main-ramp { padding-top:115px; }
 }

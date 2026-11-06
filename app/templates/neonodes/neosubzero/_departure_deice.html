@@ -89,7 +89,7 @@
     {% else %}
         <span>NOT SPRAYED</span>
     {% endif %}
-    <button type="button" data-subzero-reopen>REOPEN</button>
+    <button type="button" data-subzero-reopen>VIEW DETAILS</button>
     {% if can_edit and row.collapse_state in ('negative', 'not_sprayed') %}
     <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
         {{ mutation_identity(row, board, selected_ramp) }}
@@ -107,13 +107,14 @@
         <h2>CLEARED · RADIO PENDING</h2>
         <strong>AIR-TO-GROUND SCRIPT · FINAL ACTUAL PASS START</strong>
         {% if row.script %}<p data-radio-script>{{ row.script.text }}</p>{% else %}<p>Final readback evidence unavailable. Resolve the audited fluid and pass evidence before confirming.</p>{% endif %}
-        <p>{% if row.block_out_at_utc %}The aircraft retains Position 10{% else %}The aircraft remains active{% endif %} until the script has been read to the pilot and RADIO COMPLETE is confirmed.</p>
+        <p>{% if row.block_out_at_utc %}The aircraft retains the DEICE PAD{% else %}The aircraft remains active{% endif %} until the script has been read to the pilot and RADIO COMPLETE is confirmed.</p>
         {% if can_edit and user_can('neosubzero.coordinator.edit') %}
         <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-operational-form>
             {{ mutation_identity(row, board, selected_ramp) }}
             <button name="action" value="radio_complete" {% if not row.script %}disabled{% endif %}>RADIO COMPLETE</button>
             <small>Confirm only after actually reading the script to the pilot.</small>
         </form>
+        <details class="subzero-undo-clear"><summary>UNDO CLEAR</summary><form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-operational-form data-subzero-confirm="Undo this CLEAR? Spray evidence and pad occupancy will be preserved.">{{ mutation_identity(row, board, selected_ramp) }}<label>Correction reason<input name="correction_reason" maxlength="500" required></label><button name="action" value="undo_clear">UNDO CLEAR</button></form></details>
         {% endif %}
     </section>
     {% elif row.radio_complete %}<p>RADIO COMPLETE · {{ row.event.radio_completed_at_utc.isoformat() }} UTC · Coordinator #{{ row.event.radio_completed_by_user_id }}</p>{% endif %}

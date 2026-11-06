@@ -10,7 +10,7 @@
         root.style.removeProperty("--ucc-staffing-height");
         root.style.removeProperty("--ucc-parking-row-height");
         const main = '.ucc-ramp:not([data-ucc-ramp="Remote"])';
-        const summaries = [...root.querySelectorAll(`${main} .ucc-team > summary`)];
+        const summaries = [...root.querySelectorAll(`${main} .ucc-team`)];
         const stands = [...root.querySelectorAll(`${main} .ucc-parking-grid > div`)];
         root.style.setProperty("--ucc-staffing-row-height", `${Math.max(72, ...summaries.map(el => el.scrollHeight))}px`);
         const groups = [...root.querySelectorAll(`${main} .ucc-staffing-grid`)];
@@ -47,7 +47,7 @@
         if (tv) {
             // Fit the same operational board to BOTH axes. Scaling a viewport-
             // wide canvas by height alone leaves an empty right-hand gutter.
-            // Remote is presentation-hidden by TV CSS, never removed from data.
+            // Relevant Remote aircraft/staffing stay visible in the same board.
             let width = availableWidth;
             root.dataset.uccWeatherDensity = "normal";
             let height;
@@ -57,6 +57,10 @@
                 height = Math.max(root.scrollHeight, root.getBoundingClientRect().height, 1);
                 const ratio = height * availableWidth / width / availableHeight;
                 if (ratio <= 1.001 || pass === 7) break;
+                if (pass < 2) {
+                    root.dataset.uccWeatherDensity = pass === 0 ? 'compact' : 'minimal';
+                    continue;
+                }
                 width *= Math.min(1.5, ratio * 1.002);
             }
             const scale = Math.min(availableWidth / width, availableHeight / height);

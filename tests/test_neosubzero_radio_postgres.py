@@ -5,7 +5,7 @@ from threading import Barrier
 from unittest.mock import patch
 from sqlalchemy import text
 from app.extensions import db
-from app.models import SortDateOperation,NeoSubZeroDepartureDeiceEvent as Event,NeoSubZeroAuditEntry as Audit
+from app.models import Gateway,SortDateOperation,NeoSubZeroDepartureDeiceEvent as Event,NeoSubZeroAuditEntry as Audit
 from app.services.live_collaboration import entity_version
 from app.services.neosubzero_schema import ensure_neosubzero_pretreat_table
 from app.services.neosubzero_radio import radio_pending,radio_complete
@@ -77,6 +77,28 @@ class RadioPostgresTest(unittest.TestCase):
         db.session.expire_all();event=db.session.get(Event,eid)
         self.assertTrue(radio_pending(event));self.assertIsNone(event.radio_completed_at_utc)
         self.assertEqual(Audit.query.filter_by(action='departure_clear').count(),1)
+
+    def test_undo_clear_and_radio_complete_have_exactly_one_winner(self):
+        event=self.finish();self.mutate(self.f.alpha,'clear');eid=event.id
+        undo=self.data(event,self.f.alpha,'undo_clear',correction_reason='Mistaken CLEAR')
+        confirm=self.data(event,self.f.alpha,'radio_complete')
+        self.assertCountEqual(self.race(undo,confirm),[200,409])
+        db.session.expire_all();event=db.session.get(Event,eid)
+        self.assertEqual(Audit.query.filter(Audit.action.in_(['departure_undo_clear','departure_radio_complete'])).count(),1)
+        self.f.gateway=db.session.get(Gateway,self.ids[0]);self.f.operation=db.session.get(SortDateOperation,self.ids[1])
+        if event.status=='finished':
+            self.assertIsNone(event.radio_completed_at_utc);self.assertEqual(self.ramp()['pad']['event'].id,eid)
+        else:
+            self.assertTrue(radio_complete(event));self.assertIsNone(self.ramp()['pad'])
+
+    def test_competing_starts_cannot_put_two_aircraft_on_pad(self):
+        events=[Event.query.filter_by(sort_date_mission_id=m.id).one() for m in (self.f.alpha,self.second)]
+        requests=[self.data(e,m,'save_treatment',treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:10') for e,m in zip(events,(self.f.alpha,self.second))]
+        self.assertCountEqual(self.race(*requests),[200,409])
+        db.session.expire_all()
+        self.assertEqual(Event.query.filter(Event.pass1_started_at_utc.is_not(None)).count(),1)
+        self.f.gateway=db.session.get(Gateway,self.ids[0]);self.f.operation=db.session.get(SortDateOperation,self.ids[1])
+        self.assertEqual(len(self.ramp()['active_conflicts']),0)
 
     def test_nullable_bootstrap_preserves_legacy_clear_and_never_invents_a_confirmation(self):
         event=self.finish();event.status='cleared';db.session.commit()

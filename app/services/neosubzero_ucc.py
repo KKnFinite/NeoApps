@@ -34,6 +34,8 @@ UCC_POSITIONS = (1, 2, 3, 4)
 UCC_ROLES = ("driver", "flyer")
 UCC_RAMP_ORDER = ("Alpha", "Bravo", "Charlie", "Delta", "Echo")
 UCC_DISPLAY_RAMPS = (*UCC_RAMP_ORDER, "Remote")
+UCC_WAITING_CAPACITY = 4
+UCC_WAITING_LABELS = ('POSITION 10', 'MIDDLE 1', 'MIDDLE 2', 'POSITION 9')
 
 
 def _parking_9_10_enabled(gateway):
@@ -54,6 +56,8 @@ def neosubzero_ucc_context(gateway, operation):
     )
 
     departure_context = departure_deice_context(gateway, operation)
+    from app.services.neosubzero_trucks import registered_trucks
+    truck_options = registered_trucks(gateway, active_only=True)
     fluid_settings = departure_context["fluid_settings"]
     parking_9_10_enabled = _parking_9_10_enabled(gateway)
     if operation is None:
@@ -67,6 +71,7 @@ def neosubzero_ucc_context(gateway, operation):
             } for name in UCC_DISPLAY_RAMPS),
             "unlocated_aircraft": (),
             "staffing_pool": (),
+            "truck_options": truck_options,
             "fluid_settings": fluid_settings,
             "assignment_index": {},
             "detached_units": (),
@@ -109,14 +114,18 @@ def neosubzero_ucc_context(gateway, operation):
         aircraft = rows_by_ramp[ramp]
         aircraft.sort(key=_aircraft_sort_key)
         queue = _physical_queue(aircraft) if ramp in UCC_RAMP_ORDER else []
-        throat = queue[0] if queue else None
-        waiting_rows = queue[1:3]
+        active = [row for row in queue if _is_active_throat(row)]
+        pad = active[0] if active else None
+        waiting = [row for row in queue if not _is_active_throat(row)]
+        waiting_rows = waiting[:UCC_WAITING_CAPACITY]
+        throat = waiting_rows[0] if waiting_rows else None
         for queue_position, row in enumerate(waiting_rows, start=1):
             row["queue_position"] = queue_position
+            row['queue_label'] = UCC_WAITING_LABELS[queue_position - 1]
         waiting_queue = tuple(waiting_rows)
         parked = [row for row in aircraft if row.get("block_out_at_utc") is None and not row.get('retained_radio_throat')]
         prefix = 'ABCDE'[UCC_RAMP_ORDER.index(ramp)] if ramp in UCC_RAMP_ORDER else ''
-        occupied = ({prefix+'10'} if throat else set()) | ({prefix+'09'} if len(waiting_queue) == 2 else set())
+        occupied = ({prefix+'10'} if throat else set()) | ({prefix+'09'} if len(waiting_queue) == UCC_WAITING_CAPACITY else set())
         parking = _parking_projection(ramp, [row for row in parked if row['parking'] not in occupied], parking_9_10_enabled)
         visible_codes = {place["code"] for place in parking}
         slots = []
@@ -146,15 +155,15 @@ def neosubzero_ucc_context(gateway, operation):
                 "name": ramp,
                 "aircraft": tuple(aircraft),
                 "throat": throat,
-                "pad": throat,
+                "pad": pad,
                 "waiting_queue": waiting_queue,
                 "queue": tuple(queue),
                 "queue_version": _queue_version(aircraft),
-                "exceptions": tuple(queue[3:]),
+                "exceptions": tuple(waiting[UCC_WAITING_CAPACITY:]),
                 "location_exceptions": tuple(row for row in aircraft if row.get("block_out_at_utc") and ramp not in UCC_RAMP_ORDER),
                 "parking_positions": parking,
                 "parking_exceptions": tuple(row for row in parked if row["parking"] not in visible_codes or row['parking'] in occupied),
-                "active_conflicts": tuple(row for row in queue[1:] if _is_active_throat(row)),
+                "active_conflicts": tuple(active[1:]),
                 "slots": tuple(slots),
             }
         )
@@ -163,6 +172,7 @@ def neosubzero_ucc_context(gateway, operation):
         "ramps": tuple(ramps),
         "unlocated_aircraft": tuple(sorted(rows_by_ramp["Unlocated"], key=_aircraft_sort_key)),
         "staffing_pool": staffing_pool,
+        "truck_options": truck_options,
         "fluid_settings": fluid_settings,
         "staffing_version": ucc_staffing_version(operation),
         "assignment_index": {
@@ -400,6 +410,7 @@ def move_ucc_unit(
         set_neosubzero_ucc_truck(
             operation, *key, numbers[baseline] if baseline else "",
             user_id=user_id, assignment=trucks.get(key),
+            retained_number=numbers[baseline] if baseline else None,
         )
 
 
@@ -660,6 +671,7 @@ def clear_neosubzero_ucc_assignments_for_person_all_sorts(person_id):
 def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
     """Revision covering exactly UCC-visible aircraft, staffing, and fluid inputs."""
     from app.services.neosubzero_departure_deice import departure_deice_revision
+    from app.models import NeoSubZeroTruck
 
     operation_id = getattr(operation, "id", None)
     payload = [("departure", departure_deice_revision(gateway, operation)),
@@ -667,6 +679,7 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
     if weather_revision is not None:
         payload.append(("weather", weather_revision))
     models = (
+        ("registered_trucks", NeoSubZeroTruck, NeoSubZeroTruck.gateway_id == gateway.id),
         ("missions", SortDateMission, SortDateMission.sort_date_operation_id == operation_id),
         ("ucc", NeoSubZeroUccAssignment, NeoSubZeroUccAssignment.sort_date_operation_id == operation_id),
         ("trucks", NeoSubZeroUccTruckAssignment, NeoSubZeroUccTruckAssignment.sort_date_operation_id == operation_id),
@@ -739,10 +752,7 @@ def _departure_event_status(row):
 def _is_active_throat(row):
     event = row.get("event")
     status = _departure_event_status(row)
-    return (row.get("block_out_at_utc") is not None or row.get('retained_radio_throat')) and (radio_pending(event) or getattr(event, "pass1_started_at_utc", None) is not None or status == "finished" or (
-        status == "configured"
-        and getattr(event, "configured_at_utc", None) is not None
-    ))
+    return (row.get("block_out_at_utc") is not None or row.get('retained_radio_throat')) and (radio_pending(event) or getattr(event, "pass1_started_at_utc", None) is not None or status == "finished")
 
 
 def _is_waiting_for_deice(row):

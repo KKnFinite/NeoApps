@@ -7,7 +7,7 @@ from playwright.sync_api import expect
 from tests.browser import test_neosubzero_ucc as fixtures
 from tests.browser import test_neosubzero_operations as ops
 from app.extensions import db
-from app.models import SortDateOperation,SortDateMission,SortDateParkingAssignment,NeoSubZeroDepartureDeiceEvent,NeoSubZeroAuditEntry
+from app.models import Gateway,SortDateOperation,SortDateMission,SortDateParkingAssignment,NeoSubZeroDepartureDeiceEvent,NeoSubZeroAuditEntry
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
 
 EVIDENCE=Path('instance/subzero-radio/browser')
@@ -27,6 +27,8 @@ class RadioBrowserTest(unittest.TestCase):
                 fixture._deice_event(negative,'negative')
                 for mission,pos in ((gone,'A07'),(negative,'A08')):
                     db.session.add(SortDateParkingAssignment(sort_date_operation_id=operation.id,tail_number=mission.assigned_tail_number,ramp_code='A',position_code=pos))
+                from app.services.neosubzero_trucks import manage_truck
+                manage_truck(db.session.get(Gateway,operation.gateway_id),'add_truck',{'truck_number':'RADIO-10'},actor_id=None)
                 set_neosubzero_ucc_truck(operation,'Alpha',1,'RADIO-10');db.session.commit()
             browser=getattr(case.pw,engine).launch()
             context=browser.new_context(viewport={'width':1920,'height':900},service_workers='block')
@@ -54,7 +56,7 @@ class RadioBrowserTest(unittest.TestCase):
                 pad=p.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]')
                 expect(pad.locator('.state-radio-pending')).to_have_count(1,timeout=10000)
                 expect(pad.locator('[data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[0]))
-                self.assertEqual(pad.locator('.state-radio-pending').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(240, 45, 159)')
+                self.assertEqual(pad.locator('.state-radio-pending .ucc-plane-icon').evaluate('e=>getComputedStyle(e).color'),'rgb(240, 45, 159)')
                 p.screenshot(path=str(EVIDENCE/f'{engine}-ducc-{p.viewport_size["width"]}-pending.png'))
             board=page();ops.OperationsBrowserTest.ready(case,board,'/neosubzero/operations?mode=outbound')
             for width in (320,375,390,430,1366,1920):
@@ -112,7 +114,8 @@ class RadioBrowserTest(unittest.TestCase):
             with coordinator.expect_navigation():coordinator.locator('button[value="radio_complete"]').click()
             for p in (desktop,phone):
                 pad=p.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad] [data-ucc-aircraft]')
-                expect(pad).to_have_attribute('data-ucc-aircraft',str(case.missions[1]),timeout=10000)
+                expect(pad).to_have_count(0,timeout=10000)
+                expect(p.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))
             expect(board.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')).to_have_attribute('data-status','gone',timeout=10000)
             expect(form.locator('[name="pass1_start"]')).to_have_value('22:16')
             for p in (desktop,phone):p.screenshot(path=str(EVIDENCE/f'{engine}-ducc-{p.viewport_size["width"]}-advanced.png'))

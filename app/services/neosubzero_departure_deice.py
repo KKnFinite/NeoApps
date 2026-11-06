@@ -228,7 +228,7 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
     action = str(action or "").strip().lower()
     if radio_pending(event) and action in {'initial_contact','move_to_planned'}:
         raise NeoSubZeroDepartureDeiceError('RADIO PENDING: complete the pilot readback before starting another departure event.')
-    if event and event.status=='cleared' and action not in {'initial_contact','move_to_planned','clear','save_treatment','radio_complete'}:
+    if event and event.status=='cleared' and action not in {'initial_contact','move_to_planned','clear','save_treatment','radio_complete','undo_clear'}:
         raise NeoSubZeroDepartureDeiceError('CLEARED evidence cannot be reset. Start an explicit new event or use audited corrections.')
     from app.models import NeoSubZeroSprayRecord
     has_actual=bool(event and (event.pass1_started_at_utc or NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id).filter(NeoSubZeroSprayRecord.ended_at_utc.is_not(None)).first()))
@@ -252,6 +252,18 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
         _clear_treatment(event)
         event.configured_at_utc = None
         event.status = "not_sprayed"
+    elif action == 'undo_clear':
+        if not actor_id or not str(values.get('correction_reason') or '').strip():
+            raise NeoSubZeroDepartureDeiceError('Enter a correction reason for UNDO CLEAR.')
+        if not radio_pending(event) or event.radio_completed_at_utc or event.radio_completed_by_user_id:
+            raise NeoSubZeroDepartureDeiceError('UNDO CLEAR is available only before RADIO COMPLETE. A completed readback requires a separate controlled correction.')
+        final_pass = len(PLAN_PASS_TYPES.get(event.treatment_plan, ()))
+        if not final_pass or not getattr(event, f'pass{final_pass}_started_at_utc') or not getattr(event, f'pass{final_pass}_ended_at_utc'):
+            raise NeoSubZeroDepartureDeiceError('Verify the completed spray evidence before UNDO CLEAR.')
+        event.status = 'finished'
+        event.radio_state = None
+        event.cleared_at_utc = None
+        event.clear_outcome = None
     elif action == 'radio_complete':
         if event and radio_complete(event): return event
         if not radio_pending(event) or not actor_id:
@@ -556,20 +568,26 @@ def _validate_throat_start(operation, mission):
         raise NeoSubZeroDepartureDeiceError('RADIO PENDING aircraft location requires canonical identity/parking review before another throat START.')
     for ramp in context['ramps']:
         if ramp['name'] == 'Remote':
+            if any(row['mission_id'] == mission.id for row in ramp['aircraft']):
+                return  # Remote retains its established physical treatment layout.
             continue
         if any(row['mission_id'] == mission.id for row in ramp['queue']):
-            if any(str(row['parking']).upper().endswith('10') for row in ramp['parking_exceptions']):
+            conflict = next((row for row in ramp['parking_exceptions']
+                             if str(row['parking']).upper().endswith('10')
+                             or (len(ramp['waiting_queue']) == 4 and str(row['parking']).upper().endswith('09'))), None)
+            if conflict:
                 raise NeoSubZeroDepartureDeiceError(
-                    'Position 10 also has a parked aircraft recorded. Resolve its MotherBrain parking before START.')
-            if any((row['mission_id'] != mission.id or row['tail'] != _tail(mission.assigned_tail_number)) and
-                   getattr(row.get('event'), 'pass1_started_at_utc', None)
-                   for row in ramp['queue']):
+                    f"Position {int(str(conflict['parking'])[-2:])} also has a parked aircraft recorded. Resolve its MotherBrain parking before START.")
+            if any((row['mission_id'] != mission.id or row['tail'] != _tail(mission.assigned_tail_number))
+                   for row in (ramp['pad'], *ramp['active_conflicts']) if row):
                 raise NeoSubZeroDepartureDeiceError(
                     'Another aircraft occupies this throat. Complete its treatment, CLEAR and RADIO COMPLETE before START.')
-            if ramp['queue'][0]['mission_id'] != mission.id or ramp['queue'][0]['tail'] != _tail(mission.assigned_tail_number):
+            head = ramp['throat']
+            if not head or head['mission_id'] != mission.id or head['tail'] != _tail(mission.assigned_tail_number):
                 raise NeoSubZeroDepartureDeiceError(
                     'Only the aircraft at throat Position 10 may START. Clear the aircraft ahead or correct the waiting queue first.')
             return
+    raise NeoSubZeroDepartureDeiceError('Aircraft is not in a verified ramp waiting queue. Review its physical location before START.')
 
 
 def _save_treatment(operation, mission, event, values):

@@ -28,6 +28,8 @@ class RadioCompletionTest(unittest.TestCase):
         f.alpha.actual_block_out_datetime_utc=datetime(2026,9,1,2)
         self.second.actual_block_out_datetime_utc=datetime(2026,9,1,2,1)
         from app.services.neosubzero_spray import set_neosubzero_ucc_truck
+        from app.services.neosubzero_trucks import manage_truck
+        manage_truck(f.gateway, 'add_truck', {'truck_number':'RADIO-10'}, actor_id=self.actor.id)
         from app.services.neosubzero_ucc import set_neosubzero_ucc_assignment
         set_neosubzero_ucc_truck(f.operation,'Alpha',1,'RADIO-10')
         set_neosubzero_ucc_assignment(f.operation,'Alpha',1,'driver',f.permanent)
@@ -81,7 +83,8 @@ class RadioCompletionTest(unittest.TestCase):
         self.assertEqual(event.radio_completed_by_user_id,self.actor.id)
         self.assertGreaterEqual(event.radio_completed_at_utc,clear)
         self.assertEqual(event.pass_evidence,original)
-        self.assertEqual(self.ramp()['pad']['mission_id'],self.second.id)
+        self.assertIsNone(self.ramp()['pad'])
+        self.assertEqual(self.ramp()['throat']['mission_id'],self.second.id)
         before=Audit.query.count();stamp=event.radio_completed_at_utc
         self.assertEqual(self.post(event,'radio_complete').status_code,200)
         self.assertEqual(Audit.query.count(),before);self.assertEqual(event.radio_completed_at_utc,stamp)
@@ -121,7 +124,8 @@ class RadioCompletionTest(unittest.TestCase):
         event=self.finish();event.status='cleared';event.cleared_at_utc=datetime(2026,9,1,3,15);db.session.commit()
         before=event.updated_at
         self.assertFalse(radio_pending(event));self.assertFalse(radio_complete(event))
-        self.assertEqual(self.ramp()['pad']['mission_id'],self.second.id)
+        self.assertIsNone(self.ramp()['pad'])
+        self.assertEqual(self.ramp()['throat']['mission_id'],self.second.id)
         self.assertEqual(self.post(event,'radio_complete').status_code,409)
         self.assertEqual(event.updated_at,before);self.assertIsNone(event.radio_completed_at_utc)
 

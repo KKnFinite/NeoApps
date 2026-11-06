@@ -31,6 +31,8 @@ class UccBrowserTest(unittest.TestCase):
             db.session.add(fixture.operation)
             db.session.flush()
             cls.operation_id = fixture.operation.id
+            from app.services.neosubzero_trucks import manage_truck
+            manage_truck(gateway,'add_truck',{'truck_number':'UCC-831'},actor_id=None)
             night = fixture._unit("sort", "Night")
             aviation = fixture._unit("operation", "Aviation Services", night)
             deice = fixture._unit("work_area", "Deice", aviation)
@@ -97,7 +99,7 @@ class UccBrowserTest(unittest.TestCase):
                     self.assertLess(bounds['A01']['y'],bounds['A04']['y'])
                     self.assertLess(bounds['A10']['y'],bounds['A09']['y'])
                     self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]').count(),1)
-                    self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position]').count(),2)
+                    self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position]').count(),4)
                 else:
                     expect(page.locator('.ucc-ramp-diagram').first).to_be_hidden()
                 measurements.append({"engine":engine, **geometry})
@@ -123,23 +125,18 @@ class UccBrowserTest(unittest.TestCase):
             page.set_viewport_size({"width":1440,"height":1000})
             # Real mobile staffing mutation; desktop receives it without a reload.
             editor = mobile.locator('[data-ucc-editor="Bravo-2"]')
-            editor.locator(':scope > summary').click()
             select = editor.locator('select[name="person_id"]').first
-            select.select_option(str(self.people[1]))
             with mobile.expect_response(lambda r: r.url.endswith('/neosubzero/ucc') and r.request.method == 'POST') as saved:
-                select.locator('xpath=ancestor::form').locator('button[type="submit"]').click()
+                select.select_option(str(self.people[1]))
             self.assertEqual(saved.value.status, 200)
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('saved')
-            expect(page.locator('[data-ucc-editor="Bravo-2"] > summary')).to_contain_text('Longname-Deicer-1',timeout=10000)
+            expect(page.locator('[data-ucc-editor="Bravo-2"] .ucc-team-controls')).to_contain_text('Longname-Deicer-1',timeout=10000)
             # Stale concurrent editor gets a visible conflict and retains its draft.
             desktop = page.locator('[data-ucc-editor="Delta-3"]')
-            desktop.locator(':scope > summary').click()
             desktop_select = desktop.locator('select[name="person_id"]').first
-            desktop_select.select_option(str(self.people[2]))
+            desktop_select.evaluate('(e,v)=>{e.value=v;e.dispatchEvent(new Event("input",{bubbles:true}))}',str(self.people[2]))
             mobile_editor = mobile.locator('[data-ucc-editor="Delta-3"]')
-            mobile_editor.locator(':scope > summary').click()
             mobile_editor.locator('select[name="person_id"]').first.select_option(str(self.people[0]))
-            mobile_editor.locator('[data-ucc-assignment-form]').first.locator('button[type="submit"]').click()
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('saved')
             # Critical aircraft state keeps refreshing while a staffing draft has focus.
             desktop_select.focus()
@@ -152,7 +149,7 @@ class UccBrowserTest(unittest.TestCase):
             expect(desktop_select).to_be_focused()
             expect(desktop_select).to_have_value(str(self.people[2]))
             with page.expect_response(lambda r: r.url.endswith('/neosubzero/ucc') and r.request.method == 'POST') as conflict:
-                desktop_select.locator('xpath=ancestor::form').locator('button[type="submit"]').click()
+                desktop_select.locator('xpath=ancestor::form').evaluate('e=>e.requestSubmit()')
             self.assertEqual(conflict.value.status, 409)
             expect(page.locator('[data-ucc-feedback]')).to_contain_text('changed')
             expect(desktop_select).to_have_value(str(self.people[2]))
@@ -160,8 +157,7 @@ class UccBrowserTest(unittest.TestCase):
             # Explicit reload resolves the draft; whole units move and swap on mobile.
             self.ready(page,"/neosubzero/ucc")
             truck = mobile.locator('[data-ucc-editor="Delta-3"] [data-ucc-truck-form]')
-            truck.locator('input[name="truck_number"]').fill('UCC-831')
-            truck.locator('button[type="submit"]').click()
+            truck.locator('select[name="truck_number"]').select_option('UCC-831')
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('truck saved')
             unit_details = mobile.locator('[data-ucc-editor="unit-Delta-3"]')
             unit_details.locator(':scope > summary').click()
@@ -170,9 +166,8 @@ class UccBrowserTest(unittest.TestCase):
             unit.locator('[name="destination_position"]').select_option('4')
             unit.locator('button[type="submit"]').click()
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('unit moved')
-            expect(page.locator('[data-ucc-editor="Echo-4"] > summary')).to_contain_text('UCC-831',timeout=10000)
+            expect(page.locator('[data-ucc-editor="Echo-4"] .ucc-team-controls')).to_contain_text('UCC-831',timeout=10000)
             target = mobile.locator('[data-ucc-editor="Echo-4"]')
-            target.locator(':scope > summary').click()
             target.locator('[data-ucc-editor="unit-Echo-4"] > summary').click()
             unit = target.locator('[data-ucc-unit-form]')
             unit.locator('[name="destination_ramp"]').select_option('Bravo')
@@ -180,7 +175,7 @@ class UccBrowserTest(unittest.TestCase):
             unit.locator('[name="resolution"]').select_option('swap')
             unit.locator('button[type="submit"]').click()
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('unit moved')
-            expect(page.locator('[data-ucc-editor="Bravo-2"] > summary')).to_contain_text('UCC-831',timeout=10000)
+            expect(page.locator('[data-ucc-editor="Bravo-2"] .ucc-team-controls')).to_contain_text('UCC-831',timeout=10000)
             self.assertLessEqual(mobile.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
             mobile.screenshot(path=str(self.evidence / f"ucc-{engine}-mobile-staff-editor.png"), full_page=True)
             with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation",return_value=None), patch("app.neonodes.neosubzero.routes.neosubzero_weather_context",return_value={**self.weather_data,"current_sort":None}):
