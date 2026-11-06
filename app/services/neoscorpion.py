@@ -41,7 +41,7 @@ from app.neonodes.neorain.services import (
     effective_neorain_load_planner,
     eligible_neorain_load_planners,
 )
-from app.services.neoscorpion_fueling_status import fueling_status, fob_assessment, utc_naive
+from app.services.neoscorpion_fueling_status import aircraft_arrival_ready, fueling_status, fob_assessment, utc_naive
 from app.services.neoscorpion_fueling_start import fueling_start_state, truck_start_gate
 from app.services.neoscorpion_prof import policy_snapshot, load_observation_jobs, totals as prof_totals, iso as prof_iso
 from app.services.neoscorpion_spear_forecasts import physical_off_forecast
@@ -7229,9 +7229,15 @@ def _attach_spear_plan(rows, truck_visuals, plan):
         row["assignment_recommendation_reason_display"] = None
         row["spear_step"] = None
         row["spear_risk"] = plan.risks_by_mission_id.get(mission_id)
+        # Forecast staging can remain useful before arrival, but must not label
+        # an aircraft READY before its authoritative arrival status permits it.
+        readiness = plan.readiness_by_mission_id.get(mission_id, ())
+        if (mission_id in plan.readiness_by_mission_id
+                and not aircraft_arrival_ready(row) and "arrival_timing" not in readiness):
+            readiness = (*readiness, "arrival_timing")
         row["spear_ready"] = (
             mission_id in plan.readiness_by_mission_id
-            and not plan.readiness_by_mission_id[mission_id]
+            and not readiness
         )
         row["spear_waiting_for_data"] = plan.waiting_for_data_by_mission_id.get(
             mission_id
@@ -7241,7 +7247,7 @@ def _attach_spear_plan(rows, truck_visuals, plan):
                 "code": reason,
                 "label": SPEAR_READINESS_REASON_LABELS[reason],
             }
-            for reason in plan.readiness_by_mission_id.get(mission_id, ())
+            for reason in readiness
         )
         row["spear_problem"] = (
             plan.unavailable_by_mission_id.get(mission_id)

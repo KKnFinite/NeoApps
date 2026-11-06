@@ -10,7 +10,7 @@
   {% elif 'PARKING' in row.spear_problem %}{% set text = 'PARKING' %}
   {% elif 'fuel / capacity' in row.spear_problem %}{% set text = 'FUEL' %}
   {% else %}{% set text = 'UNAVAIL' %}{% endif %}
-{% elif row.spear_ready or row.spear_risk == 'COVERED' %}{% set text = 'READY' %}
+{% elif row.spear_ready %}{% set text = 'READY' %}
 {% else %}{% set text = '—' %}{% endif %}
 <span class="neoscorpion-spear-risk neoscorpion-dispatch-size-small is-{{ state }}" data-spear-tail-indicator data-live-spear="tail-{{ row.mission.id }}"><span>SPEAR · </span><span class="neoscorpion-spear-severity">{{ text }}</span></span>
 {%- endmacro %}

@@ -14,7 +14,7 @@ class ReadyPulseTest(unittest.TestCase):
     setUp=fixtures.StatusIntegrationTest.setUp
     login=fixtures.StatusIntegrationTest.login
 
-    def test_only_canonical_ready_qualifies_without_arrival(self):
+    def test_only_canonical_ready_qualifies_with_arrival(self):
         from types import SimpleNamespace
         from datetime import datetime
         base=fixtures.StatusRulesTest().row()

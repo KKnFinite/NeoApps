@@ -212,7 +212,7 @@ class CancelUnassignTest(unittest.TestCase):
                     html=response.json['html'] if response.is_json else response.get_data(as_text=True)
                     markup=DispatchMarkup(html)
                     attrs=next(a for tag,a in markup.tags if tag=='tr' and a.get('data-dispatch-mission-id')==str(mission.id))
-                    self.assertIn('is-ready-to-assign',attrs['class'])
+                    self.assertEqual('is-ready-to-assign' in attrs['class'],status in ('on_ground','arrived'))
                     self.assertEqual(attrs['data-ready-pulse-arrived'],'1' if status=='arrived' else '0')
         revision = self._revision(operation)
         service.save_settings(self.gateway, {'fuel_density_lbs_per_gallon':'6.7',
@@ -238,9 +238,11 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual(self._revision(operation), revision + 2)
         self.assertIn('data-assignment-alert-threshold-minutes="45"',
             self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html'])
-        # Arrival is context, not a third assignment prerequisite. The same
-        # READY contract is shared by the badge, alert and assignment controls.
-        self.assertTrue(service._ready_to_assign({**row,'arrival_status':'Scheduled'}))
+        # READY includes arrival readiness, while advance assignments remain
+        # permitted independently of this read-only status projection.
+        self.assertFalse(service._ready_to_assign({**row,'arrival_status':'Scheduled'}))
+        self.assertTrue(service._ready_to_assign({**row,'arrival_status':'On Ground'}))
+        self.assertTrue(service._ready_to_assign({**row,'arrival_status':'Arrived'}))
         for override in ({'inbound_fuel_lbs':None},
                          {'required_fuel_lbs':None}, {'parking_valid':False},
                          {'assignment':SimpleNamespace(assigned_fueler_user_id=1, assigned_truck_id=2)}):

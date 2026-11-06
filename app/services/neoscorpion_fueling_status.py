@@ -62,6 +62,13 @@ def mission_data_summary(missing):
     return f"NEEDS {first}" + (f" +{len(missing)-1}" if len(missing) > 1 else "")
 
 
+def aircraft_arrival_ready(row):
+    """Only the canonical ON GROUND/ARRIVED status establishes arrival readiness."""
+    return str(row.get("arrival_status") or "").strip().casefold().replace("_", " ") in {
+        "on ground", "arrived",
+    }
+
+
 def review_reasons(row):
     """Current operational evidence, never arrival, forecasts or advisory swaps."""
     work = row.get("fuel_work_state")
@@ -134,6 +141,8 @@ def fueling_status(row, *, now=None, threshold=30):
             detail = "MISSION DATA MISSING"
     elif missing:
         stage, detail = "pending", "MISSION DATA MISSING"
+    elif not aircraft_arrival_ready(row):
+        stage, detail = "pending", "AWAITING ARRIVAL"
     else:
         stage = "ready"
         detail = "FOB CHECK" if fueler and row.get("fob_likely") else (

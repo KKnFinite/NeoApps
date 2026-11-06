@@ -130,7 +130,7 @@ class FuelingStatusClassificationTest(unittest.TestCase):
                 self.assertIn(label, status["mission_data_missing"])
         for arrived in ("Scheduled", "On Ground", "Arrived"):
             row = self.row(); row.update(arrival_status=arrived, inbound_fuel_lbs=None, measured_inbound_fuel_lbs=0)
-            self.assertEqual(fueling_status(row)["dispatch_status_key"], "ready")
+            self.assertEqual(fueling_status(row)["dispatch_status_key"], "pending" if arrived == "Scheduled" else "ready")
 
     def test_time_urgency_every_stage_including_past_and_exact_boundary(self):
         now = datetime(2026, 10, 9, 3)

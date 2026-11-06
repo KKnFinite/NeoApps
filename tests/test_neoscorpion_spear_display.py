@@ -30,7 +30,8 @@ class SpearDisplayTest(unittest.TestCase):
             (None, (), 'NO FEASIBLE RESOURCE — truck fuel / capacity constraints', 'FUEL'),
         ):
             with self.subTest(expected=expected):
-                row = dict(spear_risk=risk, spear_readiness_reasons=reasons, spear_problem=problem, spear_ready=True)
+                row = dict(mission=SimpleNamespace(id=1), spear_risk=risk,
+                           spear_readiness_reasons=reasons, spear_problem=problem, spear_ready=True)
                 html = self.render('spear_indicator', row=row)
                 self.assertEqual(html.count('data-spear-tail-indicator'), 1)
                 self.assertIn('SPEAR · '+expected, re.sub('<[^>]+>', '', html))
@@ -52,6 +53,27 @@ class SpearDisplayTest(unittest.TestCase):
         html = self.render('spear_resources', spear=spear, parking=None)
         self.assertIn('TOP OFF · TRUCK 10', html)
         self.assertNotIn('FLIGHT', html)
+
+    def test_mission_ready_requires_arrival_without_changing_forecast_plan(self):
+        from tests import test_neoscorpion_spear as planning
+        for status in ('Scheduled','En Route','On Ground','Arrived',None):
+            with self.subTest(arrival=status):
+                row=planning._row()
+                row['arrival_status']=status
+                plan=planning._plan([row])
+                steps=plan.steps
+                # Even a staging forecast with actual timing context must not
+                # bypass the status gate via the COVERED presentation fallback.
+                self.assertTrue(steps)
+                self.assertFalse(plan.readiness_by_mission_id[row['mission'].id])
+                _attach_spear_plan([row],[],plan)
+                ready=status in ('On Ground','Arrived')
+                self.assertEqual(row['spear_ready'],ready)
+                html=self.render('spear_indicator',row=row)
+                text=re.sub('<[^>]+>','',html)
+                self.assertIn('SPEAR · '+('READY' if ready else 'WAITING'),text)
+                self.assertEqual(plan.steps,steps)
+                self.assertFalse(plan.readiness_by_mission_id[row['mission'].id])
 
     def test_card_parking_matches_canonical_mission_without_queries(self):
         rows = [dict(mission=SimpleNamespace(id=i), parking_position=parking, parking_valid=True)
@@ -76,6 +98,7 @@ class SpearDisplayTest(unittest.TestCase):
             ('Fuel direction discrepancy', 'FUEL DIRECTION'),
             ('Dispatcher review requested', 'REVIEW REQUEST'),
             ('TAIL SWAP · advisory', 'TAIL SWAP'),
+            ('AWAITING ARRIVAL', 'AWAITING ARRIVAL'),
             ('A genuine operational interruption with a long explanation', 'SEE DETAILS'),
         ):
             with self.subTest(full=full):

@@ -77,7 +77,7 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                     for i in range(3):
                         row(i).scroll_into_view_if_needed()
                         expect(row(i)).to_be_visible()
-                        expect(row(i).locator('[data-fuel-status]')).to_have_attribute('data-fuel-status','ready')
+                        expect(row(i).locator('[data-fuel-status]')).to_have_attribute('data-fuel-status','pending' if i==2 else 'ready')
                         sample=row(i).evaluate("""async r=>{
                             await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
                             const animations=r.getAnimations({subtree:true}).filter(a=>a.animationName==='neoscorpion-assignment-accent-pulse');
@@ -126,7 +126,7 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                 draft=row(3).locator('[name="assigned_fueler_user_id"]');draft.select_option(str(uid));draft.focus()
                 # Authoritative arrival changes travel through the real critical
                 # live response while this unrelated mission draft stays dirty.
-                for state,expected_gate in (('arrived','1'),('on_ground','0')):
+                for state,expected_gate in (('arrived','1'),('on_ground','0'),('scheduled','0'),('arrived','1')):
                     with F.app.app_context():
                         arrival=SortDateMission.query.filter_by(sort_date_operation_id=oid,mission_type='arrival',assigned_tail_number='N492UP').one()
                         arrival.arrival_status=state
@@ -137,6 +137,8 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                         db.session.commit()
                     for p in (page,other):
                         expect(row(1,p)).to_have_attribute('data-ready-pulse-arrived',expected_gate,timeout=12000)
+                        expect(row(1,p).locator('[data-fuel-status]')).to_have_attribute('data-fuel-status','pending' if state=='scheduled' else 'ready',timeout=12000)
+                        self.assertEqual('is-ready-to-assign' in (row(1,p).get_attribute('class') or ''),state!='scheduled')
                         self.assertEqual(animations(row(1,p)),2 if expected_gate=='1' else 0)
                     expect(draft).to_have_value(str(uid));expect(draft).to_be_focused()
                 F().ready(settings,'/neoscorpion/settings')

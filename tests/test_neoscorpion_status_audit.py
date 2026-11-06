@@ -16,7 +16,7 @@ class StatusRulesTest(unittest.TestCase):
             destination='MSP', eta_datetime_utc=None, planned_datetime_utc=datetime(2026,10,18,7)),
             tail_number='N491UP', assignment=SimpleNamespace(assigned_fueler_user_id=None,
             assigned_truck_id=None, review_status='pending'), fuel_work_state=None,
-            inbound_fuel_lbs=0, required_fuel_lbs=25000, parking_valid=True, arrival_status='Not Arrived')
+            inbound_fuel_lbs=0, required_fuel_lbs=25000, parking_valid=True, arrival_status='On Ground')
 
     def test_each_essential_field_missing_is_pending_even_with_partial_assignment(self):
         for field in ('tail', 'flight', 'destination', 'departure', 'required', 'inbound', 'parking'):
@@ -37,10 +37,16 @@ class StatusRulesTest(unittest.TestCase):
                     self.assertEqual(len(s['mission_data_missing']),1)
                     self.assertEqual(s['fuel_status_secondary'],'MISSION DATA MISSING')
 
-    def test_ready_does_not_require_arrival_and_uses_zero_or_verified_fuel(self):
-        for arrival in ('Not Arrived','On Ground','Arrived','Cancelled','Unknown'):
-            r=self.row();r['arrival_status']=arrival
-            self.assertEqual(fueling_status(r)['dispatch_status_key'],'ready')
+    def test_ready_requires_on_ground_or_arrived_and_uses_zero_or_verified_fuel(self):
+        for arrival in ('Not Arrived','Scheduled','En Route','On Ground','Arrived','Cancelled','Unknown',None):
+            with self.subTest(arrival=arrival):
+                r=self.row();r['arrival_status']=arrival
+                s=fueling_status(r)
+                ready=arrival in ('On Ground','Arrived')
+                self.assertEqual(s['dispatch_status_key'],'ready' if ready else 'pending')
+                self.assertEqual(fuel._ready_to_assign(r),ready)
+                self.assertEqual(s['mission_data_missing'],())
+                if not ready:self.assertEqual(s['fuel_status_secondary'],'AWAITING ARRIVAL')
         for key in ('measured_inbound_fuel_lbs','tail_swap_inherited_fuel_lbs'):
             r=self.row();r.update(inbound_fuel_lbs=None,**{key:0})
             self.assertEqual(fueling_status(r)['dispatch_status_key'],'ready')
