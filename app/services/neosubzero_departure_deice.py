@@ -559,34 +559,36 @@ def _departure_row(
 
 def _validate_throat_start(operation, mission):
     """The operation lock held by the caller serializes throat admission."""
-    if not mission.actual_block_out_datetime_utc:
-        return  # Treatment at a parked aircraft is not throat occupancy.
     from app.services.neosubzero_ucc import neosubzero_ucc_context
     gateway = db.session.get(Gateway, operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
     context = neosubzero_ucc_context(gateway, operation)
-    if any(radio_pending(row.get('event')) for row in context['unlocated_aircraft']):
+    if mission.actual_block_out_datetime_utc and any(radio_pending(row.get('event')) for row in context['unlocated_aircraft']):
         raise NeoSubZeroDepartureDeiceError('RADIO PENDING aircraft location requires canonical identity/parking review before another throat START.')
     for ramp in context['ramps']:
         if ramp['name'] == 'Remote':
             if any(row['mission_id'] == mission.id for row in ramp['aircraft']):
                 return  # Remote retains its established physical treatment layout.
             continue
-        if any(row['mission_id'] == mission.id for row in ramp['queue']):
+        if any(row['mission_id'] == mission.id for row in ramp['aircraft']):
+            if any((row['mission_id'] != mission.id or row['tail'] != _tail(mission.assigned_tail_number))
+                   for row in (ramp['pad'], *ramp['active_conflicts']) if row):
+                raise NeoSubZeroDepartureDeiceError(
+                    'Another aircraft occupies this throat/deice pad. Complete its treatment, CLEAR and RADIO COMPLETE before START.')
+            if not mission.actual_block_out_datetime_utc:
+                return  # Preserve parked START; the same operation lock protects its pad.
             conflict = next((row for row in ramp['parking_exceptions']
                              if str(row['parking']).upper().endswith('10')
                              or (len(ramp['waiting_queue']) == 4 and str(row['parking']).upper().endswith('09'))), None)
             if conflict:
                 raise NeoSubZeroDepartureDeiceError(
                     f"Position {int(str(conflict['parking'])[-2:])} also has a parked aircraft recorded. Resolve its MotherBrain parking before START.")
-            if any((row['mission_id'] != mission.id or row['tail'] != _tail(mission.assigned_tail_number))
-                   for row in (ramp['pad'], *ramp['active_conflicts']) if row):
-                raise NeoSubZeroDepartureDeiceError(
-                    'Another aircraft occupies this throat. Complete its treatment, CLEAR and RADIO COMPLETE before START.')
             head = ramp['throat']
             if not head or head['mission_id'] != mission.id or head['tail'] != _tail(mission.assigned_tail_number):
                 raise NeoSubZeroDepartureDeiceError(
                     'Only the aircraft at throat Position 10 may START. Clear the aircraft ahead or correct the waiting queue first.')
             return
+    if not mission.actual_block_out_datetime_utc:
+        return  # Preserve existing off-ramp treatment eligibility.
     raise NeoSubZeroDepartureDeiceError('Aircraft is not in a verified ramp waiting queue. Review its physical location before START.')
 
 

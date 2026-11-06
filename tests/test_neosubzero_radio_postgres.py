@@ -100,6 +100,12 @@ class RadioPostgresTest(unittest.TestCase):
         self.f.gateway=db.session.get(Gateway,self.ids[0]);self.f.operation=db.session.get(SortDateOperation,self.ids[1])
         self.assertEqual(len(self.ramp()['active_conflicts']),0)
 
+    def test_parked_competing_starts_share_the_same_pad_lock(self):
+        for mission in (self.f.alpha, self.second):
+            mission.actual_block_out_datetime_utc = None
+        db.session.commit()
+        self.test_competing_starts_cannot_put_two_aircraft_on_pad()
+
     def test_nullable_bootstrap_preserves_legacy_clear_and_never_invents_a_confirmation(self):
         event=self.finish();event.status='cleared';db.session.commit()
         before=event.id,event.updated_at,event.pass1_started_at_utc

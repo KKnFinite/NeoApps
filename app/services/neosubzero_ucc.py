@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.services.neosubzero_radio import radio_pending
+from app.services.neosubzero_radio import radio_pending, radio_complete
 from app.models import (
     NeoSubZeroCalloutAssignment,
     NeoSubZeroPretreatState,
@@ -123,7 +123,8 @@ def neosubzero_ucc_context(gateway, operation):
             row["queue_position"] = queue_position
             row['queue_label'] = UCC_WAITING_LABELS[queue_position - 1]
         waiting_queue = tuple(waiting_rows)
-        parked = [row for row in aircraft if row.get("block_out_at_utc") is None and not row.get('retained_radio_throat')]
+        parked = [row for row in aircraft if row.get("block_out_at_utc") is None
+                  and not row.get('retained_radio_throat') and row not in queue]
         prefix = 'ABCDE'[UCC_RAMP_ORDER.index(ramp)] if ramp in UCC_RAMP_ORDER else ''
         occupied = ({prefix+'10'} if throat else set()) | ({prefix+'09'} if len(waiting_queue) == UCC_WAITING_CAPACITY else set())
         parking = _parking_projection(ramp, [row for row in parked if row['parking'] not in occupied], parking_9_10_enabled)
@@ -318,6 +319,8 @@ def _physical_aircraft_rows(operation, departure_context):
             item["identity_note"] = "Departure deice evidence belongs to a different tail. Coordinator review required."
             item["event"] = None
             item["deice_status"] = "TAIL IDENTITY REVIEW"
+        if radio_complete(item.get('event')):
+            continue  # Confirmed departure must not reappear at its recorded stand.
         if item.get("block_out_at_utc") and _departure_event_status(item) not in {"deice_planned", "configured", "finished"} and not radio_pending(item.get('event')):
             continue
         unique[tail] = item
@@ -344,8 +347,8 @@ def _physical_queue(rows):
         rank = getattr(row["event"], "ucc_queue_order", None)
         return (1, (rank is None, rank or 0, _queue_sort_key(row)))
 
-    return sorted((row for row in rows if (row.get("block_out_at_utc") or row.get('retained_radio_throat')) and
-        (_departure_event_status(row) in {"deice_planned", "configured", "finished"} or radio_pending(row.get('event')))), key=order)
+    return sorted((row for row in rows if _is_active_throat(row) or
+        (row.get("block_out_at_utc") and _departure_event_status(row) in {"deice_planned", "configured", "finished"})), key=order)
 
 
 def _queue_version(rows):
@@ -752,7 +755,10 @@ def _departure_event_status(row):
 def _is_active_throat(row):
     event = row.get("event")
     status = _departure_event_status(row)
-    return (row.get("block_out_at_utc") is not None or row.get('retained_radio_throat')) and (radio_pending(event) or getattr(event, "pass1_started_at_utc", None) is not None or status == "finished")
+    # Actual treatment, FIN and pending readback own the pad even when the
+    # independent MotherBrain Block-Out milestone has not yet been recorded.
+    return radio_pending(event) or (status in {"deice_planned", "configured", "finished"} and
+        (getattr(event, "pass1_started_at_utc", None) is not None or status == "finished"))
 
 
 def _is_waiting_for_deice(row):

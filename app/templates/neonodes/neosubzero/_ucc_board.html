@@ -11,7 +11,7 @@
     {% if not place.aircraft %}<b>{{ place.code }}</b>{% endif %}
     {% set position = place.code[-2:]|int %}
     {% set facing = 'up' if place.code.startswith('R') else 'right' if 1 <= position <= 4 else 'left' if 5 <= position <= 8 else 'up' %}
-    {% for row in place.aircraft %}{{ aircraft(row, 'parking ' ~ place.code, facing) }}{% else %}<span>EMPTY</span>{% endfor %}
+    {% for row in place.aircraft %}{{ aircraft(row, 'parking ' ~ place.code, facing) }}{% endfor %}
 </div>
 {%- endmacro %}
 {% macro physical_ramp(ramp) -%}
@@ -25,7 +25,7 @@
         {% set queue_index = level - 1 %}
         {% set waiting = ramp.waiting_queue[queue_index] if queue_index >= 0 and queue_index < ramp.waiting_queue|length else none %}
         <div class="ucc-center-position ucc-grid-row-{{ level }} ucc-grid-column-2">
-            <div class="ucc-deice-waiting" data-ucc-queue-position="{{ level }}"{% if stand %} data-ucc-parking="{{ stand.code }}"{% endif %}>{% if waiting %}{{ aircraft(waiting, waiting.queue_label, 'up', waiting.queue_label) }}{% elif stand and stand.aircraft %}{% for row in stand.aircraft %}{{ aircraft(row, 'parking ' ~ stand.code) }}{% endfor %}{% else %}<b>{{ ('POSITION 10', 'MIDDLE 1', 'MIDDLE 2', 'POSITION 9')[queue_index] }}</b><span>EMPTY</span>{% endif %}</div>
+            <div class="ucc-deice-waiting" data-ucc-queue-position="{{ level }}"{% if stand %} data-ucc-parking="{{ stand.code }}"{% endif %}>{% if waiting %}{{ aircraft(waiting, waiting.queue_label, 'up', waiting.queue_label) }}{% elif stand and stand.aircraft %}{% for row in stand.aircraft %}{{ aircraft(row, 'parking ' ~ stand.code) }}{% endfor %}{% else %}<b>{{ ('POSITION 10', 'MIDDLE 1', 'MIDDLE 2', 'POSITION 9')[queue_index] }}</b>{% endif %}</div>
         </div>
         {% endfor %}
     </div>

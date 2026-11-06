@@ -54,6 +54,35 @@
 .neosubzero-coordinator .coordinator-status { display:inline-block; padding:5px 9px; margin-bottom:8px; border:1px solid; border-radius:3px; font-size:.75rem; }
 .neosubzero-coordinator :is(.coordinator-aircraft,.coordinator-status).state-review { background:#342517; color:#ffd188; border-color:#b68b4e; }
 
+/* Coordinator pass controls share one compact row at every viewport width.
+   Keep the existing fields, NOW actions and treatment dependencies intact. */
+.neosubzero-coordinator .neosubzero-deice-form {
+    grid-template-columns:minmax(0,1fr); align-items:start; gap:8px; margin-top:6px;
+}
+.neosubzero-coordinator .neosubzero-deice-form > label { font-size:12px; gap:3px; }
+.neosubzero-coordinator .neosubzero-deice-form > label > select {
+    width:100%; max-width:340px; min-height:36px; padding:5px 7px; font-size:13px;
+}
+.neosubzero-coordinator .neosubzero-deice-pass {
+    grid-template-columns:minmax(0,1.35fr) repeat(2,minmax(0,1fr));
+    gap:4px; margin:0; padding:6px 0 2px; border:0; border-top:1px solid #355064;
+    background:transparent; border-radius:0;
+}
+.neosubzero-coordinator .neosubzero-deice-pass[hidden] { display:none; }
+.neosubzero-coordinator .neosubzero-deice-pass legend {
+    padding:0 5px 0 0; color:#c9dfec; font-size:12px; line-height:1.3; font-weight:700;
+}
+.neosubzero-coordinator .neosubzero-deice-pass label { gap:3px; font-size:11px; line-height:1.3; }
+.neosubzero-coordinator .neosubzero-deice-pass label span {
+    display:grid; grid-template-columns:minmax(0,1fr) 32px; gap:2px; width:100%; min-width:0;
+}
+.neosubzero-coordinator .neosubzero-deice-pass :is(input,select,button) {
+    width:100%; min-width:0; min-height:36px; height:36px; margin:0;
+    padding:4px; font-size:12px; line-height:1.3;
+}
+.neosubzero-coordinator .neosubzero-deice-pass button { padding:2px; font-size:10px; }
+.neosubzero-coordinator .neosubzero-deice-pass label span:has(button[hidden]) { grid-template-columns:minmax(0,1fr); }
+
 /* Navigation grouping only; collapsed links keep their accessible names. */
 .blueprint-neosubzero .subzero-nav-section {
     margin-top:4px; padding:8px 9px 2px; border-top:1px solid #334b5d;
