@@ -1032,6 +1032,9 @@
                 if (oldStatus && newStatus && oldStatus.outerHTML !== newStatus.outerHTML) oldStatus.replaceWith(newStatus.cloneNode(true));
                 currentRow.classList?.toggle('is-ready-to-assign', nextRow.classList?.contains('is-ready-to-assign') || false);
                 currentRow.classList?.toggle('is-assignment-alert-red', nextRow.classList?.contains('is-assignment-alert-red') || false);
+                // Arrival gates only the accent. Refresh it even while a draft
+                // prevents replacing the row; keep warning/color rules intact.
+                currentRow.dataset.readyPulseArrived = nextRow.dataset.readyPulseArrived === '1' ? '1' : '0';
                 if (nextRow.dataset.etdUtc) currentRow.dataset.etdUtc = nextRow.dataset.etdUtc;
                 else delete currentRow.dataset.etdUtc;
                 ['[data-dispatch-neo-fuel]', '[data-dispatch-actual]', '[data-dispatch-apu-effective]', '.neoscorpion-dispatch-center-fuel'].forEach(selector => {

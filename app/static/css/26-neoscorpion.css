@@ -196,7 +196,7 @@
 /* A separate accent makes READY visible without animating/recoloring arrival
    text, status urgency, controls, or the geometry of either Dispatch view. */
 [data-ready-assignment-pulse="1"] .neoscorpion-dispatch-table--compact
-.neoscorpion-dispatch-primary-row.is-ready-to-assign:not(.is-complete)
+.neoscorpion-dispatch-primary-row.is-ready-to-assign[data-ready-pulse-arrived="1"]:not(.is-complete)
 > td:is(.neoscorpion-dispatch-flight, .neoscorpion-dispatch-etd-parking)::after {
     content: "";
     position: absolute;
@@ -215,7 +215,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
     [data-ready-assignment-pulse="1"] .neoscorpion-dispatch-table--compact
-    .neoscorpion-dispatch-primary-row.is-ready-to-assign:not(.is-complete)
+    .neoscorpion-dispatch-primary-row.is-ready-to-assign[data-ready-pulse-arrived="1"]:not(.is-complete)
     > td:is(.neoscorpion-dispatch-flight, .neoscorpion-dispatch-etd-parking)::after {
         animation: none;
         opacity: .4;

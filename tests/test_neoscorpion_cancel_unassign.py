@@ -200,6 +200,20 @@ class CancelUnassignTest(unittest.TestCase):
         self._login(self.dispatcher)
         panel = self.client.get('/neoscorpion/fuel-dispatch/live-panel').json
         self.assertIn('is-ready-to-assign', panel['html'])
+        arrival=SortDateMission.query.filter_by(sort_date_operation_id=operation.id,mission_type='arrival').one()
+        for status in ('scheduled','en_route','on_ground',None,'arrived'):
+            with self.subTest(arrival_status=status):
+                arrival.arrival_status=status
+                arrival.actual_block_in_datetime_utc=datetime.utcnow() if status=='arrived' else None
+                db.session.commit()
+                for url in ('/neoscorpion/fuel-dispatch','/neoscorpion/fuel-dispatch/live-panel',
+                            '/neoscorpion/fuel-dispatch/live-panel?completion_only=1'):
+                    response=self.client.get(url)
+                    html=response.json['html'] if response.is_json else response.get_data(as_text=True)
+                    markup=DispatchMarkup(html)
+                    attrs=next(a for tag,a in markup.tags if tag=='tr' and a.get('data-dispatch-mission-id')==str(mission.id))
+                    self.assertIn('is-ready-to-assign',attrs['class'])
+                    self.assertEqual(attrs['data-ready-pulse-arrived'],'1' if status=='arrived' else '0')
         revision = self._revision(operation)
         service.save_settings(self.gateway, {'fuel_density_lbs_per_gallon':'6.7',
             'red_assignment_alert_threshold_minutes':'0'})

@@ -6,7 +6,7 @@ from playwright.sync_api import expect
 from app.extensions import db
 from app.models import (User, SortDateOperation, SortDateMission, SortDateParkingAssignment,
     NeoScorpionFuelAssignment, NeoScorpionTailFuelState, NeoScorpionFuelTruck,
-    NeoScorpionSortTruck, NeoScorpionSortFueler, NeoScorpionSettings)
+    NeoScorpionSortTruck, NeoScorpionSortFueler, NeoScorpionSettings, NeoScorpionSortAssetState)
 from app.services.access_control import ensure_default_gateway_and_nodes, backfill_default_gateway_node_roles
 from app.services.password_policy import set_user_password
 from tests.browser import test_mobile_drawer as fixtures
@@ -30,6 +30,7 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                 op=SortDateOperation(gateway_id=g.id,gateway_code=g.code,generated_by_user_id=admin.id,
                     sort_date=date.today(),sort_name='night',window_minutes=60)
                 db.session.add(op);db.session.flush();oid=op.id;uid=admin.id;ids=[]
+                db.session.add(NeoScorpionSortAssetState(sort_date_operation_id=oid))
                 db.session.add(NeoScorpionSettings(gateway_id=g.id))
                 truck=NeoScorpionFuelTruck(gateway_id=g.id,truck_number='PULSE-1',capacity_gallons=10000)
                 db.session.add(truck);db.session.flush();tid=truck.id
@@ -37,7 +38,7 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                     starting_gallons=9000,current_gallons=9000,status='available'))
                 db.session.add(NeoScorpionSortFueler(sort_date_operation_id=oid,user_id=uid))
                 now=datetime.utcnow()
-                for i,state in enumerate(('arrived','on_ground','scheduled','scheduled')):
+                for i,state in enumerate(('arrived','on_ground','scheduled','arrived')):
                     tail=f'N{491+i}UP'
                     mission=SortDateMission(sort_date_operation_id=oid,sort_date=op.sort_date,gateway_code=g.code,
                         sort_name='night',mission_type='departure',mission_source='manual',flight_number=f'UPS90{i}',
@@ -90,10 +91,11 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                             }
                             animations.forEach(a=>a.play());return {count:animations.length,samples};
                         }""")
-                        self.assertEqual(sample['count'],2)
+                        self.assertEqual(sample['count'],2 if i==0 else 0)
                         for phase in sample['samples']:self.assertEqual(phase['colors'],[expected[i]]*4)
-                        self.assertLess(sample['samples'][0]['opacity'][0],.2)
-                        self.assertGreater(sample['samples'][1]['opacity'][0],.95)
+                        if i==0:
+                            self.assertLess(sample['samples'][0]['opacity'][0],.2)
+                            self.assertGreater(sample['samples'][1]['opacity'][0],.95)
                     self.assertEqual(animations(row(3)),0)
                     for width,height in ((1440,900),(1920,1080),(390,844),(375,568)):
                         page.set_viewport_size({'width':width,'height':height})
@@ -104,6 +106,10 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                         preferences.evaluate("p=>p.dataset.readyAssignmentPulse='0'")
                         self.assertAlmostEqual(row(0).bounding_box()['height'],height_actual,delta=.1)
                         preferences.evaluate("p=>p.dataset.readyAssignmentPulse='1'")
+                        self.assertEqual(animations(row(0)),2)
+                        self.assertEqual(animations(row(1)),0)
+                        self.assertEqual(animations(row(2)),0)
+                        self.assertEqual(animations(row(3)),0)
                         self.assertAlmostEqual(height_actual,73 if width<761 else 98,delta=1)
                     page.set_viewport_size({'width':1440,'height':900})
                     row(0).scroll_into_view_if_needed()
@@ -118,6 +124,21 @@ class ReadyPulseBrowserTest(unittest.TestCase):
                 # can apply the shared switch. It must not replace/focus the draft.
                 page.locator('[data-operational-board-toggle]:visible').click()
                 draft=row(3).locator('[name="assigned_fueler_user_id"]');draft.select_option(str(uid));draft.focus()
+                # Authoritative arrival changes travel through the real critical
+                # live response while this unrelated mission draft stays dirty.
+                for state,expected_gate in (('arrived','1'),('on_ground','0')):
+                    with F.app.app_context():
+                        arrival=SortDateMission.query.filter_by(sort_date_operation_id=oid,mission_type='arrival',assigned_tail_number='N492UP').one()
+                        arrival.arrival_status=state
+                        arrival.actual_block_in_datetime_utc=datetime.utcnow() if state=='arrived' else None
+                        # Publish the normal live invalidation alongside this
+                        # controlled arrival fixture update, as other board tests do.
+                        NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=oid).one().revision+=1
+                        db.session.commit()
+                    for p in (page,other):
+                        expect(row(1,p)).to_have_attribute('data-ready-pulse-arrived',expected_gate,timeout=12000)
+                        self.assertEqual(animations(row(1,p)),2 if expected_gate=='1' else 0)
+                    expect(draft).to_have_value(str(uid));expect(draft).to_be_focused()
                 F().ready(settings,'/neoscorpion/settings')
                 select=settings.locator('[name="ready_assignment_pulse_enabled"]')
                 expect(select).to_have_value('1')

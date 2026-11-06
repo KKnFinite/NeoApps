@@ -4,8 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../../app/static/js/neoscorpion_fuel_dispatch_live.js"), "utf8");
-const expression = 'const updateTopOffAlerts = () => {}; const applyMissionSearch = () => {};\n' + source.slice(source.indexOf("    const applyCriticalCompletion = (nextPanel) => {"),
-    source.indexOf("    const refreshCriticalCompletion = async", source.indexOf("    const applyCriticalCompletion = (nextPanel) => {")));
+const criticalStart = source.indexOf("    const applyCriticalCompletion = (");
+assert.ok(criticalStart >= 0, 'canonical critical updater must exist');
+const expression = 'const updateTopOffAlerts = () => {}; const applyMissionSearch = () => {}; const dispatchFingerprints = {};\n' + source.slice(criticalStart,
+    source.indexOf("    const refreshCriticalCompletion = async", criticalStart));
 
 test('independent visit completion lines refresh while a mission draft stays protected',()=>{
     let replacement,removed=0;
@@ -19,14 +21,21 @@ test('independent visit completion lines refresh while a mission draft stays pro
         querySelector:s=>s==='.neoscorpion-dispatch-action-stack'?stack:null,querySelectorAll:()=>[draft],
         closest:()=>({children:[actual]}),after:(...nodes)=>replacement=nodes});
     const actual=makeRow(),next=makeRow();
+    actual.dataset.readyPulseArrived='1'; next.dataset.readyPulseArrived='0';
     const context={root:{querySelectorAll:s=>s==='[data-truck-lines-mission="2"]'?oldLines:[actual],querySelector:()=>null},
         initialControlValues:new WeakMap(),updateAssignmentAlerts(){}};
     vm.runInNewContext(expression+'\nthis.patch=applyCriticalCompletion;',context);
     context.patch({querySelectorAll:s=>s==='[data-truck-lines-mission="2"]'?newLines:[next],querySelector:()=>null});
     assert.equal(removed,2);assert.deepEqual(replacement.map(n=>n.id),[1,2,3,4]);assert.equal(draft.value,'unsaved correction');
+    assert.equal(actual.dataset.readyPulseArrived,'0','authoritative non-arrival stops the pulse while dirty');
     // Empty / completed groups remove every old row, not just the first one.
+    next.dataset.readyPulseArrived='1';
     context.patch({querySelectorAll:s=>s==='[data-truck-lines-mission="2"]'?[]:[next],querySelector:()=>null});
     assert.equal(removed,4);
+    assert.equal(actual.dataset.readyPulseArrived,'1','arrival can enable the accent without replacing the draft');
+    delete next.dataset.readyPulseArrived;
+    context.patch({querySelectorAll:s=>s==='[data-truck-lines-mission="2"]'?[]:[next],querySelector:()=>null});
+    assert.equal(actual.dataset.readyPulseArrived,'0','unknown arrival fails closed');
 });
 test("critical completion appears under a dirty Dispatch without replacing editable controls", () => {
     const makeStack = (initial) => {
