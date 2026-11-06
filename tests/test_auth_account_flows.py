@@ -33,6 +33,7 @@ from app.services.auth_session_security import (
     FORCED_PASSWORD_CHANGE_SESSION_TTL_SECONDS,
 )
 from app.services.password_policy import set_user_password
+from app.services.image_assets import image_digest
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.user_tokens import (
     EMAIL_VERIFICATION,
@@ -1949,7 +1950,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotIn('NeoBid', cards.text)
         for key in ('gateway','staffing'):
             self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'],
-                f'/static/images/icons/neo{key}/inapp/neo{key}-inapp-128.png?v='+self.app.config['STATIC_ASSET_VERSION'])
+                f'/static/images/icons/neo{key}/inapp/neo{key}-inapp-128.png?v='+
+                image_digest(
+                    self.app.static_folder,f'images/icons/neo{key}/inapp/neo{key}-inapp-128.png'))
         self.assertNotIn('portal-header-word', html)
         self.assertIn('data-drawer-nodes', html)
         # The third state now belongs to an existing launcher app, not retired NeoBid.
@@ -2029,7 +2032,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(cards.one('article').one(cls='portal-launch-action').text, 'PENDING REVIEW')
         for key in ('gateway', 'staffing'):
             self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'],
-                f'/static/images/icons/neo{key}/inapp/neo{key}-inapp-128.png?v='+self.app.config['STATIC_ASSET_VERSION'])
+                f'/static/images/icons/neo{key}/inapp/neo{key}-inapp-128.png?v='+
+                image_digest(
+                    self.app.static_folder,f'images/icons/neo{key}/inapp/neo{key}-inapp-128.png'))
         for retired in ('portal-install-section', 'portal-install-help', 'data-manifest-url=', 'data-install-button',
                         'Open in Safari.', 'Add to Home Screen.', 'Bid tools placeholder'):
             self.assertNotIn(retired, html)

@@ -83,6 +83,8 @@ def create_app(config_class=Config, auto_bootstrap=False):
     initialize_frost_priority(app)
     app.before_request(enforce_live_refresh_request_cadence)
     register_pwa_assets(app)
+    from app.services.image_assets import register_image_assets
+    register_image_assets(app)
     register_blueprints(app)
     # Register transaction-local compact evidence after canonical field-authority
     # listeners. This performs no network I/O, schema work or startup scan.
@@ -287,7 +289,7 @@ def register_template_helpers(app):
                 "endpoint": "neoscorpion.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neoscorpion",),
-                "icon_src": "images/logos/newlogo_scorpion.png",
+                "icon_src": "images/optimized/newlogo_scorpion_menu.png",
             },
             {
                 "key": "reptile",
