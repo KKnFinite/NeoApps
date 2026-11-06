@@ -43,7 +43,11 @@ def _vault_operation(function):
             close = getattr(state['client'], 'close', None)
             if callable(close):
                 try:
-                    close()
+                    try:
+                        from app.services.archive_transfer_diagnostics import emit
+                        emit(state['client'], 'spear_archive')
+                    finally:
+                        close()
                 except Exception:
                     logging.getLogger(__name__).warning('SPEAR Vault transport cleanup failed.')
     return bounded
@@ -809,12 +813,18 @@ def _r2_client(config):
     # A bounded owner closes this client. Do not also pin its parsed service
     # models in boto3's process-global DEFAULT_SESSION after that owner exits.
     # Explicit credentials, transport limits and signing remain identical.
-    return boto3.session.Session().client("s3", endpoint_url=config["endpoint"], region_name=config["region"], aws_access_key_id=config["access_key"], aws_secret_access_key=config["secret_key"], config=Config(
+    client = boto3.session.Session().client("s3", endpoint_url=config["endpoint"], region_name=config["region"], aws_access_key_id=config["access_key"], aws_secret_access_key=config["secret_key"], config=Config(
         signature_version="s3v4",
         connect_timeout=VAULT_CONNECT_TIMEOUT_SECONDS,
         read_timeout=VAULT_READ_TIMEOUT_SECONDS,
         retries={"mode": "standard", "total_max_attempts": 1},
     ))
+    try:
+        from app.services.archive_transfer_diagnostics import attach
+        attach(client)
+    except Exception:
+        pass  # Diagnostics cannot prevent creation of the canonical transport.
+    return client
 
 
 def _calibration_key(operation, gateway, checksum):

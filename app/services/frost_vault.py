@@ -44,7 +44,11 @@ def _close_client(client):
     close = getattr(client, 'close', None)
     if callable(close):
         try:
-            close()
+            try:
+                from app.services.archive_transfer_diagnostics import emit
+                emit(client, 'frost_archive')
+            finally:
+                close()
         except Exception:
             # Cleanup must not replace a verified receipt or the actual I/O
             # failure. No provider exception text (it may contain private data).
