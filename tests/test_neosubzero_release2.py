@@ -178,6 +178,39 @@ class Release2Test(unittest.TestCase):
         self.assertEqual(response.status_code,409,response.json)
         self.assertEqual(application_context(f.operation)['reason_for_application'],'Ice')
 
+    def test_coordinator_omits_sort_context_form_but_preserves_context_and_spray_evidence(self):
+        from app.models import NeoSubZeroOperationContext
+        from app.services.neosubzero_evidence import evidence_values
+        f=self.f
+        save_application_context(f.operation,dict(reason_for_application='Frost',active_precipitation='Snow',
+            ambient_temperature='20 F',dew_point='18 F',notes='Retained shared context'),actor_id=None)
+        db.session.commit()
+        event,_=self.flow()
+        before_context=evidence_values(NeoSubZeroOperationContext.query.one())
+        before_sprays=[evidence_values(row) for row in participation_query(event).all()]
+        before_audits=NeoSubZeroAuditEntry.query.count()
+        client=self.client('grandmaster')
+        with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=f.operation):
+            for agent in ('Desktop Coordinator','Mozilla/5.0 (iPhone; Mobile)'):
+                with self.subTest(agent=agent):
+                    page=client.get('/neosubzero/coordinator?ramp=Alpha&mission='+str(f.alpha.id),headers={'User-Agent':agent})
+                    self.assertEqual(page.status_code,200)
+                    self.assertNotIn(b'neosubzero-application-context',page.data)
+                    self.assertNotIn(b'SAVE CONTEXT',page.data)
+                    self.assertIn(b'data-subzero-deice-form',page.data)
+                    self.assertIn(b'data-subzero-script-toggle',page.data)
+                    self.assertIn(b'neosubzero-mobile-ramp-link',page.data)
+                    self.assertLess(page.data.index(b'neosubzero-coordinator-tools'),page.data.index(b'neosubzero-ramp-selector'))
+                    self.assertLess(page.data.index(b'neosubzero-ramp-selector'),page.data.index(b'neosubzero-coordinator-layout'))
+            for path in ('/neosubzero/operations?mode=outbound','/neosubzero/outbound'):
+                page=client.get(path)
+                self.assertEqual(page.status_code,200,path)
+                self.assertIn(b'neosubzero-application-context',page.data,path)
+                self.assertIn(b'SAVE CONTEXT',page.data,path)
+        self.assertEqual(evidence_values(NeoSubZeroOperationContext.query.one()),before_context)
+        self.assertEqual([evidence_values(row) for row in participation_query(event).all()],before_sprays)
+        self.assertEqual(NeoSubZeroAuditEntry.query.count(),before_audits)
+
     def test_tail_swap_during_and_after_actual_spray_keeps_provenance(self):
         f=self.f;event,values=self.flow(end='')
         old=f.alpha.assigned_tail_number;original_mid=f.alpha.id
