@@ -1,4 +1,5 @@
 <aside class="motherbrain-desktop-side-nav node-desktop-side-nav operational-desktop-sidebar node-{{ node_header_key }}" aria-label="{{ node_header_name }} navigation" data-node-desktop-side-nav data-operational-sidebar data-node-desktop-shell="{{ node_header_key }}">
+    <div class="operational-sidebar-primary">
     <div class="operational-sidebar-topline">
         <button class="operational-sidebar-collapse" type="button" data-operational-sidebar-toggle aria-expanded="true" aria-label="Collapse {{ node_header_name }} menu"><span aria-hidden="true">‹</span></button>
     </div>
@@ -33,6 +34,7 @@
         <a class="motherbrain-desktop-side-link is-active" href="{{ url_for('neoreptile.index') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Dashboard</span></a>
         {% endif %}
     </nav>
+    </div>
     <nav class="operational-sidebar-utilities" aria-label="Global operational navigation">
         {% if operational_shell_supports_board_view %}<button class="operational-sidebar-utility" type="button" data-operational-board-toggle aria-expanded="false"><span>▣</span><strong>Board View</strong></button>{% endif %}
         <a class="operational-sidebar-utility" href="{{ url_for('neomotherbrain.rfd_hub') }}"><span>G</span><strong>NeoGateway</strong></a>

@@ -20,12 +20,28 @@
     /* Keep the shared shell's gutters and content layout below the taller bar. */
     body.operational-shell-page { --operational-topbar-height: 84px; }
     body.operational-shell-page .operational-desktop-sidebar {
-        /* Collapse control, logo, current page, navigation, global utilities. */
-        grid-template-rows: auto auto auto minmax(0,1fr) auto;
+        /* One scrollable primary section; global utilities stay in the footer. */
+        grid-template-rows: minmax(0,1fr) auto;
+        overflow: hidden;
     }
     body.operational-shell-page.operational-sidebar-collapsed .operational-desktop-sidebar {
-        /* The shared collapsed state also hides the current-page panel. */
-        grid-template-rows: auto auto minmax(0,1fr) auto;
+        grid-template-rows: minmax(0,1fr) auto;
+    }
+    .operational-sidebar-primary {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+        min-width: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+    }
+    .operational-sidebar-primary > * { flex: 0 0 auto; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-menu {
+        grid-template-columns: minmax(0,1fr);
+        overflow: visible;
     }
     .operational-sidebar-logo {
         display: grid; place-items: center; padding: 0 0 10px;

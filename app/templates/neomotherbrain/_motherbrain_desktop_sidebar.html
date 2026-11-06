@@ -1,6 +1,7 @@
 {% from "_neo_brand.html" import neo_brand %}
 {% set sidebar_operation = motherbrain_shell_operation if motherbrain_shell_operation is defined else none %}
 <aside class="motherbrain-desktop-side-nav operational-desktop-sidebar node-motherbrain" aria-label="MotherBrain navigation" data-motherbrain-desktop-side-nav data-operational-sidebar>
+    {% if uses_operational_shell %}<div class="operational-sidebar-primary">{% endif %}
     <div class="operational-sidebar-topline">
         <button class="operational-sidebar-collapse" type="button" data-operational-sidebar-toggle aria-expanded="true" aria-label="Collapse NeoMotherBrain menu"><span aria-hidden="true">‹</span></button>
     </div>
@@ -81,6 +82,7 @@
         {% endif %}
 
     </nav>
+    {% if uses_operational_shell %}</div>{% endif %}
     <nav class="operational-sidebar-utilities" aria-label="Global operational navigation">
         {% if operational_shell_supports_board_view %}<button class="operational-sidebar-utility" type="button" data-operational-board-toggle aria-expanded="false"><span>▣</span><strong>Board View</strong></button>{% endif %}
         <a class="operational-sidebar-utility" href="{{ url_for('neomotherbrain.rfd_hub') }}"><span>G</span><strong>NeoGateway</strong></a>

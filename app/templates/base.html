@@ -50,7 +50,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
     {% endif %}
     {% if uses_operational_shell %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/operational_node_shell.css', v=config.STATIC_ASSET_VERSION, shell='20261001-dark-select-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/operational_node_shell.css', v=config.STATIC_ASSET_VERSION, shell='20261106-sidebar-scroll-v1') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260913-employees-v7') }}">
@@ -128,7 +128,7 @@
     <script src="{{ url_for('static', filename='js/live_updates.js', v='20261101-poll-v1') }}"></script>
     {% endif %}
     {% if is_neostaffing_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20261007-nav-construction-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20261106-sidebar-scroll-v1') }}">
     <script defer src="{{ url_for('static', filename='js/neostaffing_filters.js', v='20261001-report-state') }}"></script>
     <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION, csrf='20261031-renewal-v1', seniority='20261104-seasonal-v1') }}"></script>
     {% if request.endpoint == 'neostaffing.reports' %}
