@@ -34,10 +34,10 @@
         </aside>
         <main class="neosubzero-coordinator-detail">
             {% for row in selected_rows + completed_rows if row.mission_id == selected_mission_id %}
-            <article class="neosubzero-departure-mission {{ 'is-terminal' if row.terminal else 'is-active' }}" data-subzero-mission data-terminal="{{ 'true' if row.terminal else 'false' }}">
+            <article class="neosubzero-departure-mission {{ 'is-terminal' if row.terminal else 'is-active' }}" data-subzero-mission data-mission-id="{{ row.mission_id }}" data-terminal="{{ 'true' if row.terminal else 'false' }}">
                 <strong class="coordinator-status state-{{ row.visual_state }}">{{ row.visual_label }}</strong>
-                {% if row.terminal %}{{ terminal_summary(row, can_edit, 'coordinator', selected_ramp, true) }}{% endif %}
-                {{ mission_workspace(row, can_edit, 'coordinator', selected_ramp, true) }}
+                {% if row.terminal %}{{ terminal_summary(row, can_edit, 'coordinator', selected_ramp) }}{% endif %}
+                {{ mission_workspace(row, can_edit, 'coordinator', selected_ramp) }}
                 {{ team_controls(row, 'coordinator') }}
             </article>
             {% else %}<p class="neosubzero-empty">Select a mission.</p>{% endfor %}

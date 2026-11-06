@@ -82,6 +82,37 @@
         });
     });
 
+    const reopenedKey = "neosubzero:reopened:" + window.location.pathname;
+    const storedReopened = () => {
+        try {
+            const value = JSON.parse(window.sessionStorage.getItem(reopenedKey) || "[]");
+            return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
+        } catch {
+            return [];
+        }
+    };
+    const setTerminalExpanded = (mission, expanded) => {
+        if (!mission || mission.dataset.terminal !== "true") return;
+        const compact = mission.querySelector("[data-subzero-compact]");
+        const workspace = mission.querySelector("[data-subzero-workspace]");
+        if (!compact || !workspace) return;
+        compact.hidden = expanded;
+        workspace.hidden = !expanded;
+        mission.dataset.reopened = String(expanded);
+        const id = mission.dataset.missionId;
+        if (!id) return;
+        const ids = new Set(storedReopened());
+        if (expanded) ids.add(id);
+        else ids.delete(id);
+        try { window.sessionStorage.setItem(reopenedKey, JSON.stringify([...ids])); } catch {
+            // The toggle still works when session storage is unavailable.
+        }
+    };
+    const previouslyReopened = new Set(storedReopened());
+    root.querySelectorAll('[data-subzero-mission][data-terminal="true"]').forEach((mission) => {
+        if (previouslyReopened.has(mission.dataset.missionId)) setTerminalExpanded(mission, true);
+    });
+
     root.addEventListener("click", (event) => {
         const edit = event.target.closest("[data-subzero-edit]");
         if (edit) {
@@ -110,9 +141,19 @@
         const reopen = event.target.closest("[data-subzero-reopen]");
         if (reopen) {
             const mission = reopen.closest("[data-subzero-mission]");
-            mission.querySelector("[data-subzero-compact]").hidden = true;
-            mission.querySelector("[data-subzero-workspace]").hidden = false;
-            mission.dataset.reopened = "true";
+            setTerminalExpanded(mission, true);
+            mission?.querySelector("[data-subzero-collapse]")?.focus({preventScroll: true});
+            return;
+        }
+        const collapse = event.target.closest("[data-subzero-collapse]");
+        if (collapse) {
+            const mission = collapse.closest("[data-subzero-mission]");
+            if (mission?.querySelector('[data-dirty="true"]')) {
+                window.alert("Save your changes before closing these details.");
+                return;
+            }
+            setTerminalExpanded(mission, false);
+            mission?.querySelector("[data-subzero-reopen]")?.focus({preventScroll: true});
             return;
         }
         const script = event.target.closest("[data-subzero-script]");
@@ -131,17 +172,6 @@
             panel.hidden = !panel.hidden;
             toggle.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
         }
-    });
-
-    root.addEventListener("focusout", (event) => {
-        const mission = event.target.closest("[data-subzero-mission][data-terminal='true']");
-        if (!mission || mission.dataset.reopened !== "true") return;
-        window.setTimeout(() => {
-            if (mission.contains(document.activeElement) || mission.querySelector("[data-dirty='true']")) return;
-            mission.querySelector("[data-subzero-compact]").hidden = false;
-            mission.querySelector("[data-subzero-workspace]").hidden = true;
-            mission.dataset.reopened = "false";
-        }, 0);
     });
 
     root.querySelectorAll("[data-subzero-confirm]").forEach((form) => {

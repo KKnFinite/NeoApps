@@ -26,6 +26,12 @@
     background: #09121a;
 }
 
+/* Explicitly honor collapsed/expanded terminal detail visibility. */
+.neosubzero-departure-board [data-subzero-compact][hidden],
+.neosubzero-departure-board [data-subzero-workspace][hidden] {
+    display: none !important;
+}
+
 .neosubzero-departure-compact {
     display: grid;
     grid-template-columns: minmax(70px, .7fr) minmax(70px, .7fr) minmax(130px, 1.5fr) minmax(150px, 1.7fr) auto auto;

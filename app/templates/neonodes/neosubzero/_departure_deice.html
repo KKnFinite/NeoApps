@@ -101,6 +101,7 @@
 
 {% macro mission_workspace(row, can_edit, board, selected_ramp='', open=false) %}
 <section class="neosubzero-mission-workspace" data-subzero-workspace {% if row.terminal and not open %}hidden{% endif %}>
+    {% if row.terminal %}<button type="button" data-subzero-collapse>CLOSE DETAILS</button>{% endif %}
     {% if row.radio_pending %}
     <section class="neosubzero-radio-pending" data-radio-pending aria-label="Radio confirmation pending">
         <h2>CLEARED · RADIO PENDING</h2>
