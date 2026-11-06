@@ -129,9 +129,11 @@
     body.neosubzero-ucc-tv-mode .ucc-board-heading { display:none; }
     body.neosubzero-ucc-tv-mode .ucc-parking-grid { grid-template-rows:repeat(4,var(--ucc-parking-row-height,92px)); }
     .neosubzero-ucc[data-ucc-weather-density="compact"] :is(.neosubzero-weather-hour-secondary,.neosubzero-weather-primary > small) { display:none; }
-    .neosubzero-ucc[data-ucc-weather-density="compact"] .neosubzero-ucc-upcoming article > span:nth-child(n+2) { display:none; }
     .neosubzero-ucc[data-ucc-weather-density="minimal"] :is(.neosubzero-weather-hour-secondary,.neosubzero-weather-primary > small,.neosubzero-weather-hour-priority em) { display:none; }
-    .neosubzero-ucc[data-ucc-weather-density="minimal"] .neosubzero-ucc-upcoming article > :is(span:nth-child(n+2),em) { display:none; }
+    /* Compact spacing must never turn an upcoming forecast into dates only.
+       Also override the previous stylesheet in already-open live-refresh tabs. */
+    .blueprint-neosubzero .neosubzero-ucc[data-ucc-weather-density] .neosubzero-ucc-upcoming article > :is(span:nth-child(2),span:nth-child(5)) { display:grid; }
+    .blueprint-neosubzero .neosubzero-ucc[data-ucc-weather-density] .neosubzero-ucc-upcoming article > em { display:block; }
     .neosubzero-ucc[data-ucc-weather-density="minimal"] .neosubzero-weather-current-sort { grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); }
 }
 
