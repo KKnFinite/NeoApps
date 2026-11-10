@@ -5,11 +5,7 @@ Fail closed when configured start/end times are missing; never use the legacy
 all-day fallback for an external staffing publication.
 """
 from app.services import neostaffing as staffing
-from app.services.gateway_matrix import (
-    current_gateway_local_datetime,
-    operation_is_active_at,
-    _sort_timeline_sort_setting,
-)
+from app.services import gateway_matrix
 
 
 def active_night_operation(*, local_now=None):
@@ -21,10 +17,10 @@ def active_night_operation(*, local_now=None):
             or staffing._normalize_staffing_sort_name(operation.sort_name) != 'night'
             or operation.archived_at_utc is not None):
         return None
-    setting = _sort_timeline_sort_setting(gateway, operation.sort_name)
+    setting = gateway_matrix._sort_timeline_sort_setting(gateway, operation.sort_name)
     if (setting is None or setting.sort_window_start_local is None
             or setting.sort_window_end_local is None):
         return None
     local_now = (local_now if local_now is not None
-                 else current_gateway_local_datetime(gateway))
-    return operation if operation_is_active_at(operation, local_now, gateway) else None
+                 else gateway_matrix.current_gateway_local_datetime(gateway))
+    return operation if gateway_matrix.operation_is_active_at(operation, local_now, gateway) else None
