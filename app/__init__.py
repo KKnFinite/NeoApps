@@ -91,6 +91,8 @@ def create_app(config_class=Config, auto_bootstrap=False):
     from app.services import frost_departures
     from app.services.neostaffing_sheet_sync import install as install_staffing_sheet_sync
     install_staffing_sheet_sync(app)
+    from app.services.neostaffing_raiden_sync import install as install_raiden_staffing_sync
+    install_raiden_staffing_sync(app)
     register_template_helpers(app)
     register_request_guards(app)
     register_security_headers(app)

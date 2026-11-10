@@ -125,6 +125,7 @@ from app.models.staffing_notification import StaffingNotification
 from app.models.staffing_operation_schedule import StaffingOperationSchedule
 from app.models.staffing_person import StaffingPerson
 from app.models.staffing_sheet_sync import StaffingSheetSync
+from app.models.staffing_raiden_sync import StaffingRaidenSync
 from app.models.staffing_person_qualification import StaffingPersonQualification
 from app.models.staffing_shift_flow_plan import StaffingShiftFlowPlan
 from app.models.staffing_reporting_relationship import StaffingReportingRelationship

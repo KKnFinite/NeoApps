@@ -58,6 +58,8 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
         if code.upper() == 'RFD':
             from app.services.neostaffing_sheet_sync import next_deadline
             add(gateway_id, 'staffing_sheet', next_deadline(at))
+            from app.services.neostaffing_raiden_sync import next_deadline as raiden_next_deadline
+            add(gateway_id, 'staffing_raiden', raiden_next_deadline(at))
         spear = db.session.scalar(select(NeoScorpionSettings.spear_learning_capture_enabled)
             .where(NeoScorpionSettings.gateway_id == gateway_id))
         if spear:
@@ -141,8 +143,10 @@ def perform(gateway_id, kinds):
     from app.services import frost_auto, frost_documents, frost_departures, frost_xchange_links
     from app.services import neoscorpion_spear_decisions as spear, neosubzero_archive as subzero
     from app.services.neostaffing_sheet_sync import drain as staffing_sheet_drain
+    from app.services.neostaffing_raiden_sync import drain as staffing_raiden_drain
     jobs = [('auto', frost_auto.tick), ('spear', spear.drain),
-        ('documents', frost_documents.drain), ('staffing_sheet', staffing_sheet_drain)]
+        ('documents', frost_documents.drain), ('staffing_sheet', staffing_sheet_drain),
+        ('staffing_raiden', staffing_raiden_drain)]
     progress = False
     def subzero_job(gateway):
         nonlocal progress

@@ -1,0 +1,11 @@
+# NeoStaffing Night Shift HERE -> Raiden M23
+
+Approved requested mapping: RFD Night / Ramp / Shift **Working/HERE** count from the same active-employee assignment and attendance-status semantics as NeoStaffing Attendance. The destination is the real **RFD-N-sim: Raiden** spreadsheet (`1geZ6x1fJUPu7cDF9LDlFmX6FhwE25NqrXkqe5Ire-qM`), **Display!M23**, numeric only. The source is NOT on-payroll, unmarked, other Night operations, or Google Hours Log data.
+
+Display!L23 is SHIFT, N23 retains `=M23+P23`, and O23 remains RAMP; P23's formula is untouched. If any guard fails, refuse the write. Count each active nonmanagement Shift employee once; use the current RFD Night operation and skip writes when no current Night sort exists. A new Night sort resets HERE to zero until its attendance is marked, retaining the previous number between sorts.
+
+An independent `staffing_raiden_sync` receipt tracks revisions, operation ID, delivered count, retries, leases and verification without employee payloads. Attendance and relevant employee/assignment/hierarchy changes dirty this receipt in the same transaction. The existing deadline runner drains it and verifies the sole cell after any write; Google I/O occurs outside the database transaction, never in the attendance request. No new worker or polling loop. A failed Raiden delivery cannot block the production Hours Log sync or rollback attendance.
+
+IMPORTANT permission gate: The Raiden workbook's M23 protected-range editor list includes the existing NeoApps Google service account, but the file permissions did not show a direct writer grant. An attempt through the connected Google Drive app to grant file sharing returned 403 appNotAuthorizedToFile. Verify the live service account has workbook write access; if not, the owner must explicitly share RFD-N-sim: Raiden to `neosektor-sheets@neoapps-497005.iam.gserviceaccount.com` as Editor. Do not claim actual delivery until the protected cell is read back.
+
+Tests include here/absent/unmarked/outside scope; idempotence, wrong workbook and formula guards; committed dirties, retry; and a new Night operation with zero HERE. Deploy and inspect Render logs; do not treat LIVE deployment alone as a verified M23 delivery.
