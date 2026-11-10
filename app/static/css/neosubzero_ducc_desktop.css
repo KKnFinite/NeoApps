@@ -340,9 +340,10 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         grid-template-columns:minmax(0,1fr); justify-items:center; text-align:center;
         line-height:1.04; gap:.08em; padding:.17em .24em;
     }
+    .ucc-tv-wallboard .ucc-tv-plane.is-stacked.is-in-throat { border:0; background:none; box-shadow:none; padding:0; }
     .ucc-tv-plane.is-stacked > strong { font-size:1em; font-weight:750; }
     .ucc-tv-plane.is-stacked > .ucc-tv-plane-icon { width:1.8em; height:1.8em; }
-    .ucc-tv-plane-route, .ucc-tv-plane-eta { font-size:.78em; }
+    .ucc-tv-plane-route, .ucc-tv-plane-eta, .ucc-tv-plane-etd { font-size:.78em; }
     .ucc-tv-plane-route { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b9cfe1; }
     .ucc-tv-plane-icon {
         width:1.28em; height:1.28em; background:var(--tv-plane-color,#adc3d6);

@@ -19,26 +19,27 @@
     const label = (value) => element("span", "ucc-tv-position", value);
     const heading = (value) => element("h2", "", value);
 
-    function aircraft(source) {
+    function aircraft(source, inThroat = false) {
         const iconSource = source.querySelector(".ucc-plane-icon");
         const direction = ["right", "left"].find(value => iconSource?.classList.contains(`facing-${value}`)) || "up";
         const state = Array.from(source.classList).find(value => value.startsWith("state-")) || "";
         const icon = element("span", `ucc-tv-plane-icon facing-${direction}`);
         icon.setAttribute("aria-hidden", "true");
         const route = [content(source, ".ucc-plane-flight"), source.dataset.uccTvDestination].filter(Boolean).join(" · ");
-        const card = element("div", `ucc-tv-plane is-stacked ${state}`,
+        const etd = source.dataset.uccTvEtd;
+        const card = element("div", `ucc-tv-plane is-stacked ${state}${inThroat ? " is-in-throat" : ""}`,
             element("strong", "", content(source, "strong")),
             icon,
             element("span", "ucc-tv-plane-route", route || "—"),
-            element("span", "ucc-tv-plane-eta", `ETA ${source.dataset.uccTvEta || "—"}`));
+            !inThroat && etd !== undefined ? element("span", "ucc-tv-plane-etd", `ETD ${etd || "—"}`) : null);
         card.setAttribute("aria-label", source.getAttribute("aria-label") || "");
         return card;
     }
 
-    function aircraftAt(source, position) {
+    function aircraftAt(source, position, inThroat = false) {
         return element("div", "ucc-tv-stand",
             position ? label(position) : null,
-            ...Array.from(source?.querySelectorAll(".ucc-plane") || [], aircraft));
+            ...Array.from(source?.querySelectorAll(".ucc-plane") || [], plane => aircraft(plane, inThroat)));
     }
 
     function crew(ramp, position) {
@@ -58,7 +59,7 @@
         const pad = source?.querySelector("[data-ucc-deice-pad]");
         const padAircraft = pad?.querySelector(".ucc-plane");
         const padView = element("div", "ucc-tv-pad", padAircraft
-            ? aircraft(padAircraft)
+            ? aircraft(padAircraft, true)
             : element("div", "ucc-tv-pad-idle", label("DEICE PAD"), element("span", "ucc-tv-plane-icon")));
         const stands = element("div", "ucc-tv-stands");
         for (let row = 1; row <= 4; row++) {
@@ -69,7 +70,7 @@
                 const code = `${name[0]}0${position}`;
                 return aircraftAt(source?.querySelector(`[data-ucc-parking="${code}"]`), code);
             };
-            stands.append(parking(row), aircraftAt(queue, queueLabel), parking(row + 4));
+            stands.append(parking(row), aircraftAt(queue, queueLabel, true), parking(row + 4));
         }
         return element("section", "ucc-tv-ramp", heading(name),
             element("div", "ucc-tv-staging",
