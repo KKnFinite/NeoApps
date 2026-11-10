@@ -144,22 +144,8 @@ def requests_for(metadata, groups):
                 for start,end in runs:
                     requests.append({'setDataValidation':{'range':{'sheetId':0,'startRowIndex':start,'endRowIndex':end,
                         'startColumnIndex':col,'endColumnIndex':col+1},'rule':json.loads(key)}})
-    # Preserve the workbook's formulas, changing only the obsolete FT criteria.
-    for (row,col),cell in cells.items():
-        formula=cell.get('userEnteredValue',{}).get('formulaValue','')
-        if (row,col)==(2,6) and '"DFT"' in formula:
-            requests.append({'updateCells':{'start':{'sheetId':0,'rowIndex':row,'columnIndex':col},
-                'rows':[{'values':[{'userEnteredValue':{'formulaValue':formula.replace('"DFT"','"FT"')}}]}],'fields':'userEnteredValue'}})
-    # Keep the second legacy counter/formula; it naturally reads zero once all
-    # permanent FT classifications are exported as FT. No unrelated tab edits.
-    for index,rule in enumerate(sheet.get('conditionalFormats',[])):
-        text=json.dumps(rule)
-        if '\\"DFT\\"' in text:
-            rule=json.loads(text.replace('\\"DFT\\"','\\"FT\\"'))
-            requests.append({'updateConditionalFormatRule':{'sheetId':0,'index':index,'rule':rule}})
-    if cells.get((2,5),{}).get('userEnteredValue')=={'stringValue':'DOMICILED FT'}:
-        requests.append({'updateCells':{'start':{'sheetId':0,'rowIndex':2,'columnIndex':5},
-            'rows':[{'values':[{'userEnteredValue':{'stringValue':'FULL TIME'}}]}],'fields':'userEnteredValue'}})
+    # The production summary and conditional-format rules are pre-seeded by the
+    # workbook owner. Sync never writes its protected rows or sheet-level rules.
     return requests,expected
 
 
@@ -187,7 +173,7 @@ class GoogleAdapter:
         status = getattr(response, 'status_code', None)
         code = str(status) if isinstance(status, int) and 100 <= status <= 599 else 'unknown'
         raw = str(exc)
-        index = re.search(r'requests\\[(\\d+)\\]', raw)
+        index = re.search(r'requests\[(\d+)\]', raw)
         lower = raw.lower()
         category = ('protected_range' if 'protected' in lower else
                     'permission' if 'permission' in lower or 'forbidden' in lower else
