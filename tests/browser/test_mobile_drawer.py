@@ -7,11 +7,12 @@ import logging
 import json
 import base64
 import os
+import re
 import subprocess
 import tempfile
 import threading
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import urlsplit
@@ -21,7 +22,7 @@ from werkzeug.serving import make_server
 
 from app import create_app
 from app.extensions import db
-from app.models import PortalAppAccess, User
+from app.models import PortalAppAccess, SortDateMission, SortDateOperation, User
 from app.services.access_control import ensure_default_gateway_and_nodes, backfill_default_gateway_node_roles
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -443,6 +444,75 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             finally:
                 context.close()
                 browser.close()
+
+    def test_ermac_outbound_dock_stays_outside_flight_scroll(self):
+        with self.app.app_context():
+            gateway = ensure_default_gateway_and_nodes()
+            start = datetime(2026, 11, 10, 1)
+            operation = SortDateOperation(gateway_id=gateway.id, gateway_code=gateway.code,
+                                          sort_date=start.date(), sort_name="night", window_minutes=60)
+            db.session.add(operation)
+            db.session.flush()
+            for index in range(40):
+                departure = start + timedelta(minutes=index * 3)
+                db.session.add(SortDateMission(
+                    sort_date_operation_id=operation.id, gateway_code=gateway.code, sort_date=start.date(),
+                    sort_name="night", mission_type="departure", mission_source="manual",
+                    flight_number=f"UPS{1000 + index}", origin=gateway.code, destination="SDF",
+                    timezone="America/Chicago", planned_datetime_local=departure,
+                    planned_datetime_utc=departure + timedelta(hours=6), planned_source="manual",
+                ))
+            db.session.commit()
+            operation_id = operation.id
+
+        with patch("app.services.neoermac_view_outbound._current_operation",
+                   side_effect=lambda _gateway: db.session.get(SortDateOperation, operation_id)):
+            for engine in ("chromium", "webkit"):
+                with self.subTest(engine=engine):
+                    browser = getattr(self.pw, engine).launch()
+                    try:
+                        page = browser.new_page(**self.pw.devices["iPhone 13"])
+                        page.route(lambda url: not url.startswith(self.origin), lambda route: route.abort())
+                        self.login(page)
+                        self.ready(page, "/neoermac/view-outbound")
+                        rows = page.locator(".neoermac-outbound-mobile-row")
+                        expect(rows).to_have_count(40)
+                        dock = page.locator(".neo-mobile-bottom")
+                        scroller = page.locator("[data-mobile-page-scroll]")
+                        viewport_bottom = page.evaluate("visualViewport.height")
+                        base = dock.bounding_box()
+                        self.assertAlmostEqual(base["y"] + base["height"], viewport_bottom, delta=1)
+
+                        if engine == "chromium":
+                            page.mouse.move(180, 360)
+                            page.mouse.wheel(0, 420)
+                        else:
+                            scroller.evaluate("el => el.scrollTo(0, 420)")
+                        page.wait_for_function("document.querySelector('[data-mobile-page-scroll]').scrollTop > 100")
+                        expect(page.locator("body")).to_have_class(
+                            re.compile(r"\boperational-mobile-header-hidden\b"))
+                        self.assertEqual(page.evaluate("scrollY"), 0)
+                        self.assertEqual(dock.bounding_box(), base)
+
+                        saved = scroller.evaluate("el => el.scrollTop")
+                        page.locator("[data-drawer-toggle]").tap()
+                        expect(page.locator("[data-mobile-drawer]")).to_be_visible()
+                        page.locator("[data-drawer-close]").tap()
+                        self.assertEqual(scroller.evaluate("el => el.scrollTop"), saved)
+                        self.assertEqual(dock.bounding_box(), base)
+
+                        scroller.evaluate("el => el.scrollTop = el.scrollHeight")
+                        last = rows.last.bounding_box()
+                        self.assertLessEqual(last["y"] + last["height"], base["y"])
+                        self.assertEqual(dock.bounding_box(), base)
+                        self.assertEqual(page.evaluate("scrollY"), 0)
+
+                        page.set_viewport_size({"width": 390, "height": 620})
+                        resized = dock.bounding_box()
+                        self.assertAlmostEqual(resized["y"] + resized["height"],
+                                               page.evaluate("visualViewport.height"), delta=1)
+                    finally:
+                        browser.close()
 
     def test_portal_whole_card_actions(self):
         browser=self.pw.chromium.launch()

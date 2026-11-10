@@ -1,4 +1,4 @@
-/* Dense outbound scan board; mobile rows fit the viewport without scrolling. */
+/* Dense outbound scan board with no horizontal scrolling on mobile. */
 .neoermac-shell.neoermac-outbound-shell {
     width: 100%; max-width: none; min-width: 0; padding: 12px;
     border: 0; border-radius: 0; background: #080e10; box-shadow: none;
@@ -33,6 +33,30 @@
 .neoermac-outbound-shell .neoermac-outbound-actual.is-pull-late { color: var(--node-ermac-primary); }
 .neoermac-outbound-shell .neoermac-outbound-missing { display: inline; margin: 0 0 0 6px; color: #c9d0d6; font-size: .6rem; line-height: 1; font-weight: 400; }
 @media (max-width: 900px) {
+    /* Keep the dock in its own viewport row so scrolling flights never moves it. */
+    body.operational-shell-page:has([data-mobile-page-scroll]) {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        position: relative;
+        height: 100dvh;
+        min-height: 0;
+    }
+    body.operational-shell-page > .shell > .content[data-mobile-page-scroll] {
+        height: 100%;
+        min-height: 0;
+        padding-bottom: var(--neo-dock-fade);
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+    }
+    body.neo-mobile-drawer-open.operational-shell-page > .shell > .content[data-mobile-page-scroll] {
+        overflow-y: hidden;
+    }
+    body:has([data-mobile-page-scroll]) > .neo-mobile-navigation { position: static; }
+    body:has([data-mobile-page-scroll]) > .neo-mobile-navigation > .neo-mobile-bottom { position: relative; }
+    body:has([data-mobile-page-scroll]) > .neo-mobile-navigation > :is(.neo-mobile-backdrop, .neo-mobile-drawer) {
+        position: absolute;
+    }
+
     body.mobile-app-chrome .neoermac-shell.neoermac-outbound-shell { padding: 8px; background: #080e10; }
     .neoermac-outbound-shell .neoermac-outbound-table-wrap { display: none; }
     .neoermac-outbound-shell .neoermac-outbound-mobile-list { display: block; width: 100%; max-width: 100%; min-width: 0; overflow-x: clip; }

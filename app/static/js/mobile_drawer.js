@@ -13,6 +13,8 @@
     const nodes = root.querySelector("[data-drawer-nodes]");
     const views = Array.from(panel.querySelectorAll("[data-drawer-view]"));
     const mobile = window.matchMedia("(max-width: 900px)");
+    const pageScroll = body.querySelector("[data-mobile-page-scroll]");
+    const scrollTop = () => mobile.matches && pageScroll ? pageScroll.scrollTop : window.scrollY;
     const header = document.querySelector("[data-operational-mobile-header], [data-gateway-mobile-header], [data-mobile-topbar]");
     const hiddenClass = body.hasAttribute("data-operational-shell") ? "operational-mobile-header-hidden" :
         body.hasAttribute("data-gateway-shell") ? "gateway-mobile-header-hidden" : "neo-mobile-header-hidden";
@@ -29,11 +31,11 @@
         panel.setAttribute("aria-label", root.getAttribute("aria-label"));
         panel.scrollTop = 0;
     };
-    let lastY = window.scrollY, down = 0, up = 0, ticking = false, settling = false;
+    let lastY = scrollTop(), down = 0, up = 0, ticking = false, settling = false;
     const focusable = () => Array.from(root.querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex="0"]'))
         .filter(el => !el.disabled && !el.closest("[inert]") && el.getClientRects().length);
     const resetHeader = () => {
-        lastY = Math.max(0, window.scrollY); down = 0; up = 0;
+        lastY = Math.max(0, scrollTop()); down = 0; up = 0;
         body.classList.remove(hiddenClass);
     };
     const close = (restoreFocus = true) => {
@@ -141,15 +143,17 @@
     const updateHeader = () => {
         ticking = false;
         if (open || settling || !mobile.matches || headerPopoverOpen()) { resetHeader(); return; }
-        const y = Math.max(0, window.scrollY), delta = y - lastY;
+        const y = Math.max(0, scrollTop()), delta = y - lastY;
         if (y < 16) resetHeader();
         else if (delta > 0) { down += delta; up = 0; if (down >= 26) body.classList.add(hiddenClass); }
         else if (delta < 0) { up -= delta; down = 0; if (up >= 12) body.classList.remove(hiddenClass); }
         lastY = y;
     };
-    window.addEventListener("scroll", () => {
+    const onScroll = () => {
         if (!ticking) { ticking = true; requestAnimationFrame(updateHeader); }
-    }, {passive:true});
+    };
+    window.addEventListener("scroll", onScroll, {passive:true});
+    pageScroll?.addEventListener("scroll", onScroll, {passive:true});
     root.querySelector("[data-drawer-copy-link]")?.addEventListener("click", async event => {
         const url = event.currentTarget.dataset.shareUrl;
         const status = root.querySelector("[data-drawer-copy-status]");
