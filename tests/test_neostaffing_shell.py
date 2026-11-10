@@ -143,7 +143,7 @@ class StaffingShellTest(unittest.TestCase):
         mobile=self.navigation(desktop=False)
         self.assertEqual(self.nav_links(mobile),expected)
         for html in (desktop,mobile):
-            self.assertEqual(html.count('UNDER CONSTRUCTION'),2)
+            self.assertEqual(html.count('UNDER CONSTRUCTION'),1)
             self.assertLess(html.index(f'href="{expected[5]}"'),html.index('UNDER CONSTRUCTION'))
             self.assertLess(html.index('UNDER CONSTRUCTION'),html.index(f'href="{expected[6]}"'))
             self.assertNotIn('>Home<',html)
@@ -180,9 +180,20 @@ class StaffingShellTest(unittest.TestCase):
         html=self.client.get('/neostaffing/people').get_data(as_text=True)
         rail=html.split('data-operational-sidebar ',1)[1].split('</aside>',1)[0]
         mobile=html.split('id="neo-mobile-drawer"',1)[1].split('</aside>',1)[0]
-        self.assertEqual(rail.count('UNDER CONSTRUCTION'),2)
-        self.assertEqual(mobile.count('UNDER CONSTRUCTION'),2)
+        self.assertEqual(rail.count('UNDER CONSTRUCTION'),1)
+        self.assertEqual(mobile.count('UNDER CONSTRUCTION'),1)
         self.assertEqual(self.nav_links(rail),self.nav_links(mobile))
+
+    def test_construction_heading_stays_single_after_live_employee_recovery_link(self):
+        for desktop in (True, False):
+            html = self.navigation(desktop=desktop)
+            self.assertEqual(html.count('UNDER CONSTRUCTION'), 1)
+            with self.app.test_request_context():
+                recovery = url_for('neostaffing.employee_recovery')
+                timecards = url_for('neostaffing.timecards')
+            self.assertLess(html.index('UNDER CONSTRUCTION'), html.index(f'href="{recovery}"'))
+            self.assertLess(html.index(f'href="{recovery}"'), html.index(f'href="{timecards}"'))
+            self.assertEqual(html.count('staffing-nav-section'), 1)
 
     def test_construction_heading_disappears_when_all_eight_links_denied(self):
         denied={'neostaffing.staffing_groups.view', 'neostaffing.change_requests.view',
