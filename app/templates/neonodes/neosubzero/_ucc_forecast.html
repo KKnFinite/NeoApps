@@ -10,7 +10,7 @@
     {% if not card.hours %}<span class="ucc-management-only ucc-management-forecast-unavailable">Forecast unavailable</span>{% endif %}
 </article>
 {%- endmacro %}
-<section class="neosubzero-ucc-upcoming" data-ucc-upcoming aria-label="Upcoming operational sort forecasts">
+<section id="ucc-weather-upcoming" class="neosubzero-ucc-upcoming" data-ucc-upcoming aria-label="Upcoming operational sort forecasts">
         <div class="neosubzero-weather-forecast-head">
             <strong>UPCOMING OPERATIONAL SORT WINDOWS</strong>
             <span>{{ weather.sources.forecast }} · {{ weather.forecast_status.issued_at_label }}{% if weather.forecast_status.stale %} · STALE{% endif %}</span>

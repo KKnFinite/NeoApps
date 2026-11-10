@@ -33,6 +33,7 @@ class UccBrowserTest(unittest.TestCase):
             cls.operation_id = fixture.operation.id
             from app.services.neosubzero_trucks import manage_truck
             manage_truck(gateway,'add_truck',{'truck_number':'UCC-831'},actor_id=None)
+            manage_truck(gateway,'add_truck',{'truck_number':'12'},actor_id=None)
             night = fixture._unit("sort", "Night")
             aviation = fixture._unit("operation", "Aviation Services", night)
             deice = fixture._unit("work_area", "Deice", aviation)
@@ -61,11 +62,15 @@ class UccBrowserTest(unittest.TestCase):
             hour = deepcopy(template_hour)
             hour["time"] = f"{(18+i)%24:02d}00"
             weather["current_sort"]["hours"].append(hour)
+        forecast = weather["future_forecast"][0]
+        weather["future_forecast"] = [dict(forecast, date_label=label) for label in (
+            "TUE SEP 01", "WED SEP 02", "THU SEP 03", "MON SEP 07")]
         cls.weather = patch("app.neonodes.neosubzero.routes.neosubzero_weather_context", return_value=weather)
         cls.weather_data = weather
         cls.weather_revision = patch("app.neonodes.neosubzero.routes.neosubzero_weather_revision", return_value="weather-r1")
         cls.refresh = patch("app.neonodes.neosubzero.routes.subzero_refresh_status", return_value={"live_screen_refresh_interval_ms":1000})
-        for item in (cls.current, cls.weather, cls.weather_revision, cls.refresh):
+        cls.weather_revision_mock = cls.weather_revision.start()
+        for item in (cls.current, cls.weather, cls.refresh):
             item.start()
 
     @classmethod
@@ -84,7 +89,7 @@ class UccBrowserTest(unittest.TestCase):
             page.on("pageerror", lambda error: errors.append(str(error)))
             self.login(page)
             self.ready(page, "/neosubzero/ucc")
-            for width, height in ((1920,1080), (1440,1000), (1024,768), (820,1180), (390,844), (375,812)):
+            for width, height in ((1920,1080), (1366,900), (1024,768), (820,1180), (390,844), (375,812)):
                 page.set_viewport_size({"width":width,"height":height})
                 expect(page.locator('[data-ucc-ramp="Alpha"]')).to_be_visible()
                 geometry = page.evaluate("""() => ({width:innerWidth, overflow:document.documentElement.scrollWidth-innerWidth, ramps:[...document.querySelectorAll('[data-ucc-ramp]')].slice(0,5).map(el=>({name:el.dataset.uccRamp,x:el.getBoundingClientRect().x,y:el.getBoundingClientRect().y,width:el.getBoundingClientRect().width})), fields:[...document.querySelectorAll('.ucc-team[open] input:not([type=hidden]), .ucc-team[open] select')].map(el=>{const r=el.getBoundingClientRect(); return {left:r.left,right:r.right};})})""")
@@ -109,6 +114,32 @@ class UccBrowserTest(unittest.TestCase):
                         self.assertAlmostEqual(one['y'], four['y'], delta=1)
                         self.assertAlmostEqual(two['y'], three['y'], delta=1)
                         self.assertLess(two['y'], parking['y'])
+                    if width in (1366, 1920):
+                        picker = page.locator('#ucc-staffing-picker')
+                        driver = page.locator('[data-ucc-editor="Alpha-1"] [data-ucc-assignment-form]').first
+                        button = driver.locator('[data-ucc-staffing-choice]')
+                        expect(button).to_have_text(re.compile(r'D ·\s*Longname-Deicer-0'))
+                        expect(button).not_to_contain_text('Christopher')
+                        expect(page.locator('[data-ucc-editor="Echo-4"] [data-ucc-staffing-choice]').first).to_have_text(re.compile(r'—\s*· 4'))
+                        button.click()
+                        expect(picker.get_by_role('button', name=re.compile('Christopher Longname-Deicer-0'))).to_be_visible()
+                        box = picker.bounding_box()
+                        self.assertGreater(box["width"], geometry["ramps"][0]["width"])
+                        self.assertGreaterEqual(box["x"], 0)
+                        self.assertLessEqual(box["x"] + box["width"], width)
+                        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth-innerWidth"), 1)
+                        page.screenshot(path=str(self.evidence / f"ucc-{engine}-{width}-staffing-picker.png"))
+                        page.keyboard.press('Escape')
+                        expect(picker).to_be_hidden()
+                        expect(button).to_have_attribute('aria-expanded', 'false')
+                        right = page.locator('[data-ucc-editor="Echo-4"] [data-ucc-staffing-choice]').last
+                        right.click()
+                        expect(picker.get_by_role('button', name=re.compile('Christopher Longname-Deicer-0'))).to_be_visible()
+                        box = picker.bounding_box()
+                        self.assertLessEqual(box["x"] + box["width"], width)
+                        self.assertAlmostEqual(page.locator('[data-ucc-ramp="Echo"]').bounding_box()["width"],
+                                               geometry["ramps"][-1]["width"], delta=1)
+                        page.keyboard.press('Escape')
                 else:
                     expect(page.locator('.ucc-ramp-diagram').first).to_be_hidden()
                 measurements.append({"engine":engine, **geometry})
@@ -116,21 +147,52 @@ class UccBrowserTest(unittest.TestCase):
                 if width == 1920:
                     page.screenshot(path=str(self.evidence / f"ucc-management-{engine}-1920x1080.png"))
             page.set_viewport_size({"width":1440,"height":1000})
+            weather_toggle = page.locator('[data-ucc-weather-toggle]')
+            current_weather = page.locator('#ucc-weather-current')
+            upcoming = page.locator('#ucc-weather-upcoming')
+            expect(weather_toggle).to_have_attribute('aria-expanded', 'true')
+            expect(upcoming.locator('article:visible')).to_have_count(4)
+            alpha = page.locator('[data-ucc-ramp="Alpha"]')
+            expanded_top = alpha.evaluate('el => el.getBoundingClientRect().top + scrollY')
+            weather_toggle.click()
+            expect(current_weather).to_be_hidden()
+            expect(upcoming).to_be_hidden()
+            self.assertLess(alpha.evaluate('el => el.getBoundingClientRect().top + scrollY'), expanded_top)
+            page.reload()
+            expect(weather_toggle).to_have_attribute('aria-expanded', 'false')
+            expect(current_weather).to_be_hidden()
+            expect(upcoming).to_be_hidden()
+            self.weather_data["current"]["temperature"] = "29°F" if engine == "chromium" else "30°F"
+            self.weather_data["revision"] = self.weather_revision_mock.return_value = f"weather-{engine}"
+            expect(current_weather.locator('.neosubzero-weather-primary > strong')).to_have_text(
+                self.weather_data["current"]["temperature"], timeout=10000)
+            expect(current_weather).to_be_hidden()
+            expect(upcoming).to_be_hidden()
+            weather_toggle.click()
+            expect(current_weather.locator('.neosubzero-weather-current-sort')).to_be_visible()
+            expect(upcoming.locator('article:visible')).to_have_count(4)
             slot = page.locator('[data-ucc-editor="Alpha-2"]')
-            for field, value in (('truck_number', 'UCC-831'), ('person_id', str(self.people[2])), ('person_id', str(self.people[1]))):
+            for field, value in (('truck_number', '12'), ('person_id', str(self.people[2])), ('person_id', str(self.people[1]))):
                 selector = slot.locator(f'select[name="{field}"]')
                 control = selector.last if value == str(self.people[1]) else selector.first
                 version = control.locator('xpath=ancestor::form').locator('[name="expected_version"]')
+                choice = control.locator('xpath=ancestor::form').locator('[data-ucc-staffing-choice]')
                 before_save = version.input_value()
                 with page.expect_response(lambda r: r.request.method == 'POST') as saved:
-                    control.select_option(value)
+                    choice.click()
+                    picker.locator(f'[data-value="{value}"]').click()
                 self.assertEqual(saved.value.status, 200)
                 expect(slot.locator('[data-ucc-management-save]')).to_have_text('Saved')
                 expect(version).not_to_have_value(before_save)
                 expect(control).to_have_value(value)
+                if field == 'truck_number':
+                    expect(choice).to_have_text(re.compile(r'2 ·\s*T12'))
+                assigned_version = version.input_value()
                 with page.expect_response(lambda r: r.request.method == 'POST') as cleared:
-                    control.select_option('')
+                    choice.click()
+                    picker.locator('[data-value=""]').click()
                 self.assertEqual(cleared.value.status, 200)
+                expect(version).not_to_have_value(assigned_version)
                 expect(control).to_have_value('')
             self.ready(page, "/neosubzero/ucc")
             plane = page.locator('[data-ucc-parking="C09"] .ucc-plane')
@@ -141,14 +203,24 @@ class UccBrowserTest(unittest.TestCase):
             # Device-local TV preference never changes a second browser context.
             page.evaluate("document.documentElement.requestFullscreen = undefined")
             page.set_viewport_size({"width":2560,"height":1440})
+            weather_toggle.click()
             page.locator('[data-ucc-tv-enter]').click()
             expect(page.locator('body')).to_have_class(re.compile('neosubzero-ucc-tv-mode'))
             expect(page.locator('[data-operational-topbar]')).to_be_hidden()
+            expect(weather_toggle).to_be_hidden()
+            expect(page.locator('.ucc-tv-weather')).to_be_visible()
             page.screenshot(path=str(self.evidence / f"ucc-{engine}-tv.png"), full_page=True)
             other = browser.new_context(viewport={"width":390,"height":844})
             mobile = other.new_page()
             self.login(mobile)
             self.ready(mobile,"/neosubzero/ucc")
+            expect(mobile.locator('[data-ucc-weather-toggle]')).to_be_hidden()
+            expect(mobile.locator('[data-ucc-staffing-choice]:visible')).to_have_count(0)
+            expect(mobile.locator('.ucc-pill select:visible').first).to_be_visible()
+            mobile.locator('[data-ucc-view="ramp"]').click()
+            expect(mobile.locator('[data-ucc-ramp="Alpha"] .ucc-ramp-diagram')).to_be_visible()
+            expect(mobile.locator('[data-ucc-staffing-choice]:visible')).to_have_count(0)
+            mobile.locator('[data-ucc-view="staffing"]').click()
             self.assertFalse(mobile.locator('body').evaluate("el=>el.classList.contains('neosubzero-ucc-tv-mode')"))
             page.get_by_role('button', name='Exit TV Mode').click()
             page.set_viewport_size({"width":1440,"height":1000})
@@ -168,15 +240,18 @@ class UccBrowserTest(unittest.TestCase):
             mobile_editor.locator('select[name="person_id"]').first.select_option(str(self.people[0]))
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('saved')
             # Critical aircraft state keeps refreshing while a staffing draft has focus.
-            desktop_select.focus()
+            desktop_choice = desktop.locator('[data-ucc-staffing-choice]').nth(1)
+            desktop_choice.click()
+            expect(picker).to_be_visible()
             with self.app.app_context():
                 from app.models import NeoSubZeroDepartureDeiceEvent
                 event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.missions[0]).one()
                 event.status = "cleared"
                 db.session.commit()
             expect(page.locator('[data-ucc-aircraft="%s"]' % self.missions[0])).to_have_count(0,timeout=10000)
-            expect(desktop_select).to_be_focused()
+            expect(picker).to_be_visible()
             expect(desktop_select).to_have_value(str(self.people[2]))
+            page.keyboard.press('Escape')
             with page.expect_response(lambda r: r.url.endswith('/neosubzero/ucc') and r.request.method == 'POST') as conflict:
                 desktop_select.locator('xpath=ancestor::form').evaluate('e=>e.requestSubmit()')
             self.assertEqual(conflict.value.status, 409)
@@ -187,8 +262,10 @@ class UccBrowserTest(unittest.TestCase):
             # Explicit reload resolves the draft; whole units move and swap on mobile.
             self.ready(page,"/neosubzero/ucc")
             truck = mobile.locator('[data-ucc-editor="Delta-3"] [data-ucc-truck-form]')
+            before_truck = truck.locator('[name="expected_version"]').input_value()
             truck.locator('select[name="truck_number"]').select_option('UCC-831')
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('truck saved')
+            expect(truck.locator('[name="expected_version"]')).not_to_have_value(before_truck)
             # Start the unit command from a fresh roster-wide version, separate from the truck save.
             self.ready(mobile,"/neosubzero/ucc")
             unit_details = mobile.locator('[data-ucc-editor="unit-Delta-3"]')
@@ -199,6 +276,7 @@ class UccBrowserTest(unittest.TestCase):
             unit.locator('button[type="submit"]').click()
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('unit moved')
             expect(page.locator('[data-ucc-editor="Echo-4"] .ucc-team-controls')).to_contain_text('UCC-831',timeout=10000)
+            expect(mobile.locator('[data-ucc-editor="Echo-4"] [name="truck_number"]')).to_have_value('UCC-831')
             self.ready(mobile,"/neosubzero/ucc")
             target = mobile.locator('[data-ucc-editor="Echo-4"]')
             target.locator('[data-ucc-editor="unit-Echo-4"] > summary').click()

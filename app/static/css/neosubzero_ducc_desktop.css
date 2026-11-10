@@ -246,6 +246,22 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .blueprint-neosubzero:not(.neosubzero-ucc-tv-mode,.operational-board-view) .neosubzero-ucc {
         min-width:0; grid-template-columns:repeat(10,minmax(0,1fr)); gap:8px;
 
+        & .ucc-weather-heading:not([hidden]) {
+            grid-column:1 / -1; grid-row:3; display:flex; align-items:center; justify-content:space-between;
+            gap:8px; padding:3px 0; border-bottom:1px solid #294352;
+        }
+        & .ucc-weather-heading h2 {
+            margin:0; color:#b4e2f4; font:700 .78rem/1.2 NeoFontPlain,"Segoe UI",sans-serif;
+        }
+        & [data-ucc-weather-toggle] {
+            min-height:24px; padding:2px 8px; border:1px solid #36546b; border-radius:5px;
+            color:#dcecf5; background:#102330; font:500 .73rem/1.2 NeoFontPlain,"Segoe UI",sans-serif; cursor:pointer;
+        }
+        &:has(.ucc-weather-heading:not([hidden])) :is(.neosubzero-weather,.neosubzero-ucc-upcoming) { grid-row:4; }
+        &:has(.ucc-weather-heading:not([hidden])) > .neosubzero-ucc-fluid { grid-row:5; }
+        &[data-ucc-weather-collapsed="true"] :is(.neosubzero-weather,.neosubzero-ucc-upcoming) { display:none; }
+        &[data-ucc-weather-collapsed="true"] > .neosubzero-ucc-fluid { grid-row:4; }
+
         & :is(.neosubzero-weather,.neosubzero-ucc-upcoming) {
             min-width:0; padding:10px; background:#0c1b28; border:1px solid #294352;
             border-radius:8px; overflow-wrap:anywhere; font-family:NeoFontPlain,"Segoe UI",sans-serif;
@@ -316,7 +332,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         }
         & .ucc-parking-grid { grid-area:3 / 1 / 4 / -1; border-top:1px solid #294352; padding-top:4px; }
         & .ucc-team { min-width:0; align-self:start; }
-        & .ucc-team-controls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:3px 2px; align-items:center; }
+        & .ucc-team-controls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px; align-items:center; }
         & .ucc-team-controls > form { grid-column:1 / -1; }
         & .ucc-team-controls > details { grid-column:1; min-width:0; }
         & .ucc-team-controls > details > summary { color:#a9d5e7; font-size:.62rem; }
@@ -332,8 +348,32 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         }
         & .ucc-team .ucc-pill:is(:hover,:focus-within) { border-color:#79b4ce; }
         & .ucc-team .ucc-pill span { overflow-wrap:anywhere; }
-        &[data-ucc-inline-ready="true"] [data-ucc-truck-form] [data-ucc-selected-text] { display:none; }
-        &[data-ucc-inline-ready="true"] [data-ucc-management-truck-label] { display:block; }
+        &[data-ucc-staffing-picker="true"] .ucc-team .ucc-pill { display:none; }
+        &[data-ucc-staffing-picker="true"] .ucc-staffing-choice {
+            display:flex; align-items:center; gap:3px; width:100%; min-width:0; min-height:21px;
+            padding:2px 4px; border:1px solid #36546b; border-radius:4px; background:#102330;
+            color:#dcecf5; font:500 .73rem/1.2 NeoFontPlain,"Segoe UI",sans-serif; white-space:nowrap; cursor:pointer;
+        }
+        & .is-mirrored .ucc-staffing-choice { justify-content:flex-end; }
+        & .ucc-staffing-value { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+        & .ucc-staffing-choice:is(:hover,[aria-expanded="true"]) { border-color:#79b4ce; }
+        & :is(.ucc-staffing-choice,[data-ucc-weather-toggle],.ucc-staffing-picker button):focus-visible {
+            outline:2px solid #b6e1f9; outline-offset:1px;
+        }
+        & .ucc-staffing-choice:disabled { opacity:.65; cursor:default; }
+        & .ucc-staffing-picker:popover-open {
+            position:fixed; inset:auto; margin:0; box-sizing:border-box; width:min(22rem,calc(100vw - 16px));
+            max-height:min(18rem,calc(100dvh - 16px)); overflow-y:auto; overscroll-behavior:contain;
+            padding:4px; border:1px solid #55758b; border-radius:6px; background:#102839;
+            box-shadow:0 6px 18px #0008;
+        }
+        & .ucc-staffing-picker button {
+            display:block; width:100%; padding:5px 7px; border:0; border-radius:3px; text-align:left;
+            color:#dcecf5; background:transparent; font:500 .85rem/1.25 NeoFontPlain,"Segoe UI",sans-serif;
+            overflow-wrap:anywhere; cursor:pointer;
+        }
+        & .ucc-staffing-picker button:is(:hover,:focus-visible,[aria-pressed="true"]) { background:#21465e; }
+        & .ucc-staffing-picker button:disabled { color:#9ab2c1; cursor:default; }
         & .ucc-management-save { display:block; min-width:0; color:#9bd9bc; font-size:.6rem; line-height:1.15; }
         & .ucc-management-save[data-state="saving"] { color:#a4cfe7; }
         & .ucc-management-save[data-state="error"] { color:#ffd0d0; }
@@ -360,6 +400,9 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
             & .neosubzero-ucc-upcoming { grid-column:1 / -1; grid-row:4; }
             & .neosubzero-ucc-upcoming .neosubzero-weather-forecast { grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
             & > .neosubzero-ucc-fluid { grid-row:5; }
+            &:has(.ucc-weather-heading:not([hidden])) .neosubzero-ucc-upcoming { grid-row:5; }
+            &:has(.ucc-weather-heading:not([hidden])) > .neosubzero-ucc-fluid { grid-row:6; }
+            &[data-ucc-weather-collapsed="true"] > .neosubzero-ucc-fluid { grid-row:4; }
         }
     }
 }

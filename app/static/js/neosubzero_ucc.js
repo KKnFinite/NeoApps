@@ -6,6 +6,7 @@
     root.dataset.uccInlineReady = 'true';
 
     let forms = Array.from(root.querySelectorAll("[data-ucc-assignment-form]"));
+    let staffingSurnames = {};
     const dialog = root.querySelector("[data-ucc-move-dialog]");
     let pendingForm = null;
 
@@ -164,15 +165,108 @@
 
     const field = (form, name) => form.querySelector(`[name="${name}"]`);
     const normalDesktop = () => tvDesktop.matches && !tvMode && !document.body.classList.contains("operational-board-view");
+    const weatherToggle = root.querySelector("[data-ucc-weather-toggle]");
+    const weatherStorageKey = `neoapps.neosubzero.ucc.weather-collapsed.${weatherToggle?.dataset.uccWeatherToggle}`;
+    const setWeatherCollapsed = (collapsed) => {
+        root.dataset.uccWeatherCollapsed = String(collapsed);
+        weatherToggle.setAttribute("aria-expanded", String(!collapsed));
+        weatherToggle.textContent = collapsed ? "Expand" : "Collapse";
+    };
+    if (weatherToggle) {
+        try { setWeatherCollapsed(localStorage.getItem(weatherStorageKey) === "1"); }
+        catch (_error) { setWeatherCollapsed(false); }
+        weatherToggle.closest("[data-ucc-weather-heading]").hidden = false;
+        weatherToggle.addEventListener("click", () => {
+            const collapsed = weatherToggle.getAttribute("aria-expanded") === "true";
+            setWeatherCollapsed(collapsed);
+            try { localStorage.setItem(weatherStorageKey, collapsed ? "1" : "0"); }
+            catch (_error) { /* The control still works when browser storage is blocked. */ }
+        });
+    }
+
     function updateSelectedText(form, select) {
+        const selected = select.selectedOptions[0];
         const text = form.querySelector('[data-ucc-selected-text]');
-        if (text) text.textContent = select.selectedOptions[0]?.textContent || '';
-        const truckLabel = form.querySelector('[data-ucc-management-truck-label]');
-        if (truckLabel) {
-            const position = field(form, "position_number").value;
-            const truck = select.value ? `TRUCK ${select.value}` : "NO TRUCK";
-            truckLabel.textContent = Number(position) > 2 ? `${truck} · ${position}` : `${position} · ${truck}`;
+        if (text) text.textContent = selected?.textContent || '';
+        const choice = form.querySelector("[data-ucc-staffing-choice]");
+        if (choice) {
+            choice.querySelector("[data-ucc-short-value]").textContent = selected?.dataset.uccShort || staffingSurnames[select.value] || "—";
+            choice.title = selected?.textContent.trim() || "";
+            choice.setAttribute("aria-label", `${select.getAttribute("aria-label")}: ${choice.title}`);
         }
+    }
+
+    const staffingPicker = root.querySelector("#ucc-staffing-picker");
+    let pickerTrigger = null;
+    const pickerOpen = () => pickerTrigger && staffingPicker.matches(":popover-open");
+    if (typeof staffingPicker?.showPopover === "function") {
+        root.dataset.uccStaffingPicker = "true";
+        staffingPicker.hidden = false;
+        const positionPicker = () => {
+            if (!pickerOpen()) return;
+            const anchor = pickerTrigger.getBoundingClientRect();
+            const {width, height} = staffingPicker.getBoundingClientRect();
+            const gap = 6;
+            const left = pickerTrigger.closest(".is-mirrored") ? anchor.right - width : anchor.left;
+            const below = anchor.bottom + gap;
+            const above = anchor.top - height - gap;
+            staffingPicker.style.left = `${Math.max(gap, Math.min(left, document.documentElement.clientWidth - width - gap))}px`;
+            staffingPicker.style.top = `${below + height <= innerHeight - gap ? below : Math.max(gap, above)}px`;
+        };
+        const closePicker = () => { if (pickerOpen()) staffingPicker.hidePopover(); };
+        root.addEventListener("click", (event) => {
+            const trigger = event.target.closest("[data-ucc-staffing-choice]");
+            if (!trigger || !normalDesktop()) return;
+            if (pickerOpen() && pickerTrigger === trigger) { closePicker(); return; }
+            pickerTrigger?.setAttribute("aria-expanded", "false");
+            pickerTrigger = trigger;
+            trigger.setAttribute("aria-expanded", "true");
+            const select = trigger.form.querySelector("select");
+            staffingPicker.setAttribute("aria-label", select.getAttribute("aria-label"));
+            // Use exactly the choices (including unavailable/retained values) in the canonical form.
+            staffingPicker.replaceChildren(...Array.from(select.options, option => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.textContent = option.textContent;
+                button.dataset.value = option.value;
+                button.disabled = option.disabled;
+                button.setAttribute("aria-pressed", String(option.selected));
+                return button;
+            }));
+            if (!pickerOpen()) staffingPicker.showPopover();
+            positionPicker();
+            const selected = staffingPicker.querySelector('[aria-pressed="true"]:enabled') || staffingPicker.querySelector("button:enabled");
+            selected?.focus({preventScroll: true});
+            staffingPicker.scrollTop = Math.max(0, (document.activeElement.offsetTop || 0) - staffingPicker.clientHeight / 2);
+        });
+        staffingPicker.addEventListener("click", (event) => {
+            const choice = event.target.closest("button[data-value]");
+            if (!choice || !pickerTrigger) return;
+            const form = pickerTrigger.form;
+            const select = form.querySelector("select");
+            closePicker();
+            if (select.value === choice.dataset.value && form.dataset.dirty !== "true") return;
+            select.value = choice.dataset.value;
+            select.dispatchEvent(new Event("change", {bubbles: true}));
+        });
+        staffingPicker.addEventListener("keydown", (event) => {
+            const options = Array.from(staffingPicker.querySelectorAll("button:enabled"));
+            const index = options.indexOf(document.activeElement);
+            const targets = {ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: options.length - 1};
+            if (!Object.hasOwn(targets, event.key)) return;
+            event.preventDefault();
+            options[Math.max(0, Math.min(targets[event.key], options.length - 1))]?.focus();
+        });
+        staffingPicker.addEventListener("toggle", () => {
+            if (pickerOpen()) return;
+            pickerTrigger?.setAttribute("aria-expanded", "false");
+            pickerTrigger = null;
+        });
+        window.addEventListener("scroll", positionPicker, {passive: true});
+        window.addEventListener("resize", positionPicker);
+        tvDesktop.addEventListener("change", closePicker);
+        tvEnter?.addEventListener("click", closePicker);
+        document.addEventListener("neo:board-enter", closePicker);
     }
 
     let lastStaffingFeedback;
@@ -258,6 +352,7 @@
 
     const bindBoard = () => {
     forms = Array.from(root.querySelectorAll("[data-ucc-assignment-form]"));
+    staffingSurnames = JSON.parse(root.querySelector("[data-ucc-staffing-surnames]")?.textContent || "{}");
     root.querySelectorAll("[data-ucc-live-board] form").forEach((form) => {
         if (form.dataset.uccChangeBound) return;
         form.dataset.uccChangeBound = "true";
@@ -406,7 +501,7 @@
         feedback.classList.toggle("is-inline", inline);
         currentLink.hidden = !error;
     };
-    const editing = () => root.dataset.dirty === "true" || root.dataset.saving === "true" || Boolean(root.querySelector("input:focus, select:focus, textarea:focus")) || dialog?.open;
+    const editing = () => root.dataset.dirty === "true" || root.dataset.saving === "true" || Boolean(root.querySelector("input:focus, select:focus, textarea:focus")) || dialog?.open || pickerOpen();
     let loading = false;
     let mutationEpoch = 0;
     let deferredRevision = null;
@@ -503,8 +598,8 @@
         root.dataset.saving = "true";
         const buttons = Array.from(form.querySelectorAll('button[type="submit"]'));
         const body = new FormData(form);
-        const selects = Array.from(root.querySelectorAll('[data-ucc-live-board] select:not(:disabled)'));
-        selects.forEach(select => { select.disabled = true; });
+        const controls = Array.from(root.querySelectorAll('[data-ucc-live-board] :is(select,[data-ucc-staffing-choice]):enabled'));
+        controls.forEach(control => { control.disabled = true; });
         if (event.submitter?.name) body.set(event.submitter.name, event.submitter.value);
         buttons.forEach((button) => { button.disabled = true; });
         notify("Saving UCC…", false, setStaffingFeedback(form, "saving"));
@@ -531,7 +626,7 @@
         } finally {
             window.clearTimeout(timeout);
             delete root.dataset.saving;
-            const restoreControls = () => [...buttons, ...selects].forEach(control => { control.disabled = false; });
+            const restoreControls = () => [...buttons, ...controls].forEach(control => { control.disabled = false; });
             const reconcileFirst = accepted && normalDesktop();
             if (!reconcileFirst) restoreControls();
             if (accepted) {
