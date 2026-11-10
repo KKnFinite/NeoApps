@@ -39,9 +39,15 @@ class Adapter:
 
 
 class StaffingSheetSyncTest(unittest.TestCase):
-    setUp=fixtures.ShiftFlowTest.setUp
     tearDown=fixtures.ShiftFlowTest.tearDown
     _person=fixtures.ShiftFlowTest._person
+
+    def setUp(self):
+        fixtures.ShiftFlowTest.setUp(self)
+        self._active_window = patch.object(sync, 'active_night_operation',
+                                           return_value=N(id=4101))
+        self._active_window.start()
+        self.addCleanup(self._active_window.stop)
 
     def employee(self):
         person=self._person()
@@ -116,6 +122,33 @@ class StaffingSheetSyncTest(unittest.TestCase):
         receipt.retry_at=sync.now()-timedelta(seconds=1);db.session.commit()
         good=Adapter();self.assertTrue(sync.drain(adapter_factory=lambda:good))
         self.assertEqual(good.closed,1);self.assertIsNone(sync.next_deadline(sync.now()))
+
+    def test_no_hours_log_check_or_google_io_outside_night_sort(self):
+        person=self.employee()
+        self.app.config['NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED']=True
+        row=db.session.get(Receipt,1)
+        revision=row.requested_revision
+        adapter=Adapter()
+        with patch.object(sync,'active_night_operation',return_value=None):
+            self.assertIsNone(sync.next_deadline(sync.now()))
+            self.assertFalse(sync.drain(adapter_factory=lambda:adapter))
+            self.assertEqual(adapter.closed,0)
+            self.assertEqual(db.session.get(Receipt,1).requested_revision,revision)
+        self.assertIsNotNone(sync.next_deadline(sync.now()))
+        self.assertTrue(sync.drain(adapter_factory=lambda:adapter))
+        self.assertTrue(adapter.writes)
+
+    def test_window_closes_before_hours_log_google_io_preserves_pending(self):
+        self.employee()
+        self.app.config['NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED']=True
+        adapter=Adapter()
+        with patch.object(sync,'active_night_operation',side_effect=[N(id=4101),None]):
+            self.assertFalse(sync.drain(adapter_factory=lambda:adapter))
+        self.assertEqual(adapter.closed,0)
+        row=db.session.get(Receipt,1,populate_existing=True)
+        self.assertGreater(row.requested_revision,row.delivered_revision)
+        self.assertIsNone(row.lease_token)
+        self.assertIsNone(row.lease_until)
 
     def test_uncertain_accepted_write_is_verified_without_replay(self):
         self.employee();groups=sync.source_snapshot();adapter=Adapter();write=adapter.write

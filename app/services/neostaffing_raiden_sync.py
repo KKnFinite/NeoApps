@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.extensions import db
 from app.models.staffing_raiden_sync import StaffingRaidenSync as Receipt
+from app.services.neostaffing_sort_window import active_night_operation
 
 RAIDEN_WORKBOOK_ID = '1geZ6x1fJUPu7cDF9LDlFmX6FhwE25NqrXkqe5Ire-qM'
 DISPLAY_SHEET_ID = 1866078079
@@ -24,6 +25,10 @@ STOCK_SORT_NAME = 'night'
 
 
 class RaidenSyncError(ValueError):
+    pass
+
+
+class _SortWindowClosed(Exception):
     pass
 
 
@@ -49,13 +54,7 @@ def enabled():
 
 
 def current_operation():
-    from app.services import neostaffing as staffing
-    operation = staffing.current_night_attendance_operation()
-    if not operation or str(operation.gateway_code).upper() != 'RFD':
-        return None
-    if staffing._normalize_staffing_sort_name(operation.sort_name) != STOCK_SORT_NAME:
-        return None
-    return operation
+    return active_night_operation()
 
 
 def source_snapshot():
@@ -207,6 +206,7 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
     snapshot = None
     error = None
     needs_google = False
+    window_closed = False
     try:
         if db.engine.dialect.name == 'postgresql':
             db.session.connection(execution_options={'isolation_level': 'REPEATABLE READ'})
@@ -216,10 +216,14 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
             raise RaidenSyncError('Current Night Sort unavailable; no write.')
         needs_google = (last_verified is None or last_operation != snapshot[0]
                         or last_count != snapshot[1])
+        if current_operation() is None:
+            raise _SortWindowClosed()
         db.session.remove()  # No database connection while contacting Google.
         if needs_google:
             with adapter_factory() as adapter:
                 deliver(snapshot[1], adapter)
+    except _SortWindowClosed:
+        window_closed = True
     except Exception as exc:
         error = str(exc) if isinstance(exc, RaidenSyncError) else type(exc).__name__
         current_app.logger.warning('NeoStaffing Raiden M23 sync deferred: %s', error)
@@ -234,6 +238,11 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
         return False
     receipt.lease_token = None
     receipt.lease_until = None
+    if window_closed:
+        receipt.attempts = max(0, receipt.attempts - 1)
+        receipt.retry_at = now()
+        db.session.commit()
+        return False
     receipt.last_error = error[:100] if error else None
     if error:
         # Never hammer Google on provider failures: 5, 10, 20, then 30 min.

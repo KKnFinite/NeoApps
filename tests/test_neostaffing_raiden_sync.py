@@ -69,7 +69,7 @@ class RaidenMirrorTest(unittest.TestCase):
         self.assertEqual(sync.next_check(datetime(2026, 11, 10, 5, 5)),
                          datetime(2026, 11, 10, 5, 10))
         self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
-        with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
+        with patch.object(sync, 'current_operation', return_value=self.operation):
             self.assertIsNone(db.session.get(Receipt, 1))
             self.assertLessEqual(sync.next_deadline(sync.now()), sync.now())
             self.assertFalse(sync.drain(adapter_factory=lambda: Adapter()))
@@ -80,7 +80,7 @@ class RaidenMirrorTest(unittest.TestCase):
         self.person('RAIDEN-ABSENT', self.door, 'call_in')
         self.person('RAIDEN-UNMARKED', self.door)
         self.person('RAIDEN-OUTSIDE', self.outside, 'here')
-        with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
+        with patch.object(sync, 'current_operation', return_value=self.operation):
             self.assertEqual(sync.source_snapshot(), (self.operation.id, 1))
 
     def test_one_cell_write_and_readback_idempotent(self):
@@ -107,7 +107,7 @@ class RaidenMirrorTest(unittest.TestCase):
 
     def test_saves_coalesce_and_provider_is_only_contacted_on_count_change(self):
         self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
-        with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
+        with patch.object(sync, 'current_operation', return_value=self.operation):
             self.person('RAIDEN-COMMITTED', self.door, 'here')
             row = db.session.get(Receipt, 1)
             self.assertIsNotNone(row)
@@ -154,7 +154,7 @@ class RaidenMirrorTest(unittest.TestCase):
 
     def test_failed_google_write_retries_no_faster_than_five_minutes(self):
         self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
-        with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
+        with patch.object(sync, 'current_operation', return_value=self.operation):
             self.person('RAIDEN-RETRY', self.door, 'here')
             self.due_now()
             bad = Adapter()
@@ -172,10 +172,37 @@ class RaidenMirrorTest(unittest.TestCase):
             self.assertTrue(sync.drain(adapter_factory=lambda: recovered))
             self.assertEqual(recovered.calls, [2])
 
+    def test_during_window_only_no_background_checks_or_google_off_sort(self):
+        self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
+        self.person('RAIDEN-WINDOW',self.door,'here')
+        adapter=Adapter()
+        with patch.object(sync,'current_operation',return_value=None):
+            self.assertIsNone(sync.next_deadline(sync.now()))
+            self.assertFalse(sync.drain(adapter_factory=lambda:adapter))
+        self.assertEqual(adapter.closed,0)
+        with patch.object(sync,'current_operation',return_value=self.operation):
+            self.assertIsNotNone(sync.next_deadline(sync.now()))
+            self.due_now()
+            self.assertTrue(sync.drain(adapter_factory=lambda:adapter))
+        self.assertEqual(adapter.calls,[1])
+
+    def test_window_closes_while_preparing_raiden_never_reads_google(self):
+        self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
+        self.person('RAIDEN-CLOSE',self.door,'here')
+        adapter=Adapter()
+        with patch.object(sync,'current_operation',side_effect=[
+                self.operation, self.operation, self.operation, None]):
+            self.due_now()
+            self.assertFalse(sync.drain(adapter_factory=lambda:adapter))
+        self.assertEqual(adapter.closed,0)
+        receipt=db.session.get(Receipt,1,populate_existing=True)
+        self.assertGreater(receipt.requested_revision,receipt.delivered_revision)
+        self.assertIsNone(receipt.lease_until)
+
     def test_no_operation_does_not_erase_prior_value(self):
         self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
         adapter = Adapter(12)
-        with patch.object(staffing, 'current_night_attendance_operation', return_value=None):
+        with patch.object(sync, 'current_operation', return_value=None):
             self.assertIsNone(sync.next_deadline(sync.now()))
             self.assertFalse(sync.drain(adapter_factory=lambda: adapter))
         self.assertEqual(adapter.calls, [])
@@ -183,7 +210,7 @@ class RaidenMirrorTest(unittest.TestCase):
     def test_current_night_operation_change_forces_refresh(self):
         self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
         adapter = Adapter()
-        with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
+        with patch.object(sync, 'current_operation', return_value=self.operation):
             self.person('RAIDEN-ONE', self.door, 'here')
             self.due_now()
             self.assertTrue(sync.drain(adapter_factory=lambda: adapter))
@@ -193,7 +220,7 @@ class RaidenMirrorTest(unittest.TestCase):
             id=self.operation.id + 10, sort_date=self.operation.sort_date + timedelta(days=1),
             sort_name='night', gateway_code='RFD',
         )
-        with patch.object(staffing, 'current_night_attendance_operation', return_value=newer):
+        with patch.object(sync, 'current_operation', return_value=newer):
             self.assertIsNotNone(sync.next_deadline(sync.now()))
             self.due_now()
             self.assertTrue(sync.drain(adapter_factory=lambda: adapter))

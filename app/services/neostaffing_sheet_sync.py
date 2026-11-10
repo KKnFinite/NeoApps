@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.extensions import db
 from app.models.staffing_sheet_sync import StaffingSheetSync as Receipt
+from app.services.neostaffing_sort_window import active_night_operation
 
 HOURS_LOG_WORKBOOK_ID = '1j_A1oeGCv92EiylwyOcj_1By_mc1Nakmb_rVdw6QrCY'
 SHEET_TITLE = 'Shift Staffing'
@@ -25,6 +26,10 @@ CLASSIFICATIONS = {'part_time':'PT', 'full_time_combo':'FT',
 
 
 class StaffingSheetError(ValueError):
+    pass
+
+
+class _SortWindowClosed(Exception):
     pass
 
 
@@ -212,7 +217,7 @@ def deliver(groups, adapter):
 
 
 def next_deadline(at):
-    if not enabled():return None
+    if not enabled() or active_night_operation() is None:return None
     receipt=db.session.get(Receipt,1)
     if receipt is None:return at
     if receipt.requested_revision==receipt.delivered_revision:
@@ -229,7 +234,7 @@ def status():
 
 
 def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
-    if not enabled():return False
+    if not enabled() or active_night_operation() is None:return False
     _dirty(db.session(),initial=True)
     db.session.commit()
     previous=db.session.get(Receipt,1)
@@ -244,14 +249,18 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
         db.session.rollback();return False
     token=uuid4().hex;receipt.lease_token=token;receipt.lease_until=at+timedelta(minutes=5)
     receipt.attempts+=1;db.session.commit()
-    revision=None;checksum=None;error=None
+    revision=None;checksum=None;error=None;window_closed=False
     try:
         if db.engine.dialect.name=='postgresql':
             db.session.connection(execution_options={'isolation_level':'REPEATABLE READ'})
         revision=db.session.get(Receipt,1,populate_existing=True).requested_revision
         snapshot=source_snapshot()
+        if active_night_operation() is None:
+            raise _SortWindowClosed()
         db.session.remove()  # No database transaction/connection during Google I/O.
         with adapter_factory() as adapter:checksum=deliver(snapshot,adapter)
+    except _SortWindowClosed:
+        window_closed=True
     except Exception as exc:
         # No names, credential details or provider bodies in logs/receipts.
         error=str(exc) if isinstance(exc,StaffingSheetError) else type(exc).__name__
@@ -263,6 +272,11 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
         # a newer verified receipt. Request canonical reconciliation again.
         _dirty(db.session());db.session.commit();return False
     receipt.lease_token=None;receipt.lease_until=None
+    if window_closed:
+        receipt.attempts=max(0,receipt.attempts-1)
+        receipt.retry_at=now()
+        db.session.commit()
+        return False
     receipt.last_error=error[:100] if error else None
     if error:
         receipt.retry_at=now()+timedelta(seconds=min(600,30*2**min(receipt.attempts-1,5)))
