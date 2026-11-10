@@ -1,5 +1,5 @@
-{% extends "base.html" %}
-{% block title %}DUCC | NeoSub-Zero{% endblock %}
+{% if not live_fragment %}{% extends "base.html" %}{% endif %}
+{% block title %}{% if not live_fragment %}DUCC | NeoSub-Zero{% endif %}{% endblock %}
 {% block content %}
 {% set mobile_view = 'ramp' if request.args.get('view') == 'ramp' else 'staffing' %}
 {% set ramp_names = ramps|map(attribute='name')|list %}
@@ -14,6 +14,7 @@
             <button type="button" class="neosubzero-ucc-tv-exit" data-ucc-tv-exit hidden>EXIT TV MODE</button>
         </div>
     </header>
+    {% if not live_fragment %}
     {% include "neonodes/neosubzero/_nav.html" %}
 
     <div class="ucc-mobile-controls">
@@ -26,6 +27,7 @@
         </nav>
         {% if user_can('neosubzero.coordinator.view') or user_can('neosubzero.coordinator.edit') %}<a class="ucc-back-coordinator" data-ucc-back-coordinator href="{{ url_for('neosubzero.coordinator', ramp=mobile_ramp) }}">BACK TO COORDINATOR</a>{% endif %}
     </div>
+    {% endif %}
 
     {# Ambient presentation is paused; observations, services and saved preferences remain intact. #}
     <section class="neosubzero-weather" aria-labelledby="subzero-weather-heading"
@@ -88,7 +90,7 @@
     <p class="ucc-feedback" role="status" aria-live="polite" data-ucc-feedback hidden></p>
     <a class="ucc-current-link" href="{{ url_for('neosubzero.ucc') }}" target="_blank" rel="noopener" data-ucc-current-link hidden>OPEN CURRENT UCC IN NEW TAB · PRESERVE THIS DRAFT</a>
     {% include "neonodes/neosubzero/_ucc_board.html" %}
-    {% if can_edit %}
+    {% if can_edit and not live_fragment %}
     <dialog class="neosubzero-ucc-move-dialog" data-ucc-move-dialog>
         <h2>OCCUPIED SLOT</h2>
         <p><strong data-ucc-move-person></strong> is already assigned here.</p>
@@ -101,6 +103,8 @@
     </dialog>
     {% endif %}
 </section></div>
-<script src="{{ url_for('static', live='20261101-poll-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261106-pad-crews-v1') }}" defer></script>
+{% if not live_fragment %}
+<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261106-pad-crews-v1') }}" defer></script>
 <script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='20261106-ducc-pad-crews-v1') }}" defer></script>
+{% endif %}
 {% endblock %}

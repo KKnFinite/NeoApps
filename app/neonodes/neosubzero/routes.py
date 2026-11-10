@@ -394,10 +394,12 @@ def ucc():
             )
         return redirect(url_for("neosubzero.ucc"))
     weather = neosubzero_weather_context(gateway, operation)
-    return render_template(
+    live_fragment = request.args.get("fragment") == "1"
+    html = render_template(
         "neonodes/neosubzero/ucc.html",
         gateway=gateway,
         can_edit=access["can_edit"],
+        live_fragment=live_fragment,
         revision=neosubzero_ucc_revision(
             gateway,
             operation,
@@ -414,6 +416,7 @@ def ucc():
         application_context=_application_context(operation),
         **neosubzero_ucc_context(gateway, operation),
     )
+    return (html, {"Cache-Control": "no-store"}) if live_fragment else html
 
 
 def _ucc_json_request():

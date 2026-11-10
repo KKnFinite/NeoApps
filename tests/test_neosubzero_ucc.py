@@ -1,4 +1,5 @@
 from tests.css_contracts import stylesheet_source
+from tests.html_contracts import document
 import unittest
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -964,6 +965,64 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit()
         context=neosubzero_ucc_context(self.gateway,self.operation)
         self.assertNotIn("FUTURE-TAIL",{row["tail"] for ramp in context["ramps"] for row in ramp["aircraft"]})
+
+    def test_queue_labels_follow_occupancy_on_full_page_and_ramp_fragment(self):
+        client = self.app.test_client()
+        self._login(client, self._user("queue_labels", "simulator"))
+
+        def render(query=""):
+            with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation",
+                       return_value=self.operation), patch(
+                "app.neonodes.neosubzero.routes.neosubzero_weather_context",
+                return_value=self._weather_context_fixture(),
+            ):
+                response = client.get("/neosubzero/ucc" + query)
+            self.assertEqual(response.status_code, 200)
+            return response, document(response)
+
+        _, empty = render()
+        alpha = empty.one(**{"data-ucc-ramp": "Alpha"})
+        for level in range(1, 5):
+            slot = alpha.one(**{"data-ucc-queue-position": str(level)})
+            self.assertEqual(slot.text.strip(), "")
+            self.assertFalse(slot.findall())
+        pad = alpha.one(**{"data-ucc-deice-pad": None})
+        self.assertEqual(pad.text.strip(), "DEICE PAD")
+        self.assertEqual(len(pad.findall(cls="ucc-pad-outline")), 1)
+
+        self._deice_event(self.alpha, "finished")
+        for i in range(4):
+            mission = self._departure(f"5X-QUEUE-{i}", f"N30{i}", "DEN", 4)
+            db.session.add(SortDateParkingAssignment(
+                sort_date_operation_id=self.operation.id, tail_number=mission.assigned_tail_number,
+                ramp_code="A", position_code=f"A0{i + 4}",
+            ))
+            mission.actual_block_out_datetime_utc = datetime(2026, 9, 1, 1, i)
+            self._deice_event(mission, "deice_planned")
+        db.session.commit()
+
+        full, full_dom = render("?view=ramp&ramp=Alpha")
+        fragment, fragment_dom = render("?view=ramp&ramp=Alpha&fragment=1")
+        self.assertLess(len(fragment.data), len(full.data))
+        self.assertEqual(fragment.headers["Cache-Control"], "no-store")
+        self.assertFalse(fragment_dom.findall("html"))
+        self.assertTrue(full_dom.findall(**{"data-ucc-move-dialog": None}))
+        self.assertFalse(fragment_dom.findall(**{"data-ucc-move-dialog": None}))
+        for response, root in ((full, full_dom), (fragment, fragment_dom)):
+            self.assertNotIn(b"MIDDLE 1", response.data)
+            self.assertNotIn(b"MIDDLE 2", response.data)
+            board = root.one(**{"data-subzero-ucc": None})
+            self.assertEqual(board.attrs["data-ucc-mobile-view"], "ramp")
+            alpha = board.one(**{"data-ucc-ramp": "Alpha"})
+            for level, label in enumerate(("POSITION 10", None, None, "POSITION 9"), 1):
+                plane = alpha.one(**{"data-ucc-queue-position": str(level)}).one(cls="ucc-plane")
+                self.assertIn(f"N30{level - 1}", plane.text)
+                self.assertEqual([item.text for item in plane.findall(cls="ucc-plane-position")],
+                                 [label] if label else [])
+            pad = alpha.one(**{"data-ucc-deice-pad": None})
+            self.assertIn("N200", pad.one(cls="ucc-plane").text)
+            self.assertNotIn("DEICE PAD", pad.text)
+            self.assertFalse(pad.findall(cls="ucc-pad-outline"))
 
     def test_four_waiting_places_and_separate_pad_capacity_review(self):
         missions = [self.alpha]

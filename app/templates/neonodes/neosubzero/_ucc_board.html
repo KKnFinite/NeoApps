@@ -1,10 +1,13 @@
-{% macro aircraft(row, location, facing='up', position=none) -%}
+{% macro aircraft(row, location, facing='up', position=none, show_position=true) -%}
 <button type="button" class="ucc-plane state-{{ row.visual_state }}" data-ucc-aircraft="{{ row.identity_key }}" aria-label="{{ row.tail }} {{ row.flight }}, {{ location }}, {{ row.visual_label }}">
-    <b class="ucc-plane-position">{{ position or row.parking }}</b>
+    {% if show_position %}<b class="ucc-plane-position">{{ position or row.parking }}</b>{% endif %}
     <span class="ucc-plane-icon facing-{{ facing }}" aria-hidden="true"></span><strong>{{ row.tail }}</strong>
     {% if row.flight %}<span class="ucc-plane-flight">{{ row.flight }}</span>{% endif %}
     <span class="ucc-plane-etd">{{ row.etd or '—' }}{% if row.destination %} · {{ row.destination }}{% endif %}</span>
 </button>
+{%- endmacro %}
+{% macro waiting_location(row) -%}
+    {{ row.queue_label if row.queue_position in (1, 4) else 'DEICE QUEUE' }}
 {%- endmacro %}
 {% macro parking_place(place, positioned=true) -%}
 <div class="ucc-parking-place{% if positioned and place.grid_row %} ucc-grid-row-{{ place.grid_row }} ucc-grid-column-{{ place.grid_column }}{% endif %}" data-ucc-parking="{{ place.code }}">
@@ -17,7 +20,7 @@
 {% macro physical_ramp(ramp) -%}
 <div class="ucc-ramp-diagram ucc-desktop-label {{ 'is-main-ramp' if ramp.name != 'Remote' else 'is-remote' }}" aria-label="{{ ramp.name }} physical parking and deice planning">
     {% if ramp.name != 'Remote' %}
-    <div class="ucc-deice-pad ucc-desktop-label" data-ucc-deice-pad>{% if ramp.pad %}{{ aircraft(ramp.pad, 'DEICE PAD', 'up', 'DEICE PAD') }}{% else %}<b>DEICE PAD</b><span class="ucc-pad-outline ucc-plane-icon facing-up" aria-hidden="true"></span>{% endif %}</div>
+    <div class="ucc-deice-pad ucc-desktop-label" data-ucc-deice-pad>{% if ramp.pad %}{{ aircraft(ramp.pad, 'DEICE PAD', show_position=false) }}{% else %}<b>DEICE PAD</b><span class="ucc-pad-outline ucc-plane-icon facing-up" aria-hidden="true"></span>{% endif %}</div>
     <div class="ucc-parking-grid">
         {% for place in ramp.parking_positions if place.code[-2:] not in ('09','10') %}{{ parking_place(place) }}{% endfor %}
         {% for level in range(1,5) %}
@@ -25,7 +28,10 @@
         {% set queue_index = level - 1 %}
         {% set waiting = ramp.waiting_queue[queue_index] if queue_index >= 0 and queue_index < ramp.waiting_queue|length else none %}
         <div class="ucc-center-position ucc-grid-row-{{ level }} ucc-grid-column-2">
-            <div class="ucc-deice-waiting" data-ucc-queue-position="{{ level }}"{% if stand %} data-ucc-parking="{{ stand.code }}"{% endif %}>{% if waiting %}{{ aircraft(waiting, waiting.queue_label, 'up', waiting.queue_label) }}{% elif stand and stand.aircraft %}{% for row in stand.aircraft %}{{ aircraft(row, 'parking ' ~ stand.code) }}{% endfor %}{% else %}<b>{{ ('POSITION 10', 'MIDDLE 1', 'MIDDLE 2', 'POSITION 9')[queue_index] }}</b>{% endif %}</div>
+            <div{% if waiting or (stand and stand.aircraft) %} class="ucc-deice-waiting"{% endif %} data-ucc-queue-position="{{ level }}"{% if stand %} data-ucc-parking="{{ stand.code }}"{% endif %}>
+                {% if waiting %}{{ aircraft(waiting, waiting_location(waiting), position=waiting.queue_label, show_position=level in (1, 4)) }}
+                {% elif stand and stand.aircraft %}{% for row in stand.aircraft %}{{ aircraft(row, 'parking ' ~ stand.code, position='POSITION ' ~ (stand.code[-2:]|int)) }}{% endfor %}{% endif %}
+            </div>
         </div>
         {% endfor %}
     </div>
@@ -45,7 +51,7 @@
     {% set information_groups = ramps + ({'name':'LOCATION REVIEW','aircraft':unlocated_aircraft,'queue':[],'exceptions':[],'slots':[]},) %}
     {% for ramp in information_groups %}{% for row in ramp.aircraft %}
     <article data-ucc-info-mission="{{ row.identity_key }}" hidden><header><h2>{{ row.tail }}{% if row.flight %} · {{ row.flight }}{% endif %}</h2><button type="button" data-ucc-info-close aria-label="Close aircraft information">×</button></header>
-        <dl><div><dt>LOCATION</dt><dd>{{ ramp.name }} · {% if row == ramp.pad %}DEICE PAD{% elif row in ramp.waiting_queue|default(()) %}{{ row.queue_label }}{% elif row in ramp.exceptions %}UNPLACED · CAPACITY REVIEW{% else %}{{ row.parking }}{% endif %}</dd></div>{% if row.destination or row.departure_time %}<div><dt>ROUTE / {{ row.departure_time_label }}</dt><dd>{{ row.destination }} · {{ row.departure_time }}</dd></div>{% endif %}<div><dt>AIRCRAFT</dt><dd>{{ row.tail_status }}</dd></div><div><dt>PRETREAT</dt><dd>{{ row.pretreat_status }}</dd></div><div><dt>DEPARTURE DEICE</dt><dd>{{ row.deice_status }}</dd></div></dl>
+        <dl><div><dt>LOCATION</dt><dd>{{ ramp.name }} · {% if row == ramp.pad %}DEICE PAD{% elif row in ramp.waiting_queue|default(()) %}{{ waiting_location(row) }}{% elif row in ramp.exceptions %}UNPLACED · CAPACITY REVIEW{% else %}{{ row.parking }}{% endif %}</dd></div>{% if row.destination or row.departure_time %}<div><dt>ROUTE / {{ row.departure_time_label }}</dt><dd>{{ row.destination }} · {{ row.departure_time }}</dd></div>{% endif %}<div><dt>AIRCRAFT</dt><dd>{{ row.tail_status }}</dd></div><div><dt>PRETREAT</dt><dd>{{ row.pretreat_status }}</dd></div><div><dt>DEPARTURE DEICE</dt><dd>{{ row.deice_status }}</dd></div></dl>
         {% if row.identity_note %}<p class="ucc-warning">{{ row.identity_note }}</p>{% endif %}
         <div class="ucc-resource-context">{% for owner in ramp.slots if owner.truck_number or owner.roles.driver.person or owner.roles.flyer.person %}<span>P{{ owner.position }} · {{ owner.truck_number or 'No truck' }} · {{ owner.roles.driver.person.full_name if owner.roles.driver.person else 'No driver' }} / {{ owner.roles.flyer.person.full_name if owner.roles.flyer.person else 'No flyer' }}</span>{% endfor %}</div>
         {% if row in ramp.queue and can_edit %}<form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='queue') }}" data-ucc-queue-form><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="expected_version" value="{{ ramp.queue_version }}"><span>COORDINATOR QUEUE CORRECTION</span><button type="submit" name="direction" value="forward">MOVE FORWARD</button><button type="submit" name="direction" value="back">MOVE BACK</button></form>{% endif %}

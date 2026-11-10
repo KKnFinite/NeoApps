@@ -43,7 +43,7 @@ function fixture() {
         },
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../app/static/js/neosubzero_ucc.js'),'utf8'),context);
-    return {root,feedback,currentLink,calls,listeners,poll:()=>poll(),get replacements(){return replacements;},get forecastReplacements(){return forecastReplacements;},get getCount(){return getCount;}};
+    return {root,feedback,currentLink,calls,listeners,poll:()=>poll(),set revision(value){serverRevision=value;},get replacements(){return replacements;},get forecastReplacements(){return forecastReplacements;},get getCount(){return getCount;}};
 }
 
 (async () => {
@@ -56,9 +56,15 @@ function fixture() {
     assert.equal(f.replacements,0,'Staffing forms are not replaced during a draft');
     assert.equal(f.forecastReplacements,1,'Relocated forecasts stay live without replacing focused staffing forms');
     assert.equal(f.root.dataset.uccSelectedRamp,'Bravo','Critical live refresh preserves selected ramp during drafts');
+    assert.equal(new URL(f.calls[1].url).searchParams.get('fragment'),'1');
+    await f.poll();
+    assert.equal(f.getCount,3,'Unchanged pending revision only polls, without fetching the fragment again');
+    f.revision = 'r3';
+    await f.poll();
+    assert.equal(f.forecastReplacements,2,'New aircraft or weather revisions still refresh during the draft');
     delete f.root.dataset.dirty;
     await f.poll();
-    assert.equal(f.root.dataset.revision,'r2','The same pending revision reconciles after editing');
+    assert.equal(f.root.dataset.revision,'r3','The latest pending revision reconciles after editing');
     assert.equal(f.replacements,1);
     await f.poll();
     assert.equal(f.replacements,1,'Unchanged data does not rerender forms');

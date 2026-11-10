@@ -365,12 +365,15 @@
     const editing = () => root.dataset.dirty === "true" || root.dataset.saving === "true" || Boolean(root.querySelector("input:focus, select:focus, textarea:focus")) || dialog?.open;
     let loading = false;
     let mutationEpoch = 0;
+    let deferredRevision = null;
     const refreshBoard = async () => {
         if (loading || root.dataset.saving === "true") return false;
         loading = true;
         const requestEpoch = mutationEpoch;
         try {
-            const response = await (window.NeoLiveRevision?.fetch || fetch)(window.location.href, {cache: "no-store", credentials: "same-origin"});
+            const url = new URL(window.location.href);
+            url.searchParams.set("fragment", "1");
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: "no-store", credentials: "same-origin"});
             if (!response.ok) throw new Error("Unable to refresh UCC. Your displayed state may be stale.");
             const documentNext = new DOMParser().parseFromString(await response.text(), "text/html");
             const next = documentNext.querySelector("[data-subzero-ucc]");
@@ -380,6 +383,7 @@
             const operationId = root.querySelector('[name="operation_id"]')?.value;
             const nextOperationId = next.querySelector('[name="operation_id"]')?.value;
             if (deferred && operationId !== nextOperationId) {
+                deferredRevision = next.dataset.revision;
                 notify("The current sort changed. Your draft has not been applied; open current UCC before continuing.", true);
                 return false;
             }
@@ -433,6 +437,7 @@
             }
             applyMobileView();
             showAircraft(selectedMission);
+            deferredRevision = deferred ? next.dataset.revision : null;
             if (!deferred) root.dataset.revision = next.dataset.revision;
             window.scrollTo({top: scroll, behavior: "instant"});
             return !deferred;
@@ -504,6 +509,9 @@
             // Do not consume a revision while a draft/focused input defers it.
             // The same pending change must still refresh after editing ends.
             if (payload.revision !== root.dataset.revision) {
+                // Aircraft and weather already reflect this revision. Keep the
+                // staffing reconciliation pending without downloading it again.
+                if (editing() && payload.revision === deferredRevision) return;
                 if (await refreshBoard()) revision = root.dataset.revision;
             } else if (!editing()) revision = root.dataset.revision;
         },

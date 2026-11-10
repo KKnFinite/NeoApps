@@ -684,8 +684,7 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
     models = (
         ("registered_trucks", NeoSubZeroTruck, NeoSubZeroTruck.gateway_id == gateway.id),
         ("missions", SortDateMission, SortDateMission.sort_date_operation_id == operation_id),
-        ("ucc", NeoSubZeroUccAssignment, NeoSubZeroUccAssignment.sort_date_operation_id == operation_id),
-        ("trucks", NeoSubZeroUccTruckAssignment, NeoSubZeroUccTruckAssignment.sort_date_operation_id == operation_id),
+        # departure_deice_revision already covers both UCC assignment tables.
         ("callouts", NeoSubZeroCalloutAssignment, NeoSubZeroCalloutAssignment.sort_date_operation_id == operation_id),
         ("attendance", StaffingDailyAttendance, StaffingDailyAttendance.sort_date_operation_id == operation_id),
         ("qualifications", StaffingPersonQualification, StaffingPersonQualification.qualification_key == "deice"),
