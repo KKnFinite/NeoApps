@@ -17,7 +17,7 @@ def metadata():
     values=[{} for _ in range(56)]
     for i,door in enumerate(sync.DOORS):values[1+4*i]={'formattedValue':f'D{door}'}
     values[49]={'formattedValue':'DIS'};values[55]={'formattedValue':'UNASSIGNED'}
-    return dict(spreadsheetId=sync.TEST_WORKBOOK_ID,sheets=[dict(properties=dict(sheetId=0,title=sync.SHEET_TITLE),
+    return dict(spreadsheetId=sync.HOURS_LOG_WORKBOOK_ID,sheets=[dict(properties=dict(sheetId=0,title=sync.SHEET_TITLE),
         data=[dict(startRow=8,rowData=[dict(values=values)]),dict(startRow=10,startColumn=1,
             rowData=[dict(values=[{'userEnteredValue':{'formulaValue':'=Org!E26'}}])]),
             dict(startRow=11,startColumn=3,rowData=[dict(values=[{'userEnteredValue':{'formulaValue':'=E12'}}])])])])
@@ -88,10 +88,10 @@ class StaffingSheetSyncTest(unittest.TestCase):
         self.employee();rows=staffing.shift_flow_context()['rows']
         many=[{**rows[0],'person':N(id=i,classification='part_time',first_name='A',last_name='B')} for i in range(21)]
         with self.assertRaisesRegex(sync.StaffingSheetError,'Capacity overflow'):sync.projection(many)
-        adapter=Adapter();adapter.metadata['spreadsheetId']='1j_A1oeGCv92EiylwyOcj_1By_mc1Nakmb_rVdw6QrCY'
+        adapter=Adapter();adapter.metadata['spreadsheetId']='1WakfSwELioqBXbkd4LYd8CJ8BDHRLdsVfuzd0JjMgns'
         with self.assertRaises(sync.StaffingSheetError):sync.deliver(sync.source_snapshot(),adapter)
         self.assertFalse(adapter.writes)
-        with self.assertRaises(sync.StaffingSheetError):sync.GoogleAdapter('production')
+        with self.assertRaises(sync.StaffingSheetError):sync.GoogleAdapter('1WakfSwELioqBXbkd4LYd8CJ8BDHRLdsVfuzd0JjMgns')
         adapter=Adapter();adapter.metadata['sheets'][0]['data'].append(dict(startRow=11,startColumn=45,
             rowData=[dict(values=[{'userEnteredValue':{'formulaValue':'=DO_NOT_TOUCH()'}}])]))
         with self.assertRaisesRegex(sync.StaffingSheetError,'Formula found'):sync.deliver(sync.source_snapshot(),adapter)
@@ -131,6 +131,19 @@ class StaffingSheetSyncTest(unittest.TestCase):
         with patch.object(adapter,'write',side_effect=changed):self.assertTrue(sync.drain(adapter_factory=lambda:adapter))
         r=db.session.get(Receipt,1);self.assertGreater(r.requested_revision,r.delivered_revision)
         self.assertIsNotNone(sync.next_deadline(sync.now()))
+
+    def test_cutover_requeues_verified_legacy_receipt_for_production(self):
+        self.employee();self.app.config['NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED']=True
+        stale=Receipt(id=1,requested_revision=7,delivered_revision=7,
+            retry_at=sync.now()-timedelta(seconds=1),content_checksum='0'*64)
+        db.session.add(stale);db.session.commit()
+        self.assertIsNotNone(sync.next_deadline(sync.now()))
+        adapter=Adapter()
+        self.assertTrue(sync.drain(adapter_factory=lambda:adapter))
+        current=db.session.get(Receipt,1,populate_existing=True)
+        self.assertTrue(current.content_checksum.startswith('P1'))
+        self.assertEqual(current.requested_revision,current.delivered_revision)
+        self.assertEqual(len(adapter.writes),1)
 
     def test_expired_attempt_cannot_certify_or_strand_a_late_snapshot(self):
         self.employee();self.app.config['NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED']=True

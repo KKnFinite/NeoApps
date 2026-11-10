@@ -1,4 +1,4 @@
-"""Neo-authoritative, bounded Shift staffing mirror. TEST WORKBOOK ONLY.
+"""Neo-authoritative, bounded Shift staffing mirror. PRODUCTION HOURS LOG ONLY.
 
 No external work in employee transactions. A singleton receipt is dirtied in
 the canonical transaction and drained by the existing deadline worker.
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.extensions import db
 from app.models.staffing_sheet_sync import StaffingSheetSync as Receipt
 
-TEST_WORKBOOK_ID = '1WakfSwELioqBXbkd4LYd8CJ8BDHRLdsVfuzd0JjMgns'
+HOURS_LOG_WORKBOOK_ID = '1j_A1oeGCv92EiylwyOcj_1By_mc1Nakmb_rVdw6QrCY'
 SHEET_TITLE = 'Shift Staffing'
 SHEET_ID = 0
 DOORS = (34,32,29,26,24,21,17,13,9,6,4,1)
@@ -33,7 +33,9 @@ def now():
 
 
 def enabled():
-    override = current_app.config.get('NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED')
+    override = current_app.config.get('NEOSTAFFING_HOURS_LOG_SYNC_ENABLED')
+    if override is None:  # retain deployed legacy override during cutover
+        override = current_app.config.get('NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED')
     return override is True if override is not None else not current_app.testing and db.engine.dialect.name=='postgresql'
 
 
@@ -52,7 +54,7 @@ def projection(rows):
         final = _shift_flow_area_short_label(plan.final_door_work_area) if plan and plan.final_door_work_area else ''
         discharge=shift_work_area_type(assignment.work_area)==SHIFT_FLOW_DISCHARGE
         group='DIS' if discharge else final or 'UNASSIGNED'
-        if group not in groups:raise StaffingSheetError('Final Door has no matching TEST sheet group.')
+        if group not in groups:raise StaffingSheetError('Final Door has no matching production Hours Log group.')
         code=(final if discharge else row['shorthand']) if group!='UNASSIGNED' else ''
         if not discharge and group!='UNASSIGNED' and code not in {
                 f'{prefix} {phase}' for prefix in ('d','b','-') for phase in ('DOR','BM1','BM2','BM3')}:
@@ -70,13 +72,13 @@ def source_snapshot():
     from app.services import neostaffing as staffing
     context=staffing.shift_flow_context()
     if not context['shift_area_ids']:
-        raise StaffingSheetError('Night / Ramp / Shift hierarchy unavailable; refusing to erase TEST roster.')
+        raise StaffingSheetError('Night / Ramp / Shift hierarchy unavailable; refusing to erase production roster.')
     return projection(context['rows'])
 
 
 def cell_map(metadata):
-    if metadata.get('spreadsheetId')!=TEST_WORKBOOK_ID:
-        raise StaffingSheetError('Refusing a workbook other than the fixed TEST workbook.')
+    if metadata.get('spreadsheetId')!=HOURS_LOG_WORKBOOK_ID:
+        raise StaffingSheetError('Refusing a workbook other than the fixed production Hours Log.')
     sheet=next((s for s in metadata.get('sheets',[]) if s['properties']['sheetId']==SHEET_ID),None)
     if not sheet or sheet['properties']['title']!=SHEET_TITLE:
         raise StaffingSheetError('TEST Shift Staffing tab identity changed.')
@@ -87,9 +89,9 @@ def cell_map(metadata):
                 cells[(data.get('startRow',0)+i,data.get('startColumn',0)+j)]=cell
     for index,door in enumerate(DOORS):
         header=cells.get((8,1+4*index),{})
-        if header.get('formattedValue')!=f'D{door}':raise StaffingSheetError('TEST Door header layout changed.')
+        if header.get('formattedValue')!=f'D{door}':raise StaffingSheetError('production Door header layout changed.')
     if cells.get((8,49),{}).get('formattedValue')!='DIS' or cells.get((8,55),{}).get('formattedValue')!='UNASSIGNED':
-        raise StaffingSheetError('TEST DIS / UNASSIGNED layout changed.')
+        raise StaffingSheetError('production DIS / UNASSIGNED layout changed.')
     return sheet,cells
 
 
@@ -162,8 +164,8 @@ def requests_for(metadata, groups):
 
 
 class GoogleAdapter:
-    def __init__(self, workbook_id=TEST_WORKBOOK_ID):
-        if workbook_id!=TEST_WORKBOOK_ID:raise StaffingSheetError('TEST workbook only.')
+    def __init__(self, workbook_id=HOURS_LOG_WORKBOOK_ID):
+        if workbook_id!=HOURS_LOG_WORKBOOK_ID:raise StaffingSheetError('production Hours Log only.')
         from app.services.google_motherbrain_sheets import _credential_json, _parse_service_account_json, _create_gspread_writer
         from app.services.google_diagnostic_transport import diagnostic_http_client
         from functools import partial
@@ -176,11 +178,11 @@ class GoogleAdapter:
         from app.services.google_diagnostic_transport import close_google_clients
         close_google_clients([self.client])
     def read(self):
-        return self.client.http_client.request('get',f'https://sheets.googleapis.com/v4/spreadsheets/{TEST_WORKBOOK_ID}',
+        return self.client.http_client.request('get',f'https://sheets.googleapis.com/v4/spreadsheets/{HOURS_LOG_WORKBOOK_ID}',
             params={'ranges':"'Shift Staffing'!A1:BD203",'includeGridData':'true',
                 'fields':'spreadsheetId,sheets(properties,conditionalFormats,data(startRow,startColumn,rowData(values(userEnteredValue,formattedValue,dataValidation))))'}).json()
     def write(self,requests):
-        return self.client.http_client.request('post',f'https://sheets.googleapis.com/v4/spreadsheets/{TEST_WORKBOOK_ID}:batchUpdate',
+        return self.client.http_client.request('post',f'https://sheets.googleapis.com/v4/spreadsheets/{HOURS_LOG_WORKBOOK_ID}:batchUpdate',
             json={'requests':requests,'includeSpreadsheetInResponse':False}).json()
 
 
@@ -190,24 +192,26 @@ def deliver(groups, adapter):
     after=adapter.read()
     _sheet,cells=cell_map(after)
     if any(cells.get(key,{}).get('userEnteredValue',{})!=value for key,value in expected.items()):
-        raise StaffingSheetError('TEST sheet read-back mismatch; delivery remains pending.')
+        raise StaffingSheetError('production Hours Log read-back mismatch; delivery remains pending.')
     remaining,_=requests_for(after,groups)
-    if remaining:raise StaffingSheetError('TEST classification rules could not be verified; delivery remains pending.')
-    return sha256(json.dumps(groups,sort_keys=True).encode()).hexdigest()
+    if remaining:raise StaffingSheetError('production classification rules could not be verified; delivery remains pending.')
+    return 'P1'+sha256(json.dumps(groups,sort_keys=True).encode()).hexdigest()[:62]
 
 
 def next_deadline(at):
     if not enabled():return None
     receipt=db.session.get(Receipt,1)
     if receipt is None:return at
-    if receipt.requested_revision==receipt.delivered_revision:return None
+    if receipt.requested_revision==receipt.delivered_revision:
+        return None if (receipt.content_checksum or '').startswith('P1') else at
     return max(receipt.retry_at,receipt.lease_until or at)
 
 
 def status():
     if not enabled():return None
     row=db.session.get(Receipt,1)
-    return dict(pending=not row or row.requested_revision!=row.delivered_revision,
+    return dict(pending=not row or row.requested_revision!=row.delivered_revision
+                or not (row.content_checksum or '').startswith('P1'),
         error=row.last_error if row else None,verified_at=row.verified_at if row else None)
 
 
@@ -215,6 +219,11 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
     if not enabled():return False
     _dirty(db.session(),initial=True)
     db.session.commit()
+    previous=db.session.get(Receipt,1)
+    if previous and previous.requested_revision==previous.delivered_revision and not (previous.content_checksum or '').startswith('P1'):
+        # A previously VERIFIED TEST receipt must not suppress the first production delivery.
+        _dirty(db.session())
+        db.session.commit()
     receipt=db.session.execute(select(Receipt).where(Receipt.id==1).with_for_update(skip_locked=True)).scalar_one_or_none()
     at=now()
     if (receipt is None or receipt.requested_revision==receipt.delivered_revision
@@ -233,7 +242,7 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
     except Exception as exc:
         # No names, credential details or provider bodies in logs/receipts.
         error=str(exc) if isinstance(exc,StaffingSheetError) else type(exc).__name__
-        current_app.logger.warning('Staffing TEST sheet sync deferred: %s',error)
+        current_app.logger.warning('Staffing production Hours Log sync deferred: %s',error)
     finally:db.session.remove()
     receipt=db.session.execute(select(Receipt).where(Receipt.id==1).with_for_update()).scalar_one()
     if receipt.lease_token!=token:

@@ -8,7 +8,7 @@
       <div><h1 id="shift-flow-title">SHIFT FLOW</h1><p>Ramp / Shift · Final Door rosters</p></div>
       <strong><span data-roster-planned-count>{{ shift_flow.flow_map.door_roster.count }}</span> planned · <span data-roster-header-ballmat-count>{{ shift_flow.flow_map.door_roster.ballmat_count }}</span> Ballmat start</strong>
     </header>
-    {% if sheet_sync %}<p role="status">TEST Sheet sync: {{ 'PENDING' if sheet_sync.pending else 'VERIFIED' }}{% if sheet_sync.error %} · {{ sheet_sync.error }}{% endif %} · <a href="https://docs.google.com/spreadsheets/d/1WakfSwELioqBXbkd4LYd8CJ8BDHRLdsVfuzd0JjMgns/edit#gid=0" target="_blank" rel="noopener">Shift Staffing TEST</a></p>{% endif %}
+    {% if sheet_sync %}<p role="status">HOURS LOG sync: {{ 'PENDING' if sheet_sync.pending else 'VERIFIED' }}{% if sheet_sync.error %} · {{ sheet_sync.error }}{% endif %} · <a href="https://docs.google.com/spreadsheets/d/1j_A1oeGCv92EiylwyOcj_1By_mc1Nakmb_rVdw6QrCY/edit#gid=0" target="_blank" rel="noopener">Shift Staffing TEST</a></p>{% endif %}
     {% include "neostaffing/_shift_flow_map.html" %}
   </main>
   {% if selected and not can_edit_shift_flow %}
