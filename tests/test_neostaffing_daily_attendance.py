@@ -272,6 +272,84 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         )
         self.assertIsNotNone(db.session.get(StaffingDailyAttendance, historical.id))
 
+    def test_async_save_returns_fresh_original_and_preserves_unmarked_note(self):
+        sort, _, _, area, _ = self._hierarchy()
+        operation = self._night_operation()
+        person = self._person("ASY100", area)
+        supervisor = self._user("async_note_supervisor", "operator")
+        db.session.commit()
+        self._login(supervisor.username)
+        path = f"/neostaffing/attendance?work_area_id={area.id}"
+        form = {"sort_date_operation_id": operation.id, "sort_id": sort.id, "work_area_id": area.id,
+                f"status_{person.id}": "", f"note_{person.id}": "  Keep this note  ",
+                f"original_{person.id}": self._attendance_original_from_page(path, person.id)}
+        note = self.client.post("/neostaffing/attendance/save", data=form)
+        self.assertEqual(note.status_code, 200)
+        saved = note.json["rows"][0]
+        self.assertEqual((saved["status"], saved["note"]), ("", "Keep this note"))
+        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+        self.assertIn(b'Keep this note', self.client.get(path).data)
+
+        form[f"status_{person.id}"] = "here"
+        stale = self.client.post("/neostaffing/attendance/save", data=form)
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json["row"], saved)
+        form[f"original_{person.id}"] = saved["original"]
+        form.pop(f"note_{person.id}")
+        marked = self.client.post("/neostaffing/attendance/save", data=form)
+        self.assertEqual(marked.status_code, 200)
+        saved = marked.json["rows"][0]
+        self.assertEqual((saved["status"], saved["note"]), ("here", "Keep this note"))
+        form.update({f"original_{person.id}": saved["original"], f"status_{person.id}": ""})
+        cleared = self.client.post("/neostaffing/attendance/save", data=form)
+        self.assertEqual(cleared.status_code, 200)
+        self.assertEqual(cleared.json["rows"][0]["note"], "Keep this note")
+        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+
+    def test_async_bulk_uses_signed_scope_and_skips_newer_statuses_and_notes(self):
+        sort, _, department, area, outside_area = self._hierarchy()
+        operation = self._night_operation()
+        unmarked, raced, noted, marked, outside = [self._person(f"BULK{index}", location)
+            for index, location in enumerate([area, area, area, area, outside_area])]
+        supervisor = self._user("bulk_scope_supervisor", "operator")
+        manager = StaffingPerson.query.filter_by(employee_id=supervisor.employee_id).one()
+        manager.classification = "full_time_supervisor"
+        leadership = StaffingLeadershipAssignment.query.filter_by(person_id=manager.id).one()
+        leadership.unit = department
+        leadership.leadership_level = "department"
+        writer = self._user("bulk_other_supervisor", "operator")
+        scope = {"sort_date_operation_id": operation.id, "sort_id": sort.id, "work_area_id": area.id}
+        staffing_service.save_attendance({**scope, f"status_{marked.id}": "vacation", f"note_{marked.id}": "Approved"}, writer)
+        db.session.commit()
+        self._login(supervisor.username)
+        path = f"/neostaffing/attendance?sort_id={sort.id}"
+        batch = {**scope, "bulk_status": "here"}
+        for person in (unmarked, raced, noted, marked):
+            batch[f"status_{person.id}"] = "here"
+            batch[f"note_{person.id}"] = "must not be applied"
+            batch[f"original_{person.id}"] = self._attendance_original_from_page(path, person.id)
+
+        staffing_service.save_attendance({**scope, f"status_{raced.id}": "call_in", f"note_{raced.id}": "Called"}, writer)
+        staffing_service.save_attendance({**scope, f"status_{noted.id}": "", f"note_{noted.id}": "New note"}, writer)
+        db.session.commit()
+        forged = {**batch, "work_area_id": "", f"status_{outside.id}": "",
+                  f"original_{outside.id}": self._attendance_original_from_page(path, outside.id)}
+        self.assertEqual(self.client.post("/neostaffing/attendance/save", data=forged).status_code, 400)
+        self.assertEqual(StaffingDailyAttendance.query.count(), 2)
+
+        response = self.client.post("/neostaffing/attendance/save", data=batch)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["saved"], 1)
+        self.assertEqual({row["person_id"]: (row["status"], row["note"]) for row in response.json["rows"]},
+                         {unmarked.id: ("here", ""), raced.id: ("call_in", "Called"), noted.id: ("", "New note")})
+        self.assertEqual({row.person_id: (row.status, row.note) for row in StaffingDailyAttendance.query.all()},
+                         {unmarked.id: ("here", None), raced.id: ("call_in", "Called"), marked.id: ("vacation", "Approved")})
+        self.assertEqual(self.client.post("/neostaffing/attendance/save", data=batch).json["saved"], 0)
+
+    def _attendance_original_from_page(self, path, person_id):
+        page = self.client.get(path).get_data(as_text=True)
+        return unescape(re.search(fr'name="original_{person_id}" value="([^"]+)"', page)[1])
+
     def test_legacy_null_operation_record_remains_readable(self):
         staffing_sort, _operation_unit, department, work_area, _direct = self._hierarchy()
         operation = self._night_operation()
@@ -520,10 +598,13 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         attendance_css = css.split(
             "/* NeoStaffing Attendance full-width operations console. */", 1
         )[1]
-        self.assertIn("grid-template-columns: clamp(144px, 10vw, 184px)", attendance_css)
-        self.assertIn("width: calc(100vw - 32px);", attendance_css)
-        self.assertIn("overflow-x: clip", attendance_css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", attendance_css)
+        self.assertNotIn("body:has(.neostaffing-attendance-console) { overflow-x", css)
+        self.assertNotIn("min-width: 720px; table-layout: fixed", attendance_css)
         self.assertIn("min-height: 27px", attendance_css)
+        self.assertIn('data-attendance-search', page)
+        self.assertIn('ALL HERE — CURRENT SCOPE', page)
+        self.assertNotIn('SAVE ATTENDANCE', page)
 
         context = staffing_service.attendance_context(
             {"work_area_ids": [str(nested_area.id), str(direct_area.id)]}

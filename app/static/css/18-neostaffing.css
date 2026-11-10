@@ -322,16 +322,13 @@ body:has(.neostaffing-operational-attendance) { overflow-x: clip; }
 /* NeoStaffing Attendance full-width operations console. */
 .neostaffing-attendance-console {
     display: grid;
-    grid-template-columns: clamp(144px, 10vw, 184px) clamp(220px, 16vw, 286px) minmax(0, 1fr);
-    width: calc(100vw - 32px);
-    max-width: none;
-    height: calc(100vh - 122px);
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
     min-height: 0;
-    margin: -18px calc(50% - 50vw + 16px) -54px;
-    overflow: hidden;
+    margin: 0;
     background: #091116;
 }
-body:has(.neostaffing-attendance-console) { overflow-x: clip; }
 .neostaffing-attendance-console .neostaffing-rail {
     position: static;
     width: auto;
@@ -345,6 +342,7 @@ body:has(.neostaffing-attendance-console) { overflow-x: clip; }
 .neostaffing-attendance-scope {
     position: static;
     height: 100%;
+    min-width: 0;
     overflow: auto;
     padding: 12px 8px;
     border-right: 1px solid rgba(var(--node-rgb), .18);

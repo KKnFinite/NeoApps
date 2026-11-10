@@ -101,3 +101,15 @@ class StaffingDailyAttendance(db.Model):
     sort_date_operation = db.relationship("SortDateOperation")
     recorded_by_user = db.relationship("User", foreign_keys=[recorded_by_user_id])
     updated_by_user = db.relationship("User", foreign_keys=[updated_by_user_id])
+
+
+class StaffingUnmarkedAttendanceNote(db.Model):
+    """A note on a current roster row that has no attendance status yet."""
+
+    __tablename__ = "staffing_unmarked_attendance_notes"
+
+    sort_date_operation_id = db.Column(db.Integer, db.ForeignKey("sort_date_operations.id"), primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey("staffing_people.id"), primary_key=True, index=True)
+    note = db.Column(db.Text, nullable=False)
+    updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -130,7 +130,9 @@ body.blueprint-neostaffing .neostaffing-side-filter .neostaffing-org-tree-scroll
 }
 @media(min-width:981px) {
   body.blueprint-neostaffing .neostaffing-attendance-console {
-    grid-template-columns:230px minmax(0,1fr);
+    grid-template-columns:clamp(155px,17vw,230px) minmax(0,1fr);
+    height:calc(100dvh - 122px);
+    min-height:460px;
     gap:12px;
   }
 }

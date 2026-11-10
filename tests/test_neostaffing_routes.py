@@ -3533,7 +3533,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(approval_workspace.status_code, 200)
         self.assertIn(b"SUBMIT CHANGES MODE", approval_workspace.data)
 
-    def test_attendance_all_here_updates_existing_records_and_counts(self):
+    def test_attendance_all_here_preserves_existing_records_and_counts(self):
         user = self._user("staffing_attendance_all_here")
         self._grant_app_access(user, "neostaffing", "operator")
         sort, _operation, _department, work_area = self._staffing_hierarchy()
@@ -3592,8 +3592,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(StaffingDailyAttendance.query.filter_by(attendance_date=date(2026, 7, 3)).count(), 2)
-        self.assertEqual(StaffingDailyAttendance.query.filter_by(status="here").count(), 2)
-        self.assertIn(b"Here", saved.data)
+        self.assertEqual({row.status for row in StaffingDailyAttendance.query.all()}, {"call_in", "vacation"})
+        self.assertIn(b"Attendance saved for 0 people.", saved.data)
         self.assertEqual(db.session.get(StaffingPerson, first_person.id).employee_status, "fmla")
 
     def test_database_errors_are_sanitized_with_rollback_and_safe_logging(self):

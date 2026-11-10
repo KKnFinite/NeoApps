@@ -464,6 +464,27 @@ def attendance():
     return _handle_attendance()
 
 
+@bp.post("/attendance/save")
+@neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
+def attendance_save():
+    values = request.form
+    if not values.get("bulk_status") and len(staffing_service._submitted_attendance_person_ids(values)) != 1:
+        return jsonify(error="Select exactly one employee to save."), 400
+    try:
+        result = staffing_service.save_attendance(values, current_user, form_submission=True, return_rows=True)
+        db.session.commit()
+    except staffing_service.AttendanceEditConflict as error:
+        db.session.rollback()
+        return jsonify(error=str(error), row=error.row), 409
+    except ValueError as error:
+        db.session.rollback()
+        return jsonify(error=str(error)), 400
+    except SQLAlchemyError as error:
+        db.session.rollback()
+        return jsonify(error=safe_mutation_error(error, "save attendance")), 503
+    return jsonify(result)
+
+
 @bp.route("/people/attendance", methods=["GET", "POST"])
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def people_attendance():

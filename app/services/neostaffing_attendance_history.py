@@ -11,6 +11,7 @@ from app.models import (
     StaffingAttendanceSummary,
     StaffingDailyAttendance,
 )
+from app.models.staffing_daily_attendance import StaffingUnmarkedAttendanceNote
 from app.services import neostaffing as staffing_service
 from app.services.gateway_matrix import (
     current_gateway_local_datetime,
@@ -184,6 +185,9 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
     outstanding_details = db.session.query(StaffingDailyAttendance.id).filter(
         *_attendance_detail_scope(SortDateOperation, staffing_sort.id)
     ).exists()
+    outstanding_notes = db.session.query(StaffingUnmarkedAttendanceNote.person_id).filter(
+        StaffingUnmarkedAttendanceNote.sort_date_operation_id == SortDateOperation.id
+    ).exists()
     has_summary = db.session.query(StaffingAttendanceSummary.id).filter(
         StaffingAttendanceSummary.sort_date_operation_id == SortDateOperation.id
     ).exists()
@@ -191,7 +195,7 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
     correction_start = week_start(local_now.date())
     prior_operation = (
         prior_candidates.filter(or_(~has_summary, and_(
-            outstanding_details, SortDateOperation.sort_date < correction_start)))
+            or_(outstanding_details, outstanding_notes), SortDateOperation.sort_date < correction_start)))
         .order_by(SortDateOperation.sort_date, SortDateOperation.id)
         .with_for_update(key_share=True)
         .first()
@@ -210,10 +214,11 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
     detail_count = StaffingDailyAttendance.query.filter(
         *_attendance_detail_scope(prior_operation, staffing_sort.id)
     ).count()
+    unmarked_notes = StaffingUnmarkedAttendanceNote.query.filter_by(sort_date_operation_id=prior_operation.id)
     existing_summary_count = StaffingAttendanceSummary.query.filter_by(
         sort_date_operation_id=prior_operation.id
     ).count()
-    if existing_summary_count and not detail_count:
+    if existing_summary_count and not detail_count and not unmarked_notes.first():
         return AttendanceRolloverResult(
             current_operation.id,
             prior_operation.id,
@@ -229,6 +234,8 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
     )
     purged_detail_count = (legacy_or_linked.delete(synchronize_session=False)
                           if prior_operation.sort_date < correction_start else 0)
+    if prior_operation.sort_date < correction_start:
+        purged_detail_count += unmarked_notes.delete(synchronize_session=False)
     db.session.flush()
     return AttendanceRolloverResult(
         current_operation.id,

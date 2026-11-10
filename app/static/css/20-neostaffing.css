@@ -13,23 +13,25 @@
 .neostaffing-attendance-scope-node.is-selected { border-left-color: #55c8c1; background: rgba(var(--node-rgb), .14); color: #f0f8f7; }
 .neostaffing-attendance-scope-node span { color: #748788; font-size: .55rem; font-weight: 850; text-transform: uppercase; }
 .neostaffing-attendance-scope-node strong { overflow: hidden; font-size: .75rem; line-height: 1.2; text-overflow: ellipsis; white-space: normal; }
+.neostaffing-attendance-scope form, .neostaffing-attendance-scope form label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.neostaffing-attendance-scope form :is(select, button) { box-sizing: border-box; min-height: 28px; max-width: 100%; }
 
 .neostaffing-attendance-workspace {
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr);
     gap: 8px;
     min-width: 0;
-    height: 100%;
+    box-sizing: border-box;
     min-height: 0;
     padding: 12px 14px 14px;
 }
-.neostaffing-attendance-header { min-height: 35px; }
+.neostaffing-attendance-header { min-height: 35px; flex-wrap: wrap; }
 .neostaffing-attendance-header h1 { margin: 0; color: #edf8f7; font-size: .94rem; letter-spacing: .09em; }
 .neostaffing-attendance-header p { margin: 2px 0 0; color: #7bbdb9; font-size: .68rem; font-weight: 750; }
 .neostaffing-attendance-header > strong { color: #72d4ce; font-size: .67rem; letter-spacing: .05em; }
 .neostaffing-attendance-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(94px, 10.6%)), 1fr));
     gap: 4px;
     min-width: 0;
 }
@@ -38,12 +40,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 5px;
+    min-width: 0;
     min-height: 30px;
     padding: 4px 6px;
     border-left: 2px solid rgba(var(--node-rgb), .38);
     background: #0d171d;
 }
-.neostaffing-attendance-summary span { color: #899b9c; font-size: .56rem; font-weight: 800; line-height: 1.08; text-transform: uppercase; }
+.neostaffing-attendance-summary span { color: #899b9c; font-size: .56rem; font-weight: 800; line-height: 1.15; text-transform: uppercase; overflow-wrap: anywhere; }
 .neostaffing-attendance-summary strong { color: #dbefed; font-size: .75rem; }
 .neostaffing-attendance-roster {
     display: grid;
@@ -53,25 +56,33 @@
     border-top: 2px solid #287f7a;
     background: #0b1419;
 }
-.neostaffing-attendance-toolbar { min-height: 38px; padding: 5px 8px; border-bottom: 1px solid rgba(var(--node-rgb), .16); }
-.neostaffing-attendance-toolbar > div { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.neostaffing-attendance-toolbar > div:first-child strong { color: #e2f3f2; font-size: .68rem; letter-spacing: .06em; }
-.neostaffing-attendance-toolbar > div:first-child span { overflow: hidden; color: #839797; font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
-.neostaffing-attendance-toolbar button { min-height: 27px; padding: 3px 8px; font-size: .61rem; line-height: 1; }
+.neostaffing-attendance-toolbar { flex-wrap: wrap; min-height: 38px; padding: 6px 8px; border-bottom: 1px solid rgba(var(--node-rgb), .16); }
+.neostaffing-attendance-toolbar > div { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; min-width: 0; max-width: 100%; }
+.neostaffing-attendance-roster-title strong { color: #e2f3f2; font-size: .68rem; letter-spacing: .06em; }
+.neostaffing-attendance-roster-title span { color: #96acac; font-size: .68rem; overflow-wrap: anywhere; }
+.neostaffing-attendance-search { flex: 1 1 230px; }
+.neostaffing-attendance-search input { flex: 1 1 150px; min-width: 0; max-width: 100%; min-height: 32px; padding: 4px 8px; border: 1px solid #396663; border-radius: 4px; background: #111e25; color: #e8f4f3; font: inherit; font-size: .8rem; color-scheme: dark; }
+.neostaffing-attendance-search input::-webkit-search-cancel-button { display: none; }
+.neostaffing-attendance-search span, .neostaffing-attendance-bulk :is(small, span) { color: #96acac; font-size: .69rem; overflow-wrap: anywhere; }
+.neostaffing-attendance-toolbar .neostaffing-attendance-bulk { flex: 1 1 240px; }
+.neostaffing-attendance-toolbar .action-button { min-height: 30px; max-width: 100%; padding: 4px 8px; font-size: .69rem; line-height: 1.2; white-space: normal; }
+.neostaffing-attendance-roster [hidden] { display: none !important; }
 .neostaffing-attendance-table-wrap { min-width: 0; min-height: 0; overflow: auto; }
-.neostaffing-attendance-table { width: 100%; min-width: 720px; table-layout: fixed; border-collapse: collapse; font-size: .71rem; }
-.neostaffing-attendance-table th:nth-child(1) { width: clamp(175px, 21%, 280px); }
-.neostaffing-attendance-table th:nth-child(2) { width: clamp(120px, 16%, 210px); }
-.neostaffing-attendance-table th:nth-child(3) { width: 180px; }
+.neostaffing-attendance-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .74rem; }
+.neostaffing-attendance-table th:nth-child(1) { width: 26%; }
+.neostaffing-attendance-table th:nth-child(2) { width: 20%; }
+.neostaffing-attendance-table th:nth-child(3) { width: 24%; }
 .neostaffing-attendance-table th,
-.neostaffing-attendance-table td { height: 38px; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.055); text-align: left; vertical-align: middle; }
+.neostaffing-attendance-table td { height: 38px; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.055); text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
 .neostaffing-attendance-table th { position: sticky; top: 0; z-index: 2; height: 27px; background: #111e25; color: #819596; font-size: .57rem; letter-spacing: .07em; text-transform: uppercase; }
 .neostaffing-attendance-table tbody tr:hover { background: rgba(var(--node-rgb), .07); }
-.neostaffing-attendance-table td:first-child strong { display: block; overflow: hidden; color: #e7f3f2; font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
+.neostaffing-attendance-table td:first-child strong { display: block; color: #e7f3f2; font-size: .74rem; }
 .neostaffing-attendance-table td:first-child span { color: #788d8e; font-size: .59rem; }
 .neostaffing-attendance-table select,
 .neostaffing-attendance-table input {
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     min-height: 27px;
     padding: 3px 7px;
     border: 1px solid rgba(var(--node-rgb), .38);
@@ -82,7 +93,7 @@
     font: inherit;
     color-scheme: dark;
 }
-.neostaffing-attendance-table select { padding-right: 24px; }
+.neostaffing-attendance-table select { padding-right: 3px; }
 .neostaffing-attendance-table select:hover,
 .neostaffing-attendance-table input:hover { border-color: #4ebeb8; }
 .neostaffing-attendance-table select:focus,
@@ -93,18 +104,29 @@
 .neostaffing-attendance-empty,
 .neostaffing-attendance-empty-state { color: #7f9293; font-size: .7rem; text-align: center; }
 .neostaffing-attendance-empty-state { display: grid; place-items: center; min-height: 280px; }
+.neostaffing-attendance-mobile-label { display: none; }
+.neostaffing-attendance-save-state { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-height: 1.1em; margin-top: 2px; color: #92c9c4; font-size: .67rem; }
+.neostaffing-attendance-save-state [data-state="error"] { color: #ffb4a9; }
+.neostaffing-attendance-save-state button { color: #a3ece6; background: #152a30; border: 1px solid #477771; border-radius: 3px; padding: 3px 7px; cursor: pointer; font: inherit; }
 
 @media (max-width: 1280px) and (min-width: 981px) {
-    .neostaffing-attendance-console { grid-template-columns: 144px 220px minmax(0, 1fr); }
     .neostaffing-attendance-workspace { padding: 10px; }
 }
 @media (max-width: 980px) {
-    .neostaffing-attendance-console { grid-template-columns: 1fr; width: 100%; height: auto; min-height: 0; margin: 0; overflow: visible; }
     .neostaffing-attendance-console .neostaffing-rail { display: none; }
     .neostaffing-attendance-scope { position: static; height: auto; max-height: 260px; }
     .neostaffing-attendance-workspace { min-height: auto; padding: 10px; }
-    .neostaffing-attendance-summary { grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); }
-    .neostaffing-attendance-table-wrap { max-height: 68vh; }
+}
+@media (max-width: 640px) {
+    body.mobile-app-chrome:has(.neostaffing-attendance-console) { overflow-x: visible; }
+    .neostaffing-attendance-table-wrap { overflow: visible; }
+    .neostaffing-attendance-table, .neostaffing-attendance-table tbody { display: block; }
+    .neostaffing-attendance-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .neostaffing-attendance-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 5px 9px; padding: 7px 8px; border-bottom: 1px solid #243539; }
+    .neostaffing-attendance-table td { display: block; height: auto; padding: 0; border: 0; }
+    .neostaffing-attendance-table td[colspan] { grid-column: 1 / -1; }
+    .neostaffing-attendance-mobile-label { display: block; margin-bottom: 3px; color: #96acac; font-size: .68rem; }
+    .neostaffing-attendance-table :is(input, select) { min-height: 36px; font-size: 16px; }
 }
 
 /* NeoStaffing Requests / Approvals full-width operations console. */

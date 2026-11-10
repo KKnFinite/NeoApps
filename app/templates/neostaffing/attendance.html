@@ -51,42 +51,43 @@
         {% if attendance.ready %}
         <section class="neostaffing-attendance-summary" aria-label="Attendance counts">
             <article><span>On Payroll</span><strong>{{ attendance.summary.total_roster }}</strong></article>
-            <article><span>Working</span><strong>{{ attendance.summary.here }}</strong></article>
-            <article><span>Unmarked</span><strong>{{ attendance.summary.unmarked }}</strong></article>
-            <article><span>Called In</span><strong>{{ attendance.counts.get("call_in", 0) }}</strong></article>
-            <article><span>No Call</span><strong>{{ attendance.counts.get("no_call", 0) }}</strong></article>
-            <article><span>Scheduled Off</span><strong>{{ attendance.counts.get("scheduled_off", 0) }}</strong></article>
-            <article><span>Vacation</span><strong>{{ attendance.counts.get("vacation", 0) }}</strong></article>
-            <article><span>Opt Day</span><strong>{{ attendance.counts.get("optional_day", 0) }}</strong></article>
-            <article><span>Anniversary Day</span><strong>{{ attendance.counts.get("anniversary_day", 0) }}</strong></article>
-            <article><span>Disability</span><strong>{{ attendance.counts.get("disability", 0) }}</strong></article>
-            <article><span>Work Comp</span><strong>{{ attendance.counts.get("comp", 0) }}</strong></article>
-            <article><span>Funeral</span><strong>{{ attendance.counts.get("funeral", 0) }}</strong></article>
-            <article><span>Jury</span><strong>{{ attendance.counts.get("jury", 0) }}</strong></article>
-            <article><span>FMLA</span><strong>{{ attendance.counts.get("int_fmla", 0) }}</strong></article>
-            <article><span>Military</span><strong>{{ attendance.counts.get("military", 0) }}</strong></article>
-            <article><span>Personal Leave</span><strong>{{ attendance.counts.get("personal_leave", 0) }}</strong></article>
-            <article><span>Cleared</span><strong>{{ attendance.counts.get("cleared", 0) }}</strong></article>
+            {% for status, label in [('here','Working'), ('','Unmarked'), ('call_in','Called In'), ('no_call','No Call'), ('scheduled_off','Scheduled Off'), ('vacation','Vacation'), ('optional_day','Opt Day'), ('anniversary_day','Anniversary Day'), ('disability','Disability'), ('comp','Work Comp'), ('funeral','Funeral'), ('jury','Jury'), ('int_fmla','FMLA'), ('military','Military'), ('personal_leave','Personal Leave'), ('cleared','Cleared')] %}
+            <article><span>{{ label }}</span><strong data-attendance-count="{{ status }}">{{ attendance.counts.get(status, 0) if status else attendance.summary.unmarked }}</strong></article>
+            {% endfor %}
         </section>
 
-        <form class="neostaffing-attendance-roster" method="post">
+        <section class="neostaffing-attendance-roster" data-attendance-roster data-save-url="{{ url_for('neostaffing.attendance_save') }}">
             <input type="hidden" name="sort_date_operation_id" value="{{ attendance.sort_date_operation.id }}"><input type="hidden" name="sort_id" value="{{ filters.sort_id }}"><input type="hidden" name="operation_id" value="{{ filters.operation_id }}"><input type="hidden" name="department_id" value="{{ filters.department_id }}"><input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">{% for work_area_id in attendance.selected_work_area_ids %}<input type="hidden" name="work_area_ids" value="{{ work_area_id }}">{% endfor %}
             <div class="neostaffing-attendance-toolbar">
-                <div><strong>DAILY ROSTER</strong>{% if attendance.selected_work_areas %}<span>{{ attendance.selected_work_areas|map(attribute="name")|join(" · ") }}</span>{% elif attendance.selected_scope %}<span>{{ unit_path(attendance.selected_scope) }}</span>{% endif %}</div>
-                {% if can_edit_attendance %}<div><button class="action-button action-button-secondary" type="submit" name="bulk_status" value="here">ALL HERE</button><button class="action-button" type="submit">SAVE ATTENDANCE</button></div>{% endif %}
+                <div class="neostaffing-attendance-roster-title"><strong>DAILY ROSTER</strong>{% if attendance.selected_work_areas %}<span>{{ attendance.selected_work_areas|map(attribute="name")|join(" · ") }}</span>{% elif attendance.selected_scope %}<span>{{ unit_path(attendance.selected_scope) }}</span>{% endif %}</div>
+                <div class="neostaffing-attendance-search">
+                    <input type="search" data-attendance-search aria-label="Search employees" placeholder="Search by name or employee ID" autocomplete="off">
+                    <button type="button" data-attendance-clear class="action-button action-button-secondary" hidden>Clear</button>
+                    <span data-attendance-matches role="status">{{ attendance.total_loaded }} matches</span>
+                </div>
+                {% if can_edit_attendance and attendance.rows|selectattr('authorized')|list %}
+                <div class="neostaffing-attendance-bulk">
+                    <button class="action-button action-button-secondary" type="button" data-attendance-all aria-describedby="attendance-bulk-help">ALL HERE — CURRENT SCOPE</button>
+                    <small id="attendance-bulk-help">Marks editable Unmarked employees in this scope, including hidden search results.</small>
+                    <span data-attendance-bulk-result role="status" hidden></span>
+                </div>
+                {% endif %}
             </div>
             <div class="neostaffing-attendance-table-wrap">
-                <table class="neostaffing-attendance-table">
-                    <thead><tr><th>Employee</th><th>Attendance Area</th><th>Attendance</th><th>Note</th></tr></thead>
-                    <tbody>{% for row in attendance.rows %}<tr>
-                        <td><input type="hidden" name="original_{{ row.person.id }}" value="{{ row.original_snapshot }}"><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td>
-                        <td>{{ row.work_area.name if row.work_area else "Unassigned" }}</td>
-                        <td>{% if row.status and not row.status_writable %}<span class="neostaffing-attendance-readonly-status">{{ row.status_label }}</span>{% else %}<select name="status_{{ row.person.id }}" aria-label="Attendance for {{ row.person.full_name }}" {% if not can_edit_attendance or not row.authorized %}disabled{% endif %}><option value="" {% if not row.status %}selected{% endif %}>Unmarked</option>{% for value, label in attendance.status_choices %}<option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}</td>
-                        <td><input name="note_{{ row.person.id }}" value="{{ row.note }}" placeholder="Optional note" aria-label="Attendance note for {{ row.person.full_name }}" {% if not can_edit_attendance or not row.authorized %}disabled{% endif %}></td>
-                    </tr>{% else %}<tr><td colspan="4" class="neostaffing-attendance-empty">No assigned employees match this attendance scope.</td></tr>{% endfor %}</tbody>
+                <table class="neostaffing-attendance-table" role="table" aria-label="Daily attendance roster">
+                    <thead role="rowgroup"><tr role="row"><th scope="col">Employee</th><th scope="col">Attendance Area</th><th scope="col">Attendance</th><th scope="col">Note</th></tr></thead>
+                    <tbody role="rowgroup">{% for row in attendance.rows %}<tr role="row" data-attendance-person="{{ row.person.id }}" data-attendance-status="{{ row.status }}" data-attendance-name="{{ row.person.first_name }} {{ row.person.last_name }}" data-attendance-employee-id="{{ row.person.employee_id }}">
+                        <td role="cell"><input type="hidden" name="original_{{ row.person.id }}" value="{{ row.original_snapshot }}"><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td>
+                        <td role="cell">{{ row.work_area.name if row.work_area else "Unassigned" }}</td>
+                        <td role="cell"><span class="neostaffing-attendance-mobile-label">Attendance</span>{% if row.status and not row.status_writable %}<span class="neostaffing-attendance-readonly-status">{{ row.status_label }}</span>{% else %}<select name="status_{{ row.person.id }}" aria-label="Attendance for {{ row.person.full_name }}" {% if not can_edit_attendance or not row.authorized %}disabled{% endif %}><option value="" {% if not row.status %}selected{% endif %}>Unmarked</option>{% for value, label in attendance.status_choices %}<option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}</td>
+                        <td role="cell"><span class="neostaffing-attendance-mobile-label">Note</span><input name="note_{{ row.person.id }}" value="{{ row.note }}" placeholder="Optional note" aria-label="Attendance note for {{ row.person.full_name }}" {% if not can_edit_attendance or not row.authorized or not row.status_writable %}disabled{% endif %}>
+                            {% if can_edit_attendance and row.authorized and row.status_writable %}<div class="neostaffing-attendance-save-state"><span data-attendance-state role="status"></span><button type="button" data-attendance-retry hidden>Retry</button></div>{% endif %}
+                        </td>
+                    </tr>{% endfor %}<tr role="row" data-attendance-empty {% if attendance.rows %}hidden{% endif %}><td role="cell" colspan="4" class="neostaffing-attendance-empty">No assigned employees match this attendance scope.</td></tr></tbody>
                 </table>
             </div>
-        </form>
+        </section>
+        <script defer src="{{ url_for('static', filename='js/neostaffing_attendance.js', v='20261110-autosave-v1') }}"></script>
         {% else %}<div class="neostaffing-attendance-empty-state" role="status">{{ attendance.message }}</div>{% endif %}
     </main>
 </section>
