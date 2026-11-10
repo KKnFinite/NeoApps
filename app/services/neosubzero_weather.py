@@ -16,7 +16,7 @@ from flask import current_app
 
 from app.models import GatewaySortMatrix
 from app.services.gateway_matrix import (
-    current_gateway_local_date,
+    current_gateway_local_datetime,
     gateway_timezone,
     sort_lookup_window_for_operation,
 )
@@ -33,6 +33,8 @@ METAR_TTL = timedelta(minutes=5)
 METAR_STALE_TTL = timedelta(hours=6)
 FORECAST_TTL = timedelta(minutes=30)
 FORECAST_STALE_TTL = timedelta(hours=24)
+FORECAST_CALENDAR_DAYS = 7
+TV_UPCOMING_SORT_COUNT = 4
 POINTS_TTL = timedelta(days=1)
 POINTS_STALE_TTL = timedelta(days=7)
 # Single-station observations and point metadata are small. Hourly forecasts
@@ -60,11 +62,21 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
     """Return current KRFD observation and operational-sort forecasts."""
     snapshot = _weather_snapshot(now=now)
     current = parse_aviation_weather_metar(snapshot["metar"].get("value"))
+    forecast = snapshot["forecast"].get("value")
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    start_date = operation.sort_date if operation is not None else local_now.date()
+    forecast_end = start_date + timedelta(days=FORECAST_CALENDAR_DAYS)
     forecast_cards = _forecast_cards(
         gateway,
         operation,
-        snapshot["forecast"].get("value"),
-        now=now,
+        forecast,
+        now=local_now,
+        upcoming_limit=TV_UPCOMING_SORT_COUNT,
+    )
+    # The management view retains its original date horizon and provider-error state.
+    management_cards = (
+        tuple(card for card in forecast_cards if card["sort_date"] < forecast_end)
+        if isinstance(forecast, dict) else ()
     )
     current.update(
         {
@@ -75,15 +87,13 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
     forecast_status = {
         "stale": snapshot["forecast"]["stale"],
         "error": snapshot["forecast"].get("error"),
-        "issued_at_label": _forecast_issued_label(
-            snapshot["forecast"].get("value")
-        ),
+        "issued_at_label": _forecast_issued_label(forecast),
     }
     current_sort = (
         next(
             (
                 card
-                for card in forecast_cards
+                for card in management_cards
                 if card["sort_date"] == operation.sort_date
             ),
             None,
@@ -93,7 +103,7 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
     )
     future_forecast = tuple(
         card
-        for card in forecast_cards
+        for card in management_cards
         if operation is None or card["sort_date"] != operation.sort_date
     )
     return {
@@ -102,6 +112,10 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
         "theme": current_weather_theme(current),
         "current_sort": current_sort,
         "future_forecast": future_forecast,
+        "tv_forecast_extra": tuple(
+            card for card in forecast_cards
+            if card.get("upcoming_on_tv") and (not isinstance(forecast, dict) or card["sort_date"] >= forecast_end)
+        ),
         "forecast_status": forecast_status,
         "revision": _weather_revision(snapshot),
         "sources": {
@@ -359,20 +373,20 @@ def _request_json(url, *, max_bytes=GRID_MAX_BYTES):
         raise NeoSubZeroWeatherError("Official weather source is unavailable.") from None
 
 
-def _forecast_cards(gateway, operation, payload, *, now=None):
-    if not isinstance(payload, dict):
+def _forecast_cards(gateway, operation, payload, *, now=None, upcoming_limit=0):
+    has_forecast = isinstance(payload, dict)
+    if not has_forecast and not upcoming_limit:
         return ()
+    payload = payload if has_forecast else {}
     periods = ((payload.get("hourly") or {}).get("properties") or {}).get("periods") or ()
     grid_properties = (payload.get("grid") or {}).get("properties") or {}
     gust_intervals = _grid_intervals(grid_properties.get("windGust"))
     timezone_name = gateway_timezone(gateway)
     zone = ZoneInfo(timezone_name)
     sort_name = str(getattr(operation, "sort_name", "night") or "night").strip().lower()
-    start_date = (
-        operation.sort_date
-        if operation is not None
-        else current_gateway_local_date(gateway, now=now)
-    )
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    start_date = operation.sort_date if operation is not None else local_now.date()
+    forecast_end = start_date + timedelta(days=FORECAST_CALENDAR_DAYS)
     active_days = {
         row.day_of_week
         for row in GatewaySortMatrix.query.filter_by(
@@ -383,7 +397,8 @@ def _forecast_cards(gateway, operation, payload, *, now=None):
     }
     sort_dates = [
         start_date + timedelta(days=offset)
-        for offset in range(7)
+        # Even a sort scheduled once a week has four future windows in this span.
+        for offset in range(FORECAST_CALENDAR_DAYS * (upcoming_limit + 1))
         if (start_date + timedelta(days=offset)).strftime("%A").casefold()
         in active_days
     ]
@@ -398,19 +413,30 @@ def _forecast_cards(gateway, operation, payload, *, now=None):
     ]
     cards = []
     for sort_date in sort_dates:
+        management_window = has_forecast and sort_date < forecast_end
+        if not management_window and not upcoming_limit:
+            break
         candidate = SimpleNamespace(
             sort_date=sort_date,
             sort_name=sort_name,
             gateway=gateway,
         )
         start_local, end_local = sort_lookup_window_for_operation(candidate, gateway)
+        future_window = sort_date > operation.sort_date if operation is not None else end_local > local_now
+        upcoming_on_tv = bool(upcoming_limit and future_window)
+        if not management_window and not upcoming_on_tv:
+            continue
         start = start_local.replace(tzinfo=zone)
         end = end_local.replace(tzinfo=zone)
         hours = tuple(
             row for row in hourly_rows
             if row["start"] < end and row["end"] > start
         )
-        cards.append(_forecast_card(sort_date, start, end, hours))
+        card = _forecast_card(sort_date, start, end, hours)
+        card["upcoming_on_tv"] = upcoming_on_tv
+        cards.append(card)
+        if upcoming_on_tv:
+            upcoming_limit -= 1
     return tuple(cards)
 
 

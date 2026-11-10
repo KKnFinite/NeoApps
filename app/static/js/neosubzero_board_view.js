@@ -108,9 +108,15 @@
         hourly.append(hours.length ? hourGrid : element("p", "", content(weather, ".neosubzero-weather-current-sort .neosubzero-weather-note") || "Hourly forecast unavailable"));
 
         const upcoming = tvSource.querySelector("[data-ucc-upcoming]");
-        const windows = Array.from(upcoming?.querySelectorAll("article") || [], window => {
+        const upcomingRows = upcoming?.querySelectorAll("[data-ucc-tv-window]") || [];
+        const extraRows = upcoming?.querySelector("[data-ucc-tv-forecast-extra]")?.content.querySelectorAll("article") || [];
+        const windows = [...upcomingRows, ...extraRows].slice(0, 4).map(window => {
             const [when, ...values] = window.querySelectorAll(":scope > span");
-            return element("article", "", element("strong", "ucc-tv-hour-head", content(when, "b"), element("span", "", content(when, "small"))),
+            const title = element("strong", "ucc-tv-hour-head", content(when, "b"), element("span", "", content(when, "small")));
+            if (window.hasAttribute("data-ucc-forecast-unavailable")) {
+                return element("article", "", title, element("span", "ucc-tv-muted", "Forecast unavailable"));
+            }
+            return element("article", "", title,
                 element("span", "ucc-tv-muted", values.map(value => `${content(value, "small")} ${content(value, "b")}`).join(" · ")),
                 element("span", "", content(window, "em")));
         });

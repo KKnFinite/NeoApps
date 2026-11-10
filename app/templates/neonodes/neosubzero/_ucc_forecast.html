@@ -1,3 +1,14 @@
+{% macro forecast_window(card) -%}
+<article{% if card.get('upcoming_on_tv', true) %} data-ucc-tv-window{% endif %}{% if not card.hours %} data-ucc-forecast-unavailable{% endif %}>
+    <span><b>{{ card.date_label }}</b><small>{{ card.window_label }}</small></span>
+    <span><b>{{ card.temperature_range }}</b><small>TEMP</small></span>
+    <span><b>{{ card.dewpoint_range }}</b><small>DEW</small></span>
+    <span><b>{{ card.spread_range }}</b><small>SPREAD</small></span>
+    <span><b>{{ card.precipitation_probability }}</b><small>PRECIP</small></span>
+    <span><b>{{ card.gust }}</b><small>MAX GUST</small></span>
+    <em>{{ card.conditions }} · WIND {{ card.wind }}</em>
+</article>
+{%- endmacro %}
 <section class="neosubzero-ucc-upcoming" data-ucc-upcoming aria-label="Upcoming operational sort forecasts">
         <div class="neosubzero-weather-forecast-head">
             <strong>UPCOMING OPERATIONAL SORT WINDOWS</strong>
@@ -5,17 +16,10 @@
         </div>
         {% if weather.future_forecast %}
         <div class="neosubzero-weather-forecast">
-            {% for card in weather.future_forecast %}
-            <article>
-                <span><b>{{ card.date_label }}</b><small>{{ card.window_label }}</small></span>
-                <span><b>{{ card.temperature_range }}</b><small>TEMP</small></span>
-                <span><b>{{ card.dewpoint_range }}</b><small>DEW</small></span>
-                <span><b>{{ card.spread_range }}</b><small>SPREAD</small></span>
-                <span><b>{{ card.precipitation_probability }}</b><small>PRECIP</small></span>
-                <span><b>{{ card.gust }}</b><small>MAX GUST</small></span>
-                <em>{{ card.conditions }} · WIND {{ card.wind }}</em>
-            </article>
-            {% endfor %}
+            {% for card in weather.future_forecast %}{{ forecast_window(card) }}{% endfor %}
         </div>
         {% else %}<p class="neosubzero-weather-note">{{ weather.forecast_status.error or 'No upcoming operational sort forecast is available.' }}</p>{% endif %}
+        {% if weather.tv_forecast_extra %}
+        <template data-ucc-tv-forecast-extra>{% for card in weather.tv_forecast_extra %}{{ forecast_window(card) }}{% endfor %}</template>
+        {% endif %}
 </section>

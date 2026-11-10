@@ -146,7 +146,7 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         with patch("app.services.neosubzero_weather._weather_snapshot", return_value=snapshot), patch(
             "app.services.neosubzero_weather._forecast_cards", return_value=future_snow
         ):
-            weather = neosubzero_weather_context(self.gateway)
+            weather = neosubzero_weather_context(self.gateway, now=datetime(2026, 9, 1, tzinfo=timezone.utc))
         self.assertEqual(weather["future_forecast"][0]["conditions"], "Heavy Snow")
         self.assertEqual(weather["theme"], "clear-cold")
 
@@ -277,3 +277,27 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         self.assertTrue(all(len(card["hours"]) == 1 for card in cards[1:]))
         self.assertEqual(cards[0]["gust"], "G20 mph")
         self.assertEqual(cards[0]["wind"], "NW 10 mph → NW 3 mph")
+
+        # From Monday's current sort, the fourth future sort is the following
+        # Monday. The seven-day management view still shows only Tue–Thu.
+        operation.sort_date = date(2026, 8, 31)
+        now = datetime(2026, 8, 31, 23, tzinfo=timezone.utc)
+        snapshot = {"metar": {"value": None, "stale": False},
+                    "forecast": {"value": payload, "stale": False}}
+        with patch("app.services.neosubzero_weather._weather_snapshot", return_value=snapshot):
+            forecast = neosubzero_weather_context(self.gateway, operation, now=now)
+            self.assertEqual([card["date_label"] for card in forecast["future_forecast"]],
+                             ["TUE SEP 01", "WED SEP 02", "THU SEP 03"])
+            monday, = forecast["tv_forecast_extra"]
+            self.assertEqual(monday["date_label"], "MON SEP 07")
+            self.assertEqual(monday["window_label"], "18:00–06:00")
+            self.assertEqual(monday["temperature_range"], "37°F")
+            periods.pop()
+            monday, = neosubzero_weather_context(self.gateway, operation, now=now)["tv_forecast_extra"]
+            self.assertEqual(monday["conditions"], "Forecast unavailable")
+            self.assertFalse(monday["hours"])
+            snapshot["forecast"]["value"] = None
+            outage = neosubzero_weather_context(self.gateway, operation, now=now)
+            self.assertFalse(outage["future_forecast"])
+            self.assertEqual([card["date_label"] for card in outage["tv_forecast_extra"]],
+                             ["TUE SEP 01", "WED SEP 02", "THU SEP 03", "MON SEP 07"])

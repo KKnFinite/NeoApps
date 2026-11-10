@@ -22,11 +22,14 @@ class DuccTvWeatherTest(unittest.TestCase):
             sample = case.weather_data['future_forecast'][0]
             case.weather_data['future_forecast'] = tuple(
                 dict(copy.deepcopy(sample), date_label=day)
-                for day in ('MON NOV 09', 'TUE NOV 10', 'WED NOV 11', 'THU NOV 12', 'FRI NOV 13', 'SAT NOV 14'))
+                for day in ('TUE NOV 10', 'WED NOV 11', 'THU NOV 12'))
+            case.weather_data['tv_forecast_extra'] = (dict(sample, date_label='MON NOV 16', hours=()),)
             browser = getattr(case.pw, engine).launch()
             page = browser.new_page(viewport={'width':1920, 'height':1080})
             errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
             case.login(page); case.ready(page, '/neosubzero/ucc')
+            expect(page.locator('[data-ucc-upcoming] article')).to_have_count(3)
+            expect(page.get_by_text('MON NOV 16', exact=True)).to_have_count(0)
             page.evaluate('document.documentElement.requestFullscreen=undefined')
             draft = page.locator('[data-ucc-editor="Bravo-2"] select[name="person_id"]').first
             draft.evaluate('(field, person) => { field.value = person; field.dispatchEvent(new Event("input", {bubbles:true})); }', str(case.people[2]))
@@ -39,7 +42,9 @@ class DuccTvWeatherTest(unittest.TestCase):
             expect(board.locator('button')).to_have_count(1)
             expect(board.locator('.ucc-tv-stands .ucc-tv-position').filter(has_text='Middle')).to_have_count(0)
             cards = board.locator('.ucc-tv-windows article')
-            expect(cards).to_have_count(6)
+            expect(cards).to_have_count(4)
+            expect(cards.last).to_contain_text('MON NOV 16')
+            expect(cards.last).to_contain_text('Forecast unavailable')
             for width, height in ((1920,1080), (1280,720), (3840,2160)):
                 page.set_viewport_size({'width':width, 'height':height})
                 geometry = board.evaluate('''wall => {
@@ -61,16 +66,18 @@ class DuccTvWeatherTest(unittest.TestCase):
                 self.assertTrue(geometry['ordered'])
                 self.assertEqual(len({(round(w), round(h)) for w, h in geometry['ramps']}), 1)
                 page.screenshot(path=str(EVIDENCE/f'{engine}-{width}.png'))
-                for card in cards.all():
+                for card in cards.all()[:3]:
                     expect(card).to_be_visible()
                     for key in ('temperature_range', 'precipitation_probability', 'conditions', 'wind'):
                         expect(card).to_contain_text(sample[key])
                 measurements.append(dict(engine=engine, **geometry))
+            case.weather_data['tv_forecast_extra'] = (dict(sample, date_label='MON NOV 16'),)
             with case.app.app_context():
                 set_neosubzero_ucc_assignment(db.session.get(SortDateOperation, case.operation_id), 'Bravo', 2,
                                              'driver', db.session.get(StaffingPerson, case.people[1]))
                 db.session.commit()
             expect(board.locator('.ucc-tv-ramp').filter(has=page.get_by_text('Bravo', exact=True))).to_contain_text('Longname-Deicer-1', timeout=10000)
+            expect(cards.last).to_contain_text(sample['temperature_range'])
             expect(draft).to_have_value(str(case.people[2]))
             board.get_by_role('button', name='Exit TV Mode').click()
             expect(page.locator('[data-subzero-ucc]')).to_be_visible()
