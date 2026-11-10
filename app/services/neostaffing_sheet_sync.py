@@ -177,13 +177,40 @@ class GoogleAdapter:
     def __exit__(self,*_args):
         from app.services.google_diagnostic_transport import close_google_clients
         close_google_clients([self.client])
+    @staticmethod
+    def _safe_api_error(exc, stage):
+        # Diagnose provider rejection without recording private employee names or response bodies.
+        if type(exc).__name__ != 'APIError':
+            raise exc
+        import re
+        response = getattr(exc, 'response', None)
+        status = getattr(response, 'status_code', None)
+        code = str(status) if isinstance(status, int) and 100 <= status <= 599 else 'unknown'
+        raw = str(exc)
+        index = re.search(r'requests\\[(\\d+)\\]', raw)
+        lower = raw.lower()
+        category = ('protected_range' if 'protected' in lower else
+                    'permission' if 'permission' in lower or 'forbidden' in lower else
+                    'invalid_batch' if 'invalid requests' in lower or 'invalid argument' in lower else
+                    'quota' if 'quota' in lower or 'rate limit' in lower else
+                    'unspecified')
+        suffix = f' request={index.group(1)}' if index else ''
+        raise StaffingSheetError(f'Google {stage} HTTP {code} {category}{suffix}') from None
+
     def read(self):
-        return self.client.http_client.request('get',f'https://sheets.googleapis.com/v4/spreadsheets/{HOURS_LOG_WORKBOOK_ID}',
-            params={'ranges':"'Shift Staffing'!A1:BD203",'includeGridData':'true',
-                'fields':'spreadsheetId,sheets(properties,conditionalFormats,data(startRow,startColumn,rowData(values(userEnteredValue,formattedValue,dataValidation))))'}).json()
+        try:
+            return self.client.http_client.request('get',f'https://sheets.googleapis.com/v4/spreadsheets/{HOURS_LOG_WORKBOOK_ID}',
+                params={'ranges':"'Shift Staffing'!A1:BD203",'includeGridData':'true',
+                    'fields':'spreadsheetId,sheets(properties,conditionalFormats,data(startRow,startColumn,rowData(values(userEnteredValue,formattedValue,dataValidation))))'}).json()
+        except Exception as exc:
+            self._safe_api_error(exc, 'read')
+
     def write(self,requests):
-        return self.client.http_client.request('post',f'https://sheets.googleapis.com/v4/spreadsheets/{HOURS_LOG_WORKBOOK_ID}:batchUpdate',
-            json={'requests':requests,'includeSpreadsheetInResponse':False}).json()
+        try:
+            return self.client.http_client.request('post',f'https://sheets.googleapis.com/v4/spreadsheets/{HOURS_LOG_WORKBOOK_ID}:batchUpdate',
+                json={'requests':requests,'includeSpreadsheetInResponse':False}).json()
+        except Exception as exc:
+            self._safe_api_error(exc, 'write')
 
 
 def deliver(groups, adapter):
