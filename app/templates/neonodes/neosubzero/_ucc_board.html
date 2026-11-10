@@ -1,6 +1,5 @@
-{% macro aircraft(row, location, facing='up', position=none, show_position=true) -%}
+{% macro aircraft(row, location, facing='up') -%}
 <button type="button" class="ucc-plane state-{{ row.visual_state }}" data-ucc-aircraft="{{ row.identity_key }}" aria-label="{{ row.tail }} {{ row.flight }}, {{ location }}, {{ row.visual_label }}">
-    {% if show_position %}<b class="ucc-plane-position">{{ position or row.parking }}</b>{% endif %}
     <span class="ucc-plane-icon facing-{{ facing }}" aria-hidden="true"></span><strong>{{ row.tail }}</strong>
     {% if row.flight %}<span class="ucc-plane-flight">{{ row.flight }}</span>{% endif %}
     <span class="ucc-plane-etd">{{ row.etd or '—' }}{% if row.destination %} · {{ row.destination }}{% endif %}</span>
@@ -11,7 +10,7 @@
 {%- endmacro %}
 {% macro parking_place(place, positioned=true) -%}
 <div class="ucc-parking-place{% if positioned and place.grid_row %} ucc-grid-row-{{ place.grid_row }} ucc-grid-column-{{ place.grid_column }}{% endif %}" data-ucc-parking="{{ place.code }}">
-    {% if not place.aircraft %}<b>{{ place.code }}</b>{% endif %}
+    <b>{{ place.code }}</b>
     {% set position = place.code[-2:]|int %}
     {% set facing = 'up' if place.code.startswith('R') else 'right' if 1 <= position <= 4 else 'left' if 5 <= position <= 8 else 'up' %}
     {% for row in place.aircraft %}{{ aircraft(row, 'parking ' ~ place.code, facing) }}{% endfor %}
@@ -20,7 +19,7 @@
 {% macro physical_ramp(ramp) -%}
 <div class="ucc-ramp-diagram ucc-desktop-label {{ 'is-main-ramp' if ramp.name != 'Remote' else 'is-remote' }}" aria-label="{{ ramp.name }} physical parking and deice planning">
     {% if ramp.name != 'Remote' %}
-    <div class="ucc-deice-pad ucc-desktop-label" data-ucc-deice-pad>{% if ramp.pad %}{{ aircraft(ramp.pad, 'DEICE PAD', show_position=false) }}{% else %}<b>DEICE PAD</b><span class="ucc-pad-outline ucc-plane-icon facing-up" aria-hidden="true"></span>{% endif %}</div>
+    <div class="ucc-deice-pad ucc-desktop-label" data-ucc-deice-pad>{% if ramp.pad %}{{ aircraft(ramp.pad, 'DEICE PAD') }}{% else %}<b>DEICE PAD</b><span class="ucc-pad-outline ucc-plane-icon facing-up" aria-hidden="true"></span>{% endif %}</div>
     <div class="ucc-parking-grid">
         {% for place in ramp.parking_positions if place.code[-2:] not in ('09','10') %}{{ parking_place(place) }}{% endfor %}
         {% for level in range(1,5) %}
@@ -29,8 +28,13 @@
         {% set waiting = ramp.waiting_queue[queue_index] if queue_index >= 0 and queue_index < ramp.waiting_queue|length else none %}
         <div class="ucc-center-position ucc-grid-row-{{ level }} ucc-grid-column-2">
             <div{% if waiting or (stand and stand.aircraft) %} class="ucc-deice-waiting"{% endif %} data-ucc-queue-position="{{ level }}"{% if stand %} data-ucc-parking="{{ stand.code }}"{% endif %}>
-                {% if waiting %}{{ aircraft(waiting, waiting_location(waiting), position=waiting.queue_label, show_position=level in (1, 4)) }}
-                {% elif stand and stand.aircraft %}{% for row in stand.aircraft %}{{ aircraft(row, 'parking ' ~ stand.code, position='POSITION ' ~ (stand.code[-2:]|int)) }}{% endfor %}{% endif %}
+                {% if waiting %}
+                    {% if level in (1, 4) %}<b>{{ waiting.queue_label }}</b>{% endif %}
+                    {{ aircraft(waiting, waiting_location(waiting)) }}
+                {% elif stand and stand.aircraft %}
+                    <b>POSITION {{ stand.code[-2:]|int }}</b>
+                    {% for row in stand.aircraft %}{{ aircraft(row, 'parking ' ~ stand.code) }}{% endfor %}
+                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -90,8 +94,8 @@
         </div>{% endfor %}
         </div>
     </div>
-    {% if ramp.exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>DEICE CAPACITY REVIEW · {{ ramp.exceptions|length }} unplaced</strong><p>Four waiting positions maximum: 10, Middle 1, Middle 2, 9, plus one active DEICE PAD. Confirm actual location and correct the departure queue.</p>{% for row in ramp.exceptions %}{{ aircraft(row, 'unplaced; deice capacity review') }}{% endfor %}</div>{% endif %}
-    {% if ramp.location_exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>LOCATION REVIEW · AFTER BLOCK-OUT</strong>{% for row in ramp.location_exceptions %}{{ aircraft(row, 'location unconfirmed after Block-Out') }}{% endfor %}</div>{% endif %}
+    {% if ramp.exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>DEICE CAPACITY REVIEW · {{ ramp.exceptions|length }} unplaced</strong><p>Four waiting positions maximum, plus one active DEICE PAD. Confirm actual location and correct the departure queue.</p>{% for row in ramp.exceptions %}<div><b>{{ row.parking }}</b>{{ aircraft(row, 'unplaced; deice capacity review') }}</div>{% endfor %}</div>{% endif %}
+    {% if ramp.location_exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>LOCATION REVIEW · AFTER BLOCK-OUT</strong>{% for row in ramp.location_exceptions %}<div><b>{{ row.parking }}</b>{{ aircraft(row, 'location unconfirmed after Block-Out') }}</div>{% endfor %}</div>{% endif %}
     {% if ramp.parking_exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>PARKING REVIEW</strong><p>Recorded stand is disabled, unresolved, or occupied by the throat queue. No parking assignment was changed.</p>{% for row in ramp.parking_exceptions %}{{ aircraft(row, 'parking review: ' ~ row.parking) }}<span>{{ row.parking }}</span>{% endfor %}</div>{% endif %}
     {% if ramp.active_conflicts %}<p class="ucc-queue-exception ucc-desktop-label">ACTIVE DEICE CONFLICT · More than one active event is recorded. Coordinator review required: {% for row in ramp.active_conflicts %}{{ row.tail }}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
 </section>{% endfor %}

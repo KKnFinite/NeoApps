@@ -966,7 +966,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         context=neosubzero_ucc_context(self.gateway,self.operation)
         self.assertNotIn("FUTURE-TAIL",{row["tail"] for ramp in context["ramps"] for row in ramp["aircraft"]})
 
-    def test_queue_labels_follow_occupancy_on_full_page_and_ramp_fragment(self):
+    def test_position_labels_outside_cards_on_full_page_and_ramp_fragment(self):
         client = self.app.test_client()
         self._login(client, self._user("queue_labels", "simulator"))
 
@@ -980,8 +980,29 @@ class NeoSubZeroUccTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             return response, document(response)
 
+        SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=self.operation.id, tail_number=self.remote.assigned_tail_number,
+        ).one().position_code = "R04"
+        db.session.commit()
+
+        def assert_position(slot, label, tail=None):
+            elements = [child for child in slot.children if hasattr(child, "tag")]
+            self.assertEqual([child.tag for child in elements],
+                             (["b"] if label else []) + (["button"] if tail else []))
+            if label:
+                self.assertEqual(elements[0].text, label)
+            if tail:
+                self.assertIn(tail, elements[-1].text)
+                self.assertFalse(elements[-1].findall("b"))
+
         _, empty = render()
         alpha = empty.one(**{"data-ucc-ramp": "Alpha"})
+        remote = empty.one(**{"data-ucc-ramp": "Remote"})
+        for ramp, occupied, unoccupied, tail in (
+            (alpha, "A03", "A01", "N200"), (remote, "R04", "R01", "N100"),
+        ):
+            assert_position(ramp.one(**{"data-ucc-parking": occupied}), occupied, tail)
+            assert_position(ramp.one(**{"data-ucc-parking": unoccupied}), unoccupied)
         for level in range(1, 5):
             slot = alpha.one(**{"data-ucc-queue-position": str(level)})
             self.assertEqual(slot.text.strip(), "")
@@ -991,7 +1012,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertEqual(len(pad.findall(cls="ucc-pad-outline")), 1)
 
         self._deice_event(self.alpha, "finished")
-        for i in range(4):
+        for i in range(5):
             mission = self._departure(f"5X-QUEUE-{i}", f"N30{i}", "DEN", 4)
             db.session.add(SortDateParkingAssignment(
                 sort_date_operation_id=self.operation.id, tail_number=mission.assigned_tail_number,
@@ -1009,20 +1030,21 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertTrue(full_dom.findall(**{"data-ucc-move-dialog": None}))
         self.assertFalse(fragment_dom.findall(**{"data-ucc-move-dialog": None}))
         for response, root in ((full, full_dom), (fragment, fragment_dom)):
-            self.assertNotIn(b"MIDDLE 1", response.data)
-            self.assertNotIn(b"MIDDLE 2", response.data)
+            self.assertNotIn(b"MIDDLE 1", response.data.upper())
+            self.assertNotIn(b"MIDDLE 2", response.data.upper())
             board = root.one(**{"data-subzero-ucc": None})
             self.assertEqual(board.attrs["data-ucc-mobile-view"], "ramp")
             alpha = board.one(**{"data-ucc-ramp": "Alpha"})
             for level, label in enumerate(("POSITION 10", None, None, "POSITION 9"), 1):
-                plane = alpha.one(**{"data-ucc-queue-position": str(level)}).one(cls="ucc-plane")
-                self.assertIn(f"N30{level - 1}", plane.text)
-                self.assertEqual([item.text for item in plane.findall(cls="ucc-plane-position")],
-                                 [label] if label else [])
+                assert_position(alpha.one(**{"data-ucc-queue-position": str(level)}),
+                                label, f"N30{level - 1}")
             pad = alpha.one(**{"data-ucc-deice-pad": None})
-            self.assertIn("N200", pad.one(cls="ucc-plane").text)
-            self.assertNotIn("DEICE PAD", pad.text)
-            self.assertFalse(pad.findall(cls="ucc-pad-outline"))
+            assert_position(pad, None, "N200")
+            self.assertTrue(alpha.findall(cls="ucc-queue-exception"))
+            for plane in board.findall(cls="ucc-plane"):
+                self.assertFalse(plane.findall("b"))
+                self.assertTrue(plane.findall(cls="ucc-plane-icon"))
+                self.assertTrue(plane.findall(cls="ucc-plane-etd"))
 
     def test_four_waiting_places_and_separate_pad_capacity_review(self):
         missions = [self.alpha]
