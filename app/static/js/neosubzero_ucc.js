@@ -83,6 +83,7 @@
     const tvEnter = root.querySelector("[data-ucc-tv-enter]");
     const tvExit = root.querySelector("[data-ucc-tv-exit]");
     const tvStorageKey = "neoapps.neosubzero.ucc.tv-mode";
+    const tvDesktop = window.matchMedia("(min-width:901px)");
     const cursorIdleMs = 3000;
     let tvMode = false;
     let cursorTimer = null;
@@ -136,6 +137,7 @@
         });
     };
     tvEnter?.addEventListener("click", () => {
+        if (!tvDesktop.matches) return;
         applyTvMode(true);
         requestTvFullscreen();
     });
@@ -155,7 +157,10 @@
             if (tvMode) scheduleCursorHide();
         }, {passive: eventName !== "keydown"});
     });
-    if (readTvMode()) applyTvMode(true, {persist: false});
+    if (tvDesktop.matches && readTvMode()) applyTvMode(true, {persist: false});
+    tvDesktop.addEventListener?.("change", () => {
+        if (!tvDesktop.matches && tvMode) applyTvMode(false, {persist: false});
+    });
 
     const field = (form, name) => form.querySelector(`[name="${name}"]`);
 
@@ -380,6 +385,11 @@
             if (!next) throw new Error("UCC session expired. Open current UCC to sign in.");
             if (requestEpoch !== mutationEpoch || root.dataset.saving === "true") return false;
             const deferred = editing();
+            // The wallboard uses the saved staffing from this same response,
+            // even when an open management draft prevents replacing its controls.
+            if (tvMode) root.dispatchEvent(new CustomEvent("ucc:tv-source", {
+                detail: deferred ? next.cloneNode(true) : null,
+            }));
             const operationId = root.querySelector('[name="operation_id"]')?.value;
             const nextOperationId = next.querySelector('[name="operation_id"]')?.value;
             if (deferred && operationId !== nextOperationId) {

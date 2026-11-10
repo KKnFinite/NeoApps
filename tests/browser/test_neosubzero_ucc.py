@@ -121,7 +121,7 @@ class UccBrowserTest(unittest.TestCase):
             self.login(mobile)
             self.ready(mobile,"/neosubzero/ucc")
             self.assertFalse(mobile.locator('body').evaluate("el=>el.classList.contains('neosubzero-ucc-tv-mode')"))
-            page.locator('[data-ucc-tv-exit]').click()
+            page.get_by_role('button', name='Exit TV Mode').click()
             page.set_viewport_size({"width":1440,"height":1000})
             # Real mobile staffing mutation; desktop receives it without a reload.
             editor = mobile.locator('[data-ucc-editor="Bravo-2"]')

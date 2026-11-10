@@ -1,10 +1,13 @@
-"""TV fitting must retain upcoming-sort forecast values, not only window labels."""
+"""The DUCC wallboard preserves weather, physical geometry and draft-safe refresh."""
 import copy
 import json
 import unittest
 from pathlib import Path
 
 from playwright.sync_api import expect
+from app.extensions import db
+from app.models import SortDateOperation, StaffingPerson
+from app.services.neosubzero_ucc import set_neosubzero_ucc_assignment
 from tests.browser import test_neosubzero_ucc as fixtures
 
 EVIDENCE = Path('instance/ducc-weather/browser')
@@ -19,34 +22,58 @@ class DuccTvWeatherTest(unittest.TestCase):
             sample = case.weather_data['future_forecast'][0]
             case.weather_data['future_forecast'] = tuple(
                 dict(copy.deepcopy(sample), date_label=day)
-                for day in ('MON NOV 09', 'TUE NOV 10', 'WED NOV 11'))
+                for day in ('MON NOV 09', 'TUE NOV 10', 'WED NOV 11', 'THU NOV 12', 'FRI NOV 13', 'SAT NOV 14'))
             browser = getattr(case.pw, engine).launch()
             page = browser.new_page(viewport={'width':1920, 'height':1080})
             errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
             case.login(page); case.ready(page, '/neosubzero/ucc')
             page.evaluate('document.documentElement.requestFullscreen=undefined')
+            draft = page.locator('[data-ucc-editor="Bravo-2"] select[name="person_id"]').first
+            draft.evaluate('(field, person) => { field.value = person; field.dispatchEvent(new Event("input", {bubbles:true})); }', str(case.people[2]))
             page.locator('[data-ucc-tv-enter]').click()
-            for width, height in ((1920,1080), (1366,768), (2560,1440)):
+            board = page.locator('.ucc-tv-wallboard')
+            expect(board).to_be_visible()
+            expect(page.locator('[data-subzero-ucc]')).to_be_hidden()
+            expect(board.locator('.ucc-tv-ramp > h2')).to_have_text(['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'])
+            expect(board.locator('.ucc-tv-hours article')).to_have_count(12)
+            expect(board.locator('button')).to_have_count(1)
+            expect(board.locator('.ucc-tv-stands .ucc-tv-position').filter(has_text='Middle')).to_have_count(0)
+            cards = board.locator('.ucc-tv-windows article')
+            expect(cards).to_have_count(6)
+            for width, height in ((1920,1080), (1280,720), (3840,2160)):
                 page.set_viewport_size({'width':width, 'height':height})
-                page.wait_for_function('(()=>{const r=document.querySelector("[data-subzero-ucc]").getBoundingClientRect();return r.right<=innerWidth+1&&r.bottom<=innerHeight+1})()')
-                cards = page.locator('[data-ucc-upcoming] article')
-                expect(cards).to_have_count(3)
+                geometry = board.evaluate('''wall => {
+                    const rect = node => node.getBoundingClientRect();
+                    const ramps = [...wall.querySelectorAll('.ucc-tv-ramp')];
+                    return {
+                        width: wall.scrollWidth, height: wall.scrollHeight,
+                        ramps: ramps.map(ramp => [rect(ramp).width, rect(ramp).height]),
+                        ordered: ramps.every(ramp => {
+                            const [left, pad, right] = ramp.querySelector('.ucc-tv-staging').children;
+                            const stands = rect(ramp.querySelector('.ucc-tv-stands'));
+                            return rect(left).right <= rect(pad).left && rect(pad).right <= rect(right).left
+                                && Math.max(rect(left).bottom, rect(pad).bottom, rect(right).bottom) <= stands.top;
+                        })
+                    };
+                }''')
+                self.assertLessEqual(geometry['width'], width)
+                self.assertLessEqual(geometry['height'], height)
+                self.assertTrue(geometry['ordered'])
+                self.assertEqual(len({(round(w), round(h)) for w, h in geometry['ramps']}), 1)
                 page.screenshot(path=str(EVIDENCE/f'{engine}-{width}.png'))
-                for i in range(3):
-                    card = cards.nth(i)
-                    for selector, value in (('span:nth-child(2)', sample['temperature_range']),
-                                            ('span:nth-child(5)', sample['precipitation_probability']),
-                                            ('em', sample['conditions'])):
-                        expect(card.locator(':scope > '+selector)).to_be_visible()
-                        expect(card.locator(':scope > '+selector)).to_contain_text(value)
-                    expect(card.locator(':scope > em')).to_contain_text(sample['wind'])
-                measurements.append(dict(engine=engine,width=width,height=height,
-                    density=page.locator('[data-subzero-ucc]').get_attribute('data-ucc-weather-density')))
-            # A density change or a refreshed forecast must not hide its values.
-            for density in ('normal','compact','minimal'):
-                page.evaluate('(value)=>{document.querySelector("[data-subzero-ucc]").dataset.uccWeatherDensity=value}',density)
-                for selector in ('span:nth-child(2)','span:nth-child(5)','em'):
-                    expect(cards.first.locator(':scope > '+selector)).to_be_visible()
+                for card in cards.all():
+                    expect(card).to_be_visible()
+                    for key in ('temperature_range', 'precipitation_probability', 'conditions', 'wind'):
+                        expect(card).to_contain_text(sample[key])
+                measurements.append(dict(engine=engine, **geometry))
+            with case.app.app_context():
+                set_neosubzero_ucc_assignment(db.session.get(SortDateOperation, case.operation_id), 'Bravo', 2,
+                                             'driver', db.session.get(StaffingPerson, case.people[1]))
+                db.session.commit()
+            expect(board.locator('.ucc-tv-ramp').filter(has=page.get_by_text('Bravo', exact=True))).to_contain_text('Longname-Deicer-1', timeout=10000)
+            expect(draft).to_have_value(str(case.people[2]))
+            board.get_by_role('button', name='Exit TV Mode').click()
+            expect(page.locator('[data-subzero-ucc]')).to_be_visible()
             self.assertFalse(errors, errors)
         finally:
             (EVIDENCE/f'{engine}-measurements.json').write_text(json.dumps(measurements,indent=2))

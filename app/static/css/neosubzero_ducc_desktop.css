@@ -238,3 +238,131 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-deice-pad { height:110px; min-height:110px; }
     .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp-diagram.is-main-ramp { padding-top:115px; }
 }
+
+/* The TV projection is a sibling of management DUCC, never a scaled copy. */
+.ucc-tv-wallboard { display:none; }
+@media (min-width:901px) {
+    body.neosubzero-ucc-tv-mode .ucc-board-viewport:has(> .ucc-tv-wallboard) > .neosubzero-ucc { display:none; }
+    body.neosubzero-ucc-tv-mode .ucc-tv-wallboard { display:grid; }
+    .ucc-tv-wallboard {
+        --tv-gap:.55em;
+        --tv-edge:#263c50;
+        --tv-muted:#a3bbd0;
+        --tv-accent:#80d1e8;
+        box-sizing:border-box;
+        grid-template-rows:auto auto minmax(0,1fr) auto;
+        gap:var(--tv-gap);
+        width:100%; height:100%;
+        padding:.65em .75em;
+        background:#07121e;
+        color:#e4eff7;
+        font:500 clamp(12px,.9vw,36px)/1.14 "Segoe UI",system-ui,sans-serif;
+        font-variant-numeric:tabular-nums;
+    }
+    .ucc-tv-wallboard :is(h1,h2,p,dl,dd) { margin:0; }
+    .ucc-tv-wallboard :is(section,div,article) { min-width:0; }
+    .ucc-tv-wallboard h2 { color:var(--tv-accent); font-size:.8em; letter-spacing:.085em; text-transform:uppercase; }
+    .ucc-tv-wallboard .ucc-tv-header { display:flex; align-items:center; justify-content:flex-end; gap:1em; }
+    .ucc-tv-wallboard h1 { color:#b5d9e9; font-size:.81em; letter-spacing:.12em; font-weight:650; }
+    .ucc-tv-wallboard .ucc-tv-exit {
+        background:#101f30; border:1px solid var(--tv-edge); border-radius:.4em;
+        padding:.22em .62em; color:#b5c9db; font:inherit; font-size:.74em; cursor:pointer;
+    }
+    .ucc-tv-wallboard .ucc-tv-weather {
+        display:grid; grid-template-columns:minmax(0,1.04fr) minmax(0,2.38fr) minmax(0,1.72fr);
+        background:#0b1928; border:1px solid var(--tv-edge); border-radius:.58em; padding:.54em .65em;
+    }
+    .ucc-tv-weather > section + section { border-left:1px solid var(--tv-edge); padding-left:.6em; margin-left:.6em; }
+    .ucc-tv-wallboard :is(.ucc-tv-source,.ucc-tv-muted) { color:var(--tv-muted); }
+    .ucc-tv-wallboard .ucc-tv-source { font-size:.73em; margin:.23em 0 .3em; }
+    .ucc-tv-temperature { display:flex; align-items:center; gap:.5em; margin:.26em 0; }
+    .ucc-tv-temperature > strong { font-size:2.65em; line-height:.98; color:#f0f8ff; }
+    .ucc-tv-temperature :is(b,small) { display:block; }
+    .ucc-tv-temperature small { color:var(--tv-muted); font-size:.78em; }
+    .ucc-tv-observation dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.4em .28em; }
+    .ucc-tv-observation dl > div:nth-child(4),
+    .ucc-tv-observation dl > div:last-child { grid-column:span 2; }
+    .ucc-tv-observation dt { font-size:.66em; color:var(--tv-muted); font-weight:650; }
+    .ucc-tv-observation dd { font-weight:650; font-size:.92em; overflow-wrap:anywhere; }
+    .ucc-tv-hours, .ucc-tv-windows { display:grid; gap:.26em; }
+    .ucc-tv-hours { grid-template-columns:repeat(var(--ucc-tv-hour-columns),minmax(0,1fr)); }
+    .ucc-tv-windows { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .ucc-tv-weather article {
+        display:grid; gap:.16em; align-content:start; padding:.26em .32em;
+        border-top:1px solid #20374a; background:#0d1e2f;
+        font-size:.74em; line-height:1.12; overflow-wrap:anywhere;
+    }
+    .ucc-tv-hour-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:.05em .3em; color:#d6f1ff; }
+    .ucc-tv-hour-head > span { color:var(--tv-accent); }
+    .ucc-tv-wallboard .ucc-tv-ramps {
+        display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); column-gap:var(--tv-gap);
+    }
+    .ucc-tv-wallboard .ucc-tv-ramp {
+        display:grid; grid-template-rows:auto auto minmax(0,1fr); gap:.44em;
+        padding:.48em; border:1px solid var(--tv-edge); border-radius:.65em; background:#0a1927;
+    }
+    @supports (grid-template-rows:subgrid) {
+        .ucc-tv-wallboard .ucc-tv-ramps { grid-template-rows:auto auto minmax(0,1fr); }
+        .ucc-tv-wallboard .ucc-tv-ramp { grid-row:1 / -1; grid-template-rows:subgrid; }
+    }
+    .ucc-tv-wallboard .ucc-tv-ramp h2 {
+        font-size:1.08em; padding:0 0 .3em; border-bottom:1px solid var(--tv-edge);
+    }
+    .ucc-tv-staging, .ucc-tv-stands { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.36em; }
+    @supports (grid-template-rows:subgrid) {
+        .ucc-tv-staging { grid-template-rows:repeat(2,auto); }
+        .ucc-tv-staging > div { grid-row:1 / -1; }
+        .ucc-tv-staging .ucc-tv-crew-column { grid-template-rows:subgrid; }
+    }
+    .ucc-tv-stands { grid-template-rows:repeat(4,minmax(0,1fr)); padding-top:.35em; border-top:1px solid var(--tv-edge); }
+    .ucc-tv-crew-column { display:grid; grid-template-rows:repeat(2,auto); align-content:start; gap:.25em; }
+    .ucc-tv-crew { display:grid; align-content:start; gap:.12em; font-size:.8em; overflow-wrap:anywhere; }
+    .ucc-tv-crew-column > .ucc-tv-crew + .ucc-tv-crew { border-top:1px solid #213748; padding-top:.28em; }
+    .ucc-tv-crew.is-right { text-align:right; }
+    .ucc-tv-crew strong { color:#d4eff9; font-weight:750; }
+    .ucc-tv-crew span { color:#bacfe0; }
+    .ucc-tv-pad { display:grid; align-items:center; }
+    .ucc-tv-pad-idle { display:grid; justify-items:center; gap:.4em; color:#7d9aae; text-align:center; }
+    .ucc-tv-pad-idle .ucc-tv-plane-icon { width:2.4em; height:2.4em; opacity:.34; }
+    .ucc-tv-stand { display:flex; flex-direction:column; gap:.18em; align-self:start; }
+    .ucc-tv-stands > .ucc-tv-stand:has(> .ucc-tv-plane):not(:has(> .ucc-tv-position)) { padding-top:1em; }
+    .ucc-tv-position { font-size:.72em; font-weight:700; text-align:center; color:#a4c3d8; }
+    .ucc-tv-wallboard .ucc-tv-plane {
+        display:grid; grid-template-columns:minmax(0,1.28em) minmax(0,1fr); align-items:center; gap:.24em;
+        background:#0e2133; border:1px solid #32475a; border-radius:.4em; padding:.25em;
+        color:#ecf6fe;
+    }
+    .ucc-tv-plane-text { display:grid; gap:.11em; line-height:1.09; overflow-wrap:anywhere; }
+    .ucc-tv-plane-text strong { font-size:.95em; font-weight:750; }
+    .ucc-tv-plane-text span { font-size:.78em; color:#b9cfe1; }
+    .ucc-tv-plane-text span:empty { display:none; }
+    .ucc-tv-plane-icon {
+        width:1.28em; height:1.28em; background:var(--tv-plane-color,#adc3d6);
+        -webkit-mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
+        mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
+    }
+    .ucc-tv-plane-icon.facing-right { transform:rotate(90deg); }
+    .ucc-tv-plane-icon.facing-left { transform:rotate(-90deg); }
+    .ucc-tv-plane:is(.state-planned,.state-pretreat-planned,.state-deice-planned) { --tv-plane-color:var(--subzero-planned); }
+    .ucc-tv-plane.state-configured { --tv-plane-color:var(--subzero-configured); }
+    .ucc-tv-plane.state-deicing { --tv-plane-color:var(--subzero-deicing); }
+    .ucc-tv-plane:is(.state-fin,.state-finished) { --tv-plane-color:var(--subzero-fin); }
+    .ucc-tv-plane.state-radio-pending { --tv-plane-color:var(--subzero-radio-pending); }
+    .ucc-tv-plane.state-negative { --tv-plane-color:var(--subzero-negative); }
+    .ucc-tv-plane:is(.state-gone,.state-cleared) { --tv-plane-color:var(--subzero-gone); }
+    .ucc-tv-footer {
+        display:grid; grid-template-columns:minmax(0,5fr) minmax(0,1fr); align-items:center; gap:.75em;
+        border-top:1px solid var(--tv-edge); padding-top:.35em;
+    }
+    .ucc-tv-remote { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:.6em; }
+    .ucc-tv-remote-data { display:grid; grid-template-columns:repeat(auto-fit,minmax(8em,1fr)); align-items:center; gap:.4em; }
+    .ucc-tv-remote-data > .ucc-tv-crew { border-left:1px solid var(--tv-edge); padding-left:.5em; text-align:left; }
+    .ucc-tv-remote-data .ucc-tv-stand { flex-direction:row; align-items:center; align-self:center; }
+    .ucc-tv-remote-data .ucc-tv-stand .ucc-tv-plane { flex:1; }
+    .ucc-tv-early { border-left:1px solid var(--tv-edge); padding-left:.65em; }
+    .ucc-tv-footer p { color:var(--tv-muted); font-size:.8em; margin-top:.2em; }
+}
+@media (901px <= width <= 1450px) {
+    .ucc-tv-wallboard .ucc-tv-plane { grid-template-columns:minmax(0,.9em) minmax(0,1fr); gap:.16em; padding:.22em; }
+    .ucc-tv-plane .ucc-tv-plane-icon { width:.9em; height:.9em; }
+}
