@@ -3,6 +3,9 @@
     <span class="ucc-plane-icon facing-{{ facing }}" aria-hidden="true"></span><strong>{{ row.tail }}</strong>
     {% if row.flight %}<span class="ucc-plane-flight">{{ row.flight }}</span>{% endif %}
     <span class="ucc-plane-etd">{{ row.etd or '—' }}{% if row.destination %} · {{ row.destination }}{% endif %}</span>
+    {% set destination = row.get('tv_destination', row.destination) %}
+    {% if row.flight or destination %}<span class="ucc-management-only ucc-management-plane-route">{{ row.flight }}{% if row.flight and destination %} · {% endif %}{{ destination }}</span>{% endif %}
+    {% if not row.block_out_at_utc %}<span class="ucc-management-only ucc-management-plane-etd">ETD {{ row.get('tv_etd', row.get('etd')) or '—' }}</span>{% endif %}
 </button>
 {%- endmacro %}
 {% macro waiting_location(row) -%}
@@ -46,7 +49,7 @@
 {%- endmacro %}
 <div data-ucc-live-board>
 {# Fragment replacement also upgrades already-open tabs without stale geometry. #}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261110-ducc-weather-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261110-ducc-management-v1') }}">
 {% if not operation %}<p class="neosubzero-empty">No current sort. Staffing management is unavailable.</p>{% endif %}
 <script nonce="{{ csp_nonce() }}" type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
 <header class="ucc-board-heading"><h2>RAMP OPERATIONS <span class="ucc-mobile-label">· STAFFING</span></h2><span class="ucc-desktop-label">Select an aircraft for planning information · treatment entry remains in Deice Operations</span></header>
@@ -77,7 +80,8 @@
             {% if can_edit %}<div class="ucc-team-controls">
             <form method="post" action="{{ url_for('neosubzero.truck_mutate') }}" data-ucc-truck-form data-ucc-auto-save>
                 <input type="hidden" name="board" value="ucc"><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ slot.truck_version }}">
-                <label class="ucc-pill"><select name="truck_number" aria-label="{{ ramp.name }} position {{ slot.position }} truck"><option value="">{{ 'NO TRUCK · ' ~ slot.position if mirrored else slot.position ~ ' · NO TRUCK' }}</option>{% if slot.truck_number and slot.truck_number not in truck_options|map(attribute='number')|list %}<option value="{{ slot.truck_number }}" selected disabled>{{ slot.truck_number }} · RETAINED</option>{% endif %}{% for truck in truck_options %}<option value="{{ truck.number }}"{% if truck.number == slot.truck_number %} selected{% endif %}>{{ truck.number ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ truck.number }}</option>{% endfor %}</select><span data-ucc-selected-text>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</span></label><button type="submit" class="ucc-legacy-save">SAVE</button>
+                {% set truck_label = 'TRUCK ' ~ slot.truck_number if slot.truck_number else 'NO TRUCK' %}
+                <label class="ucc-pill"><select name="truck_number" aria-label="{{ ramp.name }} position {{ slot.position }} truck"><option value="">{{ 'NO TRUCK · ' ~ slot.position if mirrored else slot.position ~ ' · NO TRUCK' }}</option>{% if slot.truck_number and slot.truck_number not in truck_options|map(attribute='number')|list %}<option value="{{ slot.truck_number }}" selected disabled>{{ slot.truck_number }} · RETAINED</option>{% endif %}{% for truck in truck_options %}<option value="{{ truck.number }}"{% if truck.number == slot.truck_number %} selected{% endif %}>{{ truck.number ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ truck.number }}</option>{% endfor %}</select><span data-ucc-selected-text>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</span><span class="ucc-management-only" data-ucc-management-truck-label>{{ truck_label ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ truck_label }}</span></label><button type="submit" class="ucc-legacy-save">SAVE</button>
             </form>
             {% for role in ('driver', 'flyer') %}{% set person_slot = slot.roles[role] %}
             <form method="post" action="{{ url_for('neosubzero.ucc') }}" data-ucc-auto-save data-ucc-assignment-form data-current-person-id="{{ person_slot.person.id if person_slot.person else '' }}" data-current-person-name="{{ person_slot.person.full_name if person_slot.person else '' }}" data-assignment-id="{{ person_slot.assignment.id if person_slot.assignment else '' }}" data-assignment-version="{{ person_slot.version }}">
@@ -85,11 +89,11 @@
                 <label class="ucc-pill"><select name="person_id" aria-label="{{ ramp.name }} position {{ slot.position }} {{ role }}"><option value="">{{ 'Unassigned · ' ~ role[0]|upper if mirrored else role[0]|upper ~ ' · Unassigned' }}</option>{% if person_slot.person and not person_slot.available %}<option value="{{ person_slot.person.id }}" selected disabled>{{ person_slot.person.full_name }} · AVAILABILITY REVIEW</option>{% endif %}{% for person_row in staffing_pool %}<option value="{{ person_row.person.id }}"{% if person_slot.person and person_slot.person.id == person_row.person.id %} selected{% endif %}>{{ person_row.person.full_name ~ ' · ' ~ role[0]|upper if mirrored else role[0]|upper ~ ' · ' ~ person_row.person.full_name }}</option>{% endfor %}</select><span data-ucc-selected-text>{{ (person_slot.person.full_name if person_slot.person else 'Unassigned') ~ ' · ' ~ role[0]|upper if mirrored else role[0]|upper ~ ' · ' ~ (person_slot.person.full_name if person_slot.person else 'Unassigned') }}</span></label><button type="submit" class="ucc-legacy-save">SAVE</button>
             </form>{% endfor %}
             {% if can_edit %}
-            <details data-ucc-editor="unit-{{ ramp.name }}-{{ slot.position }}"><summary>MOVE / SWAP</summary>{% for role in ('driver','flyer') if slot.roles[role].person %}<button type="button" class="ucc-move-person" draggable="true" data-ucc-drag-assignee data-person-id="{{ slot.roles[role].person.id }}">MOVE {{ role|upper }}</button>{% endfor %}<form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='unit') }}" data-ucc-unit-form>
+            <details data-ucc-editor="unit-{{ ramp.name }}-{{ slot.position }}"><summary>MOVE / SWAP</summary><div class="ucc-unit-actions">{% for role in ('driver','flyer') if slot.roles[role].person %}<button type="button" class="ucc-move-person" draggable="true" data-ucc-drag-assignee data-person-id="{{ slot.roles[role].person.id }}">MOVE {{ role|upper }}</button>{% endfor %}<form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='unit') }}" data-ucc-unit-form>
                 <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ staffing_version }}">
                 {% if detached_units %}<label>SOURCE UNIT<select name="source_slot"><option value="{{ ramp.name }}|{{ slot.position }}">THIS POSITION</option>{% for unit in detached_units %}<option value="{{ unit.ramp }}|{{ unit.position }}">{{ unit.ramp }} P{{ unit.position }} · {{ unit.truck or 'TEAM' }}</option>{% endfor %}</select></label>{% endif %}
                 <label>TO RAMP<select name="destination_ramp">{% for destination in ramps if destination.slots %}<option>{{ destination.name }}</option>{% endfor %}</select></label><label>POSITION<select name="destination_position">{% for position in range(1,5) %}<option>{{ position }}</option>{% endfor %}</select></label><label>RESOLUTION<select name="resolution"><option value="move">MOVE TO EMPTY</option><option value="swap">SWAP UNITS</option></select></label><button type="submit">APPLY UNIT MOVE</button>
-            </form></details>{% endif %}
+            </form></div></details><span class="ucc-management-only ucc-management-save" data-ucc-management-save role="status"></span>{% endif %}
             </div>{% endif %}
         </div>{% endfor %}
         </div>

@@ -87,8 +87,10 @@
         <span><b>TYPE IV</b> 100% · {{ fluid_settings.type_iv_fluid_name }}</span>
     </section>
 
-    <p class="ucc-feedback" role="status" aria-live="polite" data-ucc-feedback hidden></p>
-    <a class="ucc-current-link" href="{{ url_for('neosubzero.ucc') }}" target="_blank" rel="noopener" data-ucc-current-link hidden>OPEN CURRENT UCC IN NEW TAB · PRESERVE THIS DRAFT</a>
+    <div class="ucc-feedback-area">
+        <p class="ucc-feedback" role="status" aria-live="polite" data-ucc-feedback hidden></p>
+        <a class="ucc-current-link" href="{{ url_for('neosubzero.ucc') }}" target="_blank" rel="noopener" data-ucc-current-link hidden>OPEN CURRENT UCC IN NEW TAB · PRESERVE THIS DRAFT</a>
+    </div>
     {% include "neonodes/neosubzero/_ucc_board.html" %}
     {% if can_edit and not live_fragment %}
     <dialog class="neosubzero-ucc-move-dialog" data-ucc-move-dialog>
@@ -104,7 +106,7 @@
     {% endif %}
 </section></div>
 {% if not live_fragment %}
-<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261109-ducc-tv-v1') }}" defer></script>
+<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261110-ducc-management-v1') }}" defer></script>
 <script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='20261110-ducc-weather-v1') }}" defer></script>
 {% endif %}
 {% endblock %}

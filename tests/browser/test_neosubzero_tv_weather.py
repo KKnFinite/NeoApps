@@ -28,8 +28,9 @@ class DuccTvWeatherTest(unittest.TestCase):
             page = browser.new_page(viewport={'width':1920, 'height':1080})
             errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
             case.login(page); case.ready(page, '/neosubzero/ucc')
-            expect(page.locator('[data-ucc-upcoming] article')).to_have_count(3)
-            expect(page.get_by_text('MON NOV 16', exact=True)).to_have_count(0)
+            expect(page.locator('[data-ucc-upcoming] article:visible')).to_have_count(4)
+            expect(page.get_by_text('MON NOV 16', exact=True)).to_be_visible()
+            expect(page.locator('.neosubzero-weather-hour-secondary > span:first-child').first).to_be_visible()
             page.evaluate('document.documentElement.requestFullscreen=undefined')
             draft = page.locator('[data-ucc-editor="Bravo-2"] select[name="person_id"]').first
             draft.evaluate('(field, person) => { field.value = person; field.dispatchEvent(new Event("input", {bubbles:true})); }', str(case.people[2]))

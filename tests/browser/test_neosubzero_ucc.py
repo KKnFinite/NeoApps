@@ -87,11 +87,12 @@ class UccBrowserTest(unittest.TestCase):
             for width, height in ((1920,1080), (1440,1000), (1024,768), (820,1180), (390,844), (375,812)):
                 page.set_viewport_size({"width":width,"height":height})
                 expect(page.locator('[data-ucc-ramp="Alpha"]')).to_be_visible()
-                geometry = page.evaluate("""() => ({width:innerWidth, overflow:document.documentElement.scrollWidth-innerWidth, ramps:[...document.querySelectorAll('[data-ucc-ramp]')].slice(0,5).map(el=>({name:el.dataset.uccRamp,x:el.getBoundingClientRect().x,y:el.getBoundingClientRect().y})), fields:[...document.querySelectorAll('.ucc-team[open] input:not([type=hidden]), .ucc-team[open] select')].map(el=>{const r=el.getBoundingClientRect(); return {left:r.left,right:r.right};})})""")
+                geometry = page.evaluate("""() => ({width:innerWidth, overflow:document.documentElement.scrollWidth-innerWidth, ramps:[...document.querySelectorAll('[data-ucc-ramp]')].slice(0,5).map(el=>({name:el.dataset.uccRamp,x:el.getBoundingClientRect().x,y:el.getBoundingClientRect().y,width:el.getBoundingClientRect().width})), fields:[...document.querySelectorAll('.ucc-team[open] input:not([type=hidden]), .ucc-team[open] select')].map(el=>{const r=el.getBoundingClientRect(); return {left:r.left,right:r.right};})})""")
                 self.assertLessEqual(geometry["overflow"], 1, geometry)
                 self.assertEqual([r["name"] for r in geometry["ramps"]], ["Alpha","Bravo","Charlie","Delta","Echo"])
                 if width > 900:
                     self.assertEqual(len({round(r["y"]) for r in geometry["ramps"]}), 1, geometry)
+                    self.assertLess(max(r["width"] for r in geometry["ramps"]) - min(r["width"] for r in geometry["ramps"]), 1)
                     expect(page.locator('[data-ucc-parking="C09"] .ucc-plane')).to_be_visible()
                     bounds={code:page.locator(f'[data-ucc-parking="{code}"]').bounding_box() for code in ('A01','A04','A05','A09','A10')}
                     self.assertLess(bounds['A01']['x'],bounds['A10']['x'])
@@ -100,12 +101,40 @@ class UccBrowserTest(unittest.TestCase):
                     self.assertLess(bounds['A10']['y'],bounds['A09']['y'])
                     self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]').count(),1)
                     self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position]').count(),4)
+                    for ramp in page.locator('[data-ucc-ramp]').all()[:5]:
+                        one, two, four, three, pad, parking = [ramp.locator(selector).bounding_box() for selector in (
+                            '.position-1', '.position-2', '.position-4', '.position-3', '[data-ucc-deice-pad]', '.ucc-parking-grid')]
+                        self.assertLessEqual(one['x'] + one['width'], pad['x'])
+                        self.assertLessEqual(pad['x'] + pad['width'], four['x'])
+                        self.assertAlmostEqual(one['y'], four['y'], delta=1)
+                        self.assertAlmostEqual(two['y'], three['y'], delta=1)
+                        self.assertLess(two['y'], parking['y'])
                 else:
                     expect(page.locator('.ucc-ramp-diagram').first).to_be_hidden()
                 measurements.append({"engine":engine, **geometry})
                 page.screenshot(path=str(self.evidence / f"ucc-{engine}-{width}.png"), full_page=True)
+                if width == 1920:
+                    page.screenshot(path=str(self.evidence / f"ucc-management-{engine}-1920x1080.png"))
             page.set_viewport_size({"width":1440,"height":1000})
+            slot = page.locator('[data-ucc-editor="Alpha-2"]')
+            for field, value in (('truck_number', 'UCC-831'), ('person_id', str(self.people[2])), ('person_id', str(self.people[1]))):
+                selector = slot.locator(f'select[name="{field}"]')
+                control = selector.last if value == str(self.people[1]) else selector.first
+                version = control.locator('xpath=ancestor::form').locator('[name="expected_version"]')
+                before_save = version.input_value()
+                with page.expect_response(lambda r: r.request.method == 'POST') as saved:
+                    control.select_option(value)
+                self.assertEqual(saved.value.status, 200)
+                expect(slot.locator('[data-ucc-management-save]')).to_have_text('Saved')
+                expect(version).not_to_have_value(before_save)
+                expect(control).to_have_value(value)
+                with page.expect_response(lambda r: r.request.method == 'POST') as cleared:
+                    control.select_option('')
+                self.assertEqual(cleared.value.status, 200)
+                expect(control).to_have_value('')
+            self.ready(page, "/neosubzero/ucc")
             plane = page.locator('[data-ucc-parking="C09"] .ucc-plane')
+            plane.scroll_into_view_if_needed()
             plane.click()
             expect(page.locator('[data-ucc-info-mission="%s"]' % self.missions[4])).to_be_visible()
             self.assertEqual(page.locator('[data-ucc-info] input[name*="gallons"], [data-ucc-info] button[name="clear"]').count(), 0)
@@ -152,6 +181,7 @@ class UccBrowserTest(unittest.TestCase):
                 desktop_select.locator('xpath=ancestor::form').evaluate('e=>e.requestSubmit()')
             self.assertEqual(conflict.value.status, 409)
             expect(page.locator('[data-ucc-feedback]')).to_contain_text('changed')
+            expect(desktop.locator('[data-ucc-management-save]')).to_have_text('Not saved')
             expect(desktop_select).to_have_value(str(self.people[2]))
             expect(page.locator('[data-ucc-current-link]')).to_be_visible()
             # Explicit reload resolves the draft; whole units move and swap on mobile.
@@ -159,6 +189,8 @@ class UccBrowserTest(unittest.TestCase):
             truck = mobile.locator('[data-ucc-editor="Delta-3"] [data-ucc-truck-form]')
             truck.locator('select[name="truck_number"]').select_option('UCC-831')
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('truck saved')
+            # Start the unit command from a fresh roster-wide version, separate from the truck save.
+            self.ready(mobile,"/neosubzero/ucc")
             unit_details = mobile.locator('[data-ucc-editor="unit-Delta-3"]')
             unit_details.locator(':scope > summary').click()
             unit = unit_details.locator('form')
@@ -167,6 +199,7 @@ class UccBrowserTest(unittest.TestCase):
             unit.locator('button[type="submit"]').click()
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('unit moved')
             expect(page.locator('[data-ucc-editor="Echo-4"] .ucc-team-controls')).to_contain_text('UCC-831',timeout=10000)
+            self.ready(mobile,"/neosubzero/ucc")
             target = mobile.locator('[data-ucc-editor="Echo-4"]')
             target.locator('[data-ucc-editor="unit-Echo-4"] > summary').click()
             unit = target.locator('[data-ucc-unit-form]')

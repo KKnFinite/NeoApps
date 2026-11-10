@@ -1,5 +1,5 @@
-{% macro forecast_window(card) -%}
-<article{% if card.get('upcoming_on_tv', true) %} data-ucc-tv-window{% endif %}{% if not card.hours %} data-ucc-forecast-unavailable{% endif %}>
+{% macro forecast_window(card, management_extra=false) -%}
+<article{% if management_extra %} class="ucc-management-only" data-ucc-management-forecast-extra{% elif card.get('upcoming_on_tv', true) %} data-ucc-tv-window{% endif %}{% if not card.hours %} data-ucc-forecast-unavailable{% endif %}>
     <span><b>{{ card.date_label }}</b><small>{{ card.window_label }}</small></span>
     <span><b>{{ card.temperature_range }}</b><small>TEMP</small></span>
     <span><b>{{ card.dewpoint_range }}</b><small>DEW</small></span>
@@ -7,6 +7,7 @@
     <span><b>{{ card.precipitation_probability }}</b><small>PRECIP</small></span>
     <span><b>{{ card.gust }}</b><small>MAX GUST</small></span>
     <em>{{ card.conditions }} · WIND {{ card.wind }}</em>
+    {% if not card.hours %}<span class="ucc-management-only ucc-management-forecast-unavailable">Forecast unavailable</span>{% endif %}
 </article>
 {%- endmacro %}
 <section class="neosubzero-ucc-upcoming" data-ucc-upcoming aria-label="Upcoming operational sort forecasts">
@@ -14,11 +15,13 @@
             <strong>UPCOMING OPERATIONAL SORT WINDOWS</strong>
             <span>{{ weather.sources.forecast }} · {{ weather.forecast_status.issued_at_label }}{% if weather.forecast_status.stale %} · STALE{% endif %}</span>
         </div>
-        {% if weather.future_forecast %}
+        {% if weather.future_forecast or weather.tv_forecast_extra %}
         <div class="neosubzero-weather-forecast">
             {% for card in weather.future_forecast %}{{ forecast_window(card) }}{% endfor %}
+            {% for card in weather.tv_forecast_extra|default(()) %}{{ forecast_window(card, management_extra=true) }}{% endfor %}
         </div>
-        {% else %}<p class="neosubzero-weather-note">{{ weather.forecast_status.error or 'No upcoming operational sort forecast is available.' }}</p>{% endif %}
+        {% endif %}
+        {% if not weather.future_forecast %}<p class="neosubzero-weather-note"{% if weather.tv_forecast_extra %} data-ucc-management-hide{% endif %}>{{ weather.forecast_status.error or 'No upcoming operational sort forecast is available.' }}</p>{% endif %}
         {% if weather.tv_forecast_extra %}
         <template data-ucc-tv-forecast-extra>{% for card in weather.tv_forecast_extra %}{{ forecast_window(card) }}{% endfor %}</template>
         {% endif %}

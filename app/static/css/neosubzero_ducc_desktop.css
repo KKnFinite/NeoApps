@@ -182,8 +182,9 @@
 .neosubzero-ucc .ucc-team-controls details > summary { display:block; list-style:none; padding:2px 0; font-size:.6rem; color:#96b8cf; cursor:pointer; overflow-wrap:anywhere; }
 .neosubzero-ucc .ucc-team-controls details > summary::-webkit-details-marker { display:none; }
 .neosubzero-ucc .ucc-team-controls details:not([open]) > :not(summary) { display:none; }
-.neosubzero-ucc .ucc-team-controls details[open] > form { position:absolute; z-index:5; width:190px; padding:8px; background:#102839; border:1px solid #55758b; border-radius:8px; }
-.neosubzero-ucc .is-mirrored details[open] > form { right:0; }
+.neosubzero-ucc .ucc-unit-actions,.neosubzero-ucc .ucc-feedback-area { display:contents; }
+.neosubzero-ucc .ucc-team-controls details[open] .ucc-unit-actions > form { position:absolute; z-index:5; width:190px; padding:8px; background:#102839; border:1px solid #55758b; border-radius:8px; }
+.neosubzero-ucc .is-mirrored details[open] .ucc-unit-actions > form { right:0; }
 .blueprint-neosubzero .neosubzero-ucc .ucc-deice-pad {
     display:flex; position:absolute; left:calc((100% + 4px) / 3); top:0;
     width:calc((100% - 8px) / 3); min-width:0;
@@ -237,6 +238,130 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-staffing-grid { grid-template-rows:auto; min-height:0; }
     .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-deice-pad { height:110px; min-height:110px; }
     .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp-diagram.is-main-ramp { padding-top:115px; }
+}
+
+/* Ordinary desktop management only. Mobile, Board View and TV keep their own layout. */
+.blueprint-neosubzero .neosubzero-ucc .ucc-management-only { display:none; }
+@media (min-width:901px) {
+    .blueprint-neosubzero:not(.neosubzero-ucc-tv-mode,.operational-board-view) .neosubzero-ucc {
+        min-width:0; grid-template-columns:repeat(10,minmax(0,1fr)); gap:8px;
+
+        & :is(.neosubzero-weather,.neosubzero-ucc-upcoming) {
+            min-width:0; padding:10px; background:#0c1b28; border:1px solid #294352;
+            border-radius:8px; overflow-wrap:anywhere; font-family:NeoFontPlain,"Segoe UI",sans-serif;
+        }
+        & .neosubzero-weather {
+            grid-column:1 / 8;
+            grid-template-columns:minmax(125px,1fr) minmax(0,3fr); grid-template-rows:auto 1fr;
+            align-items:start; align-content:start; gap:6px 10px;
+        }
+        & .neosubzero-ucc-upcoming { grid-column:8 / -1; }
+        & .neosubzero-weather-source { justify-items:start; margin-top:3px; }
+        & :is(.neosubzero-weather-source span,.neosubzero-weather-forecast-head) { font-size:.7rem; color:#a7bdcd; }
+        & :is(.neosubzero-weather h2,.neosubzero-weather-forecast-head strong) { color:#b4e2f4; font-size:.74rem; }
+        & .neosubzero-weather-current { align-self:start; }
+        & .neosubzero-weather-primary { padding:0 0 5px; }
+        & .neosubzero-weather-primary > strong { font-size:1.85rem; }
+        & .neosubzero-weather-current dl { gap:7px 10px; }
+        & .neosubzero-weather-current dt { font-size:.64rem; color:#a7bdcd; }
+        & .neosubzero-weather-current dd { font-size:.8rem; }
+        & .neosubzero-weather-current-sort {
+            grid-template-columns:repeat(auto-fit,minmax(min(100%,113px),1fr));
+            grid-auto-flow:row; grid-auto-columns:auto; gap:5px; overflow:visible;
+        }
+        & .neosubzero-weather-current-sort > article { padding:4px; border-top:1px solid #294352; }
+        & .neosubzero-weather-current-sort time { color:#b4e2f4; font-size:.78rem; }
+        & .neosubzero-weather-hour-priority { gap:3px 6px; }
+        & .neosubzero-weather-hour-priority em { color:#b7cad7; font-size:.68rem; }
+        & .neosubzero-weather-hour-secondary { color:#a7bdcd; font-size:.68rem; line-height:1.2; }
+        & .neosubzero-weather-hour-secondary > span:nth-child(-n+4) { display:block; }
+        & .neosubzero-ucc-upcoming .neosubzero-weather-forecast > article {
+            display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 7px; padding:5px 0;
+        }
+        & .neosubzero-ucc-upcoming .neosubzero-weather-forecast > article:not([data-ucc-tv-window],[data-ucc-management-forecast-extra]),
+        & [data-ucc-management-hide] { display:none; }
+        & .neosubzero-ucc-upcoming article > span { display:inline-flex; flex-direction:row-reverse; align-items:baseline; gap:3px; }
+        & .neosubzero-ucc-upcoming article > span:first-child {
+            flex:1 0 100%; flex-direction:row; flex-wrap:wrap; justify-content:space-between; gap:2px 5px;
+        }
+        & .neosubzero-ucc-upcoming article > em { flex:1 0 100%; }
+        & .neosubzero-ucc-upcoming article[data-ucc-forecast-unavailable] > :not(:first-child,.ucc-management-forecast-unavailable) { display:none; }
+        & .neosubzero-ucc-upcoming .ucc-management-forecast-unavailable { color:#a7bdcd; font-size:.69rem; }
+        & .neosubzero-ucc-upcoming article b { font-size:.73rem; }
+        & .neosubzero-ucc-upcoming article :is(small,em) { color:#a7bdcd; font-size:.65rem; }
+
+        & .ucc-feedback-area:has(:not([hidden])) {
+            display:grid; gap:4px; position:fixed; right:18px; bottom:16px; z-index:1200; width:min(25rem,calc(100vw - 36px));
+        }
+        & .ucc-feedback:not([hidden]) { position:static; margin:0; border-radius:6px; }
+        & .ucc-feedback.is-inline:not(.is-error) { display:none; }
+        & .ucc-current-link:not([hidden]) { padding:5px 8px; background:#18232b; border:1px solid #7e6442; border-radius:5px; }
+
+        & .ucc-ramp { box-sizing:border-box; align-self:start; border-color:#3c6076; border-radius:10px; padding:6px; }
+        & [data-ucc-ramp="Alpha"] { grid-column:1 / 3; }
+        & [data-ucc-ramp="Bravo"] { grid-column:3 / 5; }
+        & [data-ucc-ramp="Charlie"] { grid-column:5 / 7; }
+        & [data-ucc-ramp="Delta"] { grid-column:7 / 9; }
+        & [data-ucc-ramp="Echo"] { grid-column:9 / 11; }
+        & .ucc-ramp > header { border-bottom:1px solid #294352; margin-bottom:6px; }
+        & .ucc-ramp:not([data-ucc-ramp="Remote"]) .ucc-treatment-layout {
+            display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.74fr) minmax(0,1fr);
+            grid-template-rows:repeat(2,minmax(var(--ucc-staffing-row-height,0px),auto)) auto;
+            align-items:start; gap:5px;
+        }
+        & .ucc-ramp:not([data-ucc-ramp="Remote"]) :is(.ucc-staffing-grid,.ucc-ramp-diagram) { display:contents; }
+        & .ucc-deice-pad {
+            position:static; grid-area:1 / 2 / 3 / 3; align-self:stretch;
+            width:auto; height:auto; min-height:0; border:0; padding:0;
+        }
+        & .ucc-parking-grid { grid-area:3 / 1 / 4 / -1; border-top:1px solid #294352; padding-top:4px; }
+        & .ucc-team { min-width:0; align-self:start; }
+        & .ucc-team-controls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:3px 2px; align-items:center; }
+        & .ucc-team-controls > form { grid-column:1 / -1; }
+        & .ucc-team-controls > details { grid-column:1; min-width:0; }
+        & .ucc-team-controls > details > summary { color:#a9d5e7; font-size:.62rem; }
+        & .ucc-team-controls details[open] .ucc-unit-actions {
+            display:grid; gap:5px; position:absolute; left:0; z-index:10;
+            width:190px; box-sizing:border-box; padding:7px; border:1px solid #55758b; border-radius:8px; background:#102839;
+        }
+        & .is-mirrored .ucc-unit-actions { right:0; left:auto; }
+        & .ucc-team-controls details[open] .ucc-unit-actions > form { position:static; width:auto; padding:0; border:0; }
+        & .ucc-team .ucc-pill {
+            padding:4px 12px 4px 5px; min-height:24px; border-radius:8px;
+            background:#102330; font:500 .72rem/1.22 NeoFontPlain,"Segoe UI",sans-serif;
+        }
+        & .ucc-team .ucc-pill:is(:hover,:focus-within) { border-color:#79b4ce; }
+        & .ucc-team .ucc-pill span { overflow-wrap:anywhere; }
+        &[data-ucc-inline-ready="true"] [data-ucc-truck-form] [data-ucc-selected-text] { display:none; }
+        &[data-ucc-inline-ready="true"] [data-ucc-management-truck-label] { display:block; }
+        & .ucc-management-save { display:block; min-width:0; color:#9bd9bc; font-size:.6rem; line-height:1.15; }
+        & .ucc-management-save[data-state="saving"] { color:#a4cfe7; }
+        & .ucc-management-save[data-state="error"] { color:#ffd0d0; }
+
+        & .ucc-plane { gap:2px; padding:4px 2px; background:#0c1e2c; border-color:#345063; overflow-wrap:anywhere; }
+        & .ucc-plane > strong { order:-1; color:#ecf5fb; font:700 .83rem/1.2 NeoFontPlain,"Segoe UI",sans-serif; }
+        & .ucc-plane > :is(.ucc-plane-flight,.ucc-plane-etd) { display:none; }
+        & .ucc-plane .ucc-management-plane-route { display:block; color:#b9d0df; font-size:.69rem; }
+        & .ucc-plane .ucc-management-plane-etd { display:block; color:#d4e4ee; font-size:.67rem; }
+        & .ucc-plane .ucc-plane-icon { font-size:2.1rem; }
+        & .ucc-plane:is(:hover,[aria-pressed="true"]) { background:#112b3b; border-color:#72b3d1; color:#e2eef5; }
+        & .ucc-queue-exception .ucc-plane { width:min(100%,9rem); }
+
+        & [data-ucc-ramp="Remote"] { width:100%; }
+        & [data-ucc-ramp="Remote"] .ucc-treatment-layout { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:12px; }
+        & [data-ucc-ramp="Remote"] .ucc-staffing-grid { grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:auto; }
+        & [data-ucc-ramp="Remote"] .ucc-team { grid-area:auto; order:0; }
+        & [data-ucc-ramp="Remote"] .ucc-ramp-diagram { grid-area:auto; }
+        & [data-ucc-ramp="Remote"] .ucc-remote-parking { grid-template-columns:repeat(auto-fit,minmax(min(100%,70px),1fr)); }
+        & [data-ucc-ramp="Remote"] .ucc-plane .ucc-plane-icon { font-size:1.6rem; }
+
+        @media (max-width:1180px) {
+            & .neosubzero-weather { grid-column:1 / -1; }
+            & .neosubzero-ucc-upcoming { grid-column:1 / -1; grid-row:4; }
+            & .neosubzero-ucc-upcoming .neosubzero-weather-forecast { grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+            & > .neosubzero-ucc-fluid { grid-row:5; }
+        }
+    }
 }
 
 /* The TV projection is a sibling of management DUCC, never a scaled copy. */

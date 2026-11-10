@@ -163,6 +163,39 @@
     });
 
     const field = (form, name) => form.querySelector(`[name="${name}"]`);
+    const normalDesktop = () => tvDesktop.matches && !tvMode && !document.body.classList.contains("operational-board-view");
+    function updateSelectedText(form, select) {
+        const text = form.querySelector('[data-ucc-selected-text]');
+        if (text) text.textContent = select.selectedOptions[0]?.textContent || '';
+        const truckLabel = form.querySelector('[data-ucc-management-truck-label]');
+        if (truckLabel) {
+            const position = field(form, "position_number").value;
+            const truck = select.value ? `TRUCK ${select.value}` : "NO TRUCK";
+            truckLabel.textContent = Number(position) > 2 ? `${truck} · ${position}` : `${position} · ${truck}`;
+        }
+    }
+
+    let lastStaffingFeedback;
+    const staffingOutput = slot => root.querySelector(`[data-ucc-editor="${CSS.escape(slot)}"] [data-ucc-management-save]`);
+    function paintStaffingFeedback() {
+        if (!lastStaffingFeedback) return;
+        const {slot, state} = lastStaffingFeedback;
+        const output = staffingOutput(slot);
+        if (!output) return;
+        output.dataset.state = state;
+        output.textContent = {saving: "Saving…", saved: "Saved", error: "Not saved"}[state];
+    }
+    function setStaffingFeedback(form, state) {
+        const slot = form.closest(".ucc-team")?.dataset?.uccEditor;
+        if (!slot) return false;
+        if (lastStaffingFeedback && lastStaffingFeedback.slot !== slot) {
+            const previous = staffingOutput(lastStaffingFeedback.slot);
+            if (previous) previous.textContent = "";
+        }
+        lastStaffingFeedback = {slot, state};
+        paintStaffingFeedback();
+        return true;
+    }
 
     const sourceFormFor = (personId, destinationForm) => {
         const visible = forms.find((form) => form !== destinationForm && form.dataset.currentPersonId === personId);
@@ -181,7 +214,9 @@
     const resetMove = (form, {restoreSelection = false} = {}) => {
         if (!form) return;
         if (restoreSelection) {
-            field(form, "person_id").value = form.dataset.currentPersonId || "";
+            const select = field(form, "person_id");
+            select.value = form.dataset.currentPersonId || "";
+            if (normalDesktop()) updateSelectedText(form, select);
             form.dataset.dirty = "false";
         }
         field(form, "source_assignment_id").value = "";
@@ -267,6 +302,7 @@
             );
             if (!personId || !hasPerson) return;
             select.value = personId;
+            if (normalDesktop()) updateSelectedText(form, select);
             form.dataset.dirty = "true";
             updateDirtyState();
             const move = prepareMove(form);
@@ -283,8 +319,7 @@
         form.dataset.autoSaveBound = 'true';
         form.addEventListener('change', () => {
             const select = form.querySelector('select');
-            const text = form.querySelector('[data-ucc-selected-text]');
-            if (text) text.textContent = select.selectedOptions[0]?.textContent || '';
+            updateSelectedText(form, select);
             form.requestSubmit();
         });
     });
@@ -355,16 +390,20 @@
             return;
         }
         const plane = event.target.closest("[data-ucc-aircraft]");
-        if (plane) showAircraft(plane.dataset.uccAircraft);
+        if (plane) {
+            showAircraft(plane.dataset.uccAircraft);
+            if (normalDesktop()) root.querySelector('[data-ucc-info]:not([hidden])')?.scrollIntoView({block: "nearest"});
+        }
         if (event.target.closest("[data-ucc-info-close]")) showAircraft("");
     });
 
     const feedback = root.querySelector("[data-ucc-feedback]");
     const currentLink = root.querySelector("[data-ucc-current-link]");
-    const notify = (message, error = false) => {
+    const notify = (message, error = false, inline = false) => {
         feedback.hidden = false;
         feedback.textContent = message;
         feedback.classList.toggle("is-error", error);
+        feedback.classList.toggle("is-inline", inline);
         currentLink.hidden = !error;
     };
     const editing = () => root.dataset.dirty === "true" || root.dataset.saving === "true" || Boolean(root.querySelector("input:focus, select:focus, textarea:focus")) || dialog?.open;
@@ -397,6 +436,7 @@
                 notify("The current sort changed. Your draft has not been applied; open current UCC before continuing.", true);
                 return false;
             }
+            if (operationId !== nextOperationId) lastStaffingFeedback = null;
             const expanded = Array.from(root.querySelectorAll("[data-ucc-editor][open]")).map((el) => el.dataset.uccEditor);
             const scroll = window.scrollY;
             const sortLabel = root.querySelector('.neosubzero-ucc-head-actions > strong');
@@ -434,6 +474,7 @@
                 bindBoard();
             }
             if (deferred) bindBoard();
+            paintStaffingFeedback();
             const newWeather = next.querySelector(".neosubzero-weather");
             if (weather && newWeather) {
                 const hourlyScroll = weather.querySelector(".neosubzero-weather-current-sort")?.scrollLeft || 0;
@@ -466,7 +507,7 @@
         selects.forEach(select => { select.disabled = true; });
         if (event.submitter?.name) body.set(event.submitter.name, event.submitter.value);
         buttons.forEach((button) => { button.disabled = true; });
-        notify("Saving UCC…");
+        notify("Saving UCC…", false, setStaffingFeedback(form, "saving"));
         const abort = new AbortController();
         const timeout = window.setTimeout(() => abort.abort(), 20000);
         let accepted = false;
@@ -482,18 +523,22 @@
                 else input.defaultValue = input.value;
             });
             updateDirtyState();
-            notify(payload.message + (root.dataset.dirty === "true" ? " Other unsaved drafts are preserved; live display will reconcile after editing." : ""));
+            const hasDraft = root.dataset.dirty === "true";
+            notify(payload.message + (hasDraft ? " Other unsaved drafts are preserved; live display will reconcile after editing." : ""), false, setStaffingFeedback(form, "saved") && !hasDraft);
         } catch (error) {
+            setStaffingFeedback(form, "error");
             notify(error.name === "AbortError" ? "Request timed out; its outcome is unknown. Check current UCC before retrying. Your draft is preserved." : (error.message || "Unable to save. Your draft is preserved; check current UCC before retrying."), true);
         } finally {
             window.clearTimeout(timeout);
             delete root.dataset.saving;
-            buttons.forEach((button) => { button.disabled = false; });
-            selects.forEach(select => { select.disabled = false; });
+            const restoreControls = () => [...buttons, ...selects].forEach(control => { control.disabled = false; });
+            const reconcileFirst = accepted && normalDesktop();
+            if (!reconcileFirst) restoreControls();
             if (accepted) {
                 if (form.contains(document.activeElement)) document.activeElement.blur();
                 try { await refreshBoard(); } catch (error) { notify("Saved, but " + error.message, true); }
             }
+            if (reconcileFirst) restoreControls();
         }
     });
 
