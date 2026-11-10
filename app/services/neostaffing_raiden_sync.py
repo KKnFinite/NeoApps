@@ -175,7 +175,7 @@ def next_deadline(at):
         return None  # Keep the last value outside an active Night sort.
     receipt = db.session.get(Receipt, 1)
     if receipt is None:
-        return next_check(at)
+        return at  # Initialize the durable polling clock on the first cycle.
     # The existing shared deadline worker uses this persistent clock,
     # regardless of how many attendance edits have been committed.
     return max(receipt.retry_at, receipt.lease_until or at)

@@ -62,6 +62,19 @@ class RaidenMirrorTest(unittest.TestCase):
         db.session.commit()
         return person
 
+    def test_fixed_five_minute_boundaries_and_first_clock_initialization(self):
+        from datetime import datetime
+        self.assertEqual(sync.next_check(datetime(2026, 11, 10, 5, 1, 12)),
+                         datetime(2026, 11, 10, 5, 5))
+        self.assertEqual(sync.next_check(datetime(2026, 11, 10, 5, 5)),
+                         datetime(2026, 11, 10, 5, 10))
+        self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
+        with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
+            self.assertIsNone(db.session.get(Receipt, 1))
+            self.assertLessEqual(sync.next_deadline(sync.now()), sync.now())
+            self.assertFalse(sync.drain(adapter_factory=lambda: Adapter()))
+            self.assertGreater(db.session.get(Receipt, 1).retry_at, sync.now())
+
     def test_counts_only_eligible_here_at_night_ramp_shift(self):
         self.person('RAIDEN-HERE', self.door, 'here')
         self.person('RAIDEN-ABSENT', self.door, 'call_in')
@@ -172,6 +185,7 @@ class RaidenMirrorTest(unittest.TestCase):
         adapter = Adapter()
         with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
             self.person('RAIDEN-ONE', self.door, 'here')
+            self.due_now()
             self.assertTrue(sync.drain(adapter_factory=lambda: adapter))
             self.assertEqual(adapter.value, 1)
         # Simulate a new active Night sort, before anyone is marked HERE.
