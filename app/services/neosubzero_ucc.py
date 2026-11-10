@@ -235,10 +235,14 @@ def _physical_aircraft_rows(operation, departure_context):
             departures[row["tail"]] = max(departures.get(row["tail"], datetime.min), row["block_out_at_utc"])
     arrival_missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id, mission_type="arrival").order_by(SortDateMission.actual_block_in_datetime_utc.desc(), SortDateMission.id).all()
     arrivals = {}
+    tv_arrival_by_tail = {}
     for mission in arrival_missions:
+        tail = str(mission.assigned_tail_number or "").strip().upper()
         if mission.actual_block_in_datetime_utc:
-            tail = str(mission.assigned_tail_number or "").strip().upper()
             arrivals[tail] = max(arrivals.get(tail, datetime.min), mission.actual_block_in_datetime_utc)
+        if tail and mission.arrival_status != "cancelled":
+            # A departure row has no inbound mission ID. Only use an unambiguous same-sort match.
+            tv_arrival_by_tail[tail] = None if tail in tv_arrival_by_tail else mission
     states = {str(row.tail_number).strip().upper(): row for row in SortDateTailState.query.filter_by(sort_date=operation.sort_date, gateway_code=operation.gateway_code, sort_name=operation.sort_name).all()}
     pretreat = {str(row.tail_number).strip().upper(): row for row in NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id).all()}
     # A tail reassignment cannot release an unconfirmed physical aircraft. Keep
@@ -268,6 +272,8 @@ def _physical_aircraft_rows(operation, departure_context):
         row["departure_time_label"] = "ATA" if mission.actual_block_in_datetime_utc else "ETA"
         row["destination"] = str(mission.origin or "").strip()
         row["departure_time"] = format_local_hhmm(mission.actual_block_in_datetime_utc or mission.eta_datetime_utc or mission.planned_datetime_utc, mission.timezone or None)
+        row["tv_destination"] = mission.destination
+        row["tv_eta"] = format_local_hhmm(mission.eta_datetime_utc, mission.timezone)
         rows.append(row)
         departure_tails.add(tail)
     located_tails = dict.fromkeys((*parking, *(tail for tail, state in states.items() if _tail_parking_location(state))))
@@ -297,6 +303,11 @@ def _physical_aircraft_rows(operation, departure_context):
             continue
         item = dict(row)
         item["identity_key"] = row.get("identity_key") or str(row["mission_id"])
+        inbound = tv_arrival_by_tail.get(tail)
+        if "tv_eta" not in item and inbound and inbound.eta_datetime_utc:
+            block_out = item.get("block_out_at_utc")
+            if not block_out or (inbound.actual_block_in_datetime_utc or inbound.eta_datetime_utc) <= block_out:
+                item["tv_eta"] = format_local_hhmm(inbound.eta_datetime_utc, inbound.timezone)
         if not item.get("block_out_at_utc") and departures.get(tail) and arrivals.get(tail, datetime.min) <= departures[tail]:
             continue  # A later preassignment is not evidence of a physical return.
         assignment = parking.get(tail)

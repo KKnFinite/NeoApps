@@ -336,6 +336,14 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-plane-text strong { font-size:.95em; font-weight:750; }
     .ucc-tv-plane-text span { font-size:.78em; color:#b9cfe1; }
     .ucc-tv-plane-text span:empty { display:none; }
+    .ucc-tv-wallboard .ucc-tv-plane.is-stacked {
+        grid-template-columns:minmax(0,1fr); justify-items:center; text-align:center;
+        line-height:1.04; gap:.08em; padding:.17em .24em;
+    }
+    .ucc-tv-plane.is-stacked > strong { font-size:1em; font-weight:750; }
+    .ucc-tv-plane.is-stacked > .ucc-tv-plane-icon { width:1.8em; height:1.8em; }
+    .ucc-tv-plane-route, .ucc-tv-plane-eta { font-size:.78em; }
+    .ucc-tv-plane-route { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b9cfe1; }
     .ucc-tv-plane-icon {
         width:1.28em; height:1.28em; background:var(--tv-plane-color,#adc3d6);
         -webkit-mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
@@ -365,4 +373,6 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
 @media (901px <= width <= 1450px) {
     .ucc-tv-wallboard .ucc-tv-plane { grid-template-columns:minmax(0,.9em) minmax(0,1fr); gap:.16em; padding:.22em; }
     .ucc-tv-plane .ucc-tv-plane-icon { width:.9em; height:.9em; }
+    .ucc-tv-wallboard .ucc-tv-plane.is-stacked { gap:.04em; padding:.1em .18em; line-height:1; }
+    .ucc-tv-plane.is-stacked > .ucc-tv-plane-icon { width:1.35em; height:1.35em; }
 }

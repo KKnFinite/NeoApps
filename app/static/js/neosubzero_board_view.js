@@ -25,10 +25,12 @@
         const state = Array.from(source.classList).find(value => value.startsWith("state-")) || "";
         const icon = element("span", `ucc-tv-plane-icon facing-${direction}`);
         icon.setAttribute("aria-hidden", "true");
-        const card = element("div", `ucc-tv-plane ${state}`, icon, element("div", "ucc-tv-plane-text",
+        const route = [content(source, ".ucc-plane-flight"), source.dataset.uccTvDestination].filter(Boolean).join(" · ");
+        const card = element("div", `ucc-tv-plane is-stacked ${state}`,
             element("strong", "", content(source, "strong")),
-            element("span", "", content(source, ".ucc-plane-flight")),
-            element("span", "", content(source, ".ucc-plane-etd"))));
+            icon,
+            element("span", "ucc-tv-plane-route", route || "—"),
+            element("span", "ucc-tv-plane-eta", `ETA ${source.dataset.uccTvEta || "—"}`));
         card.setAttribute("aria-label", source.getAttribute("aria-label") || "");
         return card;
     }
