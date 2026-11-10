@@ -306,6 +306,92 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         self.assertEqual(cleared.json["rows"][0]["note"], "Keep this note")
         self.assertEqual(StaffingDailyAttendance.query.count(), 0)
 
+    def test_multi_area_scope_post_autosave_all_here_and_reject_outside(self):
+        from werkzeug.datastructures import MultiDict
+
+        sort, _, department, first_area, outside_area = self._hierarchy()
+        second_area = staffing_service.create_unit({
+            "unit_type": "work_area", "name": "Second Door",
+            "parent_id": department.id,
+        })
+        operation = self._night_operation()
+        marked = self._person("SCOPE-MARKED", first_area)
+        eligible_one = self._person("SCOPE-FIRST", first_area)
+        eligible_two = self._person("SCOPE-SECOND", second_area)
+        outside = self._person("SCOPE-OUT", outside_area)
+        operator = self._user("multi_scope_writer", "operator")
+        db.session.commit()
+        self._login(operator.username)
+
+        path = (f"/neostaffing/attendance?sort_id={sort.id}"
+                f"&department_id={department.id}")
+        common = [
+            ("sort_date_operation_id", str(operation.id)),
+            ("sort_id", str(sort.id)),
+            ("department_id", str(department.id)),
+            ("work_area_ids", str(first_area.id)),
+            ("work_area_ids", str(second_area.id)),
+        ]
+        self.assertEqual(
+            staffing_service._submitted_attendance_work_area_ids(MultiDict(common)),
+            [str(first_area.id), str(second_area.id)],
+        )
+        self.assertEqual(
+            staffing_service._submitted_attendance_work_area_ids({
+                "work_area_ids": [str(first_area.id), str(second_area.id)]}),
+            [str(first_area.id), str(second_area.id)],
+        )
+
+        # A row in the SECOND selected area previously failed HTTP 400 because
+        # a MultiDict .get("work_area_ids") discarded every ID except the first.
+        second_original = self._attendance_original_from_page(path, eligible_two.id)
+        note_only = self.client.post("/neostaffing/attendance/save", data=MultiDict(
+            common + [(f"status_{eligible_two.id}", ""),
+                      (f"note_{eligible_two.id}", "Supervisor note"),
+                      (f"original_{eligible_two.id}", second_original)]))
+        self.assertEqual(note_only.status_code, 200, note_only.get_data(as_text=True))
+        self.assertEqual(note_only.json["rows"][0]["note"], "Supervisor note")
+
+        # Marking someone in the FIRST area must also work, without rewriting
+        # the second person's note or changing anyone outside the scope.
+        first_original = self._attendance_original_from_page(path, marked.id)
+        first = self.client.post("/neostaffing/attendance/save", data=MultiDict(
+            common + [(f"status_{marked.id}", "vacation"),
+                      (f"note_{marked.id}", "Previously approved"),
+                      (f"original_{marked.id}", first_original)]))
+        self.assertEqual(first.status_code, 200, first.get_data(as_text=True))
+
+        bulk = [*common, ("bulk_status", "here")]
+        for person in (eligible_one, eligible_two):
+            bulk.extend([
+                (f"status_{person.id}", ""),
+                (f"original_{person.id}",
+                 self._attendance_original_from_page(path, person.id)),
+            ])
+        response = self.client.post("/neostaffing/attendance/save", data=MultiDict(bulk))
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        self.assertEqual(response.json["saved"], 2)
+        self.assertEqual({
+            x.person_id: (x.status, x.note)
+            for x in StaffingDailyAttendance.query.all()
+        }, {
+            marked.id: ("vacation", "Previously approved"),
+            eligible_one.id: ("here", None),
+            eligible_two.id: ("here", "Supervisor note"),
+        })
+        self.assertIsNone(StaffingDailyAttendance.query.filter_by(person_id=outside.id).first())
+
+        # Adding an unsanctioned person to the same multi-area request still fails
+        # before any mutation. Do not relax scope authorization for the fix.
+        forged = [*common, ("bulk_status", "here"),
+                  (f"status_{outside.id}", ""),
+                  (f"original_{outside.id}",
+                   self._attendance_original_from_page(
+                       f"/neostaffing/attendance?sort_id={sort.id}", outside.id))]
+        rejected = self.client.post("/neostaffing/attendance/save", data=MultiDict(forged))
+        self.assertEqual(rejected.status_code, 400)
+        self.assertIn("outside the selected scope", rejected.json["error"])
+
     def test_async_bulk_uses_signed_scope_and_skips_newer_statuses_and_notes(self):
         sort, _, department, area, outside_area = self._hierarchy()
         operation = self._night_operation()

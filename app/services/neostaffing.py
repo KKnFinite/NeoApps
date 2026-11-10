@@ -5627,7 +5627,11 @@ def _submitted_attendance_work_area_ids(filters):
     """Return an explicit deep-link list, preserving ordinary scope navigation."""
     if "work_area_ids" not in filters:
         return None
-    raw_values = filters.get("work_area_ids")
+    # Form MultiDict values can contain one work_area_ids entry per visible area.
+    # .get() silently returns ONLY the first entry; preserve every selected area
+    # exactly as request.args.getlist() already does for the GET roster.
+    raw_values = (filters.getlist("work_area_ids") if hasattr(filters, "getlist")
+                  else filters.get("work_area_ids"))
     if isinstance(raw_values, str):
         raw_values = [value for value in raw_values.split(",") if value.strip()]
     elif raw_values is None:
