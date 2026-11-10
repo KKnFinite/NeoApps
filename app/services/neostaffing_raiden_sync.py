@@ -9,7 +9,7 @@ from functools import partial
 from uuid import uuid4
 
 from flask import current_app, has_app_context
-from sqlalchemy import case, event, inspect, select
+from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session
 
 from app.extensions import db
@@ -29,6 +29,16 @@ class RaidenSyncError(ValueError):
 
 def now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+CHECK_MINUTES = 5
+
+
+def next_check(at):
+    """Next shared five-minute UTC boundary; does not drift with supervisor saves."""
+    return (at.replace(minute=at.minute - at.minute % CHECK_MINUTES,
+                       second=0, microsecond=0)
+            + timedelta(minutes=CHECK_MINUTES))
 
 
 def enabled():
@@ -160,43 +170,34 @@ def deliver(count, adapter):
 
 
 def next_deadline(at):
-    if not enabled():
-        return None
-    operation = current_operation()
-    if operation is None:
-        return None  # Preserve the last displayed shift total between Night sorts.
+    """Only local receipt/sort checks; Raiden is contacted by the timed drain."""
+    if not enabled() or current_operation() is None:
+        return None  # Keep the last value outside an active Night sort.
     receipt = db.session.get(Receipt, 1)
     if receipt is None:
-        return at
-    due = receipt.requested_revision != receipt.delivered_revision
-    due = due or receipt.delivered_operation_id != operation.id
-    if not due:
-        return None
+        return next_check(at)
+    # The existing shared deadline worker uses this persistent clock,
+    # regardless of how many attendance edits have been committed.
     return max(receipt.retry_at, receipt.lease_until or at)
 
 
 def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
+    """Check canonical HERE once per interval; Google I/O only on a real change."""
     if not enabled() or current_operation() is None:
         return False
     _dirty(db.session(), initial=True)
     db.session.commit()
-    old = db.session.get(Receipt, 1)
-    operation = current_operation()
-    if operation is None:
-        return False
-    if (old.requested_revision == old.delivered_revision
-            and old.delivered_operation_id != operation.id):
-        _dirty(db.session())
-        db.session.commit()
     receipt = db.session.execute(
         select(Receipt).where(Receipt.id == 1).with_for_update(skip_locked=True)
     ).scalar_one_or_none()
     at = now()
-    if (receipt is None or receipt.requested_revision == receipt.delivered_revision
-            or receipt.retry_at > at
+    if (receipt is None or receipt.retry_at > at
             or receipt.lease_until and receipt.lease_until > at):
         db.session.rollback()
         return False
+    last_operation = receipt.delivered_operation_id
+    last_count = receipt.delivered_count
+    last_verified = receipt.verified_at
     token = uuid4().hex
     receipt.lease_token = token
     receipt.lease_until = at + timedelta(minutes=5)
@@ -205,6 +206,7 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
     revision = None
     snapshot = None
     error = None
+    needs_google = False
     try:
         if db.engine.dialect.name == 'postgresql':
             db.session.connection(execution_options={'isolation_level': 'REPEATABLE READ'})
@@ -212,9 +214,12 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
         snapshot = source_snapshot()
         if snapshot is None:
             raise RaidenSyncError('Current Night Sort unavailable; no write.')
-        db.session.remove()  # Never hold database I/O during Google I/O.
-        with adapter_factory() as adapter:
-            deliver(snapshot[1], adapter)
+        needs_google = (last_verified is None or last_operation != snapshot[0]
+                        or last_count != snapshot[1])
+        db.session.remove()  # No database connection while contacting Google.
+        if needs_google:
+            with adapter_factory() as adapter:
+                deliver(snapshot[1], adapter)
     except Exception as exc:
         error = str(exc) if isinstance(exc, RaidenSyncError) else type(exc).__name__
         current_app.logger.warning('NeoStaffing Raiden M23 sync deferred: %s', error)
@@ -231,19 +236,23 @@ def drain(_gateway_id=None, *, adapter_factory=GoogleAdapter):
     receipt.lease_until = None
     receipt.last_error = error[:100] if error else None
     if error:
-        receipt.retry_at = now() + timedelta(seconds=min(600, 30 * 2 ** min(receipt.attempts - 1, 5)))
+        # Never hammer Google on provider failures: 5, 10, 20, then 30 min.
+        receipt.retry_at = now() + timedelta(
+            minutes=min(30, 5 * 2 ** min(receipt.attempts - 1, 3))
+        )
     else:
         receipt.delivered_revision = revision
         receipt.delivered_operation_id = snapshot[0]
         receipt.delivered_count = snapshot[1]
-        receipt.verified_at = now()
+        if needs_google:
+            receipt.verified_at = now()
         receipt.attempts = 0
-        receipt.retry_at = now() + timedelta(seconds=1)
+        receipt.retry_at = next_check(now())
     db.session.commit()
     return not error
 
-
 def _dirty(session, *, initial=False):
+    """Commit an intent without moving the already-scheduled five-minute check."""
     dialect = session.bind.dialect.name if session.bind is not None else db.engine.dialect.name
     if dialect == 'postgresql':
         from sqlalchemy.dialects.postgresql import insert
@@ -252,18 +261,15 @@ def _dirty(session, *, initial=False):
     else:
         raise RuntimeError('Unsupported Raiden sync database')
     statement = insert(Receipt.__table__).values(
-        id=1, requested_revision=1, delivered_revision=0, retry_at=now(), attempts=0
+        id=1, requested_revision=1, delivered_revision=0,
+        retry_at=next_check(now()), attempts=0
     )
     statement = (statement.on_conflict_do_nothing(index_elements=['id']) if initial
                  else statement.on_conflict_do_update(
                      index_elements=['id'],
-                     set_={'requested_revision': Receipt.requested_revision + 1,
-                           'retry_at': case((Receipt.last_error.is_not(None) &
-                                            (Receipt.retry_at > now()), Receipt.retry_at),
-                                           else_=now())},
+                     set_={'requested_revision': Receipt.requested_revision + 1},
                  ))
     session.execute(statement)
-
 
 _TRACKED = {
     'StaffingDailyAttendance': ('status', 'person_id', 'sort_date_operation_id',

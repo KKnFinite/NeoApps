@@ -16,6 +16,7 @@ class Adapter:
         self.value = value
         self.calls = []
         self.closed = 0
+        self.read_calls = 0
         self.formula = '=M23+P23'
         self.book = sync.RAIDEN_WORKBOOK_ID
 
@@ -26,6 +27,7 @@ class Adapter:
         self.closed += 1
 
     def read(self):
+        self.read_calls += 1
         rows = [[{'userEnteredValue': {'stringValue': 'SHIFT'}},
                  ({'userEnteredValue': {'numberValue': self.value}} if self.value is not None else {}),
                  {'userEnteredValue': {'formulaValue': self.formula}},
@@ -85,35 +87,77 @@ class RaidenMirrorTest(unittest.TestCase):
             sync.deliver(4, adapter)
         self.assertEqual(adapter.calls, [3])
 
-    def test_dirty_on_committed_status_and_retry_with_independent_receipt(self):
+    def due_now(self):
+        row = db.session.get(Receipt, 1)
+        row.retry_at = sync.now() - timedelta(seconds=1)
+        db.session.commit()
+
+    def test_saves_coalesce_and_provider_is_only_contacted_on_count_change(self):
         self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
         with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
             self.person('RAIDEN-COMMITTED', self.door, 'here')
             row = db.session.get(Receipt, 1)
             self.assertIsNotNone(row)
+            self.assertGreater(row.retry_at, sync.now())
+            first_due = row.retry_at
+            self.assertFalse(sync.drain(adapter_factory=lambda: Adapter()))
+
+            # Repeated supervisor saves may dirty the receipt but never accelerate Google.
+            person = self.person('RAIDEN-SECOND', self.door, 'call_in')
+            attendance = StaffingDailyAttendance.query.filter_by(person_id=person.id).one()
+            attendance.status = 'here'
+            db.session.commit()
+            self.assertEqual(db.session.get(Receipt, 1, populate_existing=True).retry_at, first_due)
+
+            self.due_now()
             adapter = Adapter()
             self.assertTrue(sync.drain(adapter_factory=lambda: adapter))
-            self.assertEqual(adapter.calls, [1])
+            self.assertEqual(adapter.calls, [2])
             self.assertEqual(adapter.closed, 1)
             row = db.session.get(Receipt, 1, populate_existing=True)
             self.assertEqual((row.delivered_operation_id, row.delivered_count),
-                             (self.operation.id, 1))
-            self.assertIsNone(sync.next_deadline(sync.now()))
-            bad = Adapter()
-            attendance = StaffingDailyAttendance.query.filter_by(status='here').first()
+                             (self.operation.id, 2))
+            self.assertGreater(row.retry_at, sync.now())
+            self.assertLessEqual((row.retry_at - sync.now()).total_seconds(), 300)
+
+            # A scheduled check with no count change must do ZERO Google requests.
+            self.due_now()
+            before_verified = db.session.get(Receipt, 1).verified_at
+            def forbid_adapter():
+                raise AssertionError('Unchanged count must not contact Google')
+            self.assertTrue(sync.drain(adapter_factory=forbid_adapter))
+            self.assertEqual(db.session.get(Receipt, 1).verified_at, before_verified)
+
+            # Even a dirty revision that nets to the SAME HERE count makes no calls.
+            attendance = StaffingDailyAttendance.query.filter_by(person_id=person.id).one()
             attendance.status = 'call_in'
             db.session.commit()
-            row = db.session.get(Receipt, 1, populate_existing=True)
-            self.assertGreater(row.requested_revision, row.delivered_revision)
+            attendance.status = 'here'
+            db.session.commit()
+            self.due_now()
+            self.assertTrue(sync.drain(adapter_factory=forbid_adapter))
+            row = db.session.get(Receipt, 1)
+            self.assertEqual(row.delivered_revision, row.requested_revision)
+
+    def test_failed_google_write_retries_no_faster_than_five_minutes(self):
+        self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
+        with patch.object(staffing, 'current_night_attendance_operation', return_value=self.operation):
+            self.person('RAIDEN-RETRY', self.door, 'here')
+            self.due_now()
+            bad = Adapter()
             with patch.object(bad, 'write', side_effect=TimeoutError('timeout')):
                 self.assertFalse(sync.drain(adapter_factory=lambda: bad))
-            self.assertEqual(bad.closed, 1)
             row = db.session.get(Receipt, 1, populate_existing=True)
-            row.retry_at = sync.now() - timedelta(seconds=1)
-            db.session.commit()
-            self.assertTrue(sync.drain(adapter_factory=lambda: adapter))
-            self.assertEqual(adapter.calls, [1, 0])
-            self.assertIsNone(sync.next_deadline(sync.now()))
+            self.assertGreaterEqual((row.retry_at - sync.now()).total_seconds(), 299)
+            self.assertEqual(bad.closed, 1)
+            # New attendance edits cannot bypass the provider failure cooldown.
+            next_due = row.retry_at
+            self.person('RAIDEN-ANOTHER', self.door, 'here')
+            self.assertEqual(db.session.get(Receipt, 1, populate_existing=True).retry_at, next_due)
+            self.due_now()
+            recovered = Adapter()
+            self.assertTrue(sync.drain(adapter_factory=lambda: recovered))
+            self.assertEqual(recovered.calls, [2])
 
     def test_no_operation_does_not_erase_prior_value(self):
         self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
@@ -137,6 +181,7 @@ class RaidenMirrorTest(unittest.TestCase):
         )
         with patch.object(staffing, 'current_night_attendance_operation', return_value=newer):
             self.assertIsNotNone(sync.next_deadline(sync.now()))
+            self.due_now()
             self.assertTrue(sync.drain(adapter_factory=lambda: adapter))
             self.assertEqual(adapter.value, 0)
 
