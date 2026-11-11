@@ -8,6 +8,13 @@
     let wallboard;
     let tvDirty = true;
     let tvSource = root;
+    const themeKey = "neoapps.neosubzero.ucc.tv-theme";
+    let tvTheme = "dark";
+    try {
+        if (window.localStorage.getItem(themeKey) === "light") tvTheme = "light";
+    } catch (_error) {
+        // Keep the current page's preference if browser storage is blocked.
+    }
 
     const content = (parent, selector) => parent?.querySelector(selector)?.textContent.trim() || "";
     function element(tag, className, ...children) {
@@ -154,14 +161,31 @@
         const exit = element("button", "ucc-tv-exit", "Exit TV Mode");
         exit.type = "button";
         exit.addEventListener("click", () => root.querySelector("[data-ucc-tv-exit]")?.click());
+        const theme = element("button", "ucc-tv-theme",
+            element("span", "ucc-tv-theme-light", "Light"), " / ",
+            element("span", "ucc-tv-theme-dark", "Dark"));
+        theme.type = "button";
+        theme.setAttribute("aria-label", "Light appearance");
         const next = element("section", "ucc-tv-wallboard",
-            element("header", "ucc-tv-header", element("h1", "", "RFD DUCC · TV MODE"), exit),
+            element("header", "ucc-tv-header", element("h1", "", "RFD DUCC · TV MODE"), theme, exit),
             weatherView(), element("div", "ucc-tv-ramps",
                 ...["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map(name => rampView(name, find(name)))),
             footer);
+        const applyTheme = () => {
+            next.dataset.uccTvTheme = tvTheme;
+            theme.setAttribute("aria-pressed", String(tvTheme === "light"));
+        };
+        theme.addEventListener("click", () => {
+            tvTheme = tvTheme === "light" ? "dark" : "light";
+            applyTheme();
+            try { window.localStorage.setItem(themeKey, tvTheme); } catch (_error) { /* page preference remains */ }
+        });
+        applyTheme();
+        const restoreThemeFocus = wallboard?.querySelector(".ucc-tv-theme") === document.activeElement;
         if (wallboard) wallboard.replaceWith(next);
         else root.after(next);
         wallboard = next;
+        if (restoreThemeFocus) theme.focus({preventScroll:true});
     }
 
     function alignRamps() {

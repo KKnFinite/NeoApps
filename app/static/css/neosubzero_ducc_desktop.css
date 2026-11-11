@@ -459,10 +459,12 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-wallboard h2 { color:var(--tv-accent); font-size:.8em; letter-spacing:.085em; text-transform:uppercase; }
     .ucc-tv-wallboard .ucc-tv-header { display:flex; align-items:center; justify-content:flex-end; gap:1em; }
     .ucc-tv-wallboard h1 { color:#b5d9e9; font-size:.81em; letter-spacing:.12em; font-weight:650; }
-    .ucc-tv-wallboard .ucc-tv-exit {
+    .ucc-tv-wallboard :is(.ucc-tv-exit,.ucc-tv-theme) {
         background:#101f30; border:1px solid var(--tv-edge); border-radius:.4em;
         padding:.22em .62em; color:#b5c9db; font:inherit; font-size:.74em; cursor:pointer;
     }
+    .ucc-tv-theme[aria-pressed="true"] .ucc-tv-theme-light,
+    .ucc-tv-theme[aria-pressed="false"] .ucc-tv-theme-dark { text-decoration:underline; text-underline-offset:.18em; }
     .ucc-tv-wallboard .ucc-tv-weather {
         display:grid; grid-template-columns:minmax(0,1.04fr) minmax(0,2.38fr) minmax(0,1.72fr);
         background:#0b1928; border:1px solid var(--tv-edge); border-radius:.58em; padding:.78em .65em;
@@ -542,7 +544,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-plane-route, .ucc-tv-plane-eta, .ucc-tv-plane-etd { font-size:.78em; }
     .ucc-tv-plane-route { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b9cfe1; }
     .ucc-tv-plane-icon {
-        width:1.28em; height:1.28em; background:var(--tv-plane-color,#adc3d6);
+        width:1.28em; height:1.28em; background:var(--tv-plane-color,var(--tv-plane-neutral,#adc3d6));
         -webkit-mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
         mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
     }
@@ -566,6 +568,46 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-remote-data .ucc-tv-stand .ucc-tv-plane { flex:1; }
     .ucc-tv-early { border-left:1px solid var(--tv-edge); padding-left:.65em; }
     .ucc-tv-footer p { color:var(--tv-muted); font-size:.8em; margin-top:.2em; }
+
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] {
+        --tv-edge:#b4c6d2;
+        --tv-muted:#405567;
+        --tv-accent:#12657d;
+        --tv-plane-surface:#e7eff5;
+        --tv-plane-neutral:#405567;
+        --subzero-planned:#876000;
+        --subzero-configured:#176a44;
+        --subzero-deicing:#12657d;
+        --subzero-fin:#285da8;
+        --subzero-radio-pending:#b31977;
+        --subzero-negative:#ab3045;
+        --subzero-gone:#536472;
+        background:#f3f7fa;
+        color:#122333;
+    }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(.ucc-tv-weather,.ucc-tv-ramp) { background:#fff; }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-weather article {
+        background:#f3f7fa; border-top-color:var(--tv-edge);
+    }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(.ucc-tv-exit,.ucc-tv-theme) {
+        background:var(--tv-plane-surface); color:var(--tv-muted);
+    }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(h1,.ucc-tv-temperature > strong,.ucc-tv-hour-head,.ucc-tv-crew strong,.ucc-tv-plane) {
+        color:#122333;
+    }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(.ucc-tv-position,.ucc-tv-crew span,.ucc-tv-plane-route,.ucc-tv-plane-etd) {
+        color:var(--tv-muted);
+    }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew-column > .ucc-tv-crew + .ucc-tv-crew {
+        border-top-color:var(--tv-edge);
+    }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew .ucc-person-unavailable { color:#a12a3c; }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-plane:not(.is-in-throat) {
+        background:var(--tv-plane-surface); border-color:var(--tv-edge);
+    }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-pad-idle .ucc-tv-plane-icon {
+        opacity:1;
+    }
 }
 @media (901px <= width <= 1450px) {
     .ucc-tv-wallboard .ucc-tv-plane { grid-template-columns:minmax(0,.9em) minmax(0,1fr); gap:.16em; padding:.22em; }
