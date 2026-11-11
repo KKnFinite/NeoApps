@@ -65,6 +65,7 @@ def neosubzero_ucc_context(gateway, operation):
     departure_context = departure_deice_context(gateway, operation)
     from app.services.neosubzero_trucks import registered_trucks
     truck_options = registered_trucks(gateway, active_only=True)
+    active_truck_numbers = {truck.number for truck in truck_options}
     fluid_settings = departure_context["fluid_settings"]
     parking_9_10_enabled = _parking_9_10_enabled(gateway)
     if operation is None:
@@ -138,6 +139,7 @@ def neosubzero_ucc_context(gateway, operation):
                     "roles": roles,
                     "truck": truck,
                     "truck_number": getattr(truck, "truck_number", None) or "",
+                    "truck_unavailable": bool(truck and truck.truck_number and truck.truck_number not in active_truck_numbers),
                     "truck_version": entity_version(truck),
                 }
             )
@@ -454,6 +456,7 @@ def move_ucc_unit(
 ):
     """Move/swap canonical slots under the caller's operation lock, never spray snapshots."""
     from app.services.neosubzero_spray import set_neosubzero_ucc_truck
+    from app.services.neosubzero_trucks import validate_registered_truck
     source_ramp, source_position, _ = _validated_slot(operation, source_ramp, source_position, "driver", None)
     destination_ramp, destination_position, _ = _validated_slot(operation, destination_ramp, destination_position, "driver", None)
     if expected_version != ucc_staffing_version(operation):
@@ -477,6 +480,11 @@ def move_ucc_unit(
         raise NeoSubZeroUccError("The source unit is empty.")
     if not swap and (any(units[destination].values()) or numbers[destination]):
         raise NeoSubZeroUccError("The destination is occupied. Choose SWAP UNITS or an empty position.")
+    try:
+        for number in sorted(set(numbers.values()) - {""}):
+            validate_registered_truck(operation, number)
+    except ValueError as exc:
+        raise NeoSubZeroUccError(str(exc)) from exc
     for unit in units.values():
         for person in unit.values():
             if person:
@@ -501,7 +509,6 @@ def move_ucc_unit(
         set_neosubzero_ucc_truck(
             operation, *key, numbers[baseline] if baseline else "",
             user_id=user_id, assignment=trucks.get(key),
-            retained_number=numbers[baseline] if baseline else None,
         )
 
 

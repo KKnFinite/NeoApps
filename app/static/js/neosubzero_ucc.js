@@ -187,16 +187,17 @@
     function updateSelectedText(form, select) {
         const selected = select.selectedOptions[0];
         const text = form.querySelector('[data-ucc-selected-text]');
-        const unavailable = select.name === "person_id" && selected?.disabled;
+        const unavailable = Boolean(selected?.disabled);
+        const unavailableClass = select.name === "truck_number" ? "ucc-truck-unavailable" : "ucc-person-unavailable";
         if (text) {
             text.textContent = selected?.textContent || '';
-            text.classList.toggle("ucc-person-unavailable", Boolean(unavailable));
+            text.classList.toggle(unavailableClass, unavailable);
         }
         const choice = form.querySelector("[data-ucc-staffing-choice]");
         if (choice) {
             const label = choice.querySelector("[data-ucc-short-value]");
             label.textContent = selected?.dataset.uccShort || staffingSurnames[select.value] || "—";
-            label.classList.toggle("ucc-person-unavailable", Boolean(unavailable));
+            label.classList.toggle(unavailableClass, unavailable);
             choice.title = selected?.textContent.trim() || "";
             choice.setAttribute("aria-label", `${select.getAttribute("aria-label")}: ${choice.title}`);
         }

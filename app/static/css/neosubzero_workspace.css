@@ -156,8 +156,19 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
 
 /* Mobile DUCC is a lens on the existing desktop diagram, not a second board. */
 .subzero-truck-registry { list-style:none; padding:0; display:grid; gap:5px; }
-.subzero-truck-registry li { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
-.subzero-truck-registry form { margin:0 0 0 auto; }
+.subzero-fleet-counts,.subzero-fleet-tools,.subzero-fleet-identity { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; }
+.subzero-fleet-counts { font-size:.77rem; color:#afd3e5; }
+.subzero-fleet { width:min(100%, 920px); }
+.subzero-fleet-tools { justify-content:space-between; }
+.subzero-fleet form { flex-wrap:wrap; margin:0; }
+.subzero-fleet input { min-width:0; max-width:100%; }
+.subzero-truck-registry li { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:6px 8px; border-bottom:1px solid #294352; }
+.subzero-fleet-identity { flex:1 1 185px; overflow-wrap:anywhere; }
+.subzero-fleet-identity span { font-size:.73rem; }
+.subzero-fleet .is-in-service { color:#93dfbf; }
+.subzero-fleet .is-out-of-service,.subzero-fleet button.subzero-fleet-delete { color:#ff9c9c; }
+.subzero-fleet-edit summary { cursor:pointer; color:#b4e2f4; font-size:.78rem; }
+.subzero-fleet-edit form { padding:6px 0; }
 .ucc-mobile-controls,.neosubzero-mobile-ramp-link { display:none; }
 .neosubzero-coordinator-tools { display:contents; }
 .neosubzero-radio-pending { padding:10px; margin-bottom:8px; border:2px solid var(--subzero-radio-pending-border); background:var(--subzero-radio-pending); color:var(--subzero-status-dark); }

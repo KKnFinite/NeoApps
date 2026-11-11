@@ -46,7 +46,7 @@ class CoordinatedDuccBrowserTest(unittest.TestCase):
             candidate=page.locator('tr').filter(has=page.locator(f'input[name="person_id"][value="{employee_id}"]'))
             expect(candidate.get_by_role('button',name='ADD CALLOUT')).to_be_visible()
             with page.expect_navigation(): candidate.get_by_role('button',name='ADD CALLOUT').click()
-            case.ready(page,'/neosubzero/settings')
+            case.ready(page,'/neosubzero/truck-management')
             add=page.locator('form').filter(has=page.locator('input[name="action"][value="add_truck"]'))
             add.locator('[name="truck_number"]').fill(' tv-101 ')
             with page.expect_navigation(): add.get_by_role('button',name='ADD TRUCK').click()

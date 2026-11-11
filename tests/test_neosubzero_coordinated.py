@@ -38,7 +38,7 @@ class RegistryQualificationTest(unittest.TestCase):
         db.session.commit(); self.assertEqual(NeoSubZeroTruck.query.count(), 2)
         self.assertEqual(row.history[0]['actor_id'], self.actor.id)
 
-    def test_deactivation_confirmation_stale_rejection_and_retained_unit_move(self):
+    def test_deactivation_retains_assignment_and_blocks_new_selection_or_move(self):
         f=self.f; row=self.register()
         set_neosubzero_ucc_truck(f.operation,'Alpha',1,row.number)
         set_neosubzero_ucc_assignment(f.operation,'Alpha',1,'driver',f.permanent)
@@ -49,17 +49,87 @@ class RegistryQualificationTest(unittest.TestCase):
         db.session.rollback()
         manage_truck(f.gateway,'deactivate_truck',dict(truck_id=row.id,expected_version=version,confirm='yes'),actor_id=self.actor.id)
         db.session.commit()
-        with self.assertRaisesRegex(ValueError,'active registered'):
+        with self.assertRaisesRegex(ValueError,'in-service registered'):
             set_neosubzero_ucc_truck(f.operation,'Bravo',2,row.number)
         db.session.rollback()
-        move_ucc_unit(f.operation,'Alpha',1,'Bravo',2,expected_version=ucc_staffing_version(f.operation),user_id=self.actor.id)
-        db.session.commit()
-        self.assertEqual(NeoSubZeroUccTruckAssignment.query.filter_by(truck_number=row.number).one().ramp,'Bravo')
+        with self.assertRaisesRegex(ValueError,'in-service registered'):
+            move_ucc_unit(f.operation,'Alpha',1,'Bravo',2,expected_version=ucc_staffing_version(f.operation),user_id=self.actor.id)
+        db.session.rollback()
+        self.assertEqual(NeoSubZeroUccTruckAssignment.query.filter_by(truck_number=row.number).one().ramp,'Alpha')
+        slot = f._ramp_context('Alpha')['slots'][0]
+        self.assertTrue(slot['truck_unavailable'])
+        self.assertEqual(slot['roles']['driver']['person'].id, f.permanent.id)
         with self.assertRaisesRegex(ValueError,'changed'):
             manage_truck(f.gateway,'activate_truck',dict(truck_id=row.id,expected_version=version,confirm='yes'),actor_id=self.actor.id)
         db.session.rollback()
         manage_truck(f.gateway,'activate_truck',dict(truck_id=row.id,expected_version=entity_version(row),confirm='yes'),actor_id=self.actor.id)
         db.session.commit(); self.assertTrue(row.active); self.assertEqual(len(row.history),3)
+
+    def test_rename_and_archive_preserve_assignment_snapshots(self):
+        f = self.f
+        truck = self.register()
+        self.register('DZ-102')
+        truck_id = truck.id
+        snapshot = set_neosubzero_ucc_truck(f.operation, 'Early Out', 1, truck.number)
+        event = f._deice_event(f.alpha, 'finished')
+        spray = NeoSubZeroSprayRecord(
+            sort_date_operation_id=f.operation.id, sort_date_mission_id=f.alpha.id,
+            departure_deice_event_id=event.id, pass_number=1, position_number=1,
+            truck_number_snapshot=truck.number, gallons=35, pass_type='type_i',
+            fluid_name_snapshot='Type I', concentration_percent_snapshot=50,
+        )
+        db.session.add(spray)
+        db.session.commit()
+
+        def mutate(action, **values):
+            result = manage_truck(f.gateway, action, dict(
+                truck_id=truck_id, expected_version=entity_version(truck), **values,
+            ), actor_id=self.actor.id)
+            db.session.commit()
+            return result
+
+        with patch('app.services.gateway_matrix.current_gateway_local_datetime',
+                   return_value=datetime.combine(f.operation.sort_date, datetime.min.time())):
+            with self.assertRaisesRegex(ValueError, 'Early Out position 1'):
+                mutate('edit_truck', truck_number='DZ-103')
+            db.session.rollback()
+        f.operation.archived_at_utc = datetime.utcnow()
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, 'already registered'):
+            mutate('edit_truck', truck_number='DZ-102')
+        db.session.rollback()
+        renamed = mutate('edit_truck', truck_number='dz-103')
+        self.assertEqual((renamed.id, renamed.number), (truck_id, 'DZ-103'))
+        self.assertEqual(snapshot.truck_number, 'DZ-101')
+        self.assertEqual(renamed.history[-1]['prior_number'], 'DZ-101')
+        with self.assertRaisesRegex(ValueError, 'Confirm'):
+            mutate('delete_truck')
+        db.session.rollback()
+        archived = mutate('delete_truck', confirm='yes')
+        self.assertFalse(archived.active)
+        self.assertIsNotNone(archived.archived_at_utc)
+        self.assertEqual(archived.history[-1]['actor_id'], self.actor.id)
+        self.assertEqual(snapshot.truck_number, 'DZ-101')
+        self.assertEqual((spray.truck_number_snapshot, spray.gallons), ('DZ-101', 35))
+        with self.assertRaisesRegex(ValueError, 'in-service registered'):
+            set_neosubzero_ucc_truck(f.operation, 'Alpha', 1, 'DZ-103')
+        db.session.rollback()
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            mutate('activate_truck', confirm='yes')
+        db.session.rollback()
+
+    def test_archive_column_upgrade_preserves_existing_registry_and_audit(self):
+        from sqlalchemy import text
+        from app.services.schema_sync import sync_database_schema
+
+        truck = self.register()
+        truck_id, audit = truck.id, truck.history
+        db.session.execute(text('ALTER TABLE neosubzero_trucks DROP COLUMN archived_at_utc'))
+        db.session.commit()
+        sync_database_schema(self.f.app)
+        db.session.commit()
+        self.assertEqual((truck.id, truck.number, truck.active, truck.archived_at_utc, truck.history),
+                         (truck_id, 'DZ-101', True, None, audit))
 
     def test_dropdown_truck_change_preserves_people_and_prevents_duplicate(self):
         f=self.f; self.register(); self.register('DZ-102')
@@ -102,7 +172,7 @@ class RegistryQualificationTest(unittest.TestCase):
     def test_settings_and_ducc_get_are_read_only_and_authorized(self):
         f=self.f; self.register(); client=f.app.test_client(); f._login(client,self.actor)
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=f.operation), patch('app.neonodes.neosubzero.routes.neosubzero_weather_context',return_value=f._weather_context_fixture()):
-            for path in ('/neosubzero/settings','/neosubzero/ucc','/neosubzero/callouts'):
+            for path in ('/neosubzero/settings','/neosubzero/truck-management','/neosubzero/ucc','/neosubzero/callouts'):
                 response=client.get(path); self.assertEqual(response.status_code,200,path)
             page=client.get('/neosubzero/ucc').data
             self.assertIn(b'<select name="truck_number"',page)
@@ -114,7 +184,7 @@ class RegistryQualificationTest(unittest.TestCase):
         self.assertEqual(NeoSubZeroTruck.query.count(),1)
         self.assertEqual(NeoSubZeroAuditEntry.query.count(),0)
         watcher=f._user('registry-watcher','watcher');f._login(client,watcher)
-        self.assertEqual(client.post('/neosubzero/settings',data={'action':'add_truck','truck_number':'NO'}).status_code,403)
+        self.assertEqual(client.post('/neosubzero/truck-management',data={'action':'add_truck','truck_number':'NO'}).status_code,403)
 
 
 class PadAndUndoTest(unittest.TestCase):

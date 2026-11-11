@@ -127,6 +127,12 @@ NEOSUBZERO_PAGES = (
         "neosubzero.qualifications.edit",
     ),
     (
+        "Truck Management",
+        "neosubzero.truck_management",
+        "neosubzero.settings.view",
+        "neosubzero.settings.edit",
+    ),
+    (
         "Settings",
         "neosubzero.settings",
         "neosubzero.settings.view",
@@ -135,7 +141,8 @@ NEOSUBZERO_PAGES = (
 )
 NEOSUBZERO_NAV_SECTIONS = (
     (None, ("neosubzero.ucc", "neosubzero.operations", "neosubzero.coordinator",
-            "neosubzero.deicer_mobile", "neosubzero.deice_log", "neosubzero.callouts", "neosubzero.settings")),
+            "neosubzero.deicer_mobile", "neosubzero.deice_log", "neosubzero.callouts",
+            "neosubzero.truck_management", "neosubzero.settings")),
 )
 
 
@@ -1144,7 +1151,6 @@ def pretreat_mutate():
 @bp.route("/settings", methods=["GET", "POST"])
 @gateway_node_required("subzero")
 def settings():
-    from app.services.neosubzero_trucks import manage_truck, registered_trucks
     access = permission_access("neosubzero.settings.view", "neosubzero.settings.edit")
     if not access["can_view"]:
         flash("Access denied.", "error")
@@ -1165,10 +1171,6 @@ def settings():
                 )
                 changed = True
                 message = "DEICE FLUID SETTINGS SAVED."
-            elif action in {'add_truck', 'activate_truck', 'deactivate_truck'}:
-                manage_truck(gateway, action, request.form, actor_id=current_user.id)
-                changed = True
-                message = 'DEICE TRUCK REGISTRY SAVED.'
             else:
                 raise ValueError("Choose a valid Settings action.")
             if changed:
@@ -1189,7 +1191,38 @@ def settings():
         "neonodes/neosubzero/settings.html",
         can_edit=access["can_edit"],
         fluid_settings=neosubzero_fluid_settings(gateway),
-        registered_trucks=registered_trucks(gateway),
+    )
+
+
+@bp.route("/truck-management", methods=["GET", "POST"])
+@gateway_node_required("subzero")
+def truck_management():
+    from app.services.neosubzero_trucks import manage_truck, registered_trucks
+
+    access = permission_access("neosubzero.settings.view", "neosubzero.settings.edit")
+    if request.method == "POST" and not access["can_edit"]:
+        return "Access denied.", 403
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosubzero.index"))
+    gateway = get_current_gateway()
+    session[LAST_PAGE_KEY] = "neosubzero.truck_management"
+    search = request.args.get("q", "").strip()[:32]
+    if request.method == "POST":
+        try:
+            truck = manage_truck(gateway, request.form.get("action"), request.form, actor_id=current_user.id)
+            db.session.commit()
+            flash(f"TRUCK {truck.number} {'ARCHIVED' if truck.archived_at_utc else 'SAVED'}.", "success")
+        except (ValueError, IntegrityError) as exc:
+            db.session.rollback()
+            flash("Truck registry changed. Reload before retrying." if isinstance(exc, IntegrityError) else str(exc), "error")
+        return redirect(url_for("neosubzero.truck_management", q=search or None))
+    fleet = registered_trucks(gateway)
+    in_service = sum(truck.active for truck in fleet)
+    return render_template(
+        "neonodes/neosubzero/truck_management.html", can_edit=access["can_edit"],
+        trucks=[truck for truck in fleet if search.casefold() in truck.number.casefold()],
+        search=search, in_service=in_service, out_of_service=len(fleet) - in_service,
         entity_version=entity_version,
     )
 

@@ -24,6 +24,7 @@ from app.models import (
 
 LOCK_KEY = 7_483_327_341_930
 NEOSUBZERO_OPTIONAL_COLUMNS = {
+    NeoSubZeroTruck.__tablename__: {"archived_at_utc": "TIMESTAMP"},
     StaffingPersonQualification.__tablename__: {"change_history": "JSON"},
     NeoSubZeroUserPreference.__tablename__: {
         "frost_risk_explanations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",

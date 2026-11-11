@@ -3,6 +3,7 @@
 .ucc-plane-etd { display:none; }
 .neosubzero-ucc .ucc-person-unavailable,
 .ucc-tv-crew .ucc-person-unavailable { color:#ff9c9c; }
+.neosubzero-ucc .ucc-truck-unavailable { color:#ff9c9c; }
 .neosubzero-ucc .ucc-early-out .ucc-staffing-grid {
     display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:auto; gap:6px;
 }

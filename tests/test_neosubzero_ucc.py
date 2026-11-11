@@ -1098,6 +1098,8 @@ class NeoSubZeroUccTest(unittest.TestCase):
     def test_unit_move_swap_and_stale_guard_preserve_canonical_people_and_trucks(self):
         source = set_neosubzero_ucc_assignment(self.operation, "Alpha", 1, "driver", self.permanent)
         destination = set_neosubzero_ucc_assignment(self.operation, "Bravo", 4, "flyer", self.callout)
+        from app.models import NeoSubZeroTruck
+        db.session.add_all([NeoSubZeroTruck(gateway_id=self.gateway.id, number=number) for number in ("T1", "T2")])
         db.session.add_all([NeoSubZeroUccTruckAssignment(sort_date_operation_id=self.operation.id, ramp="Alpha", position_number=1, truck_number="T1"), NeoSubZeroUccTruckAssignment(sort_date_operation_id=self.operation.id, ramp="Bravo", position_number=4, truck_number="T2")])
         db.session.commit()
         version = ucc_staffing_version(self.operation)
@@ -1160,7 +1162,9 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertNotEqual(ramp["throat"]["mission_id"],later.id)
 
     def test_visible_empty_remote_ramp_keeps_canonical_staff_and_unit_moves_available(self):
+        from app.models import NeoSubZeroTruck
         source=set_neosubzero_ucc_assignment(self.operation,"Remote",1,"driver",self.permanent)
+        db.session.add(NeoSubZeroTruck(gateway_id=self.gateway.id, number="REMOTE-T1"))
         db.session.add(NeoSubZeroUccTruckAssignment(sort_date_operation_id=self.operation.id,ramp="Remote",position_number=1,truck_number="REMOTE-T1"))
         self.remote.actual_block_out_datetime_utc=datetime(2026,9,1,1)
         db.session.commit()

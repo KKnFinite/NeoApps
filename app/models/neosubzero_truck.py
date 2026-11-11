@@ -12,6 +12,7 @@ class NeoSubZeroTruck(db.Model):
     gateway_id = db.Column(db.Integer, db.ForeignKey('gateways.id'), nullable=False, index=True)
     number = db.Column(db.String(32), nullable=False)
     active = db.Column(db.Boolean, nullable=False, default=True)
+    archived_at_utc = db.Column(db.DateTime, nullable=True)
     history = db.Column(db.JSON, nullable=False, default=list)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

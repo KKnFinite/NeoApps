@@ -1,11 +1,11 @@
 {% macro short_truck(number) -%}
     {{ 'T' ~ number if number and number.isdigit() else number or '—' }}
 {%- endmacro %}
-{% macro staffing_choice(marker, value, mirrored, label, selected, unavailable=false) -%}
+{% macro staffing_choice(marker, value, mirrored, label, selected, unavailable=false, warning_class='ucc-person-unavailable') -%}
 <button type="button" class="ucc-management-only ucc-staffing-choice" data-ucc-staffing-choice aria-haspopup="dialog"
         aria-expanded="false" aria-controls="ucc-staffing-picker" aria-label="{{ label }}: {{ selected }}" title="{{ selected }}">
     {% if not mirrored %}<span aria-hidden="true">{{ marker }} ·</span>{% endif %}
-    <span class="ucc-staffing-value{{ ' ucc-person-unavailable' if unavailable else '' }}" data-ucc-short-value aria-hidden="true">{{ value }}</span>
+    <span class="ucc-staffing-value{% if unavailable %} {{ warning_class }}{% endif %}" data-ucc-short-value aria-hidden="true">{{ value }}</span>
     {% if mirrored %}<span aria-hidden="true">· {{ marker }}</span>{% endif %}
 </button>
 {%- endmacro %}
@@ -64,7 +64,7 @@
         {% for slot in ramp.slots %}
         {% set mirrored = slot.position in (3,4) %}
         <div class="ucc-team position-{{ slot.position }}{{ ' is-mirrored' if mirrored else '' }}" data-ucc-editor="{{ ramp.name }}-{{ slot.position }}">
-            <div class="ucc-team-readonly"><strong>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</strong>{% for role in ('driver','flyer') %}<span{% if slot.roles[role].person and not slot.roles[role].available %} class="ucc-person-unavailable"{% endif %}>{{ (slot.roles[role].person.full_name if slot.roles[role].person else 'Unassigned') ~ ' · ' ~ role[0]|upper if mirrored else role[0]|upper ~ ' · ' ~ (slot.roles[role].person.full_name if slot.roles[role].person else 'Unassigned') }}</span>{% endfor %}</div>
+            <div class="ucc-team-readonly"><strong{% if slot.truck_unavailable %} class="ucc-truck-unavailable"{% endif %}>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</strong>{% for role in ('driver','flyer') %}<span{% if slot.roles[role].person and not slot.roles[role].available %} class="ucc-person-unavailable"{% endif %}>{{ (slot.roles[role].person.full_name if slot.roles[role].person else 'Unassigned') ~ ' · ' ~ role[0]|upper if mirrored else role[0]|upper ~ ' · ' ~ (slot.roles[role].person.full_name if slot.roles[role].person else 'Unassigned') }}</span>{% endfor %}</div>
             {% if can_edit %}<div class="ucc-team-controls">
             <form method="post" action="{{ url_for('neosubzero.truck_mutate') }}" data-ucc-truck-form data-ucc-auto-save>
                 {{ csrf_field() }}
@@ -72,10 +72,10 @@
                 {% set label = ramp.name ~ ' position ' ~ slot.position ~ ' truck' %}
                 <label class="ucc-pill"><select name="truck_number" aria-label="{{ label }}">
                     <option value="" data-ucc-short="—">{{ 'NO TRUCK · ' ~ slot.position if mirrored else slot.position ~ ' · NO TRUCK' }}</option>
-                    {% if slot.truck_number and slot.truck_number not in truck_options|map(attribute='number')|list %}<option value="{{ slot.truck_number }}" data-ucc-short="{{ short_truck(slot.truck_number) }}" selected disabled>{{ slot.truck_number }} · RETAINED</option>{% endif %}
+                    {% if slot.truck_unavailable %}<option value="{{ slot.truck_number }}" data-ucc-short="{{ short_truck(slot.truck_number) }}" selected disabled>{{ slot.truck_number }} · UNAVAILABLE</option>{% endif %}
                     {% for truck in truck_options %}<option value="{{ truck.number }}" data-ucc-short="{{ short_truck(truck.number) }}"{% if truck.number == slot.truck_number %} selected{% endif %}>{{ truck.number ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ truck.number }}</option>{% endfor %}
-                </select><span data-ucc-selected-text>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</span></label>
-                {{ staffing_choice(slot.position, short_truck(slot.truck_number), mirrored, label, slot.truck_number or 'No truck') }}
+                </select><span data-ucc-selected-text{% if slot.truck_unavailable %} class="ucc-truck-unavailable"{% endif %}>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</span></label>
+                {{ staffing_choice(slot.position, short_truck(slot.truck_number), mirrored, label, slot.truck_number or 'No truck', slot.truck_unavailable, 'ucc-truck-unavailable') }}
                 <button type="submit" class="ucc-legacy-save">SAVE</button>
             </form>
             {% for role in ('driver', 'flyer') %}{% set person_slot = slot.roles[role] %}
@@ -104,7 +104,7 @@
 {%- endmacro %}
 <div data-ucc-live-board>
 {# Fragment replacement also upgrades already-open tabs without stale geometry. #}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261110-ducc-staffing-v2') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261111-ducc-trucks-v1') }}">
 {% if not operation %}<p class="neosubzero-empty">No current sort. Staffing management is unavailable.</p>{% endif %}
 <script nonce="{{ csp_nonce() }}" type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
 {% if can_edit %}<script nonce="{{ csp_nonce() }}" type="application/json" data-ucc-staffing-surnames>{

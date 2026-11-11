@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Truck Management | NeoSub-Zero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell">
+    <header class="neosubzero-head">
+        <div><p>NEOSUB-ZERO</p><h1>TRUCK MANAGEMENT</h1></div>
+        <div class="subzero-fleet-counts"><span>{{ in_service }} IN SERVICE</span><span>{{ out_of_service }} OUT OF SERVICE</span></div>
+    </header>
+    {% include "neonodes/neosubzero/_nav.html" %}
+    <section class="neosubzero-settings subzero-fleet" aria-label="Registered deice trucks">
+        <div class="subzero-fleet-tools">
+            <form method="get" action="{{ url_for('neosubzero.truck_management') }}">
+                <label>Find truck<input type="search" name="q" value="{{ search }}" maxlength="32"></label>
+                <button type="submit">SEARCH</button>
+                {% if search %}<a href="{{ url_for('neosubzero.truck_management') }}">CLEAR</a>{% endif %}
+            </form>
+            {% if can_edit %}
+            <form method="post">
+                {{ csrf_field() }}
+                <input type="hidden" name="action" value="add_truck">
+                <label>Truck number<input name="truck_number" maxlength="32" required></label>
+                <button type="submit">ADD TRUCK</button>
+            </form>
+            {% endif %}
+        </div>
+        <ul class="subzero-truck-registry">
+        {% for truck in trucks %}
+            <li>
+                <div class="subzero-fleet-identity"><strong>{{ truck.number }}</strong><span class="{{ 'is-in-service' if truck.active else 'is-out-of-service' }}">{{ 'IN SERVICE' if truck.active else 'OUT OF SERVICE' }}</span></div>
+                {% if can_edit %}
+                    <details class="subzero-fleet-edit">
+                        <summary aria-label="Edit truck {{ truck.number }}">EDIT</summary>
+                        <form method="post">
+                            {{ csrf_field() }}
+                            <input type="hidden" name="action" value="edit_truck">
+                            <input type="hidden" name="truck_id" value="{{ truck.id }}">
+                            <input type="hidden" name="expected_version" value="{{ entity_version(truck) }}">
+                            <label>Truck number<input name="truck_number" value="{{ truck.number }}" maxlength="32" required></label>
+                            <button type="submit">SAVE</button>
+                        </form>
+                    </details>
+                    <form method="post">
+                        {{ csrf_field() }}
+                        <input type="hidden" name="truck_id" value="{{ truck.id }}">
+                        <input type="hidden" name="expected_version" value="{{ entity_version(truck) }}">
+                        <input type="hidden" name="confirm" value="yes">
+                        <button type="submit" name="action" value="{{ 'deactivate_truck' if truck.active else 'activate_truck' }}">{{ 'SET OUT OF SERVICE' if truck.active else 'SET IN SERVICE' }}</button>
+                        <button class="subzero-fleet-delete" type="submit" name="action" value="delete_truck" data-confirm-message="Archive truck {{ truck.number }}? Existing assignments and historical records will be retained.">DELETE</button>
+                    </form>
+                {% endif %}
+            </li>
+        {% else %}
+            <li>{{ 'No trucks match this search.' if search else 'No registered trucks.' }}</li>
+        {% endfor %}
+        </ul>
+    </section>
+</section>
+{% endblock %}

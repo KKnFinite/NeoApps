@@ -68,9 +68,11 @@ class UccPostgresTest(unittest.TestCase):
             return list(pool.map(worker, (0, 1)))
 
     def test_simultaneous_whole_unit_moves_have_exactly_one_winner(self):
+        from app.models import NeoSubZeroTruck
         f = self.fixture
         set_neosubzero_ucc_assignment(f.operation,"Alpha",1,"driver",f.permanent)
         set_neosubzero_ucc_assignment(f.operation,"Alpha",1,"flyer",f.callout)
+        db.session.add(NeoSubZeroTruck(gateway_id=f.gateway.id, number="UCC-T1"))
         db.session.add(NeoSubZeroUccTruckAssignment(sort_date_operation_id=f.operation.id,ramp="Alpha",position_number=1,truck_number="UCC-T1"))
         db.session.commit()
         version = ucc_staffing_version(f.operation)
