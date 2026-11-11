@@ -12,8 +12,10 @@
     const scope = new URLSearchParams(Array.from(roster.querySelectorAll(':scope > input[type="hidden"]'),
         input => [input.name, input.value]));
     const counts = document.querySelectorAll('[data-attendance-count]');
+    const scopeCounts = document.querySelectorAll('[data-attendance-scope-here]');
     const rows = new Map();
     let bulkBusy = false;
+    let scopeCountRevision = '';
 
     for (const element of roster.querySelectorAll('[data-attendance-person]')) {
         const id = element.dataset.attendancePerson;
@@ -53,6 +55,14 @@
         for (const count of counts) count.textContent = totals.get(count.dataset.attendanceCount) || 0;
     }
 
+    function updateScopeCounts(snapshot) {
+        if (!snapshot || snapshot.revision <= scopeCountRevision) return;
+        scopeCountRevision = snapshot.revision;
+        for (const count of scopeCounts) {
+            count.textContent = snapshot.counts[count.dataset.attendanceScopeHere] ?? '—';
+        }
+    }
+
     function state(row, kind, message) {
         row.output.dataset.state = kind;
         row.output.textContent = message;
@@ -81,7 +91,7 @@
         const result = await response.json().catch(() => null);
         if (!response.ok || !Array.isArray(result?.rows)) {
             throw Object.assign(new Error(result?.error || 'Unable to save attendance. Check your connection or sign-in.'),
-                {current: response.status === 409 ? result?.row : null});
+                {current: response.status === 409 ? result?.row : null, scopeHere: result?.scope_here});
         }
         return result;
     }
@@ -99,15 +109,17 @@
         body.set(`note_${row.id}`, sent.note);
         body.set(`original_${row.id}`, row.saved.original);
         roster.dataset.attendanceMutation = String(Number(roster.dataset.attendanceMutation || 0) + 1);
-        row.request = post(body).then(({rows: [authoritative]}) => {
+        row.request = post(body).then(({rows: [authoritative], scope_here: scopeHere}) => {
             reconcile(row, authoritative, sent);
             updateCounts();
+            updateScopeCounts(scopeHere);
             state(row, 'saved', 'Saved');
         }).catch(error => {
             row.blocked = true;
             if (error.current) {
                 reconcile(row, error.current, row.saved);
                 updateCounts();
+                updateScopeCounts(error.scopeHere);
                 const currentStatus = Array.from(row.status.options).find(option => option.value === error.current.status);
                 state(row, 'error', `Error: Changed by another supervisor. Current: ${currentStatus?.text || error.current.status}${error.current.note ? ` · ${error.current.note}` : ''}. Retry to apply your edit.`);
             } else {
@@ -191,6 +203,7 @@
                 reconcile(row, authoritative, row.saved);
             }
             updateCounts();
+            updateScopeCounts(result.scope_here);
             bulkResult.textContent = `${result.saved} marked Here.`;
         } catch (error) {
             bulkResult.textContent = `Error: ${error.message}`;

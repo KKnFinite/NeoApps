@@ -3,7 +3,8 @@
     display: grid;
     flex: 1 1 auto;
     min-width: 0;
-    gap: 1px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1px 5px;
     padding: 5px 7px;
     border-left: 2px solid transparent;
     color: #b8c6c7;
@@ -12,7 +13,24 @@
 .neostaffing-attendance-scope-node:hover { background: rgba(var(--node-rgb), .08); }
 .neostaffing-attendance-scope-node.is-selected { border-left-color: #55c8c1; background: rgba(var(--node-rgb), .14); color: #f0f8f7; }
 .neostaffing-attendance-scope-node span { color: #748788; font-size: .55rem; font-weight: 850; text-transform: uppercase; }
-.neostaffing-attendance-scope-node strong { overflow: hidden; font-size: .75rem; line-height: 1.2; text-overflow: ellipsis; white-space: normal; }
+.neostaffing-attendance-scope-node strong { grid-column: 1; overflow: hidden; font-size: .75rem; line-height: 1.2; text-overflow: ellipsis; white-space: normal; }
+.neostaffing-attendance-scope-node .neostaffing-attendance-scope-count {
+    grid-area: 1 / 2 / span 2;
+    align-self: center;
+    color: #b8d8d6;
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    text-align: right;
+}
+.neostaffing-attendance-scope-node:not([data-unit-type="work_area"]) .neostaffing-attendance-scope-count { font-weight: 800; }
+.neostaffing-attendance-scope-count-heading {
+    padding-inline-end: 7px;
+    color: #a1b9b7;
+    font-size: .58rem;
+    font-weight: 800;
+    text-align: right;
+}
 .neostaffing-attendance-scope form, .neostaffing-attendance-scope form label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
 .neostaffing-attendance-scope form :is(select, button) { box-sizing: border-box; min-height: 28px; max-width: 100%; }
 

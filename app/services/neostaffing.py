@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 import re
+from time import time_ns
 
 from flask import current_app
 from itsdangerous import BadSignature, URLSafeSerializer
@@ -4664,7 +4665,7 @@ def staffing_groups_context():
     }
 
 
-def attendance_context(filters=None, user=None, include_staffing_groups=False):
+def attendance_context(filters=None, user=None, include_staffing_groups=False, *, authority=None):
     filters = dict(filters or {})
     gateway = _attendance_gateway()
     hierarchy = _daily_attendance_hierarchy()
@@ -4745,7 +4746,7 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
             work_area_ids=group_area_ids,
         )
 
-    summary = _daily_attendance_summary(rows)
+    summary = _daily_attendance_summary({row["person"].id: row for row in rows}.values())
     filters = _daily_attendance_filters(
         filters,
         staffing_sort,
@@ -4766,6 +4767,9 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
             for unit_id in sorted(selected_work_area_ids or ())
         ],
         "scope_tree": _daily_attendance_scope_tree(hierarchy, staffing_sort),
+        "scope_here_counts": _daily_attendance_scope_here_counts(
+            operation, staffing_sort, hierarchy, authority.work_area_ids,
+        ) if authority is not None else {},
         "rows": rows,
         "counts": summary["status_counts"],
         "summary": summary,
@@ -4910,6 +4914,7 @@ class AttendanceEditConflict(ValueError):
     def __init__(self, row):
         super().__init__("Attendance changed while you were editing. Review the current values before retrying.")
         self.row = row
+        self.scope_here = None
 
 
 def _changed_attendance_form_rows(values, submitted_ids, operation, *, bulk_status="", include_unchanged=False):
@@ -5013,7 +5018,8 @@ def _sync_attendance_accountability(operation, statuses, user_id, assignments, *
                                if status in ("call_in", "no_call")})
 
 
-def save_attendance(values, user, *, form_submission=False, return_rows=False, deice_operation=None):
+def save_attendance(values, user, *, form_submission=False, return_rows=False, deice_operation=None,
+                    return_scope_here=False):
     """Apply explicit commands; browser forms must supply signed original rows.
 
     Internal service callers already supply deliberate mutations, not a displayed
@@ -5087,10 +5093,16 @@ def save_attendance(values, user, *, form_submission=False, return_rows=False, d
            for person_id in person_ids):
         raise ValueError("Employee assignment changed while you were editing. Reload Attendance.")
     from app.services.neostaffing_attendance_authority import require_attendance_assignments
-    require_attendance_assignments(user, assignments_by_person, person_ids, hierarchy)
+    authority = require_attendance_assignments(user, assignments_by_person, person_ids, hierarchy)
 
     def current_row(person_id):
         return _attendance_row_payload(person_id, operation, existing.get(person_id), existing.unmarked_notes.get(person_id))
+
+    def scope_here():
+        counts = _daily_attendance_scope_here_counts(operation, staffing_sort, hierarchy, authority.work_area_ids)
+        # The operation is locked while collecting totals. Label the snapshot in
+        # that order so an older HTTP response cannot replace a newer one.
+        return {"counts": counts, "revision": str(time_ns())}
 
     response_ids = person_ids
     stale = {person_id for person_id, original in originals.items()
@@ -5099,7 +5111,10 @@ def save_attendance(values, user, *, form_submission=False, return_rows=False, d
         # Check under the employee lock, after another supervisor's write can be seen.
         person_ids = person_ids - existing.keys() - stale
     elif stale:
-        raise AttendanceEditConflict(current_row(min(stale)))
+        conflict = AttendanceEditConflict(current_row(min(stale)))
+        if return_scope_here:
+            conflict.scope_here = scope_here()
+        raise conflict
 
     saved = 0
     user_id = getattr(user, "id", None)
@@ -5183,7 +5198,10 @@ def save_attendance(values, user, *, form_submission=False, return_rows=False, d
                                    hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {})
     db.session.flush()
     if return_rows:
-        return {"saved": saved, "rows": [current_row(person_id) for person_id in sorted(response_ids)]}
+        result = {"saved": saved, "rows": [current_row(person_id) for person_id in sorted(response_ids)]}
+        if return_scope_here and (saved_statuses or bulk_status):
+            result["scope_here"] = scope_here()
+        return result
     return saved
 
 
@@ -5472,14 +5490,58 @@ def _daily_attendance_records(person_ids, operation, staffing_sort):
         return {}
     records = StaffingDailyAttendance.query.filter(
         StaffingDailyAttendance.person_id.in_(set(person_ids)),
-        StaffingDailyAttendance.attendance_date == operation.sort_date,
-        StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
-        or_(
-            StaffingDailyAttendance.sort_date_operation_id == operation.id,
-            StaffingDailyAttendance.sort_date_operation_id.is_(None),
-        ),
+        _daily_attendance_record_scope(operation, staffing_sort),
     ).all()
     return {record.person_id: record for record in records}
+
+
+def _daily_attendance_record_scope(operation, staffing_sort):
+    return db.and_(
+        StaffingDailyAttendance.attendance_date == operation.sort_date,
+        StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
+        or_(StaffingDailyAttendance.sort_date_operation_id == operation.id,
+            StaffingDailyAttendance.sort_date_operation_id.is_(None)),
+    )
+
+
+def _daily_attendance_scope_here_counts(operation, staffing_sort, hierarchy, allowed_area_ids):
+    if _normalize_staffing_sort_name(operation.sort_name) != ATTENDANCE_OPERATION_SORT_NAME:
+        return {}
+    area_ids = _daily_attendance_work_area_ids(staffing_sort, hierarchy) & allowed_area_ids
+    if not area_ids:
+        return {}
+
+    # Resolve each authorized work area to its actual ancestors once. Empty
+    # sets represent known zeroes, while uncovered nodes remain absent.
+    ancestors_by_area = {}
+    people_by_unit = {}
+    for area_id in area_ids:
+        unit = hierarchy["by_id"][area_id]
+        ancestors = []
+        while unit:
+            ancestors.append(unit.id)
+            people_by_unit.setdefault(unit.id, set())
+            if unit.id == staffing_sort.id:
+                break
+            unit = hierarchy["by_id"].get(unit.parent_id)
+        ancestors_by_area[area_id] = ancestors
+
+    here = db.session.query(StaffingWorkAssignment.work_area_unit_id, StaffingWorkAssignment.person_id).join(
+        StaffingPerson, StaffingPerson.id == StaffingWorkAssignment.person_id,
+    ).join(
+        StaffingDailyAttendance, StaffingDailyAttendance.person_id == StaffingWorkAssignment.person_id,
+    ).filter(
+        StaffingWorkAssignment.active.is_(True),
+        StaffingWorkAssignment.work_area_unit_id.in_(area_ids),
+        StaffingPerson.active.is_(True),
+        StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
+        StaffingDailyAttendance.status == "here",
+        _daily_attendance_record_scope(operation, staffing_sort),
+    ).distinct().all()
+    for area_id, person_id in here:
+        for unit_id in ancestors_by_area[area_id]:
+            people_by_unit[unit_id].add(person_id)
+    return {unit_id: len(people) for unit_id, people in people_by_unit.items()}
 
 
 def _daily_attendance_rows(assignments, existing, hierarchy):
@@ -5925,6 +5987,7 @@ def _empty_daily_attendance_context(filters, message, operation=None, hierarchy=
         "selected_work_area_ids": [],
         "selected_work_areas": [],
         "scope_tree": [],
+        "scope_here_counts": {},
         "rows": [],
         "counts": {},
         "summary": {

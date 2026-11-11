@@ -43,9 +43,11 @@ class AttendanceBrowserTest(unittest.TestCase):
         with cls.app.app_context():
             fixture = attendance_fixture.NeoStaffingDailyAttendanceTest()
             fixture.gateway = Gateway.query.filter_by(code='RFD').one()
-            sort, _, department, area, outside = fixture._hierarchy()
+            sort, operation_unit, department, area, outside = fixture._hierarchy()
             operation = fixture._night_operation()
             cls.scope = {'sort_date_operation_id': operation.id, 'work_area_id': area.id, 'sort_id': sort.id}
+            cls.scope_chain = [sort.id, operation_unit.id, department.id, area.id]
+            cls.outside_area_id = outside.id
             cls.path = f'/neostaffing/attendance?sort_id={sort.id}'
             cls.people = {}
             for employee, first, last, work_area in (
@@ -72,6 +74,11 @@ class AttendanceBrowserTest(unittest.TestCase):
     def row(self, page, employee):
         return page.locator(f'[data-attendance-employee-id="{employee}"]')
 
+    def expect_scope_here(self, page, count):
+        for unit_id in self.scope_chain:
+            expect(page.locator(f'[data-attendance-scope-here="{unit_id}"]')).to_have_text(str(count))
+        expect(page.locator(f'[data-attendance-scope-here="{self.outside_area_id}"]')).to_have_text('—')
+
     def open(self, browser, username):
         page = browser.new_page(viewport={'width': 1920, 'height': 1080})
         self.login(page, username)
@@ -94,6 +101,11 @@ class AttendanceBrowserTest(unittest.TestCase):
             other = self.open(browser, 'drawer-watcher')
             search = page.get_by_role('searchbox', name='Search employees')
             bulk = page.get_by_role('button', name='ALL HERE — CURRENT SCOPE')
+            self.expect_scope_here(page, 0)
+            for unit_id in self.scope_chain[:-1]:
+                toggle = page.locator(f'[data-attendance-tree-id="unit-{unit_id}"] > div > [data-attendance-tree-toggle]')
+                if toggle.get_attribute('aria-expanded') == 'false':
+                    toggle.click()
             expect(self.row(page, 'OUT999').locator('select')).to_be_disabled()
             rejected = page.request.post(self.origin + '/neostaffing/attendance/save',
                 headers={'Accept': 'application/json'}, form=self.scope)
@@ -110,11 +122,20 @@ class AttendanceBrowserTest(unittest.TestCase):
                 self.assertNotIn(geometry['bodyOverflow'], ('clip', 'hidden'))
                 self.assertTrue(all(left >= 0 and right <= width and control_width >= 60
                                     for left, right, control_width in geometry['controls']), (engine, width, geometry))
+                count_edges = page.locator('[data-attendance-scope-here]').evaluate_all('''elements => elements.map(el => {
+                    const {left, right, width} = el.getBoundingClientRect();
+                    return {left, right, width, align: getComputedStyle(el).textAlign};
+                })''')
+                self.assertEqual(len(count_edges), 5)
+                self.assertTrue(all(edge['width'] > 0 and edge['left'] >= 0 and edge['right'] <= width
+                                    and edge['align'] == 'right' for edge in count_edges), (engine, width, count_edges))
+                self.assertLessEqual(max(e['right'] for e in count_edges) - min(e['right'] for e in count_edges), 1)
                 if width in (1920, 1024, 390):
                     page.screenshot(path=str(self.evidence / f'attendance-{engine}-{width}.png'))
 
             search.fill('  riVERA   alina ')
             expect(page.locator('[data-attendance-matches]')).to_have_text('1 match')
+            self.expect_scope_here(page, 0)
             expect(self.row(page, 'AX100')).to_be_visible()
             search.fill('BX200')
             expect(self.row(page, 'BX200')).to_be_visible()
@@ -139,6 +160,7 @@ class AttendanceBrowserTest(unittest.TestCase):
             first.locator('select').select_option('here')
             self.assertTrue(arrived.wait(5))
             expect(first.locator('[data-attendance-state]')).to_have_text('Saving…')
+            self.expect_scope_here(page, 0)
             first.locator('select').select_option('optional_day')
             first.locator('select').select_option('scheduled_off')
             other_row = self.row(other, 'CX300')
@@ -148,6 +170,7 @@ class AttendanceBrowserTest(unittest.TestCase):
             release.set()
             expect(first.locator('[data-attendance-state]')).to_have_text('Saved')
             expect(first.locator('select')).to_have_value('scheduled_off')
+            self.expect_scope_here(page, 0)
             self.assertEqual(edits, ['here', 'scheduled_off'])
             type(self).delayed = None
 
@@ -168,6 +191,7 @@ class AttendanceBrowserTest(unittest.TestCase):
             expect(page.locator('[data-attendance-bulk-result]')).to_have_text('2 marked Here.')
             expect(search).to_have_value('Alina')
             expect(page.locator('[data-attendance-count="here"]')).to_have_text('2')
+            self.expect_scope_here(page, 2)
             page.get_by_role('button', name='Clear', exact=True).click()
             expect(second.locator('select')).to_have_value('here')
             expect(second_note).to_have_value('Preserve with bulk')
@@ -175,11 +199,23 @@ class AttendanceBrowserTest(unittest.TestCase):
             expect(self.row(page, 'EX500').locator('select')).to_have_value('vacation')
             expect(self.row(page, 'OUT999').locator('select')).to_have_value('')
 
+            type(self).fail_note = True
+            second.locator('select').select_option('call_in')
+            expect(second.locator('[data-attendance-state]')).to_contain_text('Temporary failure')
+            self.expect_scope_here(page, 2)
+            second.get_by_role('button', name='Retry').click()
+            expect(second.locator('[data-attendance-state]')).to_have_text('Saved')
+            self.expect_scope_here(page, 1)
+            second.locator('select').select_option('here')
+            expect(second.locator('[data-attendance-state]')).to_have_text('Saved')
+            self.expect_scope_here(page, 2)
+
             # A stale note edit cannot overwrite a status set by another supervisor.
             stale = self.row(other, 'BX200')
             stale_note = stale.locator('input[name^="note_"]')
             stale_note.fill('Reviewed new note')
             expect(stale.locator('[data-attendance-state]')).to_contain_text('Changed by another supervisor')
+            self.expect_scope_here(other, 2)
             expect(stale_note).to_have_value('Reviewed new note')
             expect(stale.locator('select')).to_have_value('here')
             stale.get_by_role('button', name='Retry').click()

@@ -16,6 +16,8 @@
         {% if node.children %}<button type="button" class="neostaffing-attendance-tree-toggle" data-attendance-tree-toggle aria-expanded="false" aria-label="Toggle {{ unit.name }}"></button>{% else %}<span class="neostaffing-attendance-tree-spacer"></span>{% endif %}
         <a class="neostaffing-attendance-scope-node{% if selected %} is-selected{% endif %}" href="{{ scope_href(unit) }}" data-unit-type="{{ unit.unit_type }}">
             <span>{{ unit.unit_type|replace("_", " ") }}</span><strong>{{ unit.name }}</strong>
+            {% set here_count = attendance.scope_here_counts.get(unit.id) %}
+            <span class="neostaffing-attendance-scope-count" data-attendance-scope-here="{{ unit.id }}" title="HERE in your leadership scope">{{ here_count if here_count is not none else '—' }}</span>
         </a>
     </div>
     {% if node.children %}<div data-attendance-tree-children><ul class="neostaffing-attendance-scope-tree">{% for child in node.children %}{{ scope_node(child, selected_scope, selected_work_area_ids) }}{% endfor %}</ul></div>{% endif %}
@@ -32,7 +34,10 @@
         {% if attendance.ready %}
             {% if attendance.selected_work_areas %}<div class="neostaffing-attendance-active-areas" aria-label="Active attendance areas">{% for area in attendance.selected_work_areas %}<span>{{ area.name }}</span>{% endfor %}</div>
             {% elif attendance.selected_scope %}<p class="neostaffing-attendance-current-scope">{{ unit_path(attendance.selected_scope) }}</p>{% endif %}
-            <nav data-attendance-tree aria-label="Attendance areas"><ul class="neostaffing-attendance-scope-tree">{% for node in attendance.scope_tree %}{{ scope_node(node, attendance.selected_scope, attendance.selected_work_area_ids) }}{% endfor %}</ul></nav>
+            <nav data-attendance-tree aria-label="Attendance areas">
+                <div class="neostaffing-attendance-scope-count-heading" title="Counts in your leadership scope">HERE</div>
+                <ul class="neostaffing-attendance-scope-tree">{% for node in attendance.scope_tree %}{{ scope_node(node, attendance.selected_scope, attendance.selected_work_area_ids) }}{% endfor %}</ul>
+            </nav>
             {% if attendance.staffing_groups %}
             <section class="neostaffing-attendance-group-rollups" aria-label="Staffing Groups">
                 <div><strong>STAFFING GROUPS</strong><a href="{{ url_for('neostaffing.staffing_groups') }}">VIEW</a></div>
@@ -87,7 +92,7 @@
                 </table>
             </div>
         </section>
-        <script defer src="{{ url_for('static', filename='js/neostaffing_attendance.js', v='20261110-autosave-v2') }}"></script>
+        <script defer src="{{ url_for('static', filename='js/neostaffing_attendance.js', v='20261111-scope-here-v1') }}"></script>
         {% else %}<div class="neostaffing-attendance-empty-state" role="status">{{ attendance.message }}</div>{% endif %}
     </main>
 </section>

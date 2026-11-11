@@ -65,8 +65,66 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
 
         self.assertFalse(context["ready"])
         self.assertEqual(context["message"], "NIGHT SORT HAS NOT BEEN CREATED YET.")
+        self.assertEqual(context["scope_tree"], [])
+        self.assertEqual(context["scope_here_counts"], {})
         self.assertEqual(SortDateOperation.query.count(), before)
         self.assertFalse(db.session.new)
+
+    def test_scope_here_rollups_are_distinct_bounded_and_night_only(self):
+        from app.services.neostaffing_attendance_authority import attendance_authority
+
+        sort, operation_unit, department, area, outside = self._hierarchy()
+        second = staffing_service.create_unit({"unit_type": "work_area", "name": "Second Door", "parent_id": department.id})
+        empty = staffing_service.create_unit({"unit_type": "work_area", "name": "Empty Door", "parent_id": department.id})
+        operation = self._night_operation()
+        overlap = self._person("HERE-OVERLAP", area)
+        other = self._person("HERE-OUTSIDE", outside)
+        absent = self._person("HERE-ABSENT", second)
+        yesterday = self._person("HERE-YESTERDAY", area)
+        wrong_sort = self._person("HERE-WRONG-SORT", area)
+        day_operation = SortDateOperation(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+                                          sort_date=operation.sort_date, sort_name="day")
+        db.session.add(day_operation)
+        db.session.flush()
+        self._person("HERE-UNMARKED", second)
+        # Model a legacy overlap without weakening today's assignment guard.
+        db.session.execute(StaffingWorkAssignment.__table__.insert().values(
+            person_id=overlap.id, work_area_unit_id=second.id, active=True,
+        ))
+        for person, status, day, linked_operation in (
+            (overlap, "here", operation.sort_date, operation.id),
+            (other, "here", operation.sort_date, None),  # Canonical legacy row.
+            (absent, "vacation", operation.sort_date, operation.id),
+            (yesterday, "here", operation.sort_date - timedelta(days=1), None),
+            (wrong_sort, "here", operation.sort_date, day_operation.id),
+        ):
+            db.session.add(StaffingDailyAttendance(person_id=person.id, status=status, sort_unit_id=sort.id,
+                attendance_date=day, sort_date_operation_id=linked_operation))
+        manager = self._user("here-rollups-manager", "operator")
+        limited = self._user("here-rollups-limited", "operator")
+        leader = StaffingPerson.query.filter_by(employee_id=limited.employee_id).one()
+        leader.classification = "full_time_supervisor"
+        leadership = StaffingLeadershipAssignment.query.filter_by(person_id=leader.id).one()
+        leadership.unit = department
+        leadership.leadership_level = "department"
+        db.session.commit()
+
+        hierarchy = staffing_service._daily_attendance_hierarchy()
+        authority = attendance_authority(manager, hierarchy)
+        read_counts = staffing_service._daily_attendance_scope_here_counts
+        db.session.refresh(operation)
+        self.assertEqual(self._count_selects(lambda: read_counts(operation, sort, hierarchy, authority.work_area_ids)), 1)
+        counts = {sort.id: 2, operation_unit.id: 2, department.id: 1, area.id: 1,
+                  second.id: 1, empty.id: 0, outside.id: 1}
+        for filters in ({"sort_id": sort.id}, {"work_area_id": area.id}, {"work_area_ids": [area.id, second.id]}):
+            context = staffing_service.attendance_context(filters, manager, authority=authority)
+            self.assertEqual(context["scope_here_counts"], counts)
+            self.assertEqual(context["summary"]["here"], 2 if "sort_id" in filters else 1)
+        limited_authority = attendance_authority(limited, hierarchy)
+        restricted = staffing_service.attendance_context({"sort_id": sort.id}, limited, authority=limited_authority)
+        self.assertEqual(restricted["scope_here_counts"], {sort.id: 1, operation_unit.id: 1, department.id: 1,
+                         area.id: 1, second.id: 1, empty.id: 0})
+        self.assertEqual(read_counts(SortDateOperation(sort_name="day"), sort, hierarchy, authority.work_area_ids), {})
 
     def test_missing_night_operation_route_performs_no_persistent_write(self):
         self._hierarchy()
@@ -254,7 +312,7 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
             2,
         )
 
-        staffing_service.save_attendance(
+        cleared = staffing_service.save_attendance(
             {
                 "sort_date_operation_id": str(operation.id),
                 "sort_id": str(staffing_sort.id),
@@ -262,8 +320,12 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
                 f"status_{first.id}": "",
             },
             recorder,
+            return_rows=True,
+            return_scope_here=True,
         )
         db.session.commit()
+        self.assertEqual(cleared["scope_here"]["counts"][work_area.id], 1)
+        self.assertEqual(cleared["scope_here"]["counts"][staffing_sort.id], 1)
         self.assertIsNone(
             StaffingDailyAttendance.query.filter_by(
                 person_id=first.id,

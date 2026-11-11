@@ -471,11 +471,13 @@ def attendance_save():
     if not values.get("bulk_status") and len(staffing_service._submitted_attendance_person_ids(values)) != 1:
         return jsonify(error="Select exactly one employee to save."), 400
     try:
-        result = staffing_service.save_attendance(values, current_user, form_submission=True, return_rows=True)
+        result = staffing_service.save_attendance(
+            values, current_user, form_submission=True, return_rows=True, return_scope_here=True,
+        )
         db.session.commit()
     except staffing_service.AttendanceEditConflict as error:
         db.session.rollback()
-        return jsonify(error=str(error), row=error.row), 409
+        return jsonify(error=str(error), row=error.row, scope_here=error.scope_here), 409
     except ValueError as error:
         db.session.rollback()
         return jsonify(error=str(error)), 400
@@ -1057,6 +1059,7 @@ def _handle_attendance():
         filters,
         current_user,
         include_staffing_groups=can_view_staffing_groups,
+        authority=authority,
     )
     for row in context["rows"]:
         row["authorized"] = getattr(row["work_area"], "id", None) in authority.work_area_ids
