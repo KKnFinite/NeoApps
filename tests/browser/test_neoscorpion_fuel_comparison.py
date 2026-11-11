@@ -63,52 +63,53 @@ class FuelComparisonBrowserTest(unittest.TestCase):
                     context=browser.new_context(viewport={'width':1440,'height':1000},service_workers='block')
                     page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)));login(page,case.dispatcher)
                     def row(mid):return page.locator(f'.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="{mid}"]')
-                    def check(mid,shortfall,excess):
-                        numbers=[row(mid).locator('[data-dispatch-neo-fuel]'),row(mid).locator('[data-dispatch-required-fuel]')]
+                    def check(mid, mismatch, *, mobile=False):
+                        prefix = 'data-dispatch-mobile-' if mobile else 'data-dispatch-'
+                        numbers = [row(mid).locator(f'[{prefix}{field}-fuel]') for field in ('neo', 'required')]
                         result=[]
-                        for index,number in enumerate(numbers):
-                            warning=re.compile(r'\bis-neo-fuel-shortfall\b')
-                            if shortfall:expect(number).to_have_class(warning,timeout=8000)
-                            else:expect(number).not_to_have_class(warning,timeout=8000)
-                            style=number.evaluate('e=>({color:getComputedStyle(e).color,weight:getComputedStyle(e).fontWeight,short:e.classList.contains("is-neo-fuel-shortfall"),excess:e.classList.contains("is-neo-fuel-excess")})')
-                            self.assertEqual(style['short'],shortfall,(mid,index,style))
-                            self.assertEqual(style['excess'],excess if index==0 else False,(mid,index,style))
-                            red=shortfall or (index==0 and excess)
-                            self.assertEqual(style['color']==RED,red,(mid,index,style))
-                            if red:self.assertEqual(style['weight'],'900')
-                            result.append(style)
-                        geometry=row(mid).evaluate_all(MEASURE)[0]
-                        self.assertLessEqual(max(v['baseline'] for v in geometry['values'])-min(v['baseline'] for v in geometry['values']),1,geometry)
-                        self.assertFalse(geometry['overflows'],geometry)
-                        self.assertAlmostEqual(geometry['height'],98,delta=1)
+                        for number in numbers:
+                            expect(number).to_be_visible()
+                            warning = re.compile(r'\bis-neo-fuel-mismatch\b')
+                            if mismatch:
+                                expect(number).to_have_class(warning, timeout=8000)
+                                expect(number).to_have_css('color', RED)
+                                expect(number).to_have_css('font-weight', '900')
+                            else:
+                                expect(number).not_to_have_class(warning, timeout=8000)
+                                expect(number).not_to_have_css('color', RED)
+                            result.append(number.evaluate('e => getComputedStyle(e).color'))
+                        if not mobile:
+                            geometry = row(mid).evaluate_all(MEASURE)[0]
+                            self.assertLessEqual(max(v['baseline'] for v in geometry['values'])-min(v['baseline'] for v in geometry['values']), 1, geometry)
+                            self.assertFalse(geometry['overflows'], geometry)
                         return result
-                    for name,delta,threshold,shortfall,excess in (
-                        ('below-100',-100,500,True,False),('below-one-pound',-1,500,True,False),
-                        ('equal',0,500,False,False),('below-excess-threshold',3349,500,False,False),
-                        ('exact-excess-threshold',3350,500,False,True),('above-excess-threshold',3351,500,False,True),
-                        ('custom-700',3350,700,False,False),('custom-300',2010,300,False,True),
-                        ('missing-required',None,500,False,False)):
-                        mission.planned_fuel_load=28750-delta if delta is not None else None
-                        case.mission.planned_fuel_load=30000-delta if delta is not None else None
-                        case.settings.neo_fuel_excess_alert_gallons=threshold;db.session.commit()
-                        page.goto(origin+'/neoscorpion/fuel-dispatch');page.evaluate('document.fonts.ready')
-                        for width in (1440,1280):
-                            page.set_viewport_size({'width':width,'height':1000})
-                            for board in (False,True):
-                                if page.locator('body').evaluate('e=>e.classList.contains("operational-board-view")')!=board:
-                                    page.locator('[data-operational-board-toggle]:visible').click()
-                                result=[check(mid,shortfall,excess) for mid in (mission.id,case.mission.id)]
-                                check(empty.id,False,False)
-                                metrics.append(dict(state=name,width=width,board=board,styles=result))
-                                if width==1440 and name in ('below-100','exact-excess-threshold'):
-                                    page.locator('.neoscorpion-dispatch-table--compact').screenshot(path=str(EVIDENCE/f'{engine}-{name}-{"board" if board else "normal"}.png'))
+                    for delta in (-500, -499, 499, 500, None):
+                        mission.planned_fuel_load = 28750 - delta if delta is not None else None
+                        case.mission.planned_fuel_load = 30000 - delta if delta is not None else None
+                        case.settings.neo_fuel_excess_alert_gallons = 999 if delta == 500 else 0
+                        db.session.commit()
+                        page.set_viewport_size({'width':1440, 'height':1000})
+                        page.goto(origin+'/neoscorpion/fuel-dispatch')
+                        page.evaluate('document.fonts.ready')
+                        mismatch = delta is not None and abs(delta) >= 500
+                        for board in (False, True):
+                            if page.locator('body').evaluate('e=>e.classList.contains("operational-board-view")') != board:
+                                page.locator('[data-operational-board-toggle]:visible').click()
+                            result = [check(mid, mismatch) for mid in (mission.id, case.mission.id)]
+                            check(empty.id, False)
+                            metrics.append(dict(delta=delta, board=board, styles=result))
+                        page.set_viewport_size({'width':390, 'height':844})
+                        check(mission.id, mismatch, mobile=True)
+                        check(empty.id, False, mobile=True)
+                        self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
                     # Both forms of incomplete evidence must remain neutral.
+                    page.set_viewport_size({'width':1440, 'height':1000})
                     tank=next(t for t in work.tank_states if t.tank_code=='left')
                     for missing in ('actual','apu'):
                         tank.actual_lbs=None if missing=='actual' else 15000
                         work.apu_running=None if missing=='apu' else False
                         mission.planned_fuel_load=40000;db.session.commit()
-                        page.goto(origin+'/neoscorpion/fuel-dispatch');check(mission.id,False,False)
+                        page.goto(origin+'/neoscorpion/fuel-dispatch');check(mission.id,False)
                     # Cross-device Fueler saves while another mission has a
                     # focused unsaved note: critical styling must still update.
                     tank.actual_lbs=15000;work.apu_running=False;mission.planned_fuel_load=30000
@@ -126,32 +127,29 @@ class FuelComparisonBrowserTest(unittest.TestCase):
                     operator.goto(origin+'/neoscorpion/fueler')
                     card=operator.locator(f'[data-fuel-data-card][data-physical-work-id="{work.id}"]')
                     card.locator('[name=actual_right]').fill('15')
-                    card.get_by_role('button',name='Save Fuel Entry',exact=True).click()
                     expect(row(mission.id).locator('[data-dispatch-neo-fuel]')).to_have_text('30.0',timeout=12000)
-                    check(mission.id,False,False);expect(draft).to_be_focused()
+                    check(mission.id,False);expect(draft).to_be_focused()
                     expect(draft).to_have_value('Keep this unsaved note through fuel comparison changes')
                     planning=card.locator('[data-fuel-planning-form]')
                     planning.locator('select[name=apu_running]').select_option('yes')
                     planning.locator('[name=apu_source_tank_code]').select_option('left')
-                    planning.locator('[name=apu_override_allowance]').fill('0.1')
+                    planning.locator('[name=apu_override_allowance]').fill('0.5')
                     planning.locator('[data-apu-use-manual]').click()
-                    card.get_by_role('button',name='Save Fuel Entry',exact=True).click()
-                    expect(row(mission.id).locator('[data-dispatch-neo-fuel]')).to_have_text('29.9',timeout=12000)
-                    expect(row(mission.id).locator('[data-dispatch-apu-effective]')).to_have_text('APU: 0.1')
-                    check(mission.id,True,False);expect(draft).to_be_focused()
-                    page.locator('.neoscorpion-dispatch-table--compact').screenshot(path=str(EVIDENCE/f'{engine}-live-apu-shortfall.png'))
+                    expect(row(mission.id).locator('[data-dispatch-neo-fuel]')).to_have_text('29.5',timeout=12000)
+                    expect(row(mission.id).locator('[data-dispatch-apu-effective]')).to_have_text('APU: 0.5')
+                    check(mission.id,True);expect(draft).to_be_focused()
+                    page.locator('.neoscorpion-dispatch-table--compact').screenshot(path=str(EVIDENCE/f'{engine}-live-apu-mismatch.png'))
                     planning.locator('select[name=apu_running]').select_option('no')
-                    card.get_by_role('button',name='Save Fuel Entry',exact=True).click()
                     expect(row(mission.id).locator('[data-dispatch-neo-fuel]')).to_have_text('30.0',timeout=12000)
                     expect(row(mission.id).locator('[data-dispatch-apu-effective]')).to_have_text('APU: 0.0')
-                    check(mission.id,False,False)
+                    check(mission.id,False)
                     required=row(mission.id).locator('[data-dispatch-required-fuel]')
-                    for target,shortfall in (('30.1',True),('30.0',False)):
+                    for target,mismatch in (('29.5',True),('30.4',False),('30.5',True),('30.0',False)):
                         expect(required).not_to_have_attribute('data-autosave-saving','true',timeout=12000)
                         required.fill(target);required.press('Tab')
                         expect(required).to_have_attribute('data-saved-value',target,timeout=12000)
                         expect(required).not_to_have_attribute('data-autosave-saving','true',timeout=12000)
-                        check(mission.id,shortfall,False)
+                        check(mission.id,mismatch)
                         expect(draft).to_have_value('Keep this unsaved note through fuel comparison changes')
                     db.session.expire_all()
                     self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)

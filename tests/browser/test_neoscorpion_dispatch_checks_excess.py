@@ -1,6 +1,7 @@
 """Real authenticated checkbox saves, live alerts and 16-column browser layout."""
 from datetime import date, datetime, timedelta
 import json
+import re
 import unittest
 from unittest.mock import patch
 
@@ -85,14 +86,15 @@ class DispatchChecksExcessBrowserTest(unittest.TestCase):
                 rows = [page.locator(f'[data-dispatch-mission-id="{mid}"]') for mid in mission_ids]
                 checks = [row.locator("[data-dispatch-check]") for row in rows]
                 neo = rows[0].locator("[data-dispatch-neo-fuel]")
+                warning = re.compile(r'\bis-neo-fuel-mismatch\b')
                 expect(neo).to_have_text("28.8")
-                expect(neo).to_have_class("neoscorpion-dispatch-size-large is-neo-fuel-excess")
+                expect(neo).to_have_class(warning)
                 expect(rows[1].locator("[data-dispatch-neo-fuel]")).to_have_text("28.8")
-                self.assertFalse(rows[1].locator("[data-dispatch-neo-fuel]").evaluate("el => el.classList.contains('is-neo-fuel-excess')"))
+                expect(rows[1].locator("[data-dispatch-neo-fuel]")).to_have_class(warning)
                 self.assertEqual(neo.evaluate("el => getComputedStyle(el).color"), "rgb(255, 98, 107)")
                 self.assertEqual(neo.evaluate("el => getComputedStyle(el).fontWeight"), "900")
                 expect(page.locator("[data-cycle-history] input[type=checkbox]")).to_have_count(0)
-                expect(page.locator("[data-cycle-history] .is-neo-fuel-excess")).to_have_count(0)
+                expect(page.locator("[data-cycle-history] .is-neo-fuel-mismatch")).to_have_count(0)
                 checks[0].check()
                 expect(checks[0]).to_have_attribute("data-saved-checked", "1")
                 expect(checks[0]).to_be_enabled()
@@ -133,21 +135,23 @@ class DispatchChecksExcessBrowserTest(unittest.TestCase):
                 with settings.expect_navigation(wait_until="domcontentloaded"):
                     form.get_by_role("button", name="Save Settings", exact=True).click()
                 page.bring_to_front()
-                expect(neo).not_to_have_class("neoscorpion-dispatch-size-large is-neo-fuel-excess", timeout=20000)
+                expect(neo).to_have_class(warning, timeout=20000)
                 expect(checks[0]).to_be_checked()
                 page.set_viewport_size({"width": 1440, "height": 900})
                 before_edits = sum(url == Fixture.origin + "/neoscorpion/fuel-dispatch" for _, url in requests)
                 required = rows[0].locator('[data-autosave-field="required_fuel"]')
-                required.fill("24.0")
+                required.fill("28.3")
                 required.press("Tab")
-                expect(required).to_have_attribute("data-saved-value", "24.0")
-                expect(neo).to_have_class("neoscorpion-dispatch-size-large is-neo-fuel-excess")
+                expect(required).to_have_attribute("data-saved-value", "28.3")
+                expect(neo).not_to_have_class(warning)
+                expect(required).not_to_have_class(warning)
                 apu = rows[0].locator("[data-dispatch-apu-editor]")
                 apu.locator("summary").click()
                 apu.locator("[data-dispatch-apu-override-value]").fill("1.0")
                 apu.get_by_role("button", name="SAVE", exact=True).click()
                 expect(neo).to_have_text("27.8")
-                expect(neo).not_to_have_class("neoscorpion-dispatch-size-large is-neo-fuel-excess")
+                expect(neo).to_have_class(warning)
+                expect(required).to_have_class(warning)
                 self.assertEqual(sum(url == Fixture.origin + "/neoscorpion/fuel-dispatch" for _, url in requests), before_edits)
                 settings.bring_to_front()
                 field.fill("500")
@@ -155,15 +159,15 @@ class DispatchChecksExcessBrowserTest(unittest.TestCase):
                 with settings.expect_navigation(wait_until="domcontentloaded"):
                     form.get_by_role("button", name="Save Settings", exact=True).click()
                 page.bring_to_front()
-                expect(neo).to_have_class("neoscorpion-dispatch-size-large is-neo-fuel-excess", timeout=20000)
+                expect(neo).to_have_class(warning, timeout=20000)
                 with Fixture.app.app_context():
                     tank = NeoScorpionFuelTankState.query.filter_by(fuel_work_state_id=work_ids[0], tank_code="left").one()
-                    tank.actual_lbs = 14_600
+                    tank.actual_lbs = 15_450
                     state = NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=operation_id).one()
                     record_nightly_operational_change(state, operation_id)
                     db.session.commit()
-                expect(neo).to_have_text("27.4", timeout=20000)
-                expect(neo).not_to_have_class("neoscorpion-dispatch-size-large is-neo-fuel-excess")
+                expect(neo).to_have_text("28.2", timeout=20000)
+                expect(neo).not_to_have_class(warning)
                 expect(checks[0]).to_be_checked()
                 # A second real dispatcher gets separate checks for identical flights.
                 other_context = browser.new_context(viewport={"width": 1440, "height": 900})

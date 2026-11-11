@@ -152,7 +152,7 @@ class NumberAlignmentBrowserTest(unittest.TestCase):
                                                 self.assertEqual(target.locator('.neoscorpion-dispatch-flight').evaluate('e=>getComputedStyle(e,"::after").animationName'),'neoscorpion-assignment-accent-pulse')
                                             expect(page.locator(f'[data-dispatch-mission-id="{ids[2]}"] .neoscorpion-dispatch-center-fuel')).to_have_text('CF -')
                                             expect(page.locator(f'[data-dispatch-mission-id="{ids[3]}"] .neoscorpion-dispatch-center-fuel')).to_have_text('CF 400')
-                                            self.assertEqual(page.locator(f'[data-dispatch-mission-id="{ids[0]}"] .is-neo-fuel-excess').evaluate('e=>getComputedStyle(e).color'),'rgb(255, 98, 107)')
+                                            self.assertEqual(page.locator(f'[data-dispatch-mission-id="{ids[0]}"] [data-dispatch-neo-fuel].is-neo-fuel-mismatch').evaluate('e=>getComputedStyle(e).color'),'rgb(255, 98, 107)')
                                         if percent==100 and width in (1440,1024) and feedback=='Saved':
                                             page.locator('.neoscorpion-dispatch-table--compact').screenshot(path=str(EVIDENCE/f'{engine}-{phase}-{width}-{"board" if board else "normal"}.png'))
                     if not os.getenv('NEO_NUMBERS_BASELINE_ONLY'):

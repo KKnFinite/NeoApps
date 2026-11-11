@@ -832,11 +832,18 @@
         const row = root.querySelector(`[data-dispatch-mission-id='${missionId}']`);
         const value = row?.querySelector("[data-dispatch-neo-fuel]");
         if (!value) return;
-        value.textContent = presentation.available ? presentation.display : "-";
-        const shortfall = presentation.available === true && presentation.shortfall === true;
-        value.classList.toggle("is-neo-fuel-excess", presentation.available === true && presentation.excess === true);
-        value.classList.toggle("is-neo-fuel-shortfall", shortfall);
-        row.querySelector("[data-dispatch-required-fuel]")?.classList.toggle("is-neo-fuel-shortfall", shortfall);
+        const neoDisplay = presentation.available ? presentation.display : "-";
+        value.textContent = neoDisplay;
+        const mismatch = presentation.available === true && presentation.mismatch === true;
+        value.classList.toggle("is-neo-fuel-mismatch", mismatch);
+        row.querySelector("[data-dispatch-required-fuel]")?.classList.toggle("is-neo-fuel-mismatch", mismatch);
+        for (const [selector, text] of [["[data-dispatch-mobile-neo-fuel]", neoDisplay],
+            ["[data-dispatch-mobile-required-fuel]", presentation.required_display || "-"]]) {
+            const mobileValue = row.querySelector(selector);
+            if (!mobileValue) continue;
+            mobileValue.textContent = text;
+            mobileValue.classList.toggle("is-neo-fuel-mismatch", mismatch);
+        }
     };
 
     const saveDispatcherCheck = async (input) => {
@@ -1048,15 +1055,16 @@
                 currentRow.dataset.readyPulseArrived = nextRow.dataset.readyPulseArrived === '1' ? '1' : '0';
                 if (nextRow.dataset.etdUtc) currentRow.dataset.etdUtc = nextRow.dataset.etdUtc;
                 else delete currentRow.dataset.etdUtc;
-                ['[data-dispatch-neo-fuel]', '[data-dispatch-actual]', '[data-dispatch-apu-effective]', '.neoscorpion-dispatch-center-fuel'].forEach(selector => {
+                ['[data-dispatch-neo-fuel]', '[data-dispatch-mobile-neo-fuel]', '[data-dispatch-mobile-required-fuel]',
+                    '[data-dispatch-actual]', '[data-dispatch-apu-effective]', '.neoscorpion-dispatch-center-fuel'].forEach(selector => {
                     const oldValue = currentRow.querySelector(selector), newValue = nextRow.querySelector(selector);
                     if (oldValue && newValue) { oldValue.textContent = newValue.textContent; oldValue.className = newValue.className; }
                 });
                 // Patch comparison styling even while dirty inputs/dialogs defer
                 // full replacement. Never overwrite the editable Fuel Load value.
                 currentRow.querySelector('[data-dispatch-required-fuel]')?.classList?.toggle(
-                    'is-neo-fuel-shortfall',
-                    nextRow.querySelector('[data-dispatch-neo-fuel]')?.classList?.contains('is-neo-fuel-shortfall') || false);
+                    'is-neo-fuel-mismatch',
+                    nextRow.querySelector('[data-dispatch-required-fuel]')?.classList?.contains('is-neo-fuel-mismatch') || false);
             }
             const detailFor = (scope, row) => {
                 const id = row.querySelector('[data-neoscorpion-dispatch-details]')?.getAttribute('aria-controls');

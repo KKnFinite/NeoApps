@@ -510,7 +510,7 @@ def fuel_dispatch_assignment():
             "ok": True,
             "changed": result.changed,
             "assignment_id": result.assignment.id,
-            "neo_fuel": dispatch_neo_fuel_presentation(gateway, result.assignment.sort_date_mission,
+            "neo_fuel": dispatch_neo_fuel_presentation(result.assignment.sort_date_mission,
                 result.assignment, result.fuel_work_state),
             "assigned_fueler_user_id": result.assignment.assigned_fueler_user_id,
             "assigned_truck_id": result.assignment.assigned_truck_id,

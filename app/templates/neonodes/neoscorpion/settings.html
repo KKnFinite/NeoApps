@@ -52,8 +52,9 @@
                 </select>
                 <small>Heights: desktop / mobile. Default: 98px desktop / 73px mobile. Shared across Dispatchers. Rows expand when content needs more space.</small>
             </label>
-            <label>Neo Fuel Excess Alert (gallons)
+            <label>FOB CALL DISPATCH Excess Threshold (gallons)
                 <input type="number" name="neo_fuel_excess_alert_gallons" value="{{ settings.neo_fuel_excess_alert_gallons }}" min="0" step="1" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
+                <small>Applies to the FOB CALL DISPATCH advisory. The Fuel Load and NEO Fuel columns use a fixed 500 lb difference.</small>
             </label>
             <label>Truck Fuel Discrepancy Approval Threshold (gallons)
                 <input type="number" name="truck_fuel_discrepancy_threshold_gallons" value="{{ settings.truck_fuel_discrepancy_threshold_gallons|default(1000) }}" min="0" step="1" {% if not can_edit %}readonly{% endif %}>

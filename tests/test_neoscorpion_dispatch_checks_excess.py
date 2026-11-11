@@ -142,13 +142,13 @@ class DispatchChecksExcessIntegrationTest(unittest.TestCase):
         self.assertEqual(self._settings("700").status_code, 302)
         self.assertEqual(NeoScorpionSettings.query.one().neo_fuel_excess_alert_gallons, 700)
         self.assertEqual(NeoScorpionSortAssetState.query.one().revision, 6)
-        self.assertFalse(fuel_dispatch_context(self.gateway)["rows"][0]["neo_fuel_excess_alert"])
+        self.assertTrue(fuel_dispatch_context(self.gateway)["rows"][0]["neo_fuel_mismatch"])
         for threshold in ("", "-1", "1.1", "1e3", "NaN", "2147483648", "999999999999999"):
             with self.subTest(threshold=threshold):
                 self.assertEqual(self._settings(threshold).status_code, 400)
                 self.assertEqual(NeoScorpionSettings.query.one().neo_fuel_excess_alert_gallons, 700)
         self.assertEqual(self._settings("0").status_code, 302)
-        self.assertTrue(fuel_dispatch_context(self.gateway)["rows"][0]["neo_fuel_excess_alert"])
+        self.assertTrue(fuel_dispatch_context(self.gateway)["rows"][0]["neo_fuel_mismatch"])
         other = Gateway(code="AAA", name="Other Gateway", is_active=True)
         db.session.add(other)
         db.session.flush()
@@ -156,6 +156,7 @@ class DispatchChecksExcessIntegrationTest(unittest.TestCase):
         db.session.commit()
         self.fixture._login_user("settings_viewer", "simulator")
         response = self.client.get("/neoscorpion/settings")
+        self.assertIn("FOB CALL DISPATCH Excess Threshold (gallons)", response.get_data(as_text=True))
         self.assertRegex(response.get_data(as_text=True), r'name="neo_fuel_excess_alert_gallons"[^>]+readonly')
         self.assertEqual(self._settings("900").status_code, 403)
         self.assertEqual(NeoScorpionSettings.query.filter_by(gateway_id=other.id).one().neo_fuel_excess_alert_gallons, 123)
@@ -163,11 +164,11 @@ class DispatchChecksExcessIntegrationTest(unittest.TestCase):
     def test_required_and_apu_changes_reconcile_only_that_employee_fuel_value(self):
         row = fuel_dispatch_context(self.gateway)["rows"][0]
         self.assertEqual(row["neo_fuel_lbs"], 28_750)
-        self.assertTrue(row["neo_fuel_excess_alert"])
+        self.assertTrue(row["neo_fuel_mismatch"])
         response = self.client.post("/neoscorpion/fuel-dispatch/autosave", data={
             "mission_id": self.mission.id, "field_name": "required_fuel", "value": "25.5", "expected_value": "25.4"})
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.get_json()["neo_fuel"]["excess"])
+        self.assertTrue(response.get_json()["neo_fuel"]["mismatch"])
         self.assertEqual(response.get_json()["neo_fuel"]["display"], "28.8")
         self.work.apu_running = True
         self.work.apu_allowance_lbs = 1000
@@ -176,7 +177,7 @@ class DispatchChecksExcessIntegrationTest(unittest.TestCase):
         db.session.commit()
         row = fuel_dispatch_context(self.gateway)["rows"][0]
         self.assertEqual(row["neo_fuel_lbs"], 27_750)
-        self.assertFalse(row["neo_fuel_excess_alert"])
+        self.assertTrue(row["neo_fuel_mismatch"])
         # Density and threshold changes advance live refresh, but calculations stay identical.
         before = NeoScorpionSortAssetState.query.one().revision
         self.assertEqual(self._settings("0", fuel_density_lbs_per_gallon="7.0").status_code, 302)
@@ -193,7 +194,7 @@ class DispatchChecksExcessIntegrationTest(unittest.TestCase):
         history = re.search(r'<tr class="neoscorpion-dispatch-history-row"[\s\S]*?</tr>', html)[0]
         current = re.search(r'<tr class="neoscorpion-dispatch-primary-row[^>]+>[\s\S]*?</tr>', html)[0]
         self.assertNotIn("data-dispatch-check ", history)
-        self.assertNotIn("is-neo-fuel-excess", history)
+        self.assertNotIn("is-neo-fuel-mismatch", history)
         self.assertEqual(history.count("<td"), 16)
         self.assertEqual(current.count("<td"), 16)
         self.assertEqual(html.count('colspan="16"'), 2)

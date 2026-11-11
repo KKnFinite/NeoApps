@@ -753,16 +753,12 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
     from app.services.neoscorpion_call_dispatch import attach_call_dispatch_alerts
     attach_call_dispatch_alerts(rows, operation, settings)
     checked_missions = checked_dispatch_mission_ids(operation, current_user)
-    excess_threshold = getattr(settings, "neo_fuel_excess_alert_gallons", 500)
     for row in rows:
         row["dispatcher_checked"] = row["mission"].id in checked_missions
         # Compare the displayed departure Fuel Load, not an earlier visit's
         # immutable target retained for handoff/physical-work calculations.
-        comparison_required = row["departure_required_fuel_lbs"]
-        row["neo_fuel_excess_alert"] = neo_fuel_excess_alert(
-            row["neo_fuel_lbs"], comparison_required, fuel_density, excess_threshold)
-        row["neo_fuel_shortfall_alert"] = neo_fuel_shortfall_alert(
-            row["neo_fuel_lbs"], comparison_required)
+        row["neo_fuel_mismatch"] = dispatch_fuel_load_mismatch(
+            row["neo_fuel_lbs"], row["departure_required_fuel_lbs"])
     rows.sort(
         key=lambda row: (
             0
@@ -1216,20 +1212,20 @@ def truck_manager_context(gateway):
     }
 
 
-def neo_fuel_shortfall_alert(neo_lbs, required_lbs):
-    """Presentation only: any shortfall in unrounded, available fuel pounds."""
+def dispatch_fuel_load_mismatch(neo_lbs, required_lbs):
+    """Warn when the two displayed fuel quantities differ by at least 500 raw pounds."""
     if neo_lbs is None or required_lbs is None:
         return False
     try:
         neo, required = Decimal(str(neo_lbs)), Decimal(str(required_lbs))
         return bool(neo.is_finite() and required.is_finite()
-                    and neo >= 0 and required >= 0 and neo < required)
+                    and neo >= 0 and required >= 0 and abs(neo - required) >= 500)
     except (InvalidOperation, ValueError, TypeError):
         return False
 
 
 def neo_fuel_excess_alert(neo_lbs, required_lbs, density, threshold_gallons=500):
-    """Compare unrounded pounds at the gateway density, without changing fuel."""
+    """Evaluate the separate FOB CALL DISPATCH excess advisory in gallons."""
     if any(value is None for value in (neo_lbs, required_lbs, density)):
         return False
     try:
@@ -1243,7 +1239,7 @@ def neo_fuel_excess_alert(neo_lbs, required_lbs, density, threshold_gallons=500)
         return False
 
 
-def dispatch_neo_fuel_presentation(gateway, mission, assignment, work=None):
+def dispatch_neo_fuel_presentation(mission, assignment, work=None):
     """Reconcile only the changed mission after Required or APU edits."""
     if work is not None and _normalize_tail(work.tail_number) != _normalize_tail(mission.assigned_tail_number):
         work = None
@@ -1253,12 +1249,9 @@ def dispatch_neo_fuel_presentation(gateway, mission, assignment, work=None):
     tanks = {tank.tank_code: tank for tank in work.tank_states} if work else {}
     neo_lbs = _fuel_work_calculation(tank_layout_for_tail(mission.assigned_tail_number), tanks,
         work.apu_running if work else None, _effective_apu_allowance_lbs(work))[4]
-    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
-    density = settings.fuel_density_lbs_per_gallon if settings else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON
     return {"available": neo_lbs is not None, "display": format_display_thousands(neo_lbs),
-            "shortfall": neo_fuel_shortfall_alert(neo_lbs, mission.planned_fuel_load),
-            "excess": neo_fuel_excess_alert(neo_lbs, mission.planned_fuel_load, density,
-                                           getattr(settings, "neo_fuel_excess_alert_gallons", 500))}
+            "required_display": format_dispatch_thousands(mission.planned_fuel_load),
+            "mismatch": dispatch_fuel_load_mismatch(neo_lbs, mission.planned_fuel_load)}
 
 
 def settings_context(gateway):
@@ -1799,7 +1792,7 @@ def autosave_dispatch_field(
             revision,
             field_name,
             format_display_thousands(current_lbs),
-            dispatch_neo_fuel_presentation(gateway, mission, assignment) if field_name == "required_fuel" else None,
+            dispatch_neo_fuel_presentation(mission, assignment) if field_name == "required_fuel" else None,
         )
 
     if field_name == "required_fuel":
@@ -1833,7 +1826,7 @@ def autosave_dispatch_field(
         int(asset_state.revision),
         field_name,
         format_display_thousands(requested_lbs),
-        dispatch_neo_fuel_presentation(gateway, mission, assignment) if field_name == "required_fuel" else None,
+        dispatch_neo_fuel_presentation(mission, assignment) if field_name == "required_fuel" else None,
     )
 
 
@@ -5917,9 +5910,9 @@ def save_settings(gateway, form):
     if "neo_fuel_excess_alert_gallons" in form:
         submitted_excess = str(form.get("neo_fuel_excess_alert_gallons", "")).strip()
         if not re.fullmatch(r"[0-9]+", submitted_excess):
-            raise ValueError("Neo Fuel Excess Alert must be a nonnegative whole number of gallons.")
+            raise ValueError("FOB CALL DISPATCH Excess Threshold must be a nonnegative whole number of gallons.")
         if len(submitted_excess) > 10 or int(submitted_excess) > 2147483647:
-            raise ValueError("Neo Fuel Excess Alert is too large.")
+            raise ValueError("FOB CALL DISPATCH Excess Threshold is too large.")
         settings.neo_fuel_excess_alert_gallons = int(submitted_excess)
     if 'truck_fuel_discrepancy_threshold_gallons' in form:
         settings.truck_fuel_discrepancy_threshold_gallons = int(threshold_text)

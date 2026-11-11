@@ -1097,11 +1097,8 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row strong.is-neo-fuel-excess {
-    color: #ff626b !important; font-weight: 900 !important;
-}
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row
-:is([data-dispatch-neo-fuel], [data-dispatch-required-fuel]).is-neo-fuel-shortfall {
+:is([data-dispatch-neo-fuel], [data-dispatch-required-fuel], .neoscorpion-dispatch-mobile-fuel-pair strong).is-neo-fuel-mismatch {
     color: #ff626b !important; font-weight: 900 !important;
 }
 .neoscorpion-fuel-status {
@@ -1169,7 +1166,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 /* Mobile Dispatch is a five-column overview, never a squeezed 16-column table.
    Keep the full editable desktop DOM for existing actions and live refresh. */
 .neoscorpion-dispatch-mobile-only,
-.neoscorpion-dispatch-mobile-estimate { display: none; }
+.neoscorpion-dispatch-mobile-estimate, .neoscorpion-dispatch-mobile-fuel-pair { display: none; }
 @media (max-width: 760px) {
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-table-wrap--sticky {
         width: 100%;
@@ -1249,6 +1246,13 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         font-size: .64rem;
         line-height: 1.1;
         white-space: nowrap;
+    }
+    .neoscorpion-dispatch-mobile-fuel-pair {
+        display: grid;
+        gap: 1px;
+        margin-top: 2px;
+        font-size: .6rem;
+        line-height: 1.1;
     }
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status {
         align-items: center;
