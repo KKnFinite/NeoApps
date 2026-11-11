@@ -21,6 +21,7 @@ from app.models import (
     SortDateParkingAssignment,
     SortDateTailState,
     MotherBrainParkingSettings,
+    StaffingDailyAttendance,
     StaffingPerson,
     StaffingUnit,
     StaffingWorkAssignment,
@@ -31,7 +32,7 @@ from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.live_collaboration import entity_version
 from app.services.neosubzero_staffing import (
     DEICE_QUALIFICATION_KEY,
-    deactivate_neosubzero_callouts_for_attendance,
+    neosubzero_callout_context,
     set_neosubzero_callout_membership,
     set_staffing_person_qualification,
 )
@@ -431,59 +432,39 @@ class NeoSubZeroUccTest(unittest.TestCase):
             )
         self.assertEqual(destination.person_id, self.callout.id)
 
-    def test_not_here_callout_clears_ucc_and_here_restores_pool_membership(self):
-        slot = set_neosubzero_ucc_assignment(
-            self.operation, "Alpha", 2, "flyer", self.callout
+    def test_unavailable_callout_stays_selected_and_assigned(self):
+        slot = set_neosubzero_ucc_assignment(self.operation, "Alpha", 2, "flyer", self.callout)
+        self.app.config["NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED"] = True
+        night = StaffingUnit.query.filter_by(unit_type="sort", name="Night").one()
+        attendance = StaffingDailyAttendance(
+            person_id=self.callout.id, sort_date_operation_id=self.operation.id,
+            attendance_date=self.operation.sort_date, sort_unit_id=night.id, status="call_in",
         )
+        db.session.add(attendance)
         db.session.commit()
-        deactivate_neosubzero_callouts_for_attendance(
-            self.operation, {self.callout.id: "call_in"}
-        )
-        db.session.commit()
-        self.assertFalse(self.callout_row.active)
-        self.assertEqual(self.callout_row.removal_reason, "attendance")
-        self.assertIsNone(slot.person_id)
 
-        deactivate_neosubzero_callouts_for_attendance(
-            self.operation, {self.callout.id: "here"}
-        )
-        db.session.commit()
+        context = neosubzero_callout_context(self.operation)
         self.assertTrue(self.callout_row.active)
-        self.assertIsNone(slot.person_id)
-
-    def test_manual_callout_removal_and_qualification_revoke_clear_slots(self):
-        slot = set_neosubzero_ucc_assignment(
-            self.operation, "Alpha", 1, "driver", self.callout
-        )
-        set_neosubzero_callout_membership(
-            self.operation,
-            self.callout,
-            False,
-            assignment=self.callout_row,
-        )
+        self.assertEqual(slot.person_id, self.callout.id)
+        self.assertFalse(context["callouts"][0]["available"])
+        self.assertNotIn(self.callout.id, {row["person"].id for row in context["staffing_pool"]})
+        attendance.status = "here"
         db.session.commit()
-        self.assertIsNone(slot.person_id)
-        deactivate_neosubzero_callouts_for_attendance(
-            self.operation, {self.callout.id: "here"}
-        )
+        self.assertTrue(neosubzero_callout_context(self.operation)["callouts"][0]["available"])
+
+    def test_manual_callout_removal_and_qualification_revoke_preserve_slots(self):
+        slot = set_neosubzero_ucc_assignment(self.operation, "Alpha", 1, "driver", self.callout)
+        set_neosubzero_callout_membership(self.operation, self.callout, False, assignment=self.callout_row)
+        db.session.commit()
+        self.assertEqual(slot.person_id, self.callout.id)
         self.assertFalse(self.callout_row.active)
-
-        permanent_slot = set_neosubzero_ucc_assignment(
-            self.operation, "Remote", 4, "flyer", self.permanent
-        )
-        qualification = next(
-            row
-            for row in self.permanent.qualifications
-            if row.qualification_key == DEICE_QUALIFICATION_KEY
-        )
-        set_staffing_person_qualification(
-            self.permanent,
-            DEICE_QUALIFICATION_KEY,
-            False,
-            qualification=qualification,
-        )
+        set_neosubzero_callout_membership(self.operation, self.callout, True, assignment=self.callout_row)
+        qualification = self.callout.qualifications[0]
+        set_staffing_person_qualification(self.callout, DEICE_QUALIFICATION_KEY, False, qualification=qualification)
         db.session.commit()
-        self.assertIsNone(permanent_slot.person_id)
+        self.assertEqual(slot.person_id, self.callout.id)
+        self.assertFalse(self.callout_row.active)
+        self.assertEqual(self.callout_row.removal_reason, "qualification")
 
     def test_ucc_permissions_route_refresh_and_settings_contract(self):
         defaults = {key: role for key, role, _ in DEFAULT_PERMISSION_RULES}
@@ -714,6 +695,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit()
         original_version = entity_version(slot)
         slot.person_id = self.callout.id
+        slot.updated_at = slot.updated_at + timedelta(minutes=1)
         db.session.commit()
         client = self.app.test_client()
         self._login(client, simulator)
@@ -745,6 +727,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit()
         stale_source_version = entity_version(source)
         source.assigned_at = source.assigned_at + timedelta(minutes=1)
+        source.updated_at = source.updated_at + timedelta(minutes=1)
         db.session.commit()
         client = self.app.test_client()
         self._login(client, simulator)
@@ -1183,7 +1166,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit()
         context=neosubzero_ucc_context(self.gateway,self.operation)
         self.assertIn("Remote",[r["name"] for r in context["ramps"]])
-        self.assertEqual(context["assignment_index"][str(self.permanent.id)]["assignmentId"],str(source.id))
+        self.assertEqual(context["assignment_index"]["regular"][str(self.permanent.id)]["assignmentId"],str(source.id))
         self.assertEqual(self._ramp_context('Remote')['slots'][0]['truck_number'],'REMOTE-T1')
         editor=self._user("ucc_remote_mover","simulator")
         client=self.app.test_client(); self._login(client,editor)

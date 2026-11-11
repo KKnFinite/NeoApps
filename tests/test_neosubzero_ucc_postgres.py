@@ -162,6 +162,45 @@ class UccPostgresTest(unittest.TestCase):
         self.assertEqual(NeoSubZeroTruck.query.count(),0)
         self.assertEqual(NeoSubZeroUccTruckAssignment.query.one().truck_number,'HISTORICAL')
 
+    def test_early_out_upgrade_retains_legacy_slots_and_enforces_both_scopes(self):
+        from sqlalchemy.exc import IntegrityError
+        from app.models import NeoSubZeroUccAssignment
+
+        f = self.fixture
+        slot = set_neosubzero_ucc_assignment(f.operation, "Alpha", 1, "driver", f.permanent)
+        db.session.commit()
+        original = (slot.id, slot.person_id, slot.updated_at)
+        db.session.remove()
+        with db.engine.begin() as connection:
+            connection.execute(text("DROP INDEX uq_neosubzero_ucc_regular_person, uq_neosubzero_ucc_early_out_person"))
+            connection.execute(text("""ALTER TABLE neosubzero_ucc_assignments
+                ADD CONSTRAINT uq_neosubzero_ucc_operation_person UNIQUE (sort_date_operation_id, person_id)"""))
+            for table, constraint in (
+                ("neosubzero_ucc_assignments", "ck_neosubzero_ucc_assignment_ramp"),
+                ("neosubzero_ucc_truck_assignments", "ck_neosubzero_ucc_truck_ramp"),
+            ):
+                connection.execute(text(f"""ALTER TABLE {table} DROP CONSTRAINT {constraint},
+                    ADD CONSTRAINT {constraint} CHECK (ramp IN ('Remote','Alpha','Bravo','Charlie','Delta','Echo'))"""))
+            connection.execute(text("ALTER TABLE staffing_person_qualifications DROP COLUMN change_history"))
+
+        with patch.dict(f.app.config, {"TESTING": False}):
+            self.assertTrue(ensure_neosubzero_pretreat_table(f.app))
+            self.assertTrue(ensure_neosubzero_pretreat_table(f.app))
+        slot = db.session.get(NeoSubZeroUccAssignment, original[0])
+        self.assertEqual((slot.id, slot.person_id, slot.updated_at), original)
+        operation = db.session.get(SortDateOperation, slot.sort_date_operation_id)
+        set_neosubzero_ucc_assignment(operation, "Early Out", 1, "flyer", slot.person)
+        db.session.commit()
+        for ramp in ("Remote", "Early Out"):
+            with self.assertRaises(IntegrityError):
+                with db.session.begin_nested():
+                    db.session.add(NeoSubZeroUccAssignment(
+                        sort_date_operation_id=operation.id, person_id=slot.person_id,
+                        ramp=ramp, position_number=3, team_role="driver",
+                    ))
+                    db.session.flush()
+        self.assertEqual(NeoSubZeroUccAssignment.query.filter_by(person_id=slot.person_id).count(), 2)
+
     def test_same_registered_truck_cannot_win_two_concurrent_positions(self):
         from app.services.neosubzero_trucks import manage_truck
         from app.services.neosubzero_spray import set_neosubzero_ucc_truck, NeoSubZeroSprayError

@@ -54,7 +54,8 @@ def set_neosubzero_ucc_truck(
     retained_number=None,
 ):
     """Stage the current truck for one ramp position without committing."""
-    ramp, position = _slot(ramp, position_number)
+    from app.services.neosubzero_ucc import UCC_STAFFING_SECTIONS
+    ramp, position = _slot(ramp, position_number, ramps=UCC_STAFFING_SECTIONS)
     if operation is None:
         raise NeoSubZeroSprayError("No current sort is available.")
     truck = _short_text(truck_number, "Truck number", 32)
@@ -175,9 +176,11 @@ def current_user_ucc_assignment(operation, user):
     eligible_ids = {row["person"].id for row in current_subzero_staffing_pool(operation)}
     if person.id not in eligible_ids:
         return None
+    from app.services.neosubzero_ucc import EARLY_OUT
     return (
         NeoSubZeroUccAssignment.query.options(joinedload(NeoSubZeroUccAssignment.person))
         .filter_by(sort_date_operation_id=operation.id, person_id=person.id)
+        .filter(NeoSubZeroUccAssignment.ramp != EARLY_OUT)
         .one_or_none()
     )
 
@@ -245,13 +248,13 @@ def _mission_ramp_from_rows(operation, mission):
     return ramp
 
 
-def _slot(ramp, position_number):
+def _slot(ramp, position_number, *, ramps=RAMP_ORDER):
     normalized_ramp = str(ramp or "").strip().title()
     try:
         position = int(position_number)
     except (TypeError, ValueError) as exc:
         raise NeoSubZeroSprayError("Choose a valid ramp position.") from exc
-    if normalized_ramp not in RAMP_ORDER or position not in range(1, 5):
+    if normalized_ramp not in ramps or position not in range(1, 5):
         raise NeoSubZeroSprayError("Choose a valid ramp position.")
     return normalized_ramp, position
 

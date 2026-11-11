@@ -1,6 +1,25 @@
 /* Shared physical DUCC geometry; existing mobile staffing/ramp lenses remain. */
 .ucc-staffing-grid { display:contents; }
 .ucc-plane-etd { display:none; }
+.neosubzero-ucc .ucc-person-unavailable,
+.ucc-tv-crew .ucc-person-unavailable { color:#ff9c9c; }
+.neosubzero-ucc .ucc-early-out .ucc-staffing-grid {
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:auto; gap:6px;
+}
+.blueprint-neosubzero .neosubzero-ucc .ucc-early-out .ucc-team { grid-area:auto; order:0; }
+.neosubzero-ucc .ucc-whos-left ul {
+    display:flex; flex-wrap:wrap; gap:4px 16px; list-style:none; margin:4px 0; padding:0;
+}
+.neosubzero-ucc .ucc-whos-left li { display:grid; gap:2px; font-size:.76rem; }
+.neosubzero-ucc .ucc-whos-left small { color:#a9c5d5; }
+@media (min-width:901px) {
+    .neosubzero-ucc .ucc-ramp.ucc-early-out { grid-area:12 / 1 / 13 / -1; }
+    .neosubzero-ucc .ucc-ramp.ucc-whos-left { grid-area:13 / 1 / 14 / -1; }
+}
+@media (max-width:900px) {
+    .neosubzero-ucc .ucc-early-out .ucc-staffing-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] :is(.ucc-early-out,.ucc-whos-left) { display:none; }
+}
 @media (min-width:901px) {
     .blueprint-neosubzero .neosubzero-ucc {
         display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px;
@@ -325,7 +344,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
             grid-template-rows:repeat(2,minmax(var(--ucc-staffing-row-height,0px),auto)) auto;
             align-items:start; gap:5px;
         }
-        & .ucc-ramp:not([data-ucc-ramp="Remote"]) :is(.ucc-staffing-grid,.ucc-ramp-diagram) { display:contents; }
+        & .ucc-ramp:not(.ucc-early-out,[data-ucc-ramp="Remote"]) :is(.ucc-staffing-grid,.ucc-ramp-diagram) { display:contents; }
         & .ucc-deice-pad {
             position:static; grid-area:1 / 2 / 3 / 3; align-self:stretch;
             width:auto; height:auto; min-height:0; border:0; padding:0;

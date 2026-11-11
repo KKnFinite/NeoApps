@@ -2347,10 +2347,8 @@ def create_person():
             if not user_can(MANAGEMENT_ASSIGN_PERMISSION):
                 raise ValueError("You do not have permission to assign management.")
         staffing_service.create_initial_person_assignments(person, units)
-        if 'deice_trained' in request.form:
-            from app.services.neosubzero_staffing import save_employee_deice_training
-            save_employee_deice_training(person, request.form.get('deice_trained'), actor_id=current_user.id)
-
+        if "deice_trained" in request.form:
+            raise ValueError("DEICE TRAINED is managed in NeoSubZero Deicer Management.")
         if creation_flow == "management":
             # 20C creates affiliations and formally reports only to Primary. The legacy
             # ft_supervisor_selection field is accepted for already-rendered forms.

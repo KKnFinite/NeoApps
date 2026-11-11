@@ -50,8 +50,8 @@
         const right = position >= 3;
         const team = element("div", `ucc-tv-crew${right ? " is-right" : ""}`,
             element("strong", "", right ? `${unit} · ${position}` : `${position} · ${unit}`),
-            element("span", "", driver?.textContent || "D · Unassigned"),
-            element("span", "", flyer?.textContent || "F · Unassigned"));
+            element("span", driver?.className || "", driver?.textContent || "D · Unassigned"),
+            element("span", flyer?.className || "", flyer?.textContent || "F · Unassigned"));
         return team;
     }
 
@@ -135,11 +135,13 @@
         const ramps = Array.from(tvSource.querySelectorAll("[data-ucc-ramp]"));
         const find = (name) => ramps.find(ramp => ramp.dataset.uccRamp === name);
         const remote = find("Remote");
-        const remoteCrews = [1, 2, 3, 4].filter(position => {
-            const source = remote?.querySelector(`.ucc-team.position-${position} .ucc-team-readonly`);
+        const staffedCrews = section => [1, 2, 3, 4].filter(position => {
+            const source = section?.querySelector(`.ucc-team.position-${position} .ucc-team-readonly`);
             return source && (!content(source, "strong").includes("NO TRUCK")
                 || Array.from(source.querySelectorAll("span")).some(role => !role.textContent.includes("Unassigned")));
-        }).map(position => crew(remote, position));
+        }).map(position => crew(section, position));
+        const remoteCrews = staffedCrews(remote);
+        const earlyCrews = staffedCrews(tvSource.querySelector("[data-ucc-early-out]"));
         const remoteAircraft = Array.from(remote?.querySelectorAll(".ucc-parking-place:has(.ucc-plane)") || [],
             stand => aircraftAt(stand, stand.dataset.uccParking));
         const footer = element("footer", "ucc-tv-footer",
@@ -147,7 +149,8 @@
                 element("div", "ucc-tv-remote-data", ...remoteCrews, ...remoteAircraft,
                     !remoteCrews.length && !remoteAircraft.length ? element("p", "", "No current assignments or aircraft") : null)),
             element("section", "ucc-tv-early", heading("Early Out Crew"),
-                element("p", "", "No assignment source in DUCC")));
+                element("div", "ucc-tv-remote-data", ...earlyCrews,
+                    earlyCrews.length ? null : element("p", "", "No current assignments"))));
         const exit = element("button", "ucc-tv-exit", "Exit TV Mode");
         exit.type = "button";
         exit.addEventListener("click", () => root.querySelector("[data-ucc-tv-exit]")?.click());

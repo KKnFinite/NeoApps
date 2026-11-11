@@ -95,6 +95,12 @@ def _sqlite_rebuild(tables):
                     ddl,count=re.subn(r'CONSTRAINT\s+uq_neosubzero_departure_deice_mission\s+UNIQUE\s*\(\s*sort_date_mission_id\s*\)\s*,?', '',ddl,flags=re.I)
                     if count != 1: raise RuntimeError('Unrecognized SubZero event DDL; no migration applied.')
                     ddl=re.sub(r',\s*\)\s*$', '\n)', ddl)
+                elif table in {"neosubzero_ucc_assignments", "neosubzero_ucc_truck_assignments"}:
+                    ddl, count = re.subn(r"(ramp IN \([^)]*'Echo')\)", r"\1, 'Early Out')", ddl)
+                    if count != 1:
+                        raise RuntimeError("Unrecognized NeoSubZero UCC ramp constraint.")
+                    ddl = re.sub(r',?\s*CONSTRAINT uq_neosubzero_ucc_operation_person\s+UNIQUE\s*\([^)]*\)\s*,?', ',', ddl)
+                    ddl = re.sub(r',\s*\)\s*$', '\n)', ddl)
                 else:
                     for column in NULLABLE:
                         ddl=re.sub(r'(\b'+column+r'\s+\w+(?:\([^)]*\))?)\s+NOT NULL',r'\1',ddl,flags=re.I)

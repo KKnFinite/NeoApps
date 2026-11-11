@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from flask import current_app
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import joinedload
 
@@ -32,42 +33,57 @@ def employee_deice_context(person):
 
 
 def deice_training_eligible(person):
-    """An eligible work-area path permits qualification editing, never grants it."""
     if person is None or not person.active:
         return False
-    units = _staffing_units_by_id(active_only=True)
-    areas = StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).all()
-    allowed = {'ramp', 'aviation services', 'cargo', 'unload/load', 'unload / load', 'unload', 'load'}
-    for assignment in areas:
-        unit, seen = units.get(assignment.work_area_unit_id), set()
-        while unit and unit.id not in seen:
-            if _normalized(unit.name) in allowed:
-                return True
-            seen.add(unit.id)
-            unit = units.get(unit.parent_id)
-    return False
+    areas = _ramp_work_area_ids(_staffing_units_by_id(active_only=True))
+    return any(
+        assignment.work_area_unit_id in areas
+        for assignment in StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True)
+    )
 
 
-def save_employee_deice_training(person, value, *, actor_id, expected_version=None):
-    if str(value) not in {'yes', 'no'}:
-        raise NeoSubZeroStaffingError('Choose YES or NO for DEICE TRAINED.')
-    person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
-    row = StaffingPersonQualification.query.filter_by(person_id=person.id, qualification_key=DEICE_QUALIFICATION_KEY).populate_existing().with_for_update().one_or_none()
-    if expected_version is not None and expected_version != entity_version(row):
-        raise NeoSubZeroStaffingError('Deice qualification changed. Reopen the employee editor.')
-    qualified = value == 'yes'
+def _ramp_work_area_ids(units):
+    return {
+        unit.id for unit in units.values()
+        if unit.unit_type == "work_area"
+        and (_has_named_ancestor(unit, units, "operation", "ramp")
+             or _normalized(unit.name) == "ramp"
+             or _has_named_ancestor(unit, units, "operation", PERMANENT_DEICE_OPERATION))
+    }
+
+
+def save_employee_deice_training(person, value, *, actor_id, expected_version):
+    """Save an explicit Deicer Management decision against the rendered version."""
+    if person is None or str(value) not in {"yes", "no"}:
+        raise NeoSubZeroStaffingError("Choose an active employee and a valid qualification action.")
+    person = StaffingPerson.query.filter_by(id=person.id, active=True).populate_existing().with_for_update().one_or_none()
+    if person is None:
+        raise NeoSubZeroStaffingError("Choose an active employee.")
+    row = StaffingPersonQualification.query.filter_by(
+        person_id=person.id, qualification_key=DEICE_QUALIFICATION_KEY,
+    ).populate_existing().with_for_update().one_or_none()
+    if expected_version != entity_version(row):
+        raise NeoSubZeroStaffingError("Deice qualification changed. Review current values.")
+    qualified = value == "yes"
     if qualified == bool(row and row.active):
         return row
     if qualified and not deice_training_eligible(person):
-        raise NeoSubZeroStaffingError('DEICE TRAINED is available for active Ramp, Aviation Services, Cargo and Unload/Load employees.')
-    person.updated_at = datetime.utcnow()
-    return set_staffing_person_qualification(person, DEICE_QUALIFICATION_KEY, qualified, user_id=actor_id, qualification=row)
+        raise NeoSubZeroStaffingError("Choose an active employee assigned to Ramp.")
+    return set_staffing_person_qualification(person, DEICE_QUALIFICATION_KEY, qualified,
+                                             user_id=actor_id, qualification=row)
 
 
 def neosubzero_qualification_people(search="", *, limit=250):
     """Return a bounded active-person projection for qualification management."""
     normalized_search = str(search or "").strip().casefold()
-    query = StaffingPerson.query.filter(StaffingPerson.active.is_(True))
+    units_by_id = _staffing_units_by_id(active_only=True)
+    ramp_assignments = StaffingWorkAssignment.query.with_entities(StaffingWorkAssignment.person_id).filter(
+        StaffingWorkAssignment.active.is_(True),
+        StaffingWorkAssignment.work_area_unit_id.in_(_ramp_work_area_ids(units_by_id)),
+    )
+    query = StaffingPerson.query.filter(
+        StaffingPerson.active.is_(True), StaffingPerson.id.in_(ramp_assignments.statement),
+    )
     if normalized_search:
         pattern = f"%{normalized_search}%"
         query = query.filter(
@@ -93,7 +109,6 @@ def neosubzero_qualification_people(search="", *, limit=250):
     person_ids = [person.id for person in people]
     assignments = _assignments_by_person(person_ids)
     qualifications = _qualification_rows_by_person(person_ids)
-    units_by_id = _staffing_units_by_id()
     return tuple(
         {
             "person": person,
@@ -140,6 +155,14 @@ def set_staffing_person_qualification(
             qualification_key=key,
         ).one_or_none()
     now = datetime.utcnow()
+    history = list(row.change_history or ()) if row else []
+    if row and not history:
+        for action, stamp, actor in (
+            ("grant", row.granted_at, row.granted_by_user_id),
+            ("revoke", row.revoked_at, row.revoked_by_user_id),
+        ):
+            if stamp:
+                history.append({"action": action, "at_utc": stamp.isoformat(), "actor_user_id": actor})
     if row is None:
         if not qualified:
             return None
@@ -148,6 +171,9 @@ def set_staffing_person_qualification(
             qualification_key=key,
         )
         db.session.add(row)
+    history.append({"action": "grant" if qualified else "revoke",
+                    "at_utc": now.isoformat(), "actor_user_id": user_id})
+    row.change_history = history
     row.active = qualified
     if qualified:
         row.granted_at = now
@@ -159,9 +185,10 @@ def set_staffing_person_qualification(
         row.revoked_by_user_id = user_id
         if key == DEICE_QUALIFICATION_KEY:
             active_callouts = (
-                NeoSubZeroCalloutAssignment.query.filter_by(
-                    person_id=person.id,
-                    active=True,
+                NeoSubZeroCalloutAssignment.query.filter(
+                    NeoSubZeroCalloutAssignment.person_id == person.id,
+                    or_(NeoSubZeroCalloutAssignment.active.is_(True),
+                        NeoSubZeroCalloutAssignment.removal_reason == "attendance"),
                 )
                 .with_for_update()
                 .all()
@@ -171,11 +198,6 @@ def set_staffing_person_qualification(
                 callout.removed_at = now
                 callout.removed_by_user_id = user_id
                 callout.removal_reason = "qualification"
-            from app.services.neosubzero_ucc import (
-                clear_neosubzero_ucc_assignments_for_person_all_sorts,
-            )
-
-            clear_neosubzero_ucc_assignments_for_person_all_sorts(person.id)
     return row
 
 
@@ -261,117 +283,29 @@ def set_neosubzero_callout_membership(
     row.removed_at = now
     row.removed_by_user_id = user_id
     row.removal_reason = "manual"
-    from app.services.neosubzero_ucc import (
-        clear_neosubzero_ucc_assignments_for_people,
-    )
-
-    clear_neosubzero_ucc_assignments_for_people(operation, {person.id})
     return row
 
 
-def deactivate_neosubzero_callouts_for_attendance(
-    operation,
-    attendance_status_by_person_id,
-    *,
-    user_id=None,
-):
-    """Synchronize attendance-suppressed callouts and clear unavailable UCC slots."""
-    if operation is None:
-        return 0
-    statuses = {
-        int(person_id): str(status or "").strip().casefold()
-        for person_id, status in (attendance_status_by_person_id or {}).items()
-    }
-    unavailable_ids = {
-        person_id
-        for person_id, status in statuses.items()
-        if status not in {"", "here"}
-    }
-    relevant_ids = set(statuses)
-    if not relevant_ids:
-        return 0
-    rows = (
-        NeoSubZeroCalloutAssignment.query.filter(
-            NeoSubZeroCalloutAssignment.sort_date_operation_id == operation.id,
-            NeoSubZeroCalloutAssignment.person_id.in_(relevant_ids),
-        )
-        .with_for_update()
-        .all()
-    )
-    restore_ids = _attendance_restore_person_ids(
-        operation,
-        {
-            row.person_id
-            for row in rows
-            if statuses.get(row.person_id) == "here"
-            and not row.active
-            and row.removal_reason == "attendance"
-        },
-    )
-    now = datetime.utcnow()
-    changed = 0
-    for row in rows:
-        if row.person_id in unavailable_ids and row.active:
-            row.active = False
-            row.removed_at = now
-            row.removed_by_user_id = user_id
-            row.removal_reason = "attendance"
-            changed += 1
-        elif (
-            statuses.get(row.person_id) == "here"
-            and not row.active
-            and row.removal_reason == "attendance"
-            and row.person_id in restore_ids
-        ):
-            row.active = True
-            row.removed_at = None
-            row.removed_by_user_id = None
-            row.removal_reason = None
-            changed += 1
-    if unavailable_ids:
-        from app.services.neosubzero_ucc import (
-            clear_neosubzero_ucc_assignments_for_people,
-        )
-
-        clear_neosubzero_ucc_assignments_for_people(
-            operation,
-            unavailable_ids,
-        )
-    return changed
-
-
-def permanent_deice_work_area_ids():
-    units_by_id = _staffing_units_by_id(active_only=True)
+def permanent_deice_work_area_ids(units_by_id=None):
+    if units_by_id is None:
+        units_by_id = _staffing_units_by_id(active_only=True)
     return {
         unit.id
         for unit in units_by_id.values()
         if unit.unit_type == "work_area"
         and _normalized(unit.name) == PERMANENT_DEICE_WORK_AREA
-        and _has_named_ancestor(
-            unit,
-            units_by_id,
-            "operation",
-            PERMANENT_DEICE_OPERATION,
-        )
         and _has_sort_ancestor(unit, units_by_id, "night")
+        and (
+            (_has_named_ancestor(unit, units_by_id, "department", PERMANENT_DEICE_OPERATION)
+             and _has_named_ancestor(unit, units_by_id, "operation", "ramp"))
+            or _has_named_ancestor(unit, units_by_id, "operation", PERMANENT_DEICE_OPERATION)
+        )
     }
 
 
 def _subzero_staffing_snapshot(operation):
     units_by_id = _staffing_units_by_id(active_only=True)
-    permanent_area_ids = {
-        unit.id
-        for unit in units_by_id.values()
-        if unit.unit_type == "work_area"
-        and _normalized(unit.name) == PERMANENT_DEICE_WORK_AREA
-        and _has_named_ancestor(
-            unit,
-            units_by_id,
-            "operation",
-            PERMANENT_DEICE_OPERATION,
-        )
-        and _has_sort_ancestor(unit, units_by_id, operation.sort_name)
-    }
+    permanent_area_ids = permanent_deice_work_area_ids(units_by_id)
     qualification_join = and_(
         StaffingPersonQualification.person_id == StaffingPerson.id,
         StaffingPersonQualification.qualification_key == DEICE_QUALIFICATION_KEY,
@@ -408,9 +342,20 @@ def _subzero_staffing_snapshot(operation):
         .all()
     )
     people_by_id = {person.id: person for person, _assignment, _qual in records}
-    assignment_by_person = {
-        person.id: assignment for person, assignment, _qual in records
-    }
+    assignment_by_person = {}
+    assignment_rank_by_person = {}
+    for person, assignment, _qualification in records:
+        work_area = units_by_id.get(getattr(assignment, "work_area_unit_id", None))
+        if work_area is None:
+            continue
+        rank = (
+            work_area.id not in permanent_area_ids,
+            not _has_sort_ancestor(work_area, units_by_id, operation.sort_name),
+            assignment.id,
+        )
+        if person.id not in assignment_rank_by_person or rank < assignment_rank_by_person[person.id]:
+            assignment_by_person[person.id] = assignment
+            assignment_rank_by_person[person.id] = rank
     qualified_ids = {
         person.id for person, _assignment, qualification in records if qualification
     }
@@ -419,7 +364,6 @@ def _subzero_staffing_snapshot(operation):
         set(people_by_id),
         units_by_id,
     )
-    attendance_available = bool(attendance)
     callout_rows = (
         NeoSubZeroCalloutAssignment.query.options(
             joinedload(NeoSubZeroCalloutAssignment.person)
@@ -443,15 +387,28 @@ def _subzero_staffing_snapshot(operation):
         )
         attendance_row = attendance.get(person_id)
         status = str(getattr(attendance_row, "status", "") or "").strip()
+        attendance_source = "home"
+        path = _unit_path(work_area, units_by_id)
+        area_names = {_normalized(name).replace(" ", "") for name in path.split(" / ")}
+        if source != "permanent" and area_names & {"unload/load", "unload", "load"}:
+            if not current_app.config.get("NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED", False):
+                status = "here"
+                attendance_source = "assumed_here"
+        elif source != "permanent" and "ramp" in area_names and "shift" not in area_names and not current_app.config.get(
+            "NEOSUBZERO_RAMP_ATTENDANCE_ENABLED", False,
+        ):
+            status = ""
+            attendance_source = "pending_rollout"
         return {
             "person": person,
             "source": source,
             "work_area": work_area,
-            "work_area_path": _unit_path(work_area, units_by_id),
+            "work_area_path": path,
+            "attendance_source": attendance_source,
             "attendance": attendance_row,
             "attendance_status": status,
             "attendance_label": status.replace("_", " ").title() if status else "Unmarked",
-            "available": status == "here" if attendance_available else True,
+            "available": work_area is not None and status in {"", "unmarked", "here"},
             "callout": callout_by_person.get(person_id),
             "version": entity_version(callout_by_person.get(person_id)),
         }
@@ -460,19 +417,20 @@ def _subzero_staffing_snapshot(operation):
     selected_ids = {
         person_id
         for person_id, callout in callout_by_person.items()
-        if callout.active
+        if (callout.active or callout.removal_reason == "attendance")
         and person_id in qualified_ids
         and person_id not in permanent_ids
         and person_id in people_by_id
-        and row(person_id, "callout")["available"]
     }
     callouts = tuple(row(person_id, "callout") for person_id in selected_ids)
-    candidate_ids = qualified_ids - permanent_ids - selected_ids
+    candidate_ids = {person_id for person_id in qualified_ids - permanent_ids - selected_ids
+                     if assignment_by_person.get(person_id)
+                     and assignment_by_person[person_id].work_area_unit_id in units_by_id}
     candidates = tuple(row(person_id, "callout") for person_id in candidate_ids)
     staffing_pool = tuple(
         item
         for item in (*permanent, *callouts)
-        if item["available"] and item["person"].id in qualified_ids
+        if item["available"]
     )
     sort_key = lambda item: (
         item["person"].last_name.casefold(),
@@ -485,50 +443,6 @@ def _subzero_staffing_snapshot(operation):
         "candidates": tuple(sorted(candidates, key=sort_key)),
         "staffing_pool": tuple(sorted(staffing_pool, key=sort_key)),
     }
-
-
-def _attendance_restore_person_ids(operation, person_ids):
-    if not person_ids:
-        return set()
-    qualified_ids = {
-        row.person_id
-        for row in StaffingPersonQualification.query.filter(
-            StaffingPersonQualification.person_id.in_(person_ids),
-            StaffingPersonQualification.qualification_key
-            == DEICE_QUALIFICATION_KEY,
-            StaffingPersonQualification.active.is_(True),
-        ).all()
-    }
-    if not qualified_ids:
-        return set()
-    active_person_ids = {
-        row.id
-        for row in StaffingPerson.query.filter(
-            StaffingPerson.id.in_(qualified_ids),
-            StaffingPerson.active.is_(True),
-        ).all()
-    }
-    qualified_ids &= active_person_ids
-    assignments = StaffingWorkAssignment.query.filter(
-            StaffingWorkAssignment.person_id.in_(qualified_ids),
-            StaffingWorkAssignment.active.is_(True),
-        ).all()
-    units_by_id = _staffing_units_by_id(active_only=True)
-    permanent_ids = {
-        unit.id
-        for unit in units_by_id.values()
-        if unit.unit_type == "work_area"
-        and _normalized(unit.name) == PERMANENT_DEICE_WORK_AREA
-        and _has_named_ancestor(
-            unit,
-            units_by_id,
-            "operation",
-            PERMANENT_DEICE_OPERATION,
-        )
-        and _has_sort_ancestor(unit, units_by_id, operation.sort_name)
-    }
-    permanent_people = {row.person_id for row in assignments if row.work_area_unit_id in permanent_ids}
-    return qualified_ids - permanent_people
 
 
 def _attendance_records(operation, person_ids, units_by_id):
@@ -553,7 +467,7 @@ def _attendance_records(operation, person_ids, units_by_id):
     ).all()
     records.sort(
         key=lambda item: item.sort_date_operation_id == operation.id,
-        reverse=True,
+        reverse=False,
     )
     return {record.person_id: record for record in records}
 

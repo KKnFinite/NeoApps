@@ -1,0 +1,103 @@
+{% macro employee(row) %}
+    <strong>{{ row.person.full_name }}</strong><span>{{ row.person.employee_id }}</span>
+{% endmacro %}
+{% macro callout_table(heading, entries, selected) %}
+    <section class="neosubzero-staffing-section">
+        <header><h2>{{ heading }}</h2>{% if selected %}<span>{{ entries|length }} SELECTED</span>{% endif %}</header>
+        <div class="neosubzero-staffing-table-wrap">
+            <table class="neosubzero-staffing-table">
+                <thead><tr><th>Employee</th><th>Home Work Area</th><th>Attendance</th><th>Action</th></tr></thead>
+                <tbody>
+                {% for row in entries %}
+                    <tr><td>{{ employee(row) }}</td><td>{{ row.work_area_path }}</td>
+                        <td class="{{ 'is-qualified' if row.available else 'is-unqualified' }}">{{ row.attendance_label }}
+                            {% if row.attendance_source == 'assumed_here' %}<small> · assumed</small>{% endif %}
+                        </td>
+                        <td>{% if can_edit and (selected or row.available) %}
+                            <form method="post" action="{{ url_for('neosubzero.callouts', tab='callouts') }}">
+                                {{ csrf_field() }}
+                                <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                                <input type="hidden" name="person_id" value="{{ row.person.id }}">
+                                <input type="hidden" name="expected_version" value="{{ row.version }}">
+                                <button name="action" value="{{ 'remove' if selected else 'add' }}">{{ 'REMOVE' if selected else 'ADD CALLOUT' }}</button>
+                            </form>
+                        {% endif %}</td>
+                    </tr>
+                {% else %}<tr><td colspan="4">{{ 'No callouts selected.' if selected else 'No additional qualified candidates.' }}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+{% endmacro %}
+
+{% if tab == 'eligibility' %}
+    <form class="neosubzero-staffing-search" method="get" action="{{ url_for('neosubzero.callouts') }}">
+        <input type="hidden" name="tab" value="eligibility">
+        <label for="subzero-qualification-search">RAMP EMPLOYEES</label>
+        <input id="subzero-qualification-search" type="search" name="search" value="{{ search }}" placeholder="Employee ID or name">
+        <button type="submit">SEARCH</button>
+    </form>
+    <div class="neosubzero-staffing-table-wrap">
+        <table class="neosubzero-staffing-table">
+            <thead><tr><th>Employee</th><th>Home Work Area</th><th>DEICE TRAINED</th><th>Action</th></tr></thead>
+            <tbody>{% for row in rows %}
+                <tr><td>{{ employee(row) }}</td><td>{{ row.work_area_path }}</td>
+                    <td><strong class="{{ 'is-qualified' if row.qualified else 'is-unqualified' }}">{{ 'YES' if row.qualified else 'NO' }}</strong></td>
+                    <td>{% if can_edit %}
+                        <form method="post" action="{{ url_for('neosubzero.callouts', tab='eligibility') }}">
+                            {{ csrf_field() }}
+                            <input type="hidden" name="search" value="{{ search }}">
+                            <input type="hidden" name="person_id" value="{{ row.person.id }}">
+                            <input type="hidden" name="expected_version" value="{{ row.version }}">
+                            <button name="action" value="{{ 'unqualify' if row.qualified else 'qualify' }}">{{ 'REVOKE' if row.qualified else 'GRANT' }}</button>
+                        </form>
+                    {% endif %}</td>
+                </tr>
+            {% else %}<tr><td colspan="4">No active Ramp employees match this search.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+{% elif not operation %}
+    <p class="neosubzero-empty">No Night Sort is available for staffing.</p>
+{% elif tab == 'permanent' %}
+    <section class="neosubzero-staffing-section" data-attendance-roster
+             data-save-url="{{ url_for('neosubzero.callouts', tab='permanent') }}">
+        {{ csrf_field() }}
+        <input type="hidden" name="sort_date_operation_id" value="{{ operation.id }}">
+        <div class="neosubzero-staffing-search">
+            <label for="deice-attendance-search">PERMANENT DEICE</label>
+            <input id="deice-attendance-search" type="search" data-attendance-search placeholder="Employee ID or name">
+            <button type="button" data-attendance-clear hidden>CLEAR</button>
+            <span data-attendance-matches></span>
+        </div>
+        <div class="neosubzero-staffing-table-wrap">
+            <table class="neosubzero-staffing-table">
+                <thead><tr><th>Employee</th><th>Attendance</th><th>Note</th><th>Save Status</th></tr></thead>
+                <tbody>
+                {% for row in permanent %}
+                    {% set person_id = row.person.id %}
+                    {% set original = originals[person_id] %}
+                    {% set editable = row.work_area and row.work_area.id in attendance_areas %}
+                    <tr data-attendance-person="{{ person_id }}" data-attendance-name="{{ row.person.full_name }}"
+                        data-attendance-employee-id="{{ row.person.employee_id }}" data-attendance-status="{{ original.status }}">
+                        <td>{{ employee(row) }}</td>
+                        <td><select name="status_{{ person_id }}" aria-label="Attendance for {{ row.person.full_name }}"{% if not editable %} disabled{% endif %}>
+                            <option value="">UNMARKED</option>
+                            {% for value, label in status_choices %}<option value="{{ value }}"{% if value == original.status %} selected{% endif %}>{{ label|upper }}</option>{% endfor %}
+                            {% if original.status and original.status not in status_choices|map(attribute=0)|list %}<option value="{{ original.status }}" selected disabled>{{ row.attendance_label|upper }}</option>{% endif %}
+                        </select></td>
+                        <td><input name="note_{{ person_id }}" value="{{ original.note }}" aria-label="Attendance note for {{ row.person.full_name }}"{% if not editable %} disabled{% endif %}></td>
+                        <td><input type="hidden" name="original_{{ person_id }}" value="{{ original.original }}">
+                            <span role="status" data-attendance-state></span>
+                            <button type="button" data-attendance-retry hidden>RETRY</button>
+                        </td>
+                    </tr>
+                {% endfor %}
+                <tr data-attendance-empty hidden><td colspan="4"></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+{% else %}
+    {{ callout_table("TONIGHT’S CALLOUT POOL", callouts, true) }}
+    {{ callout_table("QUALIFIED CALLOUT CANDIDATES", candidates, false) }}
+{% endif %}

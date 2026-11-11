@@ -109,7 +109,8 @@ class RegistryQualificationTest(unittest.TestCase):
             self.assertNotIn(b'<input name="truck_number"',page)
             self.assertNotIn(b'>EDIT<',page)
             calls=client.get('/neosubzero/callouts').data
-            self.assertLess(calls.index(b'QUALIFIED CALLOUT CANDIDATES'),calls.index(b"TONIGHT'S CALLOUT POOL"))
+            self.assertIn(b'DEICER MANAGEMENT', calls)
+            self.assertIn(b'QUALIFIED CALLOUT CANDIDATES', calls)
         self.assertEqual(NeoSubZeroTruck.query.count(),1)
         self.assertEqual(NeoSubZeroAuditEntry.query.count(),0)
         watcher=f._user('registry-watcher','watcher');f._login(client,watcher)
@@ -192,25 +193,19 @@ class BulkDeiceQualificationTest(unittest.TestCase):
         f=self.f
         return f._service_call(bulk.stage_workspace_change,workspace,'stage_person',dict(person_id=str(person.id),change_deice_trained='1',deice_trained=value),f.grandmaster_user)
 
-    def test_bulk_uses_shared_qualification_and_rejects_stale_workspace(self):
+    def test_bulk_rejects_forged_qualification_changes(self):
         from app.services import neostaffing_bulk_change as bulk
         f=self.f;workspace=bulk.new_workspace(f.grandmaster_user)
-        self.stage(workspace,f.employee_one,'yes')
-        f._service_call(bulk.apply_workspace,workspace,f.grandmaster_user);db.session.commit()
-        row=StaffingPersonQualification.query.filter_by(person_id=f.employee_one.id,qualification_key='deice').one()
-        self.assertTrue(row.active);self.assertEqual(row.granted_by_user_id,f.grandmaster_user.id)
-        workspace=bulk.new_workspace(f.grandmaster_user);self.stage(workspace,f.employee_one,'no')
-        save_employee_deice_training(f.employee_one,'no',actor_id=f.grandmaster_user.id,expected_version=entity_version(row));db.session.commit()
-        with self.assertRaisesRegex(ValueError,'[Cc]hanged'):
-            f._service_call(bulk.apply_workspace,workspace,f.grandmaster_user)
-        db.session.rollback();self.assertFalse(row.active)
+        with self.assertRaisesRegex(ValueError,'DEICE TRAINED'):
+            self.stage(workspace,f.employee_one,'yes')
+        self.assertEqual(StaffingPersonQualification.query.filter_by(person_id=f.employee_one.id).count(),0)
 
-    def test_bulk_qualification_outside_eligible_scope_rolls_back_profile(self):
+    def test_legacy_bulk_qualification_draft_cannot_apply(self):
         from app.services import neostaffing_bulk_change as bulk
         f=self.f;workspace=bulk.new_workspace(f.grandmaster_user)
-        self.stage(workspace,f.employee_two,'yes')
         original=f.employee_two.first_name
         f._stage_person_name(workspace,f.employee_two,'Must roll back',f.grandmaster_user)
+        workspace["people"][f"p:{f.employee_two.id}"]["changes"]["deice_trained"] = True
         with self.assertRaisesRegex(ValueError,'DEICE TRAINED'):
             f._service_call(bulk.apply_workspace,workspace,f.grandmaster_user)
         db.session.rollback();self.assertEqual(f.employee_two.first_name,original)

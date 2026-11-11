@@ -9,7 +9,7 @@ class NeoSubZeroUccAssignment(db.Model):
     __tablename__ = "neosubzero_ucc_assignments"
     __table_args__ = (
         db.CheckConstraint(
-            "ramp IN ('Remote', 'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo')",
+            "ramp IN ('Remote', 'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Early Out')",
             name="ck_neosubzero_ucc_assignment_ramp",
         ),
         db.CheckConstraint(
@@ -27,10 +27,13 @@ class NeoSubZeroUccAssignment(db.Model):
             "team_role",
             name="uq_neosubzero_ucc_operation_slot",
         ),
-        db.UniqueConstraint(
-            "sort_date_operation_id",
-            "person_id",
-            name="uq_neosubzero_ucc_operation_person",
+        db.Index(
+            "uq_neosubzero_ucc_regular_person", "sort_date_operation_id", "person_id",
+            unique=True, postgresql_where=db.text("ramp <> 'Early Out'"), sqlite_where=db.text("ramp <> 'Early Out'"),
+        ),
+        db.Index(
+            "uq_neosubzero_ucc_early_out_person", "sort_date_operation_id", "person_id",
+            unique=True, postgresql_where=db.text("ramp = 'Early Out'"), sqlite_where=db.text("ramp = 'Early Out'"),
         ),
     )
 

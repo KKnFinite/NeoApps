@@ -36,6 +36,7 @@ class StaffingPersonQualification(db.Model):
         db.ForeignKey("users.id"),
         nullable=True,
     )
+    change_history = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

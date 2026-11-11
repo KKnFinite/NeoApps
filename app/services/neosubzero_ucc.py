@@ -22,10 +22,10 @@ from app.models import (
     SortDateParkingAssignment,
     SortDateTailState,
     MotherBrainParkingSettings,
+    StaffingPerson,
 )
 from app.services.live_collaboration import entity_version
 from app.services.memory_diagnostics import memory_diagnostics
-from app.services.neosubzero_constants import RAMP_ORDER
 from app.services.neosubzero_staffing import current_subzero_staffing_pool
 
 
@@ -34,6 +34,13 @@ UCC_POSITIONS = (1, 2, 3, 4)
 UCC_ROLES = ("driver", "flyer")
 UCC_RAMP_ORDER = ("Alpha", "Bravo", "Charlie", "Delta", "Echo")
 UCC_DISPLAY_RAMPS = (*UCC_RAMP_ORDER, "Remote")
+EARLY_OUT = "Early Out"
+UCC_STAFFING_SECTIONS = (*UCC_DISPLAY_RAMPS, EARLY_OUT)
+
+
+def ucc_person_scope(ramp):
+    return (NeoSubZeroUccAssignment.ramp == EARLY_OUT if ramp == EARLY_OUT
+            else NeoSubZeroUccAssignment.ramp != EARLY_OUT)
 UCC_WAITING_CAPACITY = 4
 UCC_WAITING_LABELS = ('POSITION 10', 'MIDDLE 1', 'MIDDLE 2', 'POSITION 9')
 
@@ -73,7 +80,9 @@ def neosubzero_ucc_context(gateway, operation):
             "staffing_pool": (),
             "truck_options": truck_options,
             "fluid_settings": fluid_settings,
-            "assignment_index": {},
+            "assignment_index": {"regular": {}, "early": {}},
+            "early_out": None,
+            "whos_left": (),
             "detached_units": (),
             "staffing_version": "",
         }
@@ -109,6 +118,31 @@ def neosubzero_ucc_context(gateway, operation):
         item["visual_label"] = _visual_label(item["visual_state"])
         rows_by_ramp[ramp].append(item)
 
+    def staffing_slots(ramp):
+        slots = []
+        for position in UCC_POSITIONS:
+            roles = {}
+            for role in UCC_ROLES:
+                assignment = assignment_by_slot.get((ramp, position, role))
+                person = assignment.person if assignment else None
+                roles[role] = {
+                    "assignment": assignment,
+                    "person": person,
+                    "version": entity_version(assignment),
+                    "available": bool(person and person.id in available_people),
+                }
+            truck = truck_by_position.get((ramp, position))
+            slots.append(
+                {
+                    "position": position,
+                    "roles": roles,
+                    "truck": truck,
+                    "truck_number": getattr(truck, "truck_number", None) or "",
+                    "truck_version": entity_version(truck),
+                }
+            )
+        return tuple(slots)
+
     ramps = []
     for ramp in UCC_DISPLAY_RAMPS:
         aircraft = rows_by_ramp[ramp]
@@ -130,28 +164,6 @@ def neosubzero_ucc_context(gateway, operation):
         occupied = ({prefix+'10'} if throat else set()) | ({prefix+'09'} if len(waiting_queue) == UCC_WAITING_CAPACITY else set())
         parking = _parking_projection(ramp, [row for row in parked if row['parking'] not in occupied], parking_9_10_enabled)
         visible_codes = {place["code"] for place in parking}
-        slots = []
-        for position in UCC_POSITIONS if ramp in RAMP_ORDER else ():
-            roles = {}
-            for role in UCC_ROLES:
-                assignment = assignment_by_slot.get((ramp, position, role))
-                person = assignment.person if assignment else None
-                roles[role] = {
-                    "assignment": assignment,
-                    "person": person,
-                    "version": entity_version(assignment),
-                    "available": bool(person and person.id in available_people),
-                }
-            truck = truck_by_position.get((ramp, position))
-            slots.append(
-                {
-                    "position": position,
-                    "roles": roles,
-                    "truck": truck,
-                    "truck_number": getattr(truck, "truck_number", None) or "",
-                    "truck_version": entity_version(truck),
-                }
-            )
         ramps.append(
             {
                 "name": ramp,
@@ -166,9 +178,16 @@ def neosubzero_ucc_context(gateway, operation):
                 "parking_positions": parking,
                 "parking_exceptions": tuple(row for row in parked if row["parking"] not in visible_codes or row['parking'] in occupied),
                 "active_conflicts": tuple((active if pad is None else []) + pad_reviews),
-                "slots": tuple(slots),
+                "slots": staffing_slots(ramp),
             }
         )
+    assignment_index = {"regular": {}, "early": {}}
+    for assignment in assignment_rows:
+        if assignment.person_id is not None:
+            scope = "early" if assignment.ramp == EARLY_OUT else "regular"
+            assignment_index[scope][str(assignment.person_id)] = {
+                "assignmentId": str(assignment.id), "assignmentVersion": entity_version(assignment),
+            }
     return {
         "operation": operation,
         "ramps": tuple(ramps),
@@ -177,10 +196,9 @@ def neosubzero_ucc_context(gateway, operation):
         "truck_options": truck_options,
         "fluid_settings": fluid_settings,
         "staffing_version": ucc_staffing_version(operation),
-        "assignment_index": {
-            str(row.person_id): {"assignmentId": str(row.id), "assignmentVersion": entity_version(row)}
-            for row in assignment_rows if row.person_id is not None
-        },
+        "assignment_index": assignment_index,
+        "early_out": {"name": EARLY_OUT, "slots": staffing_slots(EARLY_OUT)},
+        "whos_left": tuple(row for row in staffing_pool if str(row["person"].id) not in assignment_index["regular"]),
         "detached_units": (),  # Remote teams are now always in the visible roster.
     }
 
@@ -535,6 +553,7 @@ def set_neosubzero_ucc_assignment(
         duplicate = NeoSubZeroUccAssignment.query.filter(
             NeoSubZeroUccAssignment.sort_date_operation_id == operation.id,
             NeoSubZeroUccAssignment.person_id == person.id,
+            ucc_person_scope(ramp),
             NeoSubZeroUccAssignment.id
             != (getattr(assignment, "id", None) or -1),
         ).one_or_none()
@@ -613,12 +632,14 @@ def move_neosubzero_ucc_assignment(
         source_assignment = NeoSubZeroUccAssignment.query.filter(
             NeoSubZeroUccAssignment.sort_date_operation_id == operation.id,
             NeoSubZeroUccAssignment.person_id == person.id,
+            ucc_person_scope(ramp),
             NeoSubZeroUccAssignment.id
             != (getattr(destination_assignment, "id", None) or -1),
         ).one_or_none()
     elif (
         source_assignment.sort_date_operation_id != operation.id
         or source_assignment.person_id != person.id
+        or (source_assignment.ramp == EARLY_OUT) != (ramp == EARLY_OUT)
         or source_assignment.id == getattr(destination_assignment, "id", None)
     ):
         raise NeoSubZeroUccError(
@@ -635,10 +656,10 @@ def move_neosubzero_ucc_assignment(
             raise NeoSubZeroUccError(
                 "Choose Remove, Swap, or Cancel for the occupied destination."
             )
-        if resolution == "swap" and source_assignment is None:
-            raise NeoSubZeroUccError(
-                "Swap requires the selected employee to have a current UCC slot."
-            )
+        if resolution == "swap":
+            if source_assignment is None:
+                raise NeoSubZeroUccError("Swap requires the selected employee to have a current UCC slot.")
+            _validate_available_person(operation, displaced_person)
 
     destination = destination_assignment
     if destination is None:
@@ -700,7 +721,7 @@ def _validated_slot(operation, ramp, position_number, team_role, assignment):
         position = int(position_number)
     except (TypeError, ValueError) as exc:
         raise NeoSubZeroUccError("Choose a valid treatment position.") from exc
-    if ramp not in RAMP_ORDER or position not in UCC_POSITIONS or role not in UCC_ROLES:
+    if ramp not in UCC_STAFFING_SECTIONS or position not in UCC_POSITIONS or role not in UCC_ROLES:
         raise NeoSubZeroUccError("Choose a valid UCC staffing slot.")
     if assignment is not None and (
         assignment.sort_date_operation_id != operation.id
@@ -713,6 +734,10 @@ def _validated_slot(operation, ramp, position_number, team_role, assignment):
 
 
 def _validate_available_person(operation, person):
+    # Attendance and eligibility writes serialize on this same employee.
+    active = db.session.query(StaffingPerson.id).filter_by(id=person.id, active=True).with_for_update().scalar()
+    if active is None:
+        raise NeoSubZeroUccError("Choose an active employee.")
     eligible_ids = {
         item["person"].id for item in current_subzero_staffing_pool(operation)
     }

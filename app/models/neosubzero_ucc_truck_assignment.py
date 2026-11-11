@@ -9,7 +9,7 @@ class NeoSubZeroUccTruckAssignment(db.Model):
     __tablename__ = "neosubzero_ucc_truck_assignments"
     __table_args__ = (
         db.CheckConstraint(
-            "ramp IN ('Remote', 'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo')",
+            "ramp IN ('Remote', 'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Early Out')",
             name="ck_neosubzero_ucc_truck_ramp",
         ),
         db.CheckConstraint(

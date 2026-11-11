@@ -579,7 +579,7 @@ DEFAULT_PERMISSION_RULES = (
     ),
     (
         "neosubzero.qualifications.edit",
-        "master",
+        "simulator",
         "Grant or remove shared employee Deice qualifications.",
     ),
     (
@@ -1694,6 +1694,10 @@ def ensure_default_permission_rules():
         if not rule.minimum_role:
             rule.minimum_role = minimum_role
         elif rule.minimum_role in LEGACY_PERMISSION_MINIMUM_ROLES.get(permission_key, set()):
+            rule.minimum_role = minimum_role
+        elif (permission_key == "neosubzero.qualifications.edit" and rule.minimum_role == "master"
+              and rule.description == description and rule.created_at and rule.updated_at
+              and 0 <= (rule.updated_at - rule.created_at).total_seconds() < 1):
             rule.minimum_role = minimum_role
         legacy_descriptions = LEGACY_PERMISSION_DESCRIPTIONS.get(permission_key, set())
         if not rule.description or rule.description in legacy_descriptions:

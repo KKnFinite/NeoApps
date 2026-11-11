@@ -98,6 +98,7 @@
         body.set(`status_${row.id}`, sent.status);
         body.set(`note_${row.id}`, sent.note);
         body.set(`original_${row.id}`, row.saved.original);
+        roster.dataset.attendanceMutation = String(Number(roster.dataset.attendanceMutation || 0) + 1);
         row.request = post(body).then(({rows: [authoritative]}) => {
             reconcile(row, authoritative, sent);
             updateCounts();
@@ -113,6 +114,7 @@
                 state(row, 'error', `Error: ${error.message}`);
             }
         }).finally(() => {
+            roster.dataset.attendanceMutation = String(Number(roster.dataset.attendanceMutation || 0) + 1);
             row.request = null;
             if (differs(draft(row), row.saved)) saveRow(row);
         });
@@ -152,6 +154,16 @@
         search.focus();
     });
     filterRows();
+
+    roster.addEventListener('attendance:refresh', event => {
+        for (const authoritative of event.detail) {
+            const row = rows.get(String(authoritative.person_id));
+            if (row && !row.request && !row.blocked && !differs(draft(row), row.saved)) {
+                reconcile(row, authoritative, row.saved);
+            }
+        }
+        updateCounts();
+    });
 
     allHere?.addEventListener('click', async () => {
         if (bulkBusy) return;

@@ -76,10 +76,11 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         )
         db.session.add(self.operation)
         self.night = self._unit("sort", "Night")
-        aviation = self._unit("operation", "Aviation Services", self.night)
+        ramp = self._unit("operation", "Ramp", self.night)
+        aviation = self._unit("department", "Aviation Services", ramp)
         self.deice = self._unit("work_area", "Deice", aviation)
-        hub = self._unit("operation", "Hub", self.night)
-        self.unload = self._unit("work_area", "Unload", hub)
+        cargo = self._unit("department", "Cargo", ramp)
+        self.unload = self._unit("work_area", "Unload", cargo)
         self.permanent = self._person("P100", "Permanent", "Deicer", self.deice)
         self.callout = self._person("P200", "Qualified", "Callout", self.unload)
         self.other = self._person("P300", "Other", "Employee", self.unload)
@@ -116,7 +117,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         result = neosubzero_qualification_people("P200")
         self.assertEqual(len(result), 1)
         self.assertTrue(result[0]["qualified"])
-        self.assertIn("Night / Hub / Unload", result[0]["work_area_path"])
+        self.assertIn("Night / Ramp / Cargo / Unload", result[0]["work_area_path"])
 
         set_staffing_person_qualification(
             self.callout,
@@ -237,7 +238,8 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         db.session.commit()
         self.assertFalse(assignment.active)
 
-    def test_not_here_attendance_suppresses_then_restores_selected_callout(self):
+    def test_not_here_attendance_changes_availability_and_preserves_selected_callout(self):
+        self.app.config["NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED"] = True
         self._authorize_attendance_recorder()
         set_staffing_person_qualification(
             self.permanent,
@@ -273,11 +275,12 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
                 self.recorder,
             )
             db.session.commit()
-        self.assertFalse(assignment.active)
-        self.assertEqual(assignment.removal_reason, "attendance")
+        self.assertTrue(assignment.active)
+        self.assertIsNone(assignment.removal_reason)
+        self.assertFalse(neosubzero_callout_context(self.operation)["callouts"][0]["available"])
         self.assertEqual(
             [item["person"].id for item in current_subzero_staffing_pool(self.operation)],
-            [],
+            [self.permanent.id],
         )
 
         with patch(
@@ -299,7 +302,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         self.assertIsNone(assignment.removal_reason)
         self.assertEqual(
             [item["person"].id for item in current_subzero_staffing_pool(self.operation)],
-            [self.callout.id],
+            [self.callout.id, self.permanent.id],
         )
 
     def test_manual_callout_removal_does_not_restore_when_here(self):
@@ -367,7 +370,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
     def test_permission_defaults_schema_and_route_enforcement(self):
         defaults = {key: role for key, role, _description in DEFAULT_PERMISSION_RULES}
         self.assertEqual(defaults["neosubzero.qualifications.view"], "watcher")
-        self.assertEqual(defaults["neosubzero.qualifications.edit"], "master")
+        self.assertEqual(defaults["neosubzero.qualifications.edit"], "simulator")
         self.assertEqual(defaults["neosubzero.callouts.view"], "watcher")
         self.assertEqual(defaults["neosubzero.callouts.edit"], "master")
         self.assertIn("staffing_person_qualifications", db.metadata.tables)
@@ -380,7 +383,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
             "app.neonodes.neosubzero.routes.current_neosubzero_operation",
             return_value=self.operation,
         ):
-            self.assertEqual(client.get("/neosubzero/qualifications").status_code, 200)
+            self.assertEqual(client.get("/neosubzero/qualifications", follow_redirects=True).status_code, 200)
             self.assertEqual(client.get("/neosubzero/callouts").status_code, 200)
             denied = client.post(
                 "/neosubzero/qualifications",
@@ -393,7 +396,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(StaffingPersonQualification.query.count(), 0)
 
-        manager = self._user("subzero_qualification_master", "master")
+        manager = self._user("subzero_qualification_simulator", "simulator")
         self._login(client, manager)
         with patch(
             "app.neonodes.neosubzero.routes.current_neosubzero_operation",
@@ -427,6 +430,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
             added = client.post(
                 "/neosubzero/callouts",
                 data={
+                    "operation_id": self.operation.id,
                     "person_id": self.callout.id,
                     "action": "add",
                     "expected_version": "",
@@ -444,6 +448,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
             removed = client.post(
                 "/neosubzero/callouts",
                 data={
+                    "operation_id": self.operation.id,
                     "person_id": self.callout.id,
                     "action": "remove",
                     "expected_version": entity_version(assignment),

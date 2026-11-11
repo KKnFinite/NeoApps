@@ -783,6 +783,8 @@ def sync_database_schema(app):
         sync_local_sqlite_schema(app)
         from app.services.neosubzero_release2_schema import sync_release2_schema
         sync_release2_schema()
+        from app.services.neosubzero_schema import sync_sqlite_ucc_early_out
+        sync_sqlite_ucc_early_out()
         from app.services.neostaffing_assignment_schema import sync_staffing_assignment_schema
         sync_staffing_assignment_schema()
         return
@@ -858,6 +860,8 @@ def sync_database_schema(app):
     sync_staffing_assignment_schema()
     from app.services.neosubzero_release2_schema import sync_release2_schema
     sync_release2_schema()
+    from app.services.neosubzero_schema import _upgrade_ucc_early_out
+    _upgrade_ucc_early_out(db.session.connection())
     db.session.flush()
 
 

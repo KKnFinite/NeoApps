@@ -24,6 +24,7 @@ from app.models import (
 
 LOCK_KEY = 7_483_327_341_930
 NEOSUBZERO_OPTIONAL_COLUMNS = {
+    StaffingPersonQualification.__tablename__: {"change_history": "JSON"},
     NeoSubZeroUserPreference.__tablename__: {
         "frost_risk_explanations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
         "operations_mode": "VARCHAR(16)",
@@ -125,8 +126,72 @@ def verify_neosubzero_schema_contract(connection):
             )
     from app.services.neosubzero_release2_schema import verify_release2_contract
     verify_release2_contract(connection)
+    _verify_ucc_early_out(connection)
     from app.services.frost_schema import verify
     verify(connection)
+
+
+def _verify_ucc_early_out(connection):
+    inspector = inspect(connection)
+    for table, name in (
+        ("neosubzero_ucc_assignments", "ck_neosubzero_ucc_assignment_ramp"),
+        ("neosubzero_ucc_truck_assignments", "ck_neosubzero_ucc_truck_ramp"),
+    ):
+        if not any(check["name"] == name and "Early Out" in check["sqltext"]
+                   for check in inspector.get_check_constraints(table)):
+            raise RuntimeError("NeoSubZero UCC Early Out slot constraint is missing.")
+    table = "neosubzero_ucc_assignments"
+    indexes = {index["name"] for index in inspector.get_indexes(table) if index["unique"]}
+    required = {"uq_neosubzero_ucc_regular_person", "uq_neosubzero_ucc_early_out_person"}
+    if not required <= indexes or any(
+        constraint["name"] == "uq_neosubzero_ucc_operation_person"
+        for constraint in inspector.get_unique_constraints(table)
+    ):
+        raise RuntimeError("NeoSubZero UCC staffing uniqueness requires upgrade.")
+
+
+def _upgrade_ucc_early_out(connection):
+    try:
+        _verify_ucc_early_out(connection)
+        return
+    except RuntimeError:
+        pass
+    rule = "CHECK (ramp IN ('Remote', 'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Early Out'))"
+    for table, name in (
+        ("neosubzero_ucc_assignments", "ck_neosubzero_ucc_assignment_ramp"),
+        ("neosubzero_ucc_truck_assignments", "ck_neosubzero_ucc_truck_ramp"),
+    ):
+        connection.execute(text(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {name}, ADD CONSTRAINT {name} {rule}"))
+    connection.execute(text("""CREATE UNIQUE INDEX IF NOT EXISTS uq_neosubzero_ucc_regular_person
+        ON neosubzero_ucc_assignments (sort_date_operation_id, person_id) WHERE ramp <> 'Early Out'"""))
+    connection.execute(text("""CREATE UNIQUE INDEX IF NOT EXISTS uq_neosubzero_ucc_early_out_person
+        ON neosubzero_ucc_assignments (sort_date_operation_id, person_id) WHERE ramp = 'Early Out'"""))
+    connection.execute(text("ALTER TABLE neosubzero_ucc_assignments DROP CONSTRAINT IF EXISTS uq_neosubzero_ucc_operation_person"))
+    _verify_ucc_early_out(connection)
+
+
+def sync_sqlite_ucc_early_out():
+    """Preserve existing local rows while updating SQLite's inline constraints."""
+    from app.services.neosubzero_release2_schema import _sqlite_rebuild
+
+    connection = db.session.connection()
+    tables = ("neosubzero_ucc_assignments", "neosubzero_ucc_truck_assignments")
+    inspector = inspect(connection)
+    if not all(inspector.has_table(table) for table in tables):
+        return
+    legacy_tables = [
+        table for table in tables
+        if any("Early Out" not in check["sqltext"] for check in inspector.get_check_constraints(table)
+               if check["name"] in {"ck_neosubzero_ucc_assignment_ramp", "ck_neosubzero_ucc_truck_ramp"})
+    ]
+    if legacy_tables:
+        db.session.commit()
+        _sqlite_rebuild(legacy_tables)
+        connection = db.session.connection()
+    for name, condition in (("regular", "<>"), ("early_out", "=")):
+        connection.execute(text(f"""CREATE UNIQUE INDEX IF NOT EXISTS uq_neosubzero_ucc_{name}_person
+            ON neosubzero_ucc_assignments (sort_date_operation_id, person_id) WHERE ramp {condition} 'Early Out'"""))
+    _verify_ucc_early_out(connection)
 
 
 def ensure_neosubzero_pretreat_table(app):
@@ -160,10 +225,8 @@ def ensure_neosubzero_pretreat_table(app):
                         f"ADD COLUMN {column_name} {column_type}"
                     )
                 )
-            if missing or missing_columns:
-                db.session.commit()
-            else:
-                db.session.rollback()
+            _upgrade_ucc_early_out(connection)
+            db.session.commit()
             from app.services.neosubzero_release2_schema import sync_release2_schema
             sync_release2_schema()
             db.session.commit()

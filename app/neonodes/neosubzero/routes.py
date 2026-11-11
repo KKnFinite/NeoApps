@@ -14,7 +14,6 @@ from app.models import (
     SortDateMission,
     SortDateOperation,
     StaffingPerson,
-    StaffingPersonQualification,
 )
 from app.neonodes.neosubzero import bp
 from app.neonodes.neosubzero.services import (
@@ -36,15 +35,13 @@ from app.services.neosubzero_departure_deice import (
 )
 from app.services.neosubzero_staffing import (
     current_subzero_staffing_pool,
-    DEICE_QUALIFICATION_KEY,
     NeoSubZeroStaffingError,
     neosubzero_callout_context,
     neosubzero_qualification_people,
     set_neosubzero_callout_membership,
-    set_staffing_person_qualification,
 )
 from app.services.neosubzero_ucc import (
-    UCC_REFRESH_KEY,
+    UCC_REFRESH_KEY, UCC_STAFFING_SECTIONS, ucc_person_scope, EARLY_OUT,
     NeoSubZeroUccError,
     move_neosubzero_ucc_assignment,
     neosubzero_ucc_context,
@@ -76,6 +73,7 @@ from app.services.access_control import get_current_gateway
 from app.services.live_collaboration import entity_version, version_conflict
 from app.services.gateway_matrix import gateway_timezone
 from app.services.permission_rules import permission_access, user_can
+from app.services.operation_lifecycle import night_staffing_operation
 
 LAST_PAGE_KEY = "neosubzero.last_page"
 NEOSUBZERO_PAGES = (
@@ -117,7 +115,7 @@ NEOSUBZERO_PAGES = (
         "neosubzero.deice_log.view",
     ),
     (
-        "Callout Management",
+        "Deicer Management",
         "neosubzero.callouts",
         "neosubzero.callouts.view",
         "neosubzero.callouts.edit",
@@ -137,8 +135,7 @@ NEOSUBZERO_PAGES = (
 )
 NEOSUBZERO_NAV_SECTIONS = (
     (None, ("neosubzero.ucc", "neosubzero.operations", "neosubzero.coordinator",
-            "neosubzero.deicer_mobile", "neosubzero.deice_log", "neosubzero.settings")),
-    ("UNDER CONSTRUCTION", ("neosubzero.callouts",)),
+            "neosubzero.deicer_mobile", "neosubzero.deice_log", "neosubzero.callouts", "neosubzero.settings")),
 )
 
 
@@ -285,7 +282,9 @@ def ucc():
         return redirect(url_for("neosubzero.index"))
     session[LAST_PAGE_KEY] = "neosubzero.ucc"
     gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
+    operation = _ucc_staffing_operation(
+        gateway, initialize=access["can_edit"] and request.method == "GET" and request.args.get("fragment") != "1",
+    )
     if request.method == "POST":
         if not access["can_edit"]:
             return "Access denied.", 403
@@ -295,19 +294,13 @@ def ucc():
             locked_operation = SortDateOperation.query.filter_by(
                 id=operation.id,
                 gateway_code=gateway.code,
-            ).with_for_update().one_or_none()
+            ).populate_existing().with_for_update().one_or_none()
             if locked_operation is None:
                 raise NeoSubZeroUccError("The current sort changed. Reload UCC.")
             _validate_ucc_sort(locked_operation)
             ramp = str(request.form.get("ramp") or "").strip().title()
-            active_ramps = {
-                item["name"]
-                for item in neosubzero_ucc_context(gateway, locked_operation)["ramps"]
-            }
-            if ramp not in active_ramps:
-                raise NeoSubZeroUccError(
-                    "Choose a current UCC ramp."
-                )
+            if ramp not in UCC_STAFFING_SECTIONS:
+                raise NeoSubZeroUccError("Choose a current UCC staffing section.")
             position = request.form.get("position_number", type=int)
             role = str(request.form.get("team_role") or "").strip().casefold()
             assignment = NeoSubZeroUccAssignment.query.filter_by(
@@ -336,6 +329,7 @@ def ucc():
                     NeoSubZeroUccAssignment.sort_date_operation_id
                     == locked_operation.id,
                     NeoSubZeroUccAssignment.person_id == person.id,
+                    ucc_person_scope(ramp),
                     NeoSubZeroUccAssignment.id
                     != (getattr(assignment, "id", None) or -1),
                 )
@@ -405,7 +399,7 @@ def ucc():
             operation,
             weather_revision=weather["revision"],
         ),
-        refresh_status=subzero_refresh_status(gateway, operation, UCC_REFRESH_KEY),
+        refresh_status=_deice_staffing_refresh(gateway, operation),
         weather=weather,
         weather_animations_enabled=neosubzero_weather_animations_enabled(
             current_user
@@ -425,7 +419,7 @@ def _ucc_json_request():
 
 def _validate_ucc_sort(operation):
     submitted = request.form.get("operation_id")
-    if submitted is not None and str(operation.id) != submitted:
+    if operation.archived_at_utc or (submitted is not None and str(operation.id) != submitted):
         raise NeoSubZeroUccError("The current sort changed. Your draft was not applied; reload current UCC.")
 
 
@@ -435,11 +429,11 @@ def ucc_planning_mutate(planning_action):
     if not user_can("neosubzero.ucc.edit"):
         return jsonify(ok=False, error="Access denied."), 403
     gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
+    operation = _ucc_staffing_operation(gateway) if planning_action == "unit" else current_neosubzero_operation(gateway)
     try:
         if operation is None:
             raise NeoSubZeroUccError("No current sort is available.")
-        operation = SortDateOperation.query.filter_by(id=operation.id, gateway_code=gateway.code).with_for_update().one()
+        operation = SortDateOperation.query.filter_by(id=operation.id, gateway_code=gateway.code).populate_existing().with_for_update().one()
         _validate_ucc_sort(operation)
         if not request.form.get("operation_id"):
             raise NeoSubZeroUccError("Reload current UCC before making this change.")
@@ -484,7 +478,7 @@ def ucc_revision_endpoint():
     if not user_can("neosubzero.ucc.view"):
         return jsonify({"ok": False, "error": "Access denied."}), 403
     gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
+    operation = _ucc_staffing_operation(gateway)
     revision = neosubzero_ucc_revision(
         gateway,
         operation,
@@ -495,7 +489,7 @@ def ucc_revision_endpoint():
             "ok": True,
             "revision": revision,
             "changed": revision != str(request.args.get("revision") or ""),
-            "refresh": subzero_refresh_status(gateway, operation, UCC_REFRESH_KEY),
+            "refresh": _deice_staffing_refresh(gateway, operation),
         }
     )
     response.headers["Cache-Control"] = "no-store"
@@ -566,11 +560,13 @@ def ucc_frost_explanation_preference():
 @gateway_node_required("subzero")
 def truck_mutate():
     gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
     board = str(request.form.get("board") or "").strip().casefold()
+    operation = _ucc_staffing_operation(gateway) if board == "ucc" else current_neosubzero_operation(gateway)
     if board == 'deicer':
         return 'Drivers may enter only their documented pass gallons.', 403
     ramp = str(request.form.get("ramp") or "").strip().title()
+    if ramp == EARLY_OUT and board != "ucc":
+        return "Early Out is managed in DUCC.", 403
     position = request.form.get("position_number", type=int)
     try:
         if operation is None:
@@ -578,7 +574,7 @@ def truck_mutate():
         locked_operation = SortDateOperation.query.filter_by(
             id=operation.id,
             gateway_code=gateway.code,
-        ).with_for_update().one_or_none()
+        ).populate_existing().with_for_update().one_or_none()
         if locked_operation is None:
             raise NeoSubZeroSprayError("The current sort changed. Reload NeoSub-Zero.")
         if request.form.get('operation_id',type=int)!=locked_operation.id:
@@ -861,144 +857,168 @@ def schedule_subzero_archive(response):
     return response
 
 
+def _ucc_staffing_operation(gateway, *, initialize=False):
+    current = current_neosubzero_operation(gateway)
+    if current and not current.archived_at_utc:
+        return current
+    return night_staffing_operation(gateway, initialize=initialize)
+
+
+def _deice_planning_operation(gateway, *, initialize=False):
+    from app.models import StaffingAttendanceSummary
+
+    current = current_neosubzero_operation(gateway)
+    if current and current.sort_name == "night" and not current.archived_at_utc:
+        if not StaffingAttendanceSummary.query.filter_by(sort_date_operation_id=current.id).first():
+            return current
+        return None
+    return night_staffing_operation(gateway, initialize=initialize)
+
+
+def _deice_staffing_refresh(gateway, operation):
+    status = subzero_refresh_status(gateway, operation, UCC_REFRESH_KEY)
+    if operation and status.get("reason") in {"before_ops_window", "outside_ops_window", "no_current_sort"}:
+        status.update(auto_refresh_enabled=True, reason="staffing_planning",
+                      message="Live staffing updates on", live_status_label="Live staffing updates on")
+    return status
+
+
 @bp.route("/callouts", methods=["GET", "POST"])
+@bp.route("/deicer-management", methods=["GET", "POST"])
 @gateway_node_required("subzero")
 def callouts():
-    access = permission_access(
-        "neosubzero.callouts.view",
-        "neosubzero.callouts.edit",
-    )
-    if not access["can_view"]:
-        flash("Access denied.", "error")
-        return redirect(url_for("neosubzero.index"))
+    from app.services import neostaffing as staffing
+    from app.services.neostaffing_attendance_authority import attendance_authority
+    from app.services.neosubzero_staffing import permanent_deice_work_area_ids
+    from app.services.operator_errors import safe_mutation_error
+
+    tab = request.args.get("tab", "callouts" if request.path.endswith("/callouts") else "permanent")
+    if tab not in {"permanent", "callouts", "eligibility"}:
+        return "Unknown Deicer Management tab.", 404
+    access = permission_access("neosubzero.callouts.view", "neosubzero.callouts.edit")
+    eligibility = permission_access("neosubzero.qualifications.view", "neosubzero.qualifications.edit")
+    if not (eligibility if tab == "eligibility" else access)["can_view"]:
+        return "Access denied.", 403
+    if tab == "eligibility" and request.method == "POST":
+        return _save_deice_qualification(eligibility)
+
     gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
+    live = request.args.get("state") == "1"
+    operation = None if tab == "eligibility" else _deice_planning_operation(
+        gateway, initialize=access["can_edit"] and request.method == "GET" and not live,
+    )
     session[LAST_PAGE_KEY] = "neosubzero.callouts"
+    attendance_areas = (attendance_authority(current_user).work_area_ids & permanent_deice_work_area_ids()
+                        if tab == "permanent" and access["can_edit"] else frozenset())
     if request.method == "POST":
-        if not access["can_edit"]:
+        if not access["can_edit"] or (tab == "permanent" and not attendance_areas):
             return "Access denied.", 403
         try:
             if operation is None:
-                raise NeoSubZeroStaffingError("No current sort is available.")
+                raise NeoSubZeroStaffingError("No current Night sort is available.")
+            if tab == "permanent":
+                result = staffing.save_attendance(
+                    request.form, current_user, form_submission=True, return_rows=True, deice_operation=operation,
+                )
+                db.session.commit()
+                return jsonify(ok=True, **result)
+
+            if request.form.get("operation_id", type=int) != operation.id:
+                raise NeoSubZeroStaffingError("The selected Night Sort changed. Reload Deicer Management.")
+            operation = SortDateOperation.query.filter_by(id=operation.id).populate_existing().with_for_update().one()
+            _validate_ucc_sort(operation)
             person = StaffingPerson.query.filter_by(
-                id=request.form.get("person_id", type=int),
-                active=True,
+                id=request.form.get("person_id", type=int), active=True,
             ).with_for_update().one_or_none()
             assignment = NeoSubZeroCalloutAssignment.query.filter_by(
-                sort_date_operation_id=operation.id,
-                person_id=getattr(person, "id", None),
+                sort_date_operation_id=operation.id, person_id=getattr(person, "id", None),
             ).with_for_update().one_or_none()
-            expected_version = str(
-                request.form.get("expected_version") or ""
-            ).strip()
-            if assignment and (
-                not expected_version
-                or version_conflict(assignment, expected_version)
-            ):
-                raise NeoSubZeroStaffingError(
-                    "Callout membership changed while you were editing. Review current values."
-                )
-            selected = request.form.get("action") == "add"
-            if request.form.get("action") not in {"add", "remove"}:
+            expected = request.form.get("expected_version") or ""
+            if expected != entity_version(assignment):
+                raise NeoSubZeroStaffingError("Callout membership changed. Review current values.")
+            action = request.form.get("action")
+            if action not in {"add", "remove"}:
                 raise NeoSubZeroStaffingError("Choose a valid callout action.")
             set_neosubzero_callout_membership(
-                operation,
-                person,
-                selected,
-                user_id=current_user.id,
-                assignment=assignment,
+                operation, person, action == "add", user_id=current_user.id, assignment=assignment,
             )
             db.session.commit()
-            flash(
-                "CALLOUT ADDED." if selected else "CALLOUT REMOVED.",
-                "success",
-            )
-        except (NeoSubZeroStaffingError, IntegrityError) as exc:
+            flash("CALLOUT ADDED." if action == "add" else "CALLOUT REMOVED.", "success")
+        except (ValueError, IntegrityError) as exc:
             db.session.rollback()
-            flash(
-                str(exc)
-                if isinstance(exc, NeoSubZeroStaffingError)
-                else "Unable to save callout membership.",
-                "error",
-            )
-        return redirect(url_for("neosubzero.callouts"))
-    return render_template(
-        "neonodes/neosubzero/callouts.html",
-        gateway=gateway,
-        can_edit=access["can_edit"],
-        **neosubzero_callout_context(operation),
+            error = safe_mutation_error(exc, "save Deice staffing")
+            if tab == "permanent":
+                return jsonify(ok=False, error=error, row=getattr(exc, "row", None)), 409
+            flash(error, "error")
+        return redirect(url_for("neosubzero.callouts", tab=tab))
+
+    search = str(request.args.get("search") or "").strip()
+    context = neosubzero_callout_context(operation) if tab != "eligibility" else {"operation": operation}
+    originals = staffing.deice_attendance_originals(operation, context.get("permanent", ()))
+    refresh = _deice_staffing_refresh(gateway, operation) if tab != "eligibility" else {}
+    values = dict(
+        gateway=gateway, tab=tab, access=access, eligibility=eligibility, search=search,
+        can_edit=(eligibility if tab == "eligibility" else access)["can_edit"],
+        rows=neosubzero_qualification_people(search) if tab == "eligibility" else (),
+        originals=originals, attendance_areas=attendance_areas,
+        status_choices=staffing.attendance_status_choices(), refresh=refresh, **context,
     )
+    if live:
+        revision = None
+        panel = None
+        if tab == "callouts":
+            from hashlib import sha256
+            from json import dumps
+
+            roster = [
+                (row["person"].id, row["person"].full_name, row["person"].employee_id,
+                 row["attendance_status"], row["attendance_source"], row["work_area_path"], row["version"])
+                for row in (*context["callouts"], *context["candidates"])
+            ]
+            revision = sha256(dumps([len(context["callouts"]), access["can_edit"], roster]).encode()).hexdigest()
+            if revision != request.args.get("revision"):
+                panel = render_template("neonodes/neosubzero/_deicer_management_panel.html", **values)
+        return jsonify(
+            operation_id=operation.id if operation else None, refresh=refresh, revision=revision,
+            rows=list(originals.values()), html=panel,
+        ), {"Cache-Control": "no-store"}
+    return render_template("neonodes/neosubzero/callouts.html", **values)
 
 
 @bp.route("/qualifications", methods=["GET", "POST"])
 @gateway_node_required("subzero")
 def qualifications():
-    access = permission_access(
-        "neosubzero.qualifications.view",
-        "neosubzero.qualifications.edit",
-    )
+    access = permission_access("neosubzero.qualifications.view", "neosubzero.qualifications.edit")
     if not access["can_view"]:
-        flash("Access denied.", "error")
-        return redirect(url_for("neosubzero.index"))
-    gateway = get_current_gateway()
-    search = str(request.values.get("search") or "").strip()
-    session[LAST_PAGE_KEY] = "neosubzero.qualifications"
+        return "Access denied.", 403
     if request.method == "POST":
-        if not access["can_edit"]:
-            return "Access denied.", 403
-        try:
-            person = StaffingPerson.query.filter_by(
-                id=request.form.get("person_id", type=int),
-                active=True,
-            ).with_for_update().one_or_none()
-            qualification = StaffingPersonQualification.query.filter_by(
-                person_id=getattr(person, "id", None),
-                qualification_key=DEICE_QUALIFICATION_KEY,
-            ).with_for_update().one_or_none()
-            expected_version = str(
-                request.form.get("expected_version") or ""
-            ).strip()
-            if qualification and (
-                not expected_version
-                or version_conflict(qualification, expected_version)
-            ):
-                raise NeoSubZeroStaffingError(
-                    "Qualification changed while you were editing. Review current values."
-                )
-            action = request.form.get("action")
-            if action not in {"qualify", "unqualify"}:
-                raise NeoSubZeroStaffingError("Choose a valid qualification action.")
-            qualified = action == "qualify"
-            set_staffing_person_qualification(
-                person,
-                DEICE_QUALIFICATION_KEY,
-                qualified,
-                user_id=current_user.id,
-                qualification=qualification,
-            )
-            db.session.commit()
-            flash(
-                "DEICE QUALIFICATION GRANTED."
-                if qualified
-                else "DEICE QUALIFICATION REMOVED.",
-                "success",
-            )
-        except (NeoSubZeroStaffingError, IntegrityError) as exc:
-            db.session.rollback()
-            flash(
-                str(exc)
-                if isinstance(exc, NeoSubZeroStaffingError)
-                else "Unable to save Deice qualification.",
-                "error",
-            )
-        return redirect(url_for("neosubzero.qualifications", search=search))
-    return render_template(
-        "neonodes/neosubzero/qualifications.html",
-        gateway=gateway,
-        can_edit=access["can_edit"],
-        search=search,
-        rows=neosubzero_qualification_people(search),
-    )
+        return _save_deice_qualification(access)
+    return redirect(url_for("neosubzero.callouts", tab="eligibility", search=request.args.get("search", "")))
+
+
+def _save_deice_qualification(access):
+    from app.services.neosubzero_staffing import save_employee_deice_training
+    from app.services.operator_errors import safe_mutation_error
+
+    if not access["can_edit"]:
+        return "Access denied.", 403
+    search = str(request.form.get("search") or "").strip()
+    try:
+        person = db.session.get(StaffingPerson, request.form.get("person_id", type=int)) if request.form.get("person_id", type=int) else None
+        action = request.form.get("action")
+        if action not in {"qualify", "unqualify"}:
+            raise NeoSubZeroStaffingError("Choose a valid qualification action.")
+        qualified = action == "qualify"
+        save_employee_deice_training(
+            person, "yes" if qualified else "no", actor_id=current_user.id,
+            expected_version=request.form.get("expected_version") or "",
+        )
+        db.session.commit()
+        flash("DEICE QUALIFICATION GRANTED." if qualified else "DEICE QUALIFICATION REMOVED.", "success")
+    except (ValueError, IntegrityError) as exc:
+        db.session.rollback()
+        flash(safe_mutation_error(exc, "save Deice qualification"), "error")
+    return redirect(url_for("neosubzero.callouts", tab="eligibility", search=search))
 
 
 @bp.route("/departure-deice/mutate", methods=["POST"])

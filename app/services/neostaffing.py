@@ -306,6 +306,8 @@ def repair_shift_door_finals():
 
 def save_employee_editor(person, values):
     """One locked transaction for the profile and its optional canonical flow."""
+    if "deice_trained" in values:
+        raise ValueError("DEICE TRAINED is managed in NeoSubZero Deicer Management.")
     person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
     if values.get("expected_person_version") != entity_version(person):
         raise ValueError("Employee changed while you were editing. Close and reopen the editor.")
@@ -313,11 +315,6 @@ def save_employee_editor(person, values):
     if home and person.active:
         save_shift_flow_plan(person, values, home.work_area)
     update_person(person, values)
-    if 'deice_trained' in values:
-        from flask_login import current_user
-        from app.services.neosubzero_staffing import save_employee_deice_training
-        save_employee_deice_training(person, values.get('deice_trained'), actor_id=current_user.id,
-                                     expected_version=values.get('expected_deice_version', ''))
     db.session.flush()
     return person
 
@@ -1902,6 +1899,23 @@ def operational_attendance_saved_rows(values):
     } for person_id in person_ids}
 
 
+def deice_attendance_originals(operation, roster):
+    """Use the same signed status/note snapshots as central Attendance."""
+    if operation is None or not roster:
+        return {}
+    people = {row["person"].id: row["attendance"] for row in roster}
+    notes = {
+        note.person_id: note for note in StaffingUnmarkedAttendanceNote.query.filter(
+            StaffingUnmarkedAttendanceNote.sort_date_operation_id == operation.id,
+            StaffingUnmarkedAttendanceNote.person_id.in_(people),
+        )
+    }
+    return {
+        person_id: _attendance_row_payload(person_id, operation, record, notes.get(person_id))
+        for person_id, record in people.items()
+    }
+
+
 def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids, *, form_submission=False, home_only=False, node_workspace=None, node_area=None):
     """Mutate only people whose effective attendance snapshot is in allowed areas."""
     submitted, gateway = _submitted_attendance_operation(values.get("sort_date_operation_id"), include_gateway=True)
@@ -2026,16 +2040,6 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
             db.session.delete(existing.unmarked_notes[person_id])
         record.updated_by_user_id = user_id
         saved += 1
-    if saved_statuses:
-        from app.services.neosubzero_staffing import (
-            deactivate_neosubzero_callouts_for_attendance,
-        )
-
-        deactivate_neosubzero_callouts_for_attendance(
-            operation,
-            {person_id: status for person_id, status in saved_statuses.items() if status},
-            user_id=user_id,
-        )
     _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person,
                                    hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {})
     db.session.flush()
@@ -5009,30 +5013,41 @@ def _sync_attendance_accountability(operation, statuses, user_id, assignments, *
                                if status in ("call_in", "no_call")})
 
 
-def save_attendance(values, user, *, form_submission=False, return_rows=False):
+def save_attendance(values, user, *, form_submission=False, return_rows=False, deice_operation=None):
     """Apply explicit commands; browser forms must supply signed original rows.
 
     Internal service callers already supply deliberate mutations, not a displayed
     roster. Both public attendance POST routes require the form safety contract.
     """
     operation, gateway = _submitted_attendance_operation(values.get("sort_date_operation_id"), include_gateway=True)
-    current_operation = (current_night_attendance_operation(gateway)
-        if operation and _normalize_staffing_sort_name(operation.sort_name) == ATTENDANCE_OPERATION_SORT_NAME
-        else current_attendance_operation(gateway, operation.sort_name) if operation else None)
+    if deice_operation is not None:
+        from app.services.neosubzero_staffing import permanent_deice_work_area_ids
+        from app.services.permission_rules import user_can
+
+        if not user_can("neosubzero.callouts.edit", user):
+            raise ValueError("Deice management permission is required.")
+        current_operation = deice_operation
+    else:
+        current_operation = (current_night_attendance_operation(gateway)
+            if operation and _normalize_staffing_sort_name(operation.sort_name) == ATTENDANCE_OPERATION_SORT_NAME
+            else current_attendance_operation(gateway, operation.sort_name) if operation else None)
     if not current_operation or not operation or operation.id != current_operation.id:
         raise ValueError("The selected Night Sort is no longer current. Reload Attendance.")
 
     hierarchy = _daily_attendance_hierarchy()
     staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
-    selected_scope, selected_work_area_ids = _daily_attendance_selection(
-        values,
-        hierarchy,
-        staffing_sort,
-        strict=True,
-    )
+    if deice_operation is not None:
+        selected_scope = None
+        selected_work_area_ids = permanent_deice_work_area_ids(hierarchy["by_id"])
+        if not selected_work_area_ids:
+            raise ValueError("The permanent Deice work area is unavailable.")
+    else:
+        selected_scope, selected_work_area_ids = _daily_attendance_selection(
+            values, hierarchy, staffing_sort, strict=True,
+        )
     submitted_person_ids = _submitted_attendance_person_ids(values)
     bulk_status = str(values.get("bulk_status") or "").strip()
-    if bulk_status and bulk_status != "here":
+    if bulk_status and (bulk_status != "here" or deice_operation is not None):
         raise ValueError("The attendance bulk action is invalid.")
     assignments = _daily_attendance_assignments(
         selected_scope,
@@ -5164,16 +5179,6 @@ def save_attendance(values, user, *, form_submission=False, return_rows=False):
             existing.unmarked_notes.pop(person_id)
         record.updated_by_user_id = user_id
         saved += 1
-    if saved_statuses:
-        from app.services.neosubzero_staffing import (
-            deactivate_neosubzero_callouts_for_attendance,
-        )
-
-        deactivate_neosubzero_callouts_for_attendance(
-            operation,
-            {person_id: status for person_id, status in saved_statuses.items() if status},
-            user_id=user_id,
-        )
     _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person,
                                    hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {})
     db.session.flush()

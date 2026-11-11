@@ -44,7 +44,6 @@ WORKSPACE_SALT = "neostaffing-bulk-change-v1"
 LIVE_DATA_CHANGED_MESSAGE = "Live Data Changed - Review Required"
 
 PERSON_FIELDS = (
-    "deice_trained",
     "employee_id",
     "first_name",
     "last_name",
@@ -196,6 +195,8 @@ def decode_workspace(token, user):
 def stage_workspace_change(workspace, action, values, user, *, bundle=None):
     bundle = bundle or BulkChangeDataBundle()
     _require_bulk_access(user)
+    if "deice_trained" in values or "change_deice_trained" in values:
+        raise ValueError("DEICE TRAINED is managed in NeoSubZero Deicer Management.")
     if action == "review_latest":
         workspace["base_revision"] = bundle.revision
         return workspace
@@ -355,6 +356,8 @@ def _lock_workspace_dependencies(workspace, simulation, bundle, user):
 
 def apply_workspace(workspace, user):
     _require_bulk_access(user)
+    if any("deice_trained" in person.get("changes", {}) for person in workspace["people"].values()):
+        raise ValueError("Remove the legacy DEICE TRAINED change. Use NeoSubZero Deicer Management.")
     bundle = BulkChangeDataBundle(fresh=True)
     _require_current_revision(workspace, bundle)
     actor = _actor_context(user, bundle)
@@ -582,10 +585,6 @@ def apply_workspace(workspace, user):
         person = ref_to_person[ref]
         if person.id not in non_management_ids or person.id in retained_management_ids:
             reconcile_management_person_state(person, today=today)
-    from app.services.neosubzero_staffing import save_employee_deice_training
-    for ref, staged in workspace['people'].items():
-        if 'deice_trained' in staged.get('changes', {}):
-            save_employee_deice_training(ref_to_person[ref], 'yes' if simulation['states'][ref]['deice_trained'] else 'no', actor_id=user.id)
     return {
         "people": changed_people,
         "unit_changes": len(workspace["units"]),
@@ -1561,10 +1560,6 @@ def _normalize_new_person(values, bundle):
 
 
 def _normalize_person_field(field, value, bundle):
-    if field == 'deice_trained':
-        if value not in {'yes', 'no'}:
-            raise ValueError('Choose YES or NO for DEICE TRAINED.')
-        return value == 'yes'
     if field == "employee_id":
         return staffing_service.validate_employee_id(value)
     if field in {"first_name", "last_name"}:

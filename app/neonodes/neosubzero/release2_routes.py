@@ -131,7 +131,7 @@ def participation_mutate():
 @gateway_node_required('subzero')
 def team_mutate():
     if not can_manage_operations() or request.form.get('board')=='deicer': return 'Access denied.',403
-    from app.services.neosubzero_ucc import (ucc_staffing_version,move_neosubzero_ucc_assignment,validate_ucc_truck_unique)
+    from app.services.neosubzero_ucc import (EARLY_OUT,ucc_staffing_version,move_neosubzero_ucc_assignment,validate_ucc_truck_unique)
     from app.services.neosubzero_spray import set_neosubzero_ucc_truck
     try:
         operation=locked_operation(legacy.get_current_gateway())
@@ -140,6 +140,8 @@ def team_mutate():
         if request.form.get('staffing_version')!=ucc_staffing_version(operation):
             raise NeoSubZeroEvidenceError('DUCC staffing changed. Your draft is kept; reload the current team before saving.')
         ramp=str(request.form.get('ramp') or '').strip().title();slot=request.form.get('position_number',type=int)
+        if ramp == EARLY_OUT:
+            raise NeoSubZeroEvidenceError('Early Out is managed in DUCC.')
         truck=NeoSubZeroUccTruckAssignment.query.filter_by(sort_date_operation_id=operation.id,ramp=ramp,position_number=slot).with_for_update().one_or_none()
         if truck is None or not truck.truck_number: raise NeoSubZeroEvidenceError('Choose an existing DUCC truck/team position.')
         all_people=NeoSubZeroUccAssignment.query.filter_by(sort_date_operation_id=operation.id).with_for_update().all()

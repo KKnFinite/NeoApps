@@ -47,6 +47,8 @@ def resolve_database_uri():
 
 
 class Config:
+    NEOSUBZERO_RAMP_ATTENDANCE_ENABLED = env_flag("NEOSUBZERO_RAMP_ATTENDANCE_ENABLED", False)
+    NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED = env_flag("NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED", False)
     # Bounded current evidence only; historical analysis/training stays LOCAL.
     FROST_AUTO_COLLECTION = env_flag('FROST_AUTO_COLLECTION', True)
     FROST_AUTO_HRRR = env_flag('FROST_AUTO_HRRR', True)

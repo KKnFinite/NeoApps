@@ -267,6 +267,30 @@ def create_manual_current_sort_operation(
     return {"operation": operation, "created": True, "status": status}
 
 
+def night_staffing_operation(gateway, *, initialize=False):
+    """Resolve the configured Night sort without activating its live operations."""
+    from app.models import StaffingAttendanceSummary
+
+    status = manual_current_sort_creation_status(gateway)
+    operation = status["existing_operation"]
+    if operation is None and initialize and status["scheduled"]:
+        try:
+            operation = generate_sort_date_operation_from_master(
+                sort_date=status["sort_date"], gateway_code=gateway.code,
+                sort_name=status["sort_name"],
+            )
+        except (IntegrityError, ValueError):
+            db.session.rollback()
+            operation = _operation_for_key(gateway, status["sort_date"], status["sort_name"])
+            if operation is None:
+                raise
+    if operation and (operation.archived_at_utc or StaffingAttendanceSummary.query.filter_by(
+        sort_date_operation_id=operation.id,
+    ).first()):
+        return None
+    return operation
+
+
 def _eligible_operation_windows(
     gateway,
     local_now,

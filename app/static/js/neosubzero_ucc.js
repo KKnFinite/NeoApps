@@ -187,10 +187,16 @@
     function updateSelectedText(form, select) {
         const selected = select.selectedOptions[0];
         const text = form.querySelector('[data-ucc-selected-text]');
-        if (text) text.textContent = selected?.textContent || '';
+        const unavailable = select.name === "person_id" && selected?.disabled;
+        if (text) {
+            text.textContent = selected?.textContent || '';
+            text.classList.toggle("ucc-person-unavailable", Boolean(unavailable));
+        }
         const choice = form.querySelector("[data-ucc-staffing-choice]");
         if (choice) {
-            choice.querySelector("[data-ucc-short-value]").textContent = selected?.dataset.uccShort || staffingSurnames[select.value] || "—";
+            const label = choice.querySelector("[data-ucc-short-value]");
+            label.textContent = selected?.dataset.uccShort || staffingSurnames[select.value] || "—";
+            label.classList.toggle("ucc-person-unavailable", Boolean(unavailable));
             choice.title = selected?.textContent.trim() || "";
             choice.setAttribute("aria-label", `${select.getAttribute("aria-label")}: ${choice.title}`);
         }
@@ -224,7 +230,8 @@
             const select = trigger.form.querySelector("select");
             staffingPicker.setAttribute("aria-label", select.getAttribute("aria-label"));
             // Use exactly the choices (including unavailable/retained values) in the canonical form.
-            staffingPicker.replaceChildren(...Array.from(select.options, option => {
+            const options = Array.from(select.options).filter(option => !option.hidden);
+            staffingPicker.replaceChildren(...options.map(option => {
                 const button = document.createElement("button");
                 button.type = "button";
                 button.textContent = option.textContent;
@@ -292,11 +299,13 @@
     }
 
     const sourceFormFor = (personId, destinationForm) => {
-        const visible = forms.find((form) => form !== destinationForm && form.dataset.currentPersonId === personId);
+        const scope = destinationForm.dataset.assignmentScope || "regular";
+        const visible = forms.find((form) => form !== destinationForm && form.dataset.currentPersonId === personId
+            && (form.dataset.assignmentScope || "regular") === scope);
         if (visible) return visible;
         // An empty Remote ramp is not drawn, but its canonical staffing may
         // still exist. Never mistake an undisplayed assignment for a free person.
-        const index = JSON.parse(root.querySelector('[data-ucc-assignment-index]')?.textContent || '{}');
+        const index = JSON.parse(root.querySelector('[data-ucc-assignment-index]')?.textContent || '{}')[scope] || {};
         return index[personId] ? {dataset:index[personId]} : null;
     };
 
@@ -473,6 +482,15 @@
         root.querySelectorAll("[data-ucc-aircraft]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.uccAircraft === selectedMission)));
     };
     root.addEventListener("click", (event) => {
+        const move = event.target.closest("[data-ucc-enable-moves]");
+        if (move) {
+            const enabled = move.getAttribute("aria-pressed") !== "true";
+            move.setAttribute("aria-pressed", String(enabled));
+            move.closest(".ucc-team").querySelectorAll("option[data-ucc-assigned-elsewhere]").forEach(option => {
+                option.hidden = !enabled;
+            });
+            return;
+        }
         const view = event.target.closest("[data-ucc-view]");
         const ramp = event.target.closest("[data-ucc-ramp-select]");
         if (view || ramp) {
@@ -502,12 +520,10 @@
         currentLink.hidden = !error;
     };
     const editing = () => root.dataset.dirty === "true" || root.dataset.saving === "true" || Boolean(root.querySelector("input:focus, select:focus, textarea:focus")) || dialog?.open || pickerOpen();
-    let loading = false;
+    let loading = null;
     let mutationEpoch = 0;
     let deferredRevision = null;
-    const refreshBoard = async () => {
-        if (loading || root.dataset.saving === "true") return false;
-        loading = true;
+    const fetchBoard = async () => {
         const requestEpoch = mutationEpoch;
         try {
             const url = new URL(window.location.href);
@@ -587,7 +603,13 @@
             if (!deferred) root.dataset.revision = next.dataset.revision;
             window.scrollTo({top: scroll, behavior: "instant"});
             return !deferred;
-        } finally { loading = false; }
+        } finally { loading = null; }
+    };
+    const refreshBoard = (afterSave = false) => {
+        if (loading) return afterSave ? loading.catch(() => {}).then(() => refreshBoard()) : Promise.resolve(false);
+        if (root.dataset.saving === "true") return Promise.resolve(false);
+        loading = fetchBoard();
+        return loading;
     };
     root.addEventListener("submit", async (event) => {
         const form = event.target;
@@ -631,7 +653,7 @@
             if (!reconcileFirst) restoreControls();
             if (accepted) {
                 if (form.contains(document.activeElement)) document.activeElement.blur();
-                try { await refreshBoard(); } catch (error) { notify("Saved, but " + error.message, true); }
+                try { await refreshBoard(true); } catch (error) { notify("Saved, but " + error.message, true); }
             }
             if (reconcileFirst) restoreControls();
         }
