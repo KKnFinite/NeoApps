@@ -9,7 +9,8 @@ from unittest.mock import patch
 from playwright.sync_api import expect
 
 from app.extensions import db
-from app.models import Gateway, SortDateOperation, SortDateParkingAssignment, StaffingPerson
+from app.models import (Gateway, NeoSubZeroDepartureDeiceEvent, NeoSubZeroSprayRecord,
+                        SortDateOperation, SortDateParkingAssignment, StaffingPerson)
 from app.services.neosubzero_staffing import set_staffing_person_qualification, DEICE_QUALIFICATION_KEY
 from app.services.neosubzero_ucc import set_neosubzero_ucc_assignment
 from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest
@@ -79,6 +80,91 @@ class UccBrowserTest(unittest.TestCase):
             item.stop()
         MobileDrawerBrowserTest.tearDownClass.__func__(cls)
 
+    def test_physical_parking_rows_and_recorded_start_in_all_views(self):
+        order = ((4, 8), (3, 7), (2, 6), (1, 5))
+        ramp_names = ("Alpha", "Bravo", "Charlie", "Delta", "Echo")
+        mission_id = self.missions[0]
+        browser = self.pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1366, "height": 900}, service_workers="block")
+            self.login(page)
+            self.ready(page, "/neosubzero/ucc")
+            alpha = page.locator('[data-ucc-ramp="Alpha"]')
+            aircraft = f'[data-ucc-aircraft="{mission_id}"]'
+            expect(alpha.locator('[data-ucc-queue-position="1"] ' + aircraft)).to_be_visible()
+            expect(alpha.locator("[data-ucc-deice-pad] .ucc-plane")).to_have_count(0)
+            for width in (1366, 1920):
+                page.set_viewport_size({"width": width, "height": 1080})
+                for name in ramp_names:
+                    ramp = page.locator(f'[data-ucc-ramp="{name}"]')
+                    tops = []
+                    for row, (left, right) in enumerate(order, 1):
+                        left_box, right_box, queue_box = [
+                            ramp.locator(selector).bounding_box() for selector in (
+                                f'[data-ucc-parking="{name[0]}{left:02d}"]',
+                                f'[data-ucc-parking="{name[0]}{right:02d}"]',
+                                f'.ucc-grid-row-{row}.ucc-grid-column-2',
+                            )
+                        ]
+                        self.assertAlmostEqual(left_box["y"], right_box["y"], delta=1)
+                        self.assertAlmostEqual(left_box["y"], queue_box["y"], delta=1)
+                        tops.append(left_box["y"])
+                    gaps = [b - a for a, b in zip(tops, tops[1:])]
+                    limit = 120 if width == 1366 else 110
+                    self.assertTrue(all(0 < gap < limit for gap in gaps), gaps)
+                    self.assertLessEqual(max(gaps) - min(gaps), 1)
+                self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth-innerWidth"), 1)
+
+            with self.app.app_context():
+                event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mission_id).one()
+                record = NeoSubZeroSprayRecord(
+                    sort_date_operation_id=self.operation_id, sort_date_mission_id=mission_id,
+                    departure_deice_event_id=event.id, tail_number_snapshot=event.tail_number,
+                    pass_number=1, position_number=1, truck_number_snapshot="UCC-831",
+                    pass_type="type_i", fluid_name_snapshot="Type I", concentration_percent_snapshot=50,
+                    started_at_utc=datetime(2026, 10, 23, 5, 10),
+                )
+                db.session.add(record)
+                db.session.commit()
+                record_id = record.id
+
+            def remove_record():
+                with self.app.app_context():
+                    db.session.delete(db.session.get(NeoSubZeroSprayRecord, record_id))
+                    db.session.commit()
+
+            self.addCleanup(remove_record)
+            expect(alpha.locator("[data-ucc-deice-pad] " + aircraft)).to_have_class(
+                "ucc-plane state-deicing", timeout=10000)
+            expect(alpha.locator("[data-ucc-queue-position] " + aircraft)).to_have_count(0)
+            page.evaluate("document.documentElement.requestFullscreen = undefined")
+            page.locator("[data-ucc-tv-enter]").click()
+            tv = page.locator(".ucc-tv-wallboard")
+            expect(tv.locator(".ucc-tv-pad .state-deicing")).to_have_count(1)
+            expect(tv.locator(".ucc-tv-stands .state-deicing")).to_have_count(0)
+            for name, ramp in zip(ramp_names, tv.locator(".ucc-tv-ramp").all()):
+                labels = ramp.locator(".ucc-tv-stands .ucc-tv-position").all_text_contents()
+                parking_labels = [label for label in labels if label.startswith(name[0])]
+                self.assertEqual(parking_labels, [f"{name[0]}{stand:02d}" for row in order for stand in row])
+                self.assertFalse(any("MIDDLE" in label for label in labels))
+            expect(tv.locator(".ucc-tv-stands .ucc-tv-plane[aria-label*='B08'] .facing-left")).to_be_visible()
+            page.screenshot(path=str(self.evidence / "ucc-physical-tv-1080p.png"))
+            tv.get_by_role("button", name="Exit TV Mode").click()
+
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.locator('[data-ucc-view="ramp"]').click()
+            expect(alpha.locator("[data-ucc-deice-pad] " + aircraft)).to_be_visible()
+            expect(alpha.locator("[data-ucc-queue-position] " + aircraft)).to_have_count(0)
+            previous = float("-inf")
+            for left, right in order:
+                left_box = alpha.locator(f'[data-ucc-parking="A{left:02d}"]').bounding_box()
+                right_box = alpha.locator(f'[data-ucc-parking="A{right:02d}"]').bounding_box()
+                self.assertAlmostEqual(left_box["y"], right_box["y"], delta=1)
+                self.assertGreater(left_box["y"], previous)
+                previous = left_box["y"]
+        finally:
+            browser.close()
+
     def test_ucc_physical_board_mobile_staffing_live_and_tv(self):
         measurements = []
         for engine in ("chromium", "webkit"):
@@ -102,7 +188,7 @@ class UccBrowserTest(unittest.TestCase):
                     bounds={code:page.locator(f'[data-ucc-parking="{code}"]').bounding_box() for code in ('A01','A04','A05','A09','A10')}
                     self.assertLess(bounds['A01']['x'],bounds['A10']['x'])
                     self.assertLess(bounds['A10']['x'],bounds['A05']['x'])
-                    self.assertLess(bounds['A01']['y'],bounds['A04']['y'])
+                    self.assertLess(bounds['A04']['y'],bounds['A01']['y'])
                     self.assertLess(bounds['A10']['y'],bounds['A09']['y'])
                     self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]').count(),1)
                     self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position]').count(),4)

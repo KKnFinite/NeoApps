@@ -857,8 +857,9 @@ class NeoSubZeroUccTest(unittest.TestCase):
             self.assertEqual(len(places),10)
             self.assertEqual((places['10']['grid_row'],places['10']['grid_column']),(1,2))
             self.assertEqual((places['09']['grid_row'],places['09']['grid_column']),(4,2))
-            self.assertEqual((places['01']['grid_row'],places['05']['grid_row']),(1,1))
-            self.assertEqual((places['04']['grid_row'],places['08']['grid_row']),(4,4))
+            for row, (left, right) in enumerate(((4, 8), (3, 7), (2, 6), (1, 5)), 1):
+                self.assertEqual((places[f'{left:02}']['grid_row'], places[f'{left:02}']['grid_column']), (row, 1))
+                self.assertEqual((places[f'{right:02}']['grid_row'], places[f'{right:02}']['grid_column']), (row, 3))
         parking=SortDateParkingAssignment.query.filter_by(tail_number='N200').one()
         parking.position_code='A10';settings.include_throat_default=False;db.session.commit()
         ramp=self._ramp_context('Alpha')

@@ -330,7 +330,14 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
             position:static; grid-area:1 / 2 / 3 / 3; align-self:stretch;
             width:auto; height:auto; min-height:0; border:0; padding:0;
         }
-        & .ucc-parking-grid { grid-area:3 / 1 / 4 / -1; border-top:1px solid #294352; padding-top:4px; }
+        & .ucc-parking-grid {
+            grid-area:3 / 1 / 4 / -1; border-top:1px solid #294352; padding-top:4px;
+            grid-template-rows:repeat(4,var(--ucc-parking-row-height,auto));
+            align-items:start; align-content:start;
+        }
+        & .ucc-parking-grid :is(.ucc-parking-place,.ucc-deice-waiting) { min-height:0; padding-block:2px; gap:2px; }
+        & .ucc-parking-grid .ucc-plane { padding-block:2px; gap:1px; }
+        & .ucc-parking-grid .ucc-plane .ucc-plane-icon { font-size:1.75rem; }
         & .ucc-team { min-width:0; align-self:start; }
         & .ucc-team-controls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px; align-items:center; }
         & .ucc-team-controls > form { grid-column:1 / -1; }

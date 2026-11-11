@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
@@ -115,7 +115,8 @@ def neosubzero_ucc_context(gateway, operation):
         aircraft.sort(key=_aircraft_sort_key)
         queue = _physical_queue(aircraft) if ramp in UCC_RAMP_ORDER else []
         active = [row for row in queue if _is_active_throat(row)]
-        pad = active[0] if active else None
+        pad_reviews = [row for row in aircraft if row.get("pad_evidence_review")]
+        pad = active[0] if len(active) == 1 and not pad_reviews else None
         waiting = [row for row in queue if not _is_active_throat(row)]
         waiting_rows = waiting[:UCC_WAITING_CAPACITY]
         throat = waiting_rows[0] if waiting_rows else None
@@ -124,7 +125,7 @@ def neosubzero_ucc_context(gateway, operation):
             row['queue_label'] = UCC_WAITING_LABELS[queue_position - 1]
         waiting_queue = tuple(waiting_rows)
         parked = [row for row in aircraft if row.get("block_out_at_utc") is None
-                  and not row.get('retained_radio_throat') and row not in queue]
+                  and not row.get('retained_radio_throat') and row not in queue and row not in pad_reviews]
         prefix = 'ABCDE'[UCC_RAMP_ORDER.index(ramp)] if ramp in UCC_RAMP_ORDER else ''
         occupied = ({prefix+'10'} if throat else set()) | ({prefix+'09'} if len(waiting_queue) == UCC_WAITING_CAPACITY else set())
         parking = _parking_projection(ramp, [row for row in parked if row['parking'] not in occupied], parking_9_10_enabled)
@@ -164,7 +165,7 @@ def neosubzero_ucc_context(gateway, operation):
                 "location_exceptions": tuple(row for row in aircraft if row.get("block_out_at_utc") and ramp not in UCC_RAMP_ORDER),
                 "parking_positions": parking,
                 "parking_exceptions": tuple(row for row in parked if row["parking"] not in visible_codes or row['parking'] in occupied),
-                "active_conflicts": tuple(active[1:]),
+                "active_conflicts": tuple((active if pad is None else []) + pad_reviews),
                 "slots": tuple(slots),
             }
         )
@@ -196,9 +197,9 @@ def _parking_projection(ramp, parked, parking_9_10_enabled):
         grid_row, grid_column = None, None
         if ramp in UCC_RAMP_ORDER:
             if 1 <= number <= 4:
-                grid_row, grid_column = number, 1
+                grid_row, grid_column = 5 - number, 1
             elif 5 <= number <= 8:
-                grid_row, grid_column = number - 4, 3
+                grid_row, grid_column = 9 - number, 3
             else:
                 grid_row, grid_column = (1 if number == 10 else 4), 2
         parking.append({
@@ -244,7 +245,8 @@ def _physical_aircraft_rows(operation, departure_context):
     # A tail reassignment cannot release an unconfirmed physical aircraft. Keep
     # its existing event at its canonical stand/throat with an identity warning;
     # do not transfer its spray evidence or radio authority to the new tail.
-    detached=departure_context.get('detached_radio',())
+    detached_radio = departure_context.get("detached_radio", ())
+    detached = (*detached_radio, *departure_context.get("detached_spraying", ()))
     sources={mission.id:mission for mission in SortDateMission.query.filter(
         SortDateMission.sort_date_operation_id==operation.id,
         SortDateMission.id.in_([event.sort_date_mission_id for event in detached])).all()} if detached else {}
@@ -253,8 +255,13 @@ def _physical_aircraft_rows(operation, departure_context):
         if mission is None: continue
         tail=str(event.tail_number).strip().upper()
         row=_departure_row(mission,operation,parking.get(tail),states.get(tail),pretreat.get(tail),event,departure_context['fluid_settings'],datetime.utcnow())
-        row.update(tail=tail,flight=event.flight_number_snapshot or '',identity_key=f'radio-{event.id}',script=None,
-            identity_note='RADIO PENDING · Mission/tail identity changed. Confirm the physical aircraft and resolve canonical identity before radio confirmation.')
+        row.update(tail=tail, flight=event.flight_number_snapshot or '', script=None)
+        if event in detached_radio:
+            row.update(identity_key=f'radio-{event.id}',
+                       identity_note='RADIO PENDING · Mission/tail identity changed. Confirm the physical aircraft and resolve canonical identity before radio confirmation.')
+        else:
+            row.update(identity_key=f'deice-{event.id}', block_out_at_utc=None,
+                       identity_note='ACTIVE DEICE · Mission/tail identity changed. Confirm the physical aircraft and resolve canonical identity.')
         recorded_ramps={evidence.get('ramp') for evidence in (event.pass_evidence or {}).values()
                         if evidence.get('parking')=='DEICE PAD' and evidence.get('ramp') in UCC_RAMP_ORDER}
         if len(recorded_ramps)==1:
@@ -288,18 +295,31 @@ def _physical_aircraft_rows(operation, departure_context):
             "pretreat_status": "PRETREATED" if state and state.pretreat_status else "PRETREAT PLANNED" if treatment and treatment.pretreat_planned else "—",
             "deice_status": str(getattr(state, "deice_status", "unknown")).upper(), "event": None,
         })
+    spray_starts = departure_context.get("spray_starts", {})
+    for row in rows:
+        _project_spray_start(row, spray_starts)
+
+    def identity_order(row):
+        # A different mission may reference this same tail. Keep the active
+        # event on its own mission when that mission still owns the tail.
+        event = row.get("event")
+        linked_active = _is_active_throat(row) and row["mission_id"] == event.sort_date_mission_id
+        return (not linked_active, not bool(row.get("block_out_at_utc")), _aircraft_sort_key(row))
+
     unique = {}
-    for row in sorted(rows, key=lambda row: (0 if row.get("block_out_at_utc") else 1, _aircraft_sort_key(row))):
+    for row in sorted(rows, key=identity_order):
         tail = row["tail"]
         # Multiple missions can reference one aircraft; it cannot occupy two stands.
         if tail == "-":
             continue
         if tail in unique:
-            unique[tail]["identity_note"] = "Multiple current-sort missions reference this tail; inspect canonical mission details."
+            unique[tail].setdefault("identity_note", "Multiple current-sort missions reference this tail; inspect canonical mission details.")
             continue
         item = dict(row)
         item["identity_key"] = row.get("identity_key") or str(row["mission_id"])
-        if not item.get("block_out_at_utc") and departures.get(tail) and arrivals.get(tail, datetime.min) <= departures[tail]:
+        if (not _is_active_throat(item) and not item.get("pad_evidence_review")
+                and not item.get("block_out_at_utc") and departures.get(tail)
+                and arrivals.get(tail, datetime.min) <= departures[tail]):
             continue  # A later preassignment is not evidence of a physical return.
         assignment = parking.get(tail)
         state = states.get(tail)
@@ -320,13 +340,58 @@ def _physical_aircraft_rows(operation, departure_context):
         if event and str(event.tail_number or "").strip().upper() != tail:
             item["identity_note"] = "Departure deice evidence belongs to a different tail. Coordinator review required."
             item["event"] = None
+            item["pad_evidence_review"] = True
             item["deice_status"] = "TAIL IDENTITY REVIEW"
         if radio_complete(item.get('event')):
             continue  # Confirmed departure must not reappear at its recorded stand.
-        if item.get("block_out_at_utc") and _departure_event_status(item) not in {"deice_planned", "configured", "finished"} and not radio_pending(item.get('event')):
+        if (item.get("block_out_at_utc") and _departure_event_status(item) not in {"deice_planned", "configured", "finished"}
+                and not _is_active_throat(item) and not item.get("pad_evidence_review")):
             continue
         unique[tail] = item
     return list(unique.values())
+
+
+def _project_spray_start(row, spray_starts):
+    event = row.get("event")
+    if event is None:
+        if row.get("ownership_review"):
+            row["identity_note"] = row["ownership_review"]
+        if row.get("event_ownership_conflict"):
+            row["pad_evidence_review"] = True
+        return
+    if radio_complete(event):
+        return
+    tail = row["tail"]
+    mission_ids = {event.sort_date_mission_id, row["mission_id"]}
+    frozen_starts = []
+    conflicting = False
+    for evidence in (event.pass_evidence or {}).values():
+        recorded_tail = str(evidence.get("tail") or "").strip().upper()
+        recorded_operation = evidence.get("operation_id")
+        if evidence.get("start") and (recorded_tail not in ("", tail)
+                                      or recorded_operation not in (None, event.sort_date_operation_id)):
+            conflicting = True
+        if recorded_tail == tail and recorded_operation == event.sort_date_operation_id:
+            mission_ids.add(evidence.get("mission_id"))
+            try:
+                started = datetime.fromisoformat(evidence.get("start") or "")
+            except (TypeError, ValueError):
+                continue
+            if started.tzinfo is not None:
+                started = started.astimezone(timezone.utc).replace(tzinfo=None)
+            frozen_starts.append(started)
+    records = spray_starts.get(event.id, ())
+    matched = [record for record in records if str(record.tail_number_snapshot or "").strip().upper() == tail
+               and record.sort_date_mission_id in mission_ids]
+    conflicting = conflicting or any(record.tail_number_snapshot and record not in matched for record in records)
+    starts = frozen_starts + [record.started_at_utc for record in matched]
+    started = _spray_started_at(row) or min(starts, default=None)
+    if conflicting or (records and not started) or (started and event.status in {"negative", "not_sprayed"}):
+        row.update(pad_evidence_review=True, identity_note="Recorded spray conflicts with the current tail, mission, or treatment state. Coordinator review required.")
+    else:
+        row["spray_started_at_utc"] = started
+        if _holds_for_radio(row) and not radio_pending(event):
+            row["identity_note"] = "Spray and CLEAR are recorded. Radio confirmation is unverified; coordinator review required."
 
 
 def validate_ucc_truck_unique(operation, truck_number, assignment=None):
@@ -349,12 +414,15 @@ def _physical_queue(rows):
         rank = getattr(row["event"], "ucc_queue_order", None)
         return (1, (rank is None, rank or 0, _queue_sort_key(row)))
 
-    return sorted((row for row in rows if _is_active_throat(row) or
-        (row.get("block_out_at_utc") and _departure_event_status(row) in {"deice_planned", "configured", "finished"})), key=order)
+    return sorted((row for row in rows if not row.get("pad_evidence_review") and (_is_active_throat(row) or
+        (row.get("block_out_at_utc") and _departure_event_status(row) in {"deice_planned", "configured", "finished"}))), key=order)
 
 
 def _queue_version(rows):
-    return hashlib.sha256(json.dumps([(row["mission_id"], entity_version(row.get("event")), str(row.get("block_out_at_utc")), row["parking"], row["tail"]) for row in rows], sort_keys=True).encode()).hexdigest()
+    values = [(row["mission_id"], entity_version(row.get("event")), str(row.get("block_out_at_utc")),
+               row["parking"], row["tail"], str(_spray_started_at(row)), bool(row.get("pad_evidence_review")))
+              for row in rows]
+    return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 
 def ucc_staffing_version(operation):
@@ -706,14 +774,14 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
 def _visual_state(row):
     event = row.get("event")
     status = _departure_event_status(row)
-    if radio_pending(event): return 'radio-pending'
+    if _holds_for_radio(row): return 'radio-pending'
     if status == "cleared":
         return "gone"
     if status == "negative" or row.get("collapse_state") == "negative":
         return "negative"
     if status == "finished":
         return "finished"
-    if getattr(event, 'pass1_started_at_utc', None):
+    if _spray_started_at(row):
         return 'deicing'
     if status == "deice_planned":
         return "deice-planned"
@@ -753,13 +821,25 @@ def _departure_event_status(row):
     return status or ("deice_planned" if row.get("canonical_departure_required") else "")
 
 
-def _is_active_throat(row):
+def _spray_started_at(row):
     event = row.get("event")
+    return (row.get("spray_started_at_utc") or getattr(event, "pass1_started_at_utc", None)
+            or getattr(event, "pass2_started_at_utc", None))
+
+
+def _holds_for_radio(row):
+    event = row.get("event")
+    return radio_pending(event) or (_departure_event_status(row) == "cleared"
+                                    and not radio_complete(event)
+                                    and bool(_spray_started_at(row) or getattr(event, "clear_outcome", None) == "sprayed"))
+
+
+def _is_active_throat(row):
     status = _departure_event_status(row)
     # Actual treatment, FIN and pending readback own the pad even when the
     # independent MotherBrain Block-Out milestone has not yet been recorded.
-    return radio_pending(event) or (status in {"deice_planned", "configured", "finished"} and
-        (getattr(event, "pass1_started_at_utc", None) is not None or status == "finished"))
+    return not row.get("pad_evidence_review") and (_holds_for_radio(row) or status == "finished" or
+        (status in {"deice_planned", "configured"} and _spray_started_at(row) is not None))
 
 
 def _is_waiting_for_deice(row):
@@ -773,7 +853,7 @@ def _throat_sort_key(row):
     event = row.get("event")
     status = _departure_event_status(row)
     active_at = (
-        getattr(event, "pass1_started_at_utc", None)
+        _spray_started_at(row)
         or getattr(event, "configured_at_utc", None)
         or row.get("sort_time")
     )

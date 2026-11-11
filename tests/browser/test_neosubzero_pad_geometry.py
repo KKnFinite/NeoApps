@@ -91,12 +91,12 @@ class UccPadGeometryBrowserTest(unittest.TestCase):
                     for prefix,ramp_name in zip('ABCDE',('Alpha','Bravo','Charlie','Delta','Echo')):
                         ramp=page.locator(f'[data-ucc-ramp="{ramp_name}"]')
                         spots={n:ramp.locator(f'[data-ucc-parking="{prefix}{n:02d}"]').bounding_box() for n in range(1,11)}
-                        for middle,left,right in ((10,1,5),(9,4,8)):
+                        for middle,left,right in ((10,4,8),(9,1,5)):
                             self.assertLess(spots[left]['x'],spots[middle]['x']);self.assertLess(spots[middle]['x'],spots[right]['x'])
                             self.assertGreaterEqual(spots[middle]['y'],spots[left]['y']-1)
                             self.assertLessEqual(spots[middle]['y']+spots[middle]['height'],spots[left]['y']+spots[left]['height']+1)
                         expect(ramp.locator('[data-ucc-deice-pad]')).to_be_visible()
-                    for q,left,right in ((1,2,6),(2,4,8)):
+                    for q,left,right in ((1,4,8),(2,3,7)):
                         b=alpha.locator(f'[data-ucc-queue-position="{q}"]').bounding_box()
                         l=alpha.locator(f'[data-ucc-parking="A{left:02d}"]').bounding_box();r=alpha.locator(f'[data-ucc-parking="A{right:02d}"]').bounding_box()
                         self.assertLess(l['x'],b['x']);self.assertLess(b['x'],r['x'])

@@ -58,19 +58,21 @@
     function rampView(name, source) {
         const pad = source?.querySelector("[data-ucc-deice-pad]");
         const padAircraft = pad?.querySelector(".ucc-plane");
+        const padReview = content(pad, "[data-ucc-pad-review]");
         const padView = element("div", "ucc-tv-pad", padAircraft
             ? aircraft(padAircraft, true)
-            : element("div", "ucc-tv-pad-idle", label("DEICE PAD"), element("span", "ucc-tv-plane-icon")));
+            : element("div", "ucc-tv-pad-idle", label(padReview || "DEICE PAD"),
+                padReview ? null : element("span", "ucc-tv-plane-icon")));
         const stands = element("div", "ucc-tv-stands");
         for (let row = 1; row <= 4; row++) {
             const queue = source?.querySelector(`[data-ucc-queue-position="${row}"]`);
             const queueLabel = (row === 1 || row === 4) && queue?.querySelector(".ucc-plane")
                 ? content(queue, ":scope > b") : "";
-            const parking = (position) => {
-                const code = `${name[0]}0${position}`;
-                return aircraftAt(source?.querySelector(`[data-ucc-parking="${code}"]`), code);
+            const parking = (column) => {
+                const stand = source?.querySelector(`.ucc-grid-row-${row}.ucc-grid-column-${column}[data-ucc-parking]`);
+                return aircraftAt(stand, stand?.dataset.uccParking);
             };
-            stands.append(parking(row), aircraftAt(queue, queueLabel, true), parking(row + 4));
+            stands.append(parking(1), aircraftAt(queue, queueLabel, true), parking(3));
         }
         return element("section", "ucc-tv-ramp", heading(name),
             element("div", "ucc-tv-staging",
@@ -169,7 +171,7 @@
         root.style.setProperty("--ucc-staffing-row-height", `${Math.max(72, ...summaries.map(el => el.scrollHeight))}px`);
         const groups = [...root.querySelectorAll(`${main} .ucc-staffing-grid`)];
         root.style.setProperty("--ucc-staffing-height", `${Math.max(0, ...groups.map(el => el.scrollHeight))}px`);
-        const minimumStand = 108;
+        const minimumStand = document.body.classList.contains("operational-board-view") ? 108 : 36;
         // scrollHeight rounds to whole CSS pixels; reserve the fractional line
         // box/border remainder so every ramp uses the exact same safe row size.
         root.style.setProperty("--ucc-parking-row-height", `${Math.ceil(Math.max(minimumStand, ...stands.map(el => el.scrollHeight))) + 2}px`);

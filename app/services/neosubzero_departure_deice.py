@@ -178,15 +178,33 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
         )
         for mission in missions
     ]
-    sprayed_tails={_tail(tail) for (tail,) in db.session.query(NeoSubZeroSprayRecord.tail_number_snapshot).filter(
-        NeoSubZeroSprayRecord.sort_date_operation_id==operation.id,
+    recorded_sprays = db.session.query(
+        NeoSubZeroSprayRecord.departure_deice_event_id,
+        NeoSubZeroSprayRecord.sort_date_mission_id,
+        NeoSubZeroSprayRecord.tail_number_snapshot,
+        NeoSubZeroSprayRecord.started_at_utc,
+    ).filter(
+        NeoSubZeroSprayRecord.sort_date_operation_id == operation.id,
         NeoSubZeroSprayRecord.departure_deice_event_id.is_not(None),
-        or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).distinct() if tail}
+        or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),NeoSubZeroSprayRecord.ended_at_utc.is_not(None)),
+    ).distinct().all()
+    sprayed_tails = {_tail(record.tail_number_snapshot) for record in recorded_sprays if record.tail_number_snapshot}
+    spray_starts = {}
+    for record in recorded_sprays:
+        if record.started_at_utc is not None:
+            spray_starts.setdefault(record.departure_deice_event_id, []).append(record)
+    detached_spraying = tuple(
+        event for tail, event in events.items()
+        if event and tail not in current_tails and not radio_pending(event) and not radio_complete(event)
+        and (event.pass1_started_at_utc or event.pass2_started_at_utc or event.status == "finished"
+             or event.clear_outcome == "sprayed" or event.id in spray_starts)
+    )
     for row in rows:
         row['ownership_review'] = reviews.get(row['tail'])
+        row["event_ownership_conflict"] = bool(row["ownership_review"])
         if row['mission_id'] in detached_source_ids:
             row['ownership_review']='A former physical tail is still RADIO PENDING. Resolve the canonical mission/tail identity before continuing.'
-        if row['gone_without_deice'] and row['tail'] in sprayed_tails:
+        if not row['ownership_review'] and row['gone_without_deice'] and row['tail'] in sprayed_tails:
             row['ownership_review']='Recorded departure spray requires physical-tail evidence review.'
         if row['ownership_review']:
             row.update(gone_without_deice=False,terminal=False,collapse_state='active')
@@ -209,7 +227,8 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
     from app.services.neosubzero_operations import departure_presentation
     for row in rows:
         row['visual_state'], row['visual_label'] = departure_presentation(row, tail_states.get(row['tail']))
-    return {"operation": operation, "rows": rows, "fluid_settings": settings,"detached_radio":detached_radio}
+    return {"operation": operation, "rows": rows, "fluid_settings": settings, "detached_radio": detached_radio,
+            "detached_spraying": detached_spraying, "spray_starts": spray_starts}
 
 
 def mutate_departure_deice(operation, mission, action, values, *, event=None, actor_id=None):
@@ -570,7 +589,8 @@ def _validate_throat_start(operation, mission):
                 return  # Remote retains its established physical treatment layout.
             continue
         if any(row['mission_id'] == mission.id for row in ramp['aircraft']):
-            if any((row['mission_id'] != mission.id or row['tail'] != _tail(mission.assigned_tail_number))
+            if any((row.get('pad_evidence_review') or row['mission_id'] != mission.id
+                    or row['tail'] != _tail(mission.assigned_tail_number))
                    for row in (ramp['pad'], *ramp['active_conflicts']) if row):
                 raise NeoSubZeroDepartureDeiceError(
                     'Another aircraft occupies this throat/deice pad. Complete its treatment, CLEAR and RADIO COMPLETE before START.')
