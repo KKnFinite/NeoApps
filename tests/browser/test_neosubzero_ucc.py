@@ -91,8 +91,8 @@ class UccBrowserTest(unittest.TestCase):
             self.ready(page, "/neosubzero/ucc")
             alpha = page.locator('[data-ucc-ramp="Alpha"]')
             aircraft = f'[data-ucc-aircraft="{mission_id}"]'
-            expect(alpha.locator('[data-ucc-queue-position="1"] ' + aircraft)).to_be_visible()
-            expect(alpha.locator("[data-ucc-deice-pad] .ucc-plane")).to_have_count(0)
+            expect(alpha.locator("[data-ucc-deice-pad] " + aircraft)).to_be_visible()
+            expect(alpha.locator("[data-ucc-queue-position] " + aircraft)).to_have_count(0)
             for width in (1366, 1920):
                 page.set_viewport_size({"width": width, "height": 1080})
                 for name in ramp_names:

@@ -50,6 +50,10 @@ class OperationsBrowserTest(unittest.TestCase):
             mission=fixture._departure('UPS7777','N777UP','DEN',4)
             mission.planned_datetime_utc=datetime(2026,10,23,5);mission.planned_datetime_local=datetime(2026,10,23,0)
             db.session.add(SortDateParkingAssignment(sort_date_operation_id=cls.operation_id,tail_number=mission.assigned_tail_number,ramp_code='D',position_code='D04'))
+            inbound=fixture._departure('UPS7100','N441UP','RFD',3)
+            inbound.mission_type='arrival';inbound.origin='SDF'
+            inbound.eta_datetime_utc=datetime(2026,10,23,2,35)
+            inbound.planned_datetime_utc=datetime(2026,10,23,2,30)
             cls.flow_id=mission.id;db.session.commit()
 
     def seed(self):
@@ -58,6 +62,8 @@ class OperationsBrowserTest(unittest.TestCase):
             NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.flow_id).delete()
             for index,mid in enumerate(self.missions):
                 mission=db.session.get(SortDateMission,mid);mission.assigned_tail_number=f'N44{index}UP';mission.eta_datetime_utc=datetime(2026,10,23,5,index*5)
+                if index == 1:
+                    mission.planned_datetime_utc = mission.eta_datetime_utc = datetime(2026,10,23,5,20)
                 event=NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mid).one()
                 event.tail_number=mission.assigned_tail_number
                 event.status=('deice_planned','configured','configured','finished','negative','cleared')[index]
@@ -85,11 +91,19 @@ class OperationsBrowserTest(unittest.TestCase):
             root=page.locator('[data-ops-workspace]')
             for mode in ('outbound','pretreat'):
                 self.ready(page,'/neosubzero/operations?mode='+mode)
+                expect(page).to_have_title('Deice Dispatch | NeoSub-Zero')
+                expect(root.locator('h1')).to_have_text('DEICE DISPATCH')
+                if mode == 'pretreat':
+                    expect(page.locator('[data-ops-layout]')).to_have_count(0)
+                    row = root.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"]')
+                    expect(row.locator('[data-ops-pretreat-location] > *')).to_have_text(['A04', 'ETA 21:35'])
+                    expect(row.locator('[data-ops-pretreat-route] > *')).to_have_text(['GT: 2:45', 'SDF - 00:20'])
                 for width,height in ((320,900),(375,900),(390,900),(430,900),(768,1024),(1366,768),(1920,900),(1920,1080),(3840,2160)):
                     page.set_viewport_size({'width':width,'height':height})
                     page.wait_for_function('(w)=>document.documentElement.clientWidth===w',arg=width)
-                    for layout in ('list','visual'):
-                        self.layout(page,layout)
+                    for layout in (('list','visual') if mode == 'outbound' else ('list',)):
+                        if mode == 'outbound':
+                            self.layout(page,layout)
                         expect(root).to_have_attribute('data-layout',layout)
                         if layout=='list':
                             self.ramp(page,'All');expect(root).to_have_attribute('data-ramp','All')
@@ -102,7 +116,7 @@ class OperationsBrowserTest(unittest.TestCase):
                         self.assertLessEqual(geometry['overflow'],1,dict(engine=engine,mode=mode,width=width,layout=layout,**geometry))
                         # Take one DOM snapshot: a live board replacement must not mix
                         # geometry from different revisions or stale nth locators.
-                        visible=page.locator('[data-ops-board]').evaluate('board=>[...board.querySelectorAll("[data-ops-row]")].filter(row=>row.getBoundingClientRect().height>0).map(row=>({right:row.getBoundingClientRect().right,passes:[1,2].map(n=>{const p=row.querySelector(`[data-ops-primary-pass="${n}"]`).getBoundingClientRect();return {width:p.width,height:p.height};})}))')
+                        visible=page.locator('[data-ops-board]').evaluate('board=>[...board.querySelectorAll("[data-ops-row]")].filter(row=>row.getBoundingClientRect().height>0).map(row=>({right:row.getBoundingClientRect().right,passes:[...row.querySelectorAll("[data-ops-primary-pass]")].map(element=>{const p=element.getBoundingClientRect();return {width:p.width,height:p.height};})}))')
                         self.assertTrue(visible)
                         for row in visible:
                             self.assertLessEqual(row['right'],width+1)
@@ -111,8 +125,10 @@ class OperationsBrowserTest(unittest.TestCase):
                         measurements.append(dict(engine=engine,mode=mode,width=width,layout=layout,overflow=page.evaluate('document.documentElement.scrollWidth-innerWidth')))
                         page.screenshot(path=str(evidence/f'{engine}-{mode}-{layout}-{width}.png'))
             # A shared ramp survives mode changes and reload; mode/layout are user preferences.
-            page.set_viewport_size({'width':1440,'height':1000});self.layout(page,'list');expect(root).to_have_attribute('data-layout','list')
+            page.set_viewport_size({'width':1440,'height':1000})
             page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound');expect(root).to_have_attribute('data-ready','true')
+            expect(root).to_have_attribute('data-layout','visual')
+            self.layout(page,'list');expect(root).to_have_attribute('data-layout','list')
             page.locator('[data-ops-context] summary').click()
             page.locator('[data-ops-context] [name="notes"]').fill('Context draft survives modes')
             page.locator('[data-ops-mode="pretreat"]').click();expect(root).to_have_attribute('data-mode','pretreat');expect(root).to_have_attribute('data-ready','true')
@@ -174,35 +190,52 @@ class OperationsBrowserTest(unittest.TestCase):
             pane.locator('[data-ops-close]').click();page.set_viewport_size({'width':375,'height':900})
             page.locator('[data-ops-mode="pretreat"]').click();expect(root).to_have_attribute('data-mode','pretreat')
             expect(root).to_have_attribute('data-ready','true')
-            page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] a').click()
-            treatment=pane.locator('.neosubzero-treatment-form')
+            row = page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"]')
+            inline = row.locator('[data-ops-inline]')
+            expect(inline).to_be_hidden()
+            expect(row.locator('.ops-mobile')).to_contain_text('ETD')
+            row.locator('.ops-pretreat-summary').click()
+            expect(pane).to_be_hidden()
+            treatment=inline.locator('.neosubzero-treatment-form')
+            treatment.locator('.ops-pretreat-notes > summary').click()
             treatment.locator('[name="notes"]').fill('Concurrent creation draft')
+            treatment.locator('[name="notes"]').focus()
             with self.app.app_context():
                 db.session.add(NeoSubZeroPretreatState(sort_date_operation_id=self.operation_id,tail_number='N441UP',pretreat_planned=True));db.session.commit()
             expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"]')).to_have_attribute('data-status','planned',timeout=10000)
             expect(treatment.locator('[name="notes"]')).to_have_value('Concurrent creation draft')
             expect(treatment.locator('[name="expected_version"]')).to_have_value('')
+            expect(treatment.locator('[name="notes"]')).to_be_focused()
             page.reload();self.ready(page,f'/neosubzero/operations?mode=pretreat&mission={self.missions[1]}')
             expect(treatment.locator('[name="notes"]')).to_have_value('Concurrent creation draft')
             with page.expect_response(lambda r:r.url.endswith('/operations/mutate')) as stale:
                 treatment.locator('button[type="submit"]').click()
             self.assertEqual(stale.value.status,409)
-            expect(pane.locator('[data-ops-detail-feedback]')).to_contain_text('Pretreat changed')
+            expect(inline.locator('[data-ops-inline-feedback]')).to_contain_text('Pretreat changed')
             expect(treatment.locator('[name="notes"]')).to_have_value('Concurrent creation draft')
-            page.once('dialog',lambda dialog:dialog.dismiss());pane.locator('[data-ops-reload]').click()
+            page.once('dialog',lambda dialog:dialog.dismiss());inline.locator('[data-ops-reload-inline]').click()
             expect(treatment.locator('[name="notes"]')).to_have_value('Concurrent creation draft')
-            page.once('dialog',lambda dialog:dialog.accept());pane.locator('[data-ops-reload]').click()
+            page.once('dialog',lambda dialog:dialog.accept());inline.locator('[data-ops-reload-inline]').click()
             expect(treatment.locator('[name="notes"]')).to_have_value('')
-            treatment=pane.locator('.neosubzero-treatment-form')
+            treatment=inline.locator('.neosubzero-treatment-form')
+            expect(treatment.locator('[name="reason_for_application"]')).to_have_count(0)
+            expect(treatment.locator('[name="pass1_plan"]')).to_have_value('type_i')
             treatment.locator('[name="pass1_surface_area"]').select_option('wings_only')
+            treatment.locator('[name="pass2_plan"]').select_option('type_iv')
             treatment.locator('[name="pass2_surface_area"]').select_option('entire_aircraft')
+            treatment.get_by_role('button',name='Set Pass 1 start to now').click()
+            expect(treatment.locator('[name="pass1_start"]')).not_to_have_value('')
+            treatment.get_by_role('button',name='Set Pass 1 end to now').click()
+            expect(treatment.locator('[name="pass1_end"]')).not_to_have_value('')
             for name,value in (('pass1_start','21:00'),('pass1_end','21:02'),('pass2_start','21:04'),('pass2_end','21:08')):treatment.locator('[name="'+name+'"]').fill(value)
+            if not treatment.locator('[name="notes"]').is_visible():
+                treatment.locator('.ops-pretreat-notes > summary').click()
             treatment.locator('[name="notes"]').fill('Mobile pretreat independent notes')
             fail_save=lambda route:route.abort('connectionrefused')
             page.route('**/operations/mutate',fail_save)
             treatment.locator('button[type="submit"]').click()
-            expect(pane.locator('[data-ops-detail-feedback]')).to_contain_text('draft is kept')
-            expect(pane.locator('[data-ops-detail-feedback]')).to_be_visible()
+            expect(inline.locator('[data-ops-inline-feedback]')).to_contain_text('draft is kept')
+            expect(inline.locator('[data-ops-inline-feedback]')).to_be_visible()
             expect(treatment.locator('[name="notes"]')).to_have_value('Mobile pretreat independent notes')
             expect(treatment.locator('button[type="submit"]')).to_be_enabled()
             page.unroute('**/operations/mutate',fail_save)
@@ -210,8 +243,12 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-status')).to_contain_text('PRETREATED')
             page.screenshot(path=str(evidence/f'{engine}-mobile-pretreat-detail.png'))
             self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
-            self.assertLessEqual(pane.evaluate('e=>e.scrollWidth-e.clientWidth'),1)
-            pane.locator('[data-ops-close]').click();page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound')
+            self.assertLessEqual(inline.evaluate('e=>e.scrollWidth-e.clientWidth'),1)
+            with self.app.app_context():
+                saved = NeoSubZeroPretreatState.query.filter_by(tail_number='N441UP').one()
+                self.assertEqual(saved.reason_for_application, 'Pretreat')
+                self.assertEqual([saved.pass_evidence[str(i)]['reason'] for i in (1,2)], ['Pretreat','Pretreat'])
+            page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound')
             expect(root).to_have_attribute('data-ready','true')
             expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-pretreated')).to_be_visible()
             with self.app.app_context():

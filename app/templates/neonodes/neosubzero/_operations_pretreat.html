@@ -1,0 +1,68 @@
+{% from 'neonodes/neosubzero/_departure_deice.html' import spray_position_forms, team_controls with context %}
+{% macro identity(row) -%}
+    {{ csrf_field() }}
+    <input type="hidden" name="operation_id" value="{{ operation.id }}">
+    <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+    <input type="hidden" name="physical_tail" value="{{ row.tail }}">
+    <input type="hidden" name="expected_version" value="{{ row.version }}">
+{%- endmacro %}
+{% macro pass_fields(row, number, locked) -%}
+    {% set prefix = 'pass' ~ number %}
+    {% set active = number == 1 or row[prefix ~ '_start'] or row[prefix ~ '_end'] or (row.state and row.state.pass2_surface_area) %}
+    <fieldset class="ops-pretreat-pass">
+        <legend>PASS {{ number }}</legend>
+        <label>Plan<select name="{{ prefix }}_plan" {% if locked %}disabled{% endif %}>
+            {% if number == 1 %}<option value="type_i">Type I</option>
+            {% else %}<option value="">Unused</option><option value="type_iv"{% if active %} selected{% endif %}>Type IV</option>{% endif %}
+        </select></label>
+        <label>Surface<select name="{{ prefix }}_surface_area" {% if locked or not active %}disabled{% endif %}>
+            <option value="">Choose surface</option>
+            {% for value, label in surface_labels.items() %}<option value="{{ value }}"{% if row.state and row.state[prefix ~ '_surface_area'] == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></label>
+        {% for milestone in ('start', 'end') %}
+        {% set name = prefix ~ '_' ~ milestone %}
+        {% set enabled = not locked and active and (row[prefix ~ '_start'] if milestone == 'end' else number == 1 or row.pass1_end) %}
+        <div class="ops-pretreat-clock">
+            <label>{{ milestone|upper }}<input name="{{ name }}" value="{{ row[name] }}" inputmode="numeric" maxlength="5" placeholder="HH:MM" data-clock-time{% if not enabled %} readonly{% endif %}></label>
+            <button type="button" aria-label="Set Pass {{ number }} {{ milestone }} to now" data-subzero-stamp="{{ name }}"{% if not enabled %} hidden{% endif %}>NOW</button>
+        </div>
+        {% endfor %}
+    </fieldset>
+{%- endmacro %}
+{% set locked = not can_edit or row.completed %}
+<details data-ops-pretreat-row{% if selected and row.mission_id == selected.mission_id %} data-ops-initial-open{% endif %}>
+    <summary class="ops-pretreat-summary">
+        <div class="ops-identity"><span class="ops-desktop">{{ row.flight }}</span><strong>{{ row.tail }}</strong></div>
+        <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-location><strong>{{ row.parking or '—' }}</strong><span>ETA {{ row.inbound_eta or '—' }}</span></div>
+        <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-route><strong>GT: {{ row.ground_time if row.ground_time != '-' else '—' }}</strong><span>{{ row.destination }} - {{ row.etd }}</span></div>
+        <span class="ops-mobile">ETD {{ row.etd }}</span>
+        <div class="ops-status"><strong>{{ row.visual_label }}</strong></div>
+    </summary>
+    <div class="ops-pretreat-inline" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
+        <p class="ops-detail-feedback" data-ops-inline-feedback role="status" hidden></p>
+        <button type="button" data-ops-reload-inline hidden>RELOAD CURRENT VALUES</button>
+        <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" class="neosubzero-treatment-form ops-pretreat-form" data-ops-inline-treatment>
+            {{ identity(row) }}
+            <input type="hidden" name="action" value="save_treatment">
+            {{ pass_fields(row, 1, locked) }}
+            {{ pass_fields(row, 2, locked) }}
+            <div class="ops-pretreat-actions">
+                {% if can_edit %}
+                <button type="button" data-subzero-edit{% if not row.completed %} hidden{% endif %}>EDIT</button>
+                <button type="submit"{% if row.completed %} hidden{% endif %}>SAVE</button>
+                {% endif %}
+            </div>
+            <details class="ops-pretreat-notes"{% if can_edit and row.completed %} open{% endif %}><summary>{% if can_edit and row.completed %}NOTES / CORRECTION{% else %}NOTES{% endif %}</summary>
+                <label>Notes<textarea name="notes"{% if locked %} readonly{% endif %}>{{ row.state.notes or '' if row.state else '' }}</textarea></label>
+                {% if can_edit and (row.pass1_end or row.pass2_end) %}<label>Correction reason<input name="correction_reason" maxlength="2000"{% if row.completed %} required{% endif %}></label>{% endif %}
+            </details>
+        </form>
+        {% if can_edit or row.pass1_start or row.pass2_start %}
+        <details class="ops-pretreat-support"><summary>PLANNING / TREATMENT RECORDS</summary>
+            {% if can_edit %}<form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}">{{ identity(row) }}<button name="action" value="toggle_planned">{{ 'UNPLAN' if row.planned else 'PRETREAT PLANNED' }}</button><button name="action" value="toggle_configured">{{ 'CLEAR CONFIGURED' if row.configured else 'CONFIGURED' }}</button></form>{% endif %}
+            {% if row.pass1_start or row.pass2_start %}{{ spray_position_forms(row, can_edit, board) }}{{ team_controls(row, board) }}{% endif %}
+            <a class="ops-staff-link" href="{{ url_for('neosubzero.deice_log') }}">TAIL-OWNED APPLICATION HISTORY / AUDITED CORRECTIONS</a>
+        </details>
+        {% endif %}
+    </div>
+</details>

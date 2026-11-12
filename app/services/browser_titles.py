@@ -162,6 +162,8 @@ def _title_parts(path, ballmat_side):
     if path.startswith("/neostaffing"):
         return "NeoStaffing", "NeoStaffing"
 
+    if path in {"/neosubzero/operations", "/neosubzero/pretreat", "/neosubzero/outbound"}:
+        return "Deice Dispatch", "NeoSub-Zero"
     if path == "/neosubzero/ucc":
         return "DUCC", "NeoSub-Zero"
 

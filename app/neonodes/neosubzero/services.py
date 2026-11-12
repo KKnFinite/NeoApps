@@ -47,9 +47,9 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
     arrivals_by_tail = {}
     for mission in missions:
         tail = _tail(mission.assigned_tail_number)
-        if mission.mission_type != "arrival" or not tail:
+        if mission.mission_type != "arrival" or not tail or mission.arrival_status == "cancelled":
             continue
-        value = mission.eta_datetime_utc or mission.planned_datetime_utc
+        value = mission.eta_datetime_utc
         if tail not in arrivals_by_tail or (value is not None and (arrivals_by_tail[tail] is None or value < arrivals_by_tail[tail])):
             arrivals_by_tail[tail] = value
     tail_keys = {_tail(m.assigned_tail_number) for m in departures if _tail(m.assigned_tail_number)}
@@ -103,14 +103,27 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
             state.reason_for_application = _pretreat_reason_value(
                 values.get("reason_for_application")
             )
+        inline = "pass1_plan" in values or "pass2_plan" in values
+        if inline and (values.get("pass1_plan") != "type_i" or values.get("pass2_plan") not in {"", "type_iv"}):
+            raise NeoSubZeroPretreatError("Pretreat supports Type I on Pass 1 and optional Type IV on Pass 2.")
+        unused_second_pass = inline and not values.get("pass2_plan")
+        if unused_second_pass and any(values.get(name) for name in ("pass2_start", "pass2_end", "pass2_surface_area")):
+            raise NeoSubZeroPretreatError("Choose Type IV before recording Pass 2 treatment.")
         state.pass1_surface_area = _surface(values.get("pass1_surface_area"))
-        state.pass2_surface_area = _surface(values.get("pass2_surface_area"))
+        state.pass2_surface_area = None if unused_second_pass else _surface(values.get("pass2_surface_area"))
         state.pass1_started_at_utc = _parse_hhmm(values.get("pass1_start"), operation, mission)
         state.pass1_ended_at_utc = _parse_hhmm(values.get("pass1_end"), operation, mission)
         state.pass2_started_at_utc = _parse_hhmm(values.get("pass2_start"), operation, mission)
         state.pass2_ended_at_utc = _parse_hhmm(values.get("pass2_end"), operation, mission)
         state.notes = str(values.get("notes") or "").strip() or None
         _validate_sequence(state)
+        if inline and any(start and end and start == end for start, end in (
+            (state.pass1_started_at_utc, state.pass1_ended_at_utc),
+            (state.pass2_started_at_utc, state.pass2_ended_at_utc),
+        )):
+            raise NeoSubZeroPretreatError("A pass END must be later than its START.")
+        if unused_second_pass and (before or {}).get("pass2_started_at_utc"):
+            raise NeoSubZeroPretreatError("Recorded physical treatment cannot be erased.")
         for number in (1,2):
             if (before or {}).get(f'pass{number}_ended_at_utc') and not getattr(state,f'pass{number}_ended_at_utc'):
                 raise NeoSubZeroPretreatError('Recorded physical treatment cannot be erased.')

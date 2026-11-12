@@ -298,6 +298,8 @@ def resolve_shell_metadata(
         if is_neoscorpion_page
         else neorain_current_label
         if is_neorain_page
+        else "DEICE DISPATCH"
+        if endpoint in {"neosubzero.operations", "neosubzero.pretreat", "neosubzero.outbound"}
         else "OPERATIONS"
         if is_neosubzero_page
         else "DASHBOARD"

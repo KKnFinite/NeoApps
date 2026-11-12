@@ -136,8 +136,9 @@ class UccPostgresTest(unittest.TestCase):
             events.append(f._deice_event(mission,'deice_planned'))
         db.session.commit();ids=[event.id for event in events]
         before=neosubzero_ucc_context(f.gateway,f.operation)['ramps'][0]
-        self.assertIsNone(before['pad'])
-        self.assertEqual([row['mission_id'] for row in before['waiting_queue']],[m.id for m in missions])
+        self.assertEqual(before['pad']['mission_id'],missions[0].id)
+        self.assertTrue(before['pad_is_planned'])
+        self.assertEqual([row['mission_id'] for row in before['waiting_queue']],[m.id for m in missions[1:]])
         actor=f._user('pg-pad-coordinator','grandmaster')
         mutate_departure_deice(f.operation,missions[0],'save_treatment',dict(treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:00',pass1_end='22:05'),event=events[0],actor_id=actor.id)
         mutate_departure_deice(f.operation,missions[0],'clear',{},event=events[0]);db.session.commit()
@@ -148,7 +149,9 @@ class UccPostgresTest(unittest.TestCase):
         self.assertEqual(events[0].radio_state,'pending')
         mutate_departure_deice(f.operation,missions[0],'radio_complete',{},event=events[0],actor_id=actor.id);db.session.commit()
         after=neosubzero_ucc_context(f.gateway,f.operation)['ramps'][0]
-        self.assertIsNone(after['pad']);self.assertEqual(after['throat']['mission_id'],missions[1].id)
+        self.assertEqual(after['pad']['mission_id'],missions[1].id)
+        self.assertTrue(after['pad_is_planned'])
+        self.assertEqual(after['throat']['mission_id'],missions[2].id)
         self.assertEqual([event.id for event in NeoSubZeroDepartureDeiceEvent.query.order_by(NeoSubZeroDepartureDeiceEvent.id)],ids)
         self.assertIsNotNone(db.session.get(NeoSubZeroDepartureDeiceEvent,ids[0]).pass1_ended_at_utc)
 

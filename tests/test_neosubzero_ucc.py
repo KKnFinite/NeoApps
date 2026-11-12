@@ -169,7 +169,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIsNone(alpha["throat"])
         self.assertEqual(alpha["parking_positions"][2]["aircraft"][0]["event"].id, event.id)
 
-    def test_configuration_does_not_occupy_pad_or_overtake_physical_queue(self):
+    def test_configuration_does_not_overtake_first_blocked_out_pad_candidate(self):
         planned_two = self._departure("5X201", "N201", "SLC", 3)
         configured = self._departure("5X202", "N202", "DEN", 4)
         db.session.add_all(
@@ -200,15 +200,16 @@ class NeoSubZeroUccTest(unittest.TestCase):
         configured.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1, 30)
         db.session.commit()
         alpha = self._ramp_context("Alpha")
-        self.assertEqual(alpha["throat"]["mission_id"], planned_two.id)
-        self.assertIsNone(alpha["pad"])
+        self.assertEqual(alpha["pad"]["mission_id"], planned_two.id)
+        self.assertTrue(alpha["pad_is_planned"])
+        self.assertEqual(alpha["throat"]["mission_id"], configured.id)
         self.assertEqual(
             [row["mission_id"] for row in alpha["waiting_queue"]],
-            [planned_two.id, configured.id, self.alpha.id],
+            [configured.id, self.alpha.id],
         )
         self.assertEqual(
             [row["queue_position"] for row in alpha["waiting_queue"]],
-            [1, 2, 3],
+            [1, 2],
         )
 
     def test_coordinator_selection_never_changes_universal_throat(self):
@@ -229,14 +230,14 @@ class NeoSubZeroUccTest(unittest.TestCase):
         )
         configured.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1)
         db.session.commit()
-        before = self._ramp_context("Alpha")["throat"]["mission_id"]
+        before = self._ramp_context("Alpha")["pad"]["mission_id"]
         departure_rows = self._departure_rows()
         with self.app.test_request_context(
             f"/neosubzero/coordinator?ramp=Alpha&mission={self.alpha.id}"
         ):
             workspace = _coordinator_workspace_state(self.operation, departure_rows)
             self.assertEqual(workspace["selected_mission_id"], self.alpha.id)
-            after = self._ramp_context("Alpha")["throat"]["mission_id"]
+            after = self._ramp_context("Alpha")["pad"]["mission_id"]
         self.assertEqual(before, configured.id)
         self.assertEqual(after, configured.id)
 
@@ -263,8 +264,10 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.alpha.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1)
         next_mission.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1, 10)
         db.session.commit()
-        self.assertEqual(self._ramp_context("Alpha")["throat"]["mission_id"], self.alpha.id)
+        self.assertEqual(self._ramp_context("Alpha")["pad"]["mission_id"], self.alpha.id)
 
+        event.pass1_started_at_utc = datetime(2026, 8, 31, 1, 1)
+        event.pass1_ended_at_utc = datetime(2026, 8, 31, 1, 2)
         event.status = "finished"
         db.session.commit()
         finished = self._ramp_context("Alpha")["pad"]
@@ -272,11 +275,14 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertEqual(finished["visual_label"], "FINISHED / AWAITING CLEARANCE")
 
         event.status = "cleared"
+        event.radio_state = "pending"
         db.session.commit()
-        self.assertEqual(
-            self._ramp_context("Alpha")["throat"]["mission_id"],
-            next_mission.id,
-        )
+        self.assertEqual(self._ramp_context("Alpha")["pad"]["mission_id"], self.alpha.id)
+        event.radio_state = "complete"
+        event.radio_completed_at_utc = datetime(2026, 8, 31, 1, 12)
+        event.radio_completed_by_user_id = self._user("radio-confirmed", "grandmaster").id
+        db.session.commit()
+        self.assertEqual(self._ramp_context("Alpha")["pad"]["mission_id"], next_mission.id)
 
         next_event.status = "deice_planned"
         next_event.configured_at_utc = None
@@ -289,9 +295,9 @@ class NeoSubZeroUccTest(unittest.TestCase):
         next_mission.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1, 15)
         db.session.commit()
         alpha = self._ramp_context("Alpha")
-        self.assertEqual(alpha["throat"]["mission_id"], next_mission.id)
-        self.assertEqual(len(alpha["waiting_queue"]), 1)
-        self.assertIsNone(alpha["pad"])
+        self.assertIsNone(alpha["throat"])
+        self.assertEqual(len(alpha["waiting_queue"]), 0)
+        self.assertEqual(alpha["pad"]["mission_id"], next_mission.id)
 
     def test_parking_position_and_pretreat_configuration_do_not_imply_throat(self):
         pretreat = NeoSubZeroPretreatState(
@@ -870,8 +876,8 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit();ramp=self._ramp_context('Alpha')
         stand=next(p for p in ramp['parking_positions'] if p['code']=='A10')
         self.assertEqual(stand['aircraft'],())
-        self.assertIsNone(ramp['pad'])
-        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']], [self.alpha.id, waiting.id])
+        self.assertEqual(ramp['pad']['mission_id'], self.alpha.id)
+        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']], [waiting.id])
         self.assertEqual([row['mission_id'] for row in ramp['parking_exceptions']],[parked.id])
 
     def test_off_sort_still_shows_five_empty_ramps_without_future_records(self):
@@ -995,7 +1001,9 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertEqual(pad.text.strip(), "DEICE PAD")
         self.assertEqual(len(pad.findall(cls="ucc-pad-outline")), 1)
 
-        self._deice_event(self.alpha, "finished")
+        finished = self._deice_event(self.alpha, "finished")
+        finished.pass1_started_at_utc = datetime(2026, 9, 1, 0, 55)
+        finished.pass1_ended_at_utc = datetime(2026, 9, 1, 0, 58)
         for i in range(5):
             mission = self._departure(f"5X-QUEUE-{i}", f"N30{i}", "DEN", 4)
             db.session.add(SortDateParkingAssignment(
@@ -1032,7 +1040,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
 
     def test_four_waiting_places_and_separate_pad_capacity_review(self):
         missions = [self.alpha]
-        for i in range(4):
+        for i in range(5):
             mission = self._departure(f"5X30{i}", f"N30{i}", "DEN", 4)
             db.session.add(SortDateParkingAssignment(sort_date_operation_id=self.operation.id, tail_number=mission.assigned_tail_number, ramp_code="A", position_code=f"A0{i+4}"))
             missions.append(mission)
@@ -1041,15 +1049,15 @@ class NeoSubZeroUccTest(unittest.TestCase):
             self._deice_event(mission, "deice_planned")
         db.session.commit()
         ramp = self._ramp_context("Alpha")
-        self.assertIsNone(ramp['pad'])
-        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[:4]])
-        self.assertEqual([r["mission_id"] for r in ramp["exceptions"]], [m.id for m in missions[4:]])
+        self.assertEqual(ramp['pad']['mission_id'], missions[0].id)
+        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[1:5]])
+        self.assertEqual([r["mission_id"] for r in ramp["exceptions"]], [missions[5].id])
         self.assertTrue(all(not p["aircraft"] for p in ramp["parking_positions"]))
-        ramp["throat"]["event"].status = "cleared"
+        ramp["pad"]["event"].status = "cleared"
         db.session.commit()
         ramp = self._ramp_context("Alpha")
-        self.assertIsNone(ramp['pad'])
-        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[1:5]])
+        self.assertEqual(ramp['pad']['mission_id'], missions[1].id)
+        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[2:]])
         self.assertEqual([r['mission_id'] for r in ramp['exceptions']], [])
 
     def test_queue_correction_uses_existing_events_stale_guard_and_audit(self):
@@ -1063,13 +1071,13 @@ class NeoSubZeroUccTest(unittest.TestCase):
         reorder_ucc_queue(self.gateway, self.operation, "Alpha", second.id, "forward", expected_version=version, user_id=None)
         db.session.commit()
         ramp = self._ramp_context("Alpha")
-        self.assertEqual(ramp["throat"]["mission_id"], second.id)
-        self.assertIn('"before"', ramp["throat"]["event"].ucc_queue_history)
+        self.assertEqual(ramp["pad"]["mission_id"], second.id)
+        self.assertIn('"before"', ramp["pad"]["event"].ucc_queue_history)
         with self.assertRaisesRegex(NeoSubZeroUccError, "changed"):
             reorder_ucc_queue(self.gateway, self.operation, "Alpha", second.id, "back", expected_version=version, user_id=None)
-        ramp["throat"]["event"].status = "configured"
-        ramp["throat"]["event"].configured_at_utc = datetime(2026, 9, 1, 1)
-        ramp["throat"]["event"].pass1_started_at_utc = datetime(2026, 9, 1, 1)
+        ramp["pad"]["event"].status = "configured"
+        ramp["pad"]["event"].configured_at_utc = datetime(2026, 9, 1, 1)
+        ramp["pad"]["event"].pass1_started_at_utc = datetime(2026, 9, 1, 1)
         db.session.commit()
         with self.assertRaisesRegex(NeoSubZeroUccError, "active deice"):
             reorder_ucc_queue(self.gateway, self.operation, "Alpha", second.id, "back", expected_version=self._ramp_context("Alpha")["queue_version"], user_id=None)
@@ -1078,7 +1086,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.alpha.actual_block_out_datetime_utc = datetime(2026, 9, 1, 1)
         db.session.add(SortDateTailState(sort_date=self.operation.sort_date, gateway_code="RFD", sort_name="night", tail_number="N200", deice_status="required"))
         db.session.commit()
-        self.assertEqual(self._ramp_context("Alpha")["throat"]["mission_id"], self.alpha.id)
+        self.assertEqual(self._ramp_context("Alpha")["pad"]["mission_id"], self.alpha.id)
         self.assertEqual(NeoSubZeroDepartureDeiceEvent.query.count(), 0)
 
     def test_motherbrain_location_and_tail_identity_conflict_do_not_fabricate_work(self):
@@ -1158,8 +1166,8 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self._deice_event(self.alpha,"deice_planned")
         db.session.commit()
         ramp=self._ramp_context("Alpha")
-        self.assertEqual(ramp["throat"]["mission_id"],self.alpha.id)
-        self.assertNotEqual(ramp["throat"]["mission_id"],later.id)
+        self.assertEqual(ramp["pad"]["mission_id"],self.alpha.id)
+        self.assertNotEqual(ramp["pad"]["mission_id"],later.id)
 
     def test_visible_empty_remote_ramp_keeps_canonical_staff_and_unit_moves_available(self):
         from app.models import NeoSubZeroTruck
@@ -1179,6 +1187,25 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertEqual(response.status_code,200,response.json)
         self.assertEqual(NeoSubZeroUccTruckAssignment.query.filter_by(ramp="Bravo",position_number=2).one().truck_number,"REMOTE-T1")
         self.assertEqual(NeoSubZeroUccAssignment.query.filter_by(ramp="Bravo",position_number=2,team_role="driver").one().person_id,self.permanent.id)
+
+    def test_conflicting_verified_spray_claims_leave_pad_in_review(self):
+        verified = [self.alpha, self._departure("UPS-PAD2", "N-PAD2", "DEN", 3)]
+        waiting = self._departure("UPS-PAD3", "N-PAD3", "SDF", 4)
+        for mission, parking in zip([*verified, waiting], ["A03", "A04", "A05"]):
+            mission.actual_block_out_datetime_utc = datetime(2026, 9, 1, 1)
+            if mission is not self.alpha:
+                db.session.add(SortDateParkingAssignment(
+                    sort_date_operation_id=self.operation.id, tail_number=mission.assigned_tail_number,
+                    ramp_code="A", position_code=parking,
+                ))
+            event = self._deice_event(mission, "deice_planned")
+            if mission in verified:
+                event.pass1_started_at_utc = datetime(2026, 9, 1, 1, 5)
+        db.session.commit()
+        ramp = self._ramp_context("Alpha")
+        self.assertIsNone(ramp["pad"])
+        self.assertEqual([row["mission_id"] for row in ramp["active_conflicts"]], [m.id for m in verified])
+        self.assertEqual([row["mission_id"] for row in ramp["waiting_queue"]], [waiting.id])
 
     def _deice_event(self, mission, status, *, configured_at=None):
         event = NeoSubZeroDepartureDeiceEvent(

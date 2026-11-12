@@ -161,8 +161,12 @@ def neosubzero_ucc_context(gateway, operation):
         queue = _physical_queue(aircraft) if ramp in UCC_RAMP_ORDER else []
         active = [row for row in queue if _is_active_throat(row)]
         pad_reviews = [row for row in aircraft if row.get("pad_evidence_review")]
-        pad = active[0] if len(active) == 1 and not pad_reviews else None
         waiting = [row for row in queue if not _is_active_throat(row)]
+        pad = None
+        if not pad_reviews and len(active) <= 1:
+            # Planning occupancy never supplies actual spray or radio evidence.
+            pad = next(iter(active or waiting), None)
+        waiting = [row for row in waiting if row is not pad]
         waiting_rows = waiting[:UCC_WAITING_CAPACITY]
         throat = waiting_rows[0] if waiting_rows else None
         for queue_position, row in enumerate(waiting_rows, start=1):
@@ -170,7 +174,8 @@ def neosubzero_ucc_context(gateway, operation):
             row['queue_label'] = UCC_WAITING_LABELS[queue_position - 1]
         waiting_queue = tuple(waiting_rows)
         parked = [row for row in aircraft if row.get("block_out_at_utc") is None
-                  and not row.get('retained_radio_throat') and row not in queue and row not in pad_reviews]
+                  and not row.get('retained_radio_throat') and row not in queue and row not in pad_reviews
+                  and not (ramp in UCC_RAMP_ORDER and _is_unverified_finish(row))]
         prefix = 'ABCDE'[UCC_RAMP_ORDER.index(ramp)] if ramp in UCC_RAMP_ORDER else ''
         occupied = ({prefix+'10'} if throat else set()) | ({prefix+'09'} if len(waiting_queue) == UCC_WAITING_CAPACITY else set())
         parking = _parking_projection(ramp, [row for row in parked if row['parking'] not in occupied], parking_9_10_enabled)
@@ -181,6 +186,7 @@ def neosubzero_ucc_context(gateway, operation):
                 "aircraft": tuple(aircraft),
                 "throat": throat,
                 "pad": pad,
+                "pad_is_planned": bool(pad and not _is_active_throat(pad)),
                 "waiting_queue": waiting_queue,
                 "queue": tuple(queue),
                 "queue_version": _queue_version(aircraft),
@@ -189,6 +195,7 @@ def neosubzero_ucc_context(gateway, operation):
                 "parking_positions": parking,
                 "parking_exceptions": tuple(row for row in parked if row["parking"] not in visible_codes or row['parking'] in occupied),
                 "active_conflicts": tuple((active if pad is None else []) + pad_reviews),
+                "unverified_finishes": tuple(row for row in aircraft if _is_unverified_finish(row)) if ramp in UCC_RAMP_ORDER else (),
                 "slots": staffing_slots(ramp),
             }
         )
@@ -373,8 +380,9 @@ def _physical_aircraft_rows(operation, departure_context):
             item["deice_status"] = "TAIL IDENTITY REVIEW"
         if radio_complete(item.get('event')):
             continue  # Confirmed departure must not reappear at its recorded stand.
-        if (item.get("block_out_at_utc") and _departure_event_status(item) not in {"deice_planned", "configured", "finished"}
-                and not _is_active_throat(item) and not item.get("pad_evidence_review")):
+        if (item.get("block_out_at_utc") and not _is_waiting_for_deice(item)
+                and not _is_active_throat(item) and not item.get("pad_evidence_review")
+                and not _is_unverified_finish(item)):
             continue
         unique[tail] = item
     return list(unique.values())
@@ -443,13 +451,16 @@ def _physical_queue(rows):
         rank = getattr(row["event"], "ucc_queue_order", None)
         return (1, (rank is None, rank or 0, _queue_sort_key(row)))
 
-    return sorted((row for row in rows if not row.get("pad_evidence_review") and (_is_active_throat(row) or
-        (row.get("block_out_at_utc") and _departure_event_status(row) in {"deice_planned", "configured", "finished"}))), key=order)
+    return sorted(
+        (row for row in rows if _is_active_throat(row) or _is_waiting_for_deice(row)),
+        key=order,
+    )
 
 
 def _queue_version(rows):
     values = [(row["mission_id"], entity_version(row.get("event")), str(row.get("block_out_at_utc")),
-               row["parking"], row["tail"], str(_spray_started_at(row)), bool(row.get("pad_evidence_review")))
+               row["parking"], row["tail"], _departure_event_status(row),
+               str(_spray_started_at(row)), bool(row.get("pad_evidence_review")))
               for row in rows]
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
@@ -540,7 +551,7 @@ def reorder_ucc_queue(gateway, operation, ramp_name, mission_id, direction, *, e
     for rank, row in enumerate(queue, 1):
         event = row["event"]
         if event is None:
-            raise NeoSubZeroUccError("Record Initial Contact in Deice Operations before manually reordering this aircraft.")
+            raise NeoSubZeroUccError("Record Initial Contact in Deice Dispatch before manually reordering this aircraft.")
         history = json.loads(event.ucc_queue_history or "[]")
         history.append({"actor": user_id, "at_utc": datetime.utcnow().isoformat(), "before": before, "after": after})
         event.ucc_queue_order = rank
@@ -885,21 +896,36 @@ def _holds_for_radio(row):
     event = row.get("event")
     return radio_pending(event) or (_departure_event_status(row) == "cleared"
                                     and not radio_complete(event)
-                                    and bool(_spray_started_at(row) or getattr(event, "clear_outcome", None) == "sprayed"))
+                                    and bool(_spray_started_at(row) or getattr(event, "pass1_ended_at_utc", None)
+                                             or getattr(event, "pass2_ended_at_utc", None)))
 
 
 def _is_active_throat(row):
     status = _departure_event_status(row)
     # Actual treatment, FIN and pending readback own the pad even when the
     # independent MotherBrain Block-Out milestone has not yet been recorded.
-    return not row.get("pad_evidence_review") and (_holds_for_radio(row) or status == "finished" or
-        (status in {"deice_planned", "configured"} and _spray_started_at(row) is not None))
+    return not row.get("pad_evidence_review") and (_holds_for_radio(row) or
+        (status in {"deice_planned", "configured", "finished"} and _has_pad_treatment_evidence(row)))
+
+
+def _has_pad_treatment_evidence(row):
+    event = row.get("event")
+    return bool(_spray_started_at(row) or (
+        _departure_event_status(row) == "finished"
+        and (getattr(event, "pass1_ended_at_utc", None) or getattr(event, "pass2_ended_at_utc", None))
+    ))
+
+
+def _is_unverified_finish(row):
+    return (_departure_event_status(row) == "finished" and not row.get("pad_evidence_review")
+            and not _has_pad_treatment_evidence(row))
 
 
 def _is_waiting_for_deice(row):
     return (
-        _departure_event_status(row) == "deice_planned"
+        not row.get("pad_evidence_review")
         and row.get("block_out_at_utc") is not None
+        and _departure_event_status(row) in {"deice_planned", "configured"}
     )
 
 

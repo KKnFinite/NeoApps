@@ -192,7 +192,7 @@
 {% if row.frost_inspection.last %}<details><summary>CORRECT LAST INSPECTION</summary>{{ inspection_form(row, board, true) }}</details>{% endif %}
 </details>
 {% else %}
-<p><a href="{{ url_for('neosubzero.operations',mode='outbound',mission=row.mission_id) }}">FROST INSPECTION · OPTIONAL · OPEN OPERATIONS DETAILS</a></p>
+<p><a href="{{ url_for('neosubzero.operations',mode='outbound',mission=row.mission_id) }}">FROST INSPECTION · OPTIONAL · OPEN DEICE DISPATCH DETAILS</a></p>
 {% endif %}
 {% endif %}
 </section>

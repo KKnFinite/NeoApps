@@ -32,9 +32,30 @@ class OperationsTest(unittest.TestCase):
             self.assertEqual(page.status_code, 200)
             self.assertIn(b'data-ops-workspace', page.data)
             self.assertIn(('data-mode="'+mode+'"').encode(), page.data)
-            self.assertEqual(page.data.count(b'data-ops-primary-pass="1"'), 3)
-            self.assertEqual(page.data.count(b'data-ops-primary-pass="2"'), 3)
+            self.assertIn(b'DEICE DISPATCH', page.data)
+            if mode == 'pretreat':
+                self.assertEqual(page.data.count(b'data-ops-inline-treatment'), 3)
+                self.assertNotIn(b'data-ops-layout=', page.data)
+            else:
+                self.assertEqual(page.data.count(b'data-ops-primary-pass="1"'), 3)
+                self.assertEqual(page.data.count(b'data-ops-primary-pass="2"'), 3)
         self.assertEqual(self.client.get('/neosubzero/coordinator').status_code,200)
+
+    def test_inline_pretreat_records_reason_and_does_not_invent_an_unused_pass(self):
+        values = dict(mode='pretreat', action='save_treatment', expected_version='',
+            pass1_plan='type_i', pass2_plan='', pass1_surface_area='wings_only',
+            pass1_start='2200', pass1_end='2210', reason_for_application='Outbound weather')
+        unsupported = self.post('pretreat/mutate', **{**values, 'pass1_plan': 'type_iv'})
+        self.assertEqual(unsupported.status_code, 409)
+        equal_times = self.post('pretreat/mutate', **{**values, 'pass1_end': '2200'})
+        self.assertEqual(equal_times.status_code, 409)
+        self.assertEqual(self.post('pretreat/mutate', **values).status_code, 200)
+        state = NeoSubZeroPretreatState.query.one()
+        self.assertEqual(state.reason_for_application, 'Pretreat')
+        self.assertEqual(state.pass_evidence['1']['reason'], 'Pretreat')
+        self.assertEqual(set(state.pass_evidence), {'1'})
+        self.assertIsNone(state.pass2_surface_area)
+        self.assertIsNone(state.pass2_started_at_utc)
 
     def test_no_current_sort_is_safe_in_both_modes_and_revision(self):
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=None):

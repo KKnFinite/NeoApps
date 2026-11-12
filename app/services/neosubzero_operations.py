@@ -64,6 +64,8 @@ def operations_context(gateway, operation, mode):
         row['primary_passes'] = []
         if mode == 'pretreat':
             state = row['state']
+            row['parking'] = departure.get('parking') or row['parking']
+            row['destination'] = mission.destination or '—'
             planned = bool(state and (row['planned'] or state.configured_at_utc or state.pass1_surface_area or state.pass1_started_at_utc))
             types = ('Type I', 'Type IV') if planned else ()
             surfaces = [getattr(state, f'pass{i}_surface_area', None) for i in (1, 2)]

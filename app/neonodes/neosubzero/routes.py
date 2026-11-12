@@ -79,7 +79,7 @@ from app.services.operation_lifecycle import night_staffing_operation
 
 LAST_PAGE_KEY = "neosubzero.last_page"
 NEOSUBZERO_PAGES = (
-    ('Deice Operations', 'neosubzero.operations', 'neosubzero.outbound.view', 'neosubzero.outbound.edit'),
+    ('Deice Dispatch', 'neosubzero.operations', 'neosubzero.outbound.view', 'neosubzero.outbound.edit'),
     (
         "Pretreat",
         "neosubzero.pretreat",
@@ -1132,11 +1132,17 @@ def pretreat_mutate():
             tail_number=tail,
         ).with_for_update().one_or_none()
         require_version(state, request.form.get('expected_version'), 'Pretreat')
+        if str(mission.departure_status or "").strip().lower() in {"cancelled", "departed"}:
+            raise NeoSubZeroPretreatError("This departure is no longer open for Pretreat.")
+        values = request.form.to_dict()
+        if values.get("action") == "save_treatment":
+            from app.neonodes.neosubzero.services import DEFAULT_PRETREAT_REASON
+            values["reason_for_application"] = DEFAULT_PRETREAT_REASON
         mutate_pretreat(
             operation,
             mission,
-            request.form.get("action"),
-            request.form,
+            values.get("action"),
+            values,
             state=state,
             actor_id=current_user.id,
         )

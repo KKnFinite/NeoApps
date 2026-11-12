@@ -29,6 +29,16 @@
     const draftKey = detail => ['neoapps.subzero.operations.draft', root.dataset.userId,
         root.dataset.operationId, root.dataset.mode, detail.dataset.missionId, detail.dataset.tail].join(':');
     const detail = () => pane.querySelector('[data-ops-detail-content]');
+    const isPretreat = root.dataset.mode === 'pretreat';
+    const draftContents = () => isPretreat ? [...root.querySelectorAll('[data-ops-inline]')] : [detail()].filter(Boolean);
+    const inlineFor = form => form.closest('[data-ops-inline]');
+    const inlineMessage = (content, text, error = false) => {
+        const line = content.querySelector('[data-ops-inline-feedback]');
+        line.textContent = text;
+        line.hidden = !text;
+        line.classList.toggle('is-error', error);
+        content.querySelector('[data-ops-reload-inline]').hidden = !error;
+    };
     const dirty = () => !!root.querySelector('form[data-dirty="true"]');
     const draftMessage = text => {
         const note = pane.querySelector('[data-ops-draft-status]');
@@ -43,15 +53,20 @@
                 else sessionStorage.removeItem(key);
             } catch (_) { notify('Context draft remains open. Browser storage is unavailable; save before reloading.',true); }
         }
-        const content = detail(); if (!content) return;
-        const forms = [...content.querySelectorAll('form[data-dirty="true"]')].map(form => ({
-            key: formKey(form), unlocked: form.dataset.unlocked,
-            fields: [...form.elements].filter(e => e.name && e.name !== 'csrf_token' && !['submit', 'button'].includes(e.type)).map(e => ({name:e.name, value:e.value, checked:e.checked}))
-        }));
-        try {
-            if (forms.length) sessionStorage.setItem(draftKey(content), JSON.stringify(forms));
-            else sessionStorage.removeItem(draftKey(content));
-        } catch (_) { draftMessage('Draft remains open. Browser storage is unavailable; do not reload until saved.'); }
+        for (const content of draftContents()) {
+            const forms = [...content.querySelectorAll('form[data-dirty="true"]')].map(form => ({
+                key: formKey(form), unlocked: form.dataset.unlocked,
+                fields: [...form.elements].filter(e => e.name && e.name !== 'csrf_token' && !['submit', 'button'].includes(e.type)).map(e => ({name:e.name, value:e.value, checked:e.checked}))
+            }));
+            try {
+                if (forms.length) sessionStorage.setItem(draftKey(content), JSON.stringify(forms));
+                else sessionStorage.removeItem(draftKey(content));
+            } catch (_) {
+                const message = 'Draft remains open. Browser storage is unavailable; do not reload until saved.';
+                if (isPretreat) inlineMessage(content, message, true);
+                else draftMessage(message);
+            }
+        }
     };
     const sync = form => {
         if (form.matches('[data-subzero-deice-form]')) {
@@ -61,39 +76,59 @@
             if (!form.dataset.unlocked) form.dataset.unlocked = form.querySelector('[data-subzero-edit]:not([hidden])') || !form.querySelector('button[type="submit"]') ? 'false' : 'true';
             const unlocked = form.dataset.unlocked === 'true';
             const names = ['pass1_start', 'pass1_end', 'pass2_start', 'pass2_end'];
+            const useSecond = !form.elements.pass2_plan || form.elements.pass2_plan.value === 'type_iv';
             names.forEach((name, index) => {
-                const enabled = unlocked && (!index || !!form.elements[names[index-1]].value);
+                const enabled = unlocked && (index < 2 || useSecond) && (!index || !!form.elements[names[index-1]].value);
                 form.elements[name].readOnly = !enabled;
+                if (index >= 2) form.elements[name].disabled = !useSecond;
                 const stamp = form.querySelector(`[data-subzero-stamp="${name}"]`);
                 if (stamp) stamp.hidden = !enabled;
             });
             form.querySelectorAll('select').forEach(e => { e.disabled = !unlocked; });
+            form.elements.pass2_surface_area.disabled = !unlocked || !useSecond;
+            form.elements.notes.readOnly = !unlocked;
+            const edit = form.querySelector('[data-subzero-edit]');
+            const save = form.querySelector('button[type="submit"]');
+            if (edit) edit.hidden = unlocked;
+            if (save) save.hidden = !unlocked;
         }
     };
     const initialize = (restore = false) => {
-        pane.querySelectorAll('form').forEach(sync);
-        if (!restore || !detail()) return;
-        let drafts = [];
-        try { drafts = JSON.parse(sessionStorage.getItem(draftKey(detail())) || '[]');
-            drafts.forEach(draft => { draft.fields = draft.fields.filter(field => field.name !== 'csrf_token'); });
-            if (drafts.length) sessionStorage.setItem(draftKey(detail()),JSON.stringify(drafts));
-        } catch (_) { /* current DOM remains usable */ }
-        for (const draft of drafts) {
-            const form = [...pane.querySelectorAll('form')].find(e => formKey(e) === draft.key);
-            if (!form) continue;
-            form.dataset.unlocked = draft.unlocked || form.dataset.unlocked;
-            draft.fields.forEach(saved => {
-                const field = form.elements[saved.name];
-                if (saved.name === 'csrf_token' || !field || !('value' in field)) return;
-                if (field.tagName === 'SELECT' && saved.value && ![...field.options].some(option=>option.value===saved.value)) {
-                    const option=document.createElement('option');option.value=saved.value;option.textContent='PREVIOUS SELECTION ('+saved.value+') — REVIEW';field.append(option);
+        if (!isPretreat) pane.querySelectorAll('form').forEach(sync);
+        for (const content of draftContents()) {
+            if (isPretreat) content.querySelectorAll('form').forEach(sync);
+            if (!restore) continue;
+            let drafts = [];
+            try { drafts = JSON.parse(sessionStorage.getItem(draftKey(content)) || '[]');
+                drafts.forEach(draft => { draft.fields = draft.fields.filter(field => field.name !== 'csrf_token'); });
+                if (drafts.length) sessionStorage.setItem(draftKey(content),JSON.stringify(drafts));
+            } catch (_) { /* current DOM remains usable */ }
+            for (const draft of drafts) {
+                const form = [...content.querySelectorAll('form')].find(e => formKey(e) === draft.key);
+                if (!form) continue;
+                form.dataset.unlocked = draft.unlocked || form.dataset.unlocked;
+                draft.fields.forEach(saved => {
+                    const field = form.elements[saved.name];
+                    if (saved.name === 'csrf_token' || !field || !('value' in field)) return;
+                    if (field.tagName === 'SELECT' && saved.value && ![...field.options].some(option=>option.value===saved.value)) {
+                        const option=document.createElement('option');option.value=saved.value;option.textContent='PREVIOUS SELECTION ('+saved.value+') — REVIEW';field.append(option);
+                    }
+                    field.value = saved.value;
+                    if (['checkbox', 'radio'].includes(field.type)) field.checked = saved.checked;
+                });
+                form.dataset.dirty = 'true'; sync(form);
+                if (isPretreat && draft.fields.some(field => field.name === 'notes' && field.value !== form.elements.notes?.defaultValue)) {
+                    form.querySelector('.ops-pretreat-notes').open = true;
                 }
-                field.value = saved.value;
-                if (['checkbox', 'radio'].includes(field.type)) field.checked = saved.checked;
-            });
-            form.dataset.dirty = 'true'; sync(form);
+            }
+            if (drafts.length) {
+                const message = 'RESTORED UNSAVED DRAFT · Original version retained. Resolve any server conflict before saving.';
+                if (isPretreat) {
+                    content.closest('details').open = true;
+                    inlineMessage(content, message, true);
+                } else draftMessage(message);
+            }
         }
-        if (drafts.length) draftMessage('RESTORED UNSAVED DRAFT · Original version retained. Resolve any server conflict before saving.');
     };
     const applyLayout = () => {
         const board = root.querySelector('[data-ops-board]');
@@ -102,6 +137,7 @@
         rows.sort((a,b) => Number(a.dataset.order) - Number(b.dataset.order));
         rows.forEach(row => board.append(row));
         board.querySelectorAll('.ops-ramp-column').forEach(e => e.remove());
+        if (isPretreat) root.dataset.layout = 'list';
         const visual = root.dataset.layout === 'visual';
         // Desktop always shows every ramp. Keep the stored mobile selection
         // intact, including when live refresh or a viewport change reapplies it.
@@ -130,6 +166,46 @@
         if (mission) url.searchParams.set('mission',mission);
         return url;
     };
+    const reconcilePretreat = (board, incoming, active) => {
+        const nextRows = new Map([...incoming.querySelectorAll('[data-ops-row]')].map(row => [row.dataset.missionId, row]));
+        if (!media.matches) nextRows.forEach(row => { row.querySelector('[data-ops-pretreat-row]').open = true; });
+        for (const row of board.querySelectorAll('[data-ops-row]')) {
+            const next = nextRows.get(row.dataset.missionId);
+            const editor = row.querySelector('[data-ops-pretreat-row]');
+            const preserve = row.contains(active) || row.querySelector('form[data-dirty="true"]');
+            if (next?.dataset.tail !== row.dataset.tail) {
+                if (preserve) {
+                    editor.open = true;
+                    inlineMessage(row.querySelector('[data-ops-inline]'),
+                        'Aircraft identity or eligibility changed. Original-tail draft retained for review.', true);
+                    if (next) next.replaceWith(row);
+                    else incoming.append(row);
+                }
+                continue;
+            }
+            const nextEditor = next.querySelector('[data-ops-pretreat-row]');
+            if (preserve) {
+                row.className = next.className;
+                row.dataset.status = next.dataset.status;
+                row.dataset.ramp = next.dataset.ramp;
+                const summary = editor.querySelector('summary');
+                summary.replaceChildren(...nextEditor.querySelector('summary').childNodes);
+                next.replaceWith(row);
+                continue;
+            }
+            nextEditor.open = editor.open;
+            const opened = new Set([...editor.querySelectorAll('details[open]')]
+                .map(section => section.querySelector(':scope > summary')?.textContent));
+            nextEditor.querySelectorAll('details').forEach(section => {
+                section.open = opened.has(section.querySelector(':scope > summary')?.textContent);
+            });
+            const feedback = editor.querySelector('[data-ops-inline-feedback]');
+            if (!feedback.hidden) {
+                inlineMessage(nextEditor.querySelector('[data-ops-inline]'), feedback.textContent, feedback.classList.contains('is-error'));
+            }
+        }
+    };
+
     const fetchPage = async (mission = selected, saved = null) => {
         const requestEpoch = ++epoch;
         const response = await (window.NeoLiveRevision?.fetch || fetch)(currentUrl(mission), {cache:'no-store',signal:navigationAbort.signal});
@@ -147,8 +223,25 @@
             const incoming = next.querySelector('[data-ops-context]');
             if (previous && incoming) {incoming.open=previous.open;previous.replaceWith(incoming);}
         }
-        root.querySelector('[data-ops-board]').replaceWith(next.querySelector('[data-ops-board]'));
+        const currentBoard = root.querySelector('[data-ops-board]');
+        const nextBoard = next.querySelector('[data-ops-board]');
+        const activeRowField = isPretreat && currentBoard.contains(document.activeElement) ? document.activeElement : null;
+        const caret = activeRowField && 'selectionStart' in activeRowField ? [activeRowField.selectionStart, activeRowField.selectionEnd] : null;
+        if (isPretreat && next.dataset.operationId === root.dataset.operationId) reconcilePretreat(currentBoard, nextBoard, activeRowField);
+        currentBoard.replaceWith(nextBoard);
         ['operationId','layout','ramp'].forEach(key => { root.dataset[key] = next.dataset[key]; });
+        if (isPretreat) {
+            revision = next.dataset.revision;
+            tagOrder();
+            applyLayout();
+            initialize();
+            if (activeRowField?.isConnected) {
+                activeRowField.focus({preventScroll:true});
+                if (caret && caret[0] !== null) activeRowField.setSelectionRange(...caret);
+            }
+            window.scrollTo({top:scroll,behavior:'instant'});
+            return;
+        }
         const incoming = next.querySelector('[data-ops-detail-content]');
         const current = detail();
         // Optional evidence/details must not close on an idle live refresh,
@@ -227,6 +320,19 @@
         if (open) { event.preventDefault(); saveDraft(); const mission = open.closest('[data-ops-row]').dataset.missionId; try { pane.querySelector(':focus')?.blur(); selected = mission; await fetchPage(mission); } catch(error) { notify(error.message,true); } return; }
         const close = event.target.closest('[data-ops-close]');
         if (close) { saveDraft(); pane.hidden = true; selected = null; history.replaceState(null,'',currentUrl(null)); return; }
+        const reloadInline = event.target.closest('[data-ops-reload-inline]');
+        if (reloadInline) {
+            const content = inlineFor(reloadInline);
+            if (content.querySelector('form[data-dirty="true"]') && !window.confirm('Discard unsaved entries for this aircraft?')) return;
+            try {
+                content.querySelectorAll('form[data-dirty="true"]').forEach(form => delete form.dataset.dirty);
+                inlineMessage(content, '');
+                saveDraft();
+                reloadInline.blur();
+                await fetchPage();
+            } catch (error) { inlineMessage(content, error.message, true); }
+            return;
+        }
         const reload = event.target.closest('[data-ops-reload]');
         if (reload) {
             if (pane.querySelector('form[data-dirty="true"]') && !window.confirm('Discard unsaved entries for this aircraft and reload current server values?')) return;
@@ -257,8 +363,15 @@
             const form = edit.closest('form'); form.dataset.unlocked = 'true'; edit.hidden = true;
             form.querySelectorAll('textarea,input[name="reason_for_application"]').forEach(e => {e.readOnly=false;});
             form.querySelector('button[type="submit"]').hidden = false; sync(form);
-            pane.querySelectorAll('[data-subzero-spray-control]').forEach(e => {e.readOnly=e.dataset.sprayReady==='false';});
-            pane.querySelectorAll('[data-subzero-spray-save]').forEach(e => {e.hidden=false;}); return;
+            const inline = inlineFor(form);
+            if (inline) {
+                form.dataset.dirty = 'true';
+                saveDraft();
+                form.elements.pass1_surface_area.focus();
+            }
+            const editor = inline || pane;
+            editor.querySelectorAll('[data-subzero-spray-control]').forEach(e => {e.readOnly=e.dataset.sprayReady==='false';});
+            editor.querySelectorAll('[data-subzero-spray-save]').forEach(e => {e.hidden=false;}); return;
         }
         const stamp = event.target.closest('[data-subzero-deice-stamp], [data-subzero-stamp]');
         if (stamp) {
@@ -270,7 +383,8 @@
         const form = event.target.closest('form'); if (!form) return;
         event.preventDefault(); if (busy) return;
         if (form.dataset.subzeroConfirm && !window.confirm(form.dataset.subzeroConfirm)) return;
-        const body = new FormData(form), content = form.closest('[data-ops-detail-content]');
+        const inline = inlineFor(form);
+        const body = new FormData(form), content = inline || form.closest('[data-ops-detail-content]');
         if (event.submitter?.name) body.set(event.submitter.name,event.submitter.value);
         body.set('target',formAction(form)); body.set('mode',root.dataset.mode);
         body.set('operation_id',root.dataset.operationId); if (content) body.set('physical_tail',content.dataset.tail);
@@ -278,14 +392,28 @@
         const timeout = setTimeout(()=>abort.abort(),25000);
         busy = true; ++epoch;
         const buttons = [...form.querySelectorAll('button')]; buttons.forEach(button => {button.disabled=true;});
-        notify('SAVING…');
+        if (inline) inlineMessage(inline, 'SAVING…');
+        else notify('SAVING…');
         try {
             const response = await fetch(root.dataset.mutateUrl,{method:'POST',body,signal:abort.signal});
             let payload; try { payload=await response.json(); } catch (_) { throw new Error(`Save could not be confirmed (${response.status}). Your entries are kept. Check current state before retrying.`); }
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Save rejected. Your entries are kept.');
-            delete form.dataset.dirty; saveDraft(); notify(payload.message);
-            busy = false; await fetchPage(selected,key);
-        } catch(error) { notify(error.name === 'AbortError' ? 'Save timed out. Your draft is kept. Check current state before retrying; no automatic retry was sent.' : error instanceof TypeError ? 'Network error while saving. Your draft is kept. Check current state before retrying; no automatic retry was sent.' : error.message,true); }
+            delete form.dataset.dirty;
+            saveDraft();
+            if (inline) {
+                if (form.contains(document.activeElement)) document.activeElement.blur();
+                inlineMessage(inline, payload.message);
+            }
+            else notify(payload.message);
+            busy = false;
+            await fetchPage(selected,key);
+        } catch(error) {
+            const message = error.name === 'AbortError' ? 'Save timed out. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
+                : error instanceof TypeError ? 'Network error while saving. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
+                : error.message;
+            if (inline) inlineMessage(inline, message, true);
+            else notify(message,true);
+        }
         finally { clearTimeout(timeout); busy=false; buttons.forEach(button=>{button.disabled=false;}); }
     });
     const context = root.querySelector('[data-ops-context] form');
@@ -295,9 +423,17 @@
             if (draft) { const safeDraft=draft.filter(saved=>saved.name!=='csrf_token'); sessionStorage.setItem(['neoapps.subzero.operations.context',root.dataset.userId,root.dataset.operationId].join(':'),JSON.stringify(safeDraft)); safeDraft.forEach(saved=>{if (context.elements[saved.name]) context.elements[saved.name].value=saved.value;}); context.dataset.dirty='true'; notify('RESTORED UNSAVED APPLICATION CONTEXT DRAFT'); }
         } catch (_) { /* Current server values remain available. */ }
     }
+    if (isPretreat) root.querySelectorAll('[data-ops-pretreat-row]').forEach(row => {
+        row.open = !media.matches || row.hasAttribute('data-ops-initial-open');
+    });
     tagOrder(); applyLayout(); initialize(true); syncFeedback();
     root.dataset.ready = 'true';
-    media.addEventListener('change',applyLayout);
+    media.addEventListener('change', () => {
+        if (isPretreat) root.querySelectorAll('[data-ops-pretreat-row]').forEach(row => {
+            row.open = !media.matches || row.contains(document.activeElement) || !!row.querySelector('form[data-dirty="true"]');
+        });
+        applyLayout();
+    });
     window.addEventListener('beforeunload',()=>{ saveDraft(); stopLive(); });
     window.addEventListener('pagehide',stopLive);
     // A back/forward-cache restore needs a fresh controller and canonical scope;

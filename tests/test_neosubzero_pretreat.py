@@ -38,6 +38,13 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         self.assertEqual(rows[1]["parking"], "TBD")
         self.assertNotIn("fuel", rows[0])
 
+    def test_missing_inbound_eta_does_not_use_the_arrival_schedule_as_ground_time(self):
+        self.arrival.eta_datetime_utc = None
+        db.session.commit()
+        row = next(row for row in pretreat_context(self.gateway, self.operation)["rows"] if row["tail"] == "T1")
+        self.assertFalse(row["inbound_eta"])
+        self.assertEqual(row["ground_time"], "-")
+
     def test_reversible_plan_config_chronology_and_completion(self):
         state = mutate_pretreat(self.operation, self.departure, "toggle_planned", {}, None)
         self.assertTrue(state.pretreat_planned)
