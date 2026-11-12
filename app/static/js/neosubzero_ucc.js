@@ -186,14 +186,23 @@
         });
     }
 
+    function copyAttendance(target, source) {
+        if (!target) return;
+        const status = source?.dataset.uccAttendance;
+        if (status) target.dataset.uccAttendance = status;
+        else delete target.dataset.uccAttendance;
+    }
+
     function updateSelectedText(form, select) {
         const selected = select.selectedOptions[0];
         const text = form.querySelector('[data-ucc-selected-text]');
-        const unavailable = Boolean(selected?.disabled);
-        const unavailableClass = select.name === "truck_number" ? "ucc-truck-unavailable" : "ucc-person-unavailable";
         if (text) {
             text.textContent = selected?.textContent || '';
-            text.classList.toggle(unavailableClass, unavailable);
+            if (select.name === "truck_number") {
+                text.classList.toggle("ucc-truck-unavailable", Boolean(selected?.disabled));
+            } else {
+                copyAttendance(text, selected);
+            }
         }
     }
 
@@ -588,11 +597,25 @@
                     team.querySelectorAll("[data-ucc-crew-line]").forEach(line => {
                         const role = line.dataset.uccCrewLine;
                         const form = current.querySelector(`[data-ucc-crew-form="${role}"]`);
-                        if (!form || form.dataset.dirty === "true" || form.contains(document.activeElement)) return;
+                        if (!form) return;
+                        const nextForm = team.querySelector(`[data-ucc-crew-form="${role}"]`);
                         const currentLine = current.querySelector(`[data-ucc-crew-line="${role}"]`);
+                        if (form.dataset.dirty === "true" || form.contains(document.activeElement)) {
+                            // Refresh the saved employee's color without replacing the operator's draft.
+                            const personId = form.dataset.currentPersonId;
+                            if (personId && personId === nextForm.dataset.currentPersonId) {
+                                const source = line.querySelector("span");
+                                copyAttendance(currentLine.querySelector("span"), source);
+                                const select = form.querySelector("select");
+                                const assignedOption = [...select.options].find(option => option.value === personId);
+                                copyAttendance(assignedOption, source);
+                                if (select.value === personId) copyAttendance(form.querySelector("[data-ucc-selected-text]"), source);
+                            }
+                            return;
+                        }
                         currentLine.toggleAttribute("data-ucc-assigned", line.hasAttribute("data-ucc-assigned"));
                         currentLine.querySelector("span").replaceWith(line.querySelector("span"));
-                        form.replaceWith(team.querySelector(`[data-ucc-crew-form="${role}"]`));
+                        form.replaceWith(nextForm);
                     });
                     if (savedCrewForm?.closest(".ucc-team") === current && savedCrewForm.dataset.uccCrewForm === "unit") {
                         savedCrewForm.replaceWith(team.querySelector('[data-ucc-crew-form="unit"]'));

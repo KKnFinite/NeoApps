@@ -238,7 +238,7 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
             ))
             db.session.commit()
         tick(tv, 5000)
-        expect(alpha.locator(".ucc-person-unavailable")).to_contain_text("Longname-Deicer-1")
+        expect(alpha.locator('[data-ucc-attendance="unavailable"]')).to_contain_text("Longname-Deicer-1")
 
         case.ready(work, "/neosubzero/ucc")
         early = work.locator('[data-ucc-early-out] .position-1')

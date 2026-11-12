@@ -59,7 +59,6 @@
             const role = field.dataset.uccTvCrewField;
             let value = field.textContent.trim();
             let fullName = value;
-            let stateClass = field.className;
             if (field.dataset.uccTvLastName !== undefined) {
                 const first = field.dataset.uccTvFirstName.trim();
                 const last = field.dataset.uccTvLastName.trim();
@@ -68,9 +67,9 @@
                 fullName = [first, last].filter(Boolean).join(" ");
                 const label = role[0].toUpperCase();
                 value = right ? `${name} · ${label}` : `${label} · ${name}`;
-                stateClass = field.hasAttribute("data-ucc-tv-attendance-unavailable") ? "ucc-person-unavailable" : "";
             }
-            const line = element(field.localName, stateClass, value);
+            const line = element(field.localName, field.className, value);
+            if (field.dataset.uccAttendance) line.dataset.uccAttendance = field.dataset.uccAttendance;
             line.title = fullName;
             line.dataset.uccTvCrewField = role;
             return line;

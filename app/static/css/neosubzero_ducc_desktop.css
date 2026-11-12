@@ -1,8 +1,14 @@
 /* Shared physical DUCC geometry; existing mobile staffing/ramp lenses remain. */
 .ucc-staffing-grid { display:contents; }
 .ucc-plane-etd { display:none; }
-.neosubzero-ucc .ucc-person-unavailable,
 .neosubzero-ucc .ucc-truck-unavailable { color:#ff9c9c; }
+.neosubzero-ucc { --ucc-unmarked:#f4f8fc; --ucc-here:#92dfa6; --ucc-absent:#ff9c9c; }
+.neosubzero-ucc :is(span[data-ucc-attendance="unmarked"], select:has(option:checked[data-ucc-attendance="unmarked"])) { --ucc-attendance-color:var(--ucc-unmarked); }
+.neosubzero-ucc :is(span[data-ucc-attendance="here"], select:has(option:checked[data-ucc-attendance="here"])) { --ucc-attendance-color:var(--ucc-here); }
+.neosubzero-ucc :is(span[data-ucc-attendance="unavailable"], select:has(option:checked[data-ucc-attendance="unavailable"])) { --ucc-attendance-color:var(--ucc-absent); }
+.neosubzero-ucc span[data-ucc-attendance] { color:var(--ucc-attendance-color); }
+/* Match the shared operational shell's select color priority only for assigned people. */
+.neosubzero-ucc select:has(option:checked[data-ucc-attendance]) { color:var(--ucc-attendance-color) !important; }
 .neosubzero-ucc .ucc-early-out .ucc-staffing-grid {
     display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:auto; gap:6px;
 }
@@ -490,6 +496,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         --tv-accent:#80d1e8;
         --tv-truck:#79c6ff;
         --tv-person:#92dfa6;
+        --tv-unmarked:#f4f8fc;
         --tv-unavailable:#ff9c9c;
         box-sizing:border-box;
         grid-template-rows:auto auto minmax(0,1fr) auto;
@@ -572,7 +579,8 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         color:var(--tv-person); font-size:1.1em; font-weight:750; line-height:1.04;
     }
     .ucc-tv-crew > :is(strong,span) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .ucc-tv-wallboard .ucc-tv-crew :is(.ucc-truck-unavailable,.ucc-person-unavailable) { color:var(--tv-unavailable); }
+    .ucc-tv-crew [data-ucc-attendance="unmarked"] { color:var(--tv-unmarked); }
+    .ucc-tv-wallboard .ucc-tv-crew :is(.ucc-truck-unavailable,.ucc-person-unavailable,[data-ucc-attendance="unavailable"]) { color:var(--tv-unavailable); }
     .ucc-tv-pad { display:grid; align-items:center; }
     .ucc-tv-pad-idle { display:grid; justify-items:center; gap:.4em; color:#7d9aae; text-align:center; }
     .ucc-tv-pad-idle .ucc-tv-plane-icon { width:2.4em; height:2.4em; opacity:.34; }
@@ -654,6 +662,10 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew-column > .ucc-tv-crew + .ucc-tv-crew {
         border-top-color:var(--tv-edge);
     }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew [data-ucc-attendance="unmarked"] {
+        background:#405567; border-radius:2px; width:fit-content; max-width:100%;
+    }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew-column > .is-right [data-ucc-attendance="unmarked"] { justify-self:end; }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] {
         --tv-truck:#125f9d;
         --tv-person:#1d6b3c;

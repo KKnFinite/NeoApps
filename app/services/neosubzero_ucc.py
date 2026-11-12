@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -136,7 +136,10 @@ def neosubzero_ucc_context(gateway, operation):
                     "person": person,
                     "version": entity_version(assignment),
                     "available": bool(person and person.id in available_people),
-                    "tv_attendance_unavailable": bool(attendance and attendance.status not in {"here", "unmarked"}),
+                    "attendance_display": (
+                        "unmarked" if not attendance or attendance.status in {"", "unmarked"}
+                        else "here" if attendance.status == "here" else "unavailable"
+                    ),
                 }
             truck = truck_by_position.get((ramp, position))
             slots.append(
@@ -790,12 +793,24 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
                ("parking_9_10_enabled", _parking_9_10_enabled(gateway))]
     if weather_revision is not None:
         payload.append(("weather", weather_revision))
+    attendance_scope = StaffingDailyAttendance.sort_date_operation_id == operation_id
+    if operation:
+        # DUCC also projects legacy attendance before NeoStaffing links it to an
+        # operation. A legacy row can be cleared without ever receiving that link.
+        assigned_people = select(NeoSubZeroUccAssignment.person_id).where(
+            NeoSubZeroUccAssignment.sort_date_operation_id == operation_id
+        )
+        attendance_scope = or_(attendance_scope, and_(
+            StaffingDailyAttendance.sort_date_operation_id.is_(None),
+            StaffingDailyAttendance.attendance_date == operation.sort_date,
+            StaffingDailyAttendance.person_id.in_(assigned_people),
+        ))
     models = (
         ("registered_trucks", NeoSubZeroTruck, NeoSubZeroTruck.gateway_id == gateway.id),
         ("missions", SortDateMission, SortDateMission.sort_date_operation_id == operation_id),
         # departure_deice_revision already covers both UCC assignment tables.
         ("callouts", NeoSubZeroCalloutAssignment, NeoSubZeroCalloutAssignment.sort_date_operation_id == operation_id),
-        ("attendance", StaffingDailyAttendance, StaffingDailyAttendance.sort_date_operation_id == operation_id),
+        ("attendance", StaffingDailyAttendance, attendance_scope),
         ("qualifications", StaffingPersonQualification, StaffingPersonQualification.qualification_key == "deice"),
         ("people", StaffingPerson, StaffingPerson.active.is_(True)),
         ("work", StaffingWorkAssignment, StaffingWorkAssignment.active.is_(True)),

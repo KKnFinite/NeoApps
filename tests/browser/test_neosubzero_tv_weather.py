@@ -124,13 +124,16 @@ class DuccTvWeatherTest(unittest.TestCase):
         for field, text, color in (
             (remote.locator('[data-ucc-tv-crew-field="truck"]'), '1. 123456', blue),
             (early.locator('[data-ucc-tv-crew-field="truck"]'), '1. UCC-831', red),
-            (unmarked, 'D · T. Smith-Jones', green),
+            (unmarked, 'D · T. Smith-Jones', '#f4f8fc'),
             (here, "F · T. O'Neil", green),
             (absent, 'D · C. De la Cruz', red),
         ):
             expect(field).to_have_text(text)
             expect(field).to_have_css('color', rgb(color))
-            self.assertGreaterEqual(contrast(color, '#f3f7fa' if light else '#07121e'), 4.5)
+            background = '#405567' if light and field == unmarked else '#f3f7fa' if light else '#07121e'
+            self.assertGreaterEqual(contrast(color, background), 4.5)
+        if light:
+            expect(unmarked).to_have_css('background-color', rgb('#405567'))
         expect(absent).to_have_attribute('title', 'Christopher De la Cruz')
         expect(here).to_have_attribute('title', "Taylor O'Neil")
         sizes = early.locator('.ucc-tv-crew').evaluate("""crew => Array.from(crew.children, field => {
@@ -182,7 +185,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             expect(board.locator('.ucc-tv-hours article')).to_have_count(12)
             expect(board.locator('.ucc-tv-header > :visible')).to_have_text(['RFD DUCC · TV MODE', 'Light / Dark', 'Exit TV Mode'])
             expect(board.locator('.ucc-tv-remote .ucc-tv-plane-icon')).to_have_class('ucc-tv-plane-icon facing-up')
-            expect(board.locator('.ucc-tv-early .ucc-person-unavailable')).to_have_text('D · C. De la Cruz')
+            expect(board.locator('.ucc-tv-early [data-ucc-attendance="unavailable"]')).to_have_text('D · C. De la Cruz')
             expect(board.locator('.ucc-tv-pad .state-deicing .ucc-tv-plane-icon')).to_have_class('ucc-tv-plane-icon facing-up')
             expect(board.locator('.ucc-tv-stands .ucc-tv-plane-icon.facing-right').first).to_be_visible()
             expect(board.locator('.ucc-tv-stands .ucc-tv-plane-icon.facing-left').first).to_be_visible()

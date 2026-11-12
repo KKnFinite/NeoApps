@@ -141,7 +141,7 @@ class DeicerManagementTest(unittest.TestCase):
                              ("call_in", "Coverage arranged", self.manager.id))
             self.assertEqual(client.post(path + "?tab=permanent", data=values).status_code, 409)
             self.assertEqual(NeoSubZeroUccAssignment.query.filter_by(person_id=permanent_person.id).count(), 2)
-            self.assertIn(b"ucc-person-unavailable", client.get("/neosubzero/ucc").data)
+            self.assertIn(b'data-ucc-attendance="unavailable"', client.get("/neosubzero/ucc").data)
 
             client.post(path + "?tab=eligibility", data={
                 "person_id": self.candidate.id, "action": "unqualify", "expected_version": entity_version(authorization),
