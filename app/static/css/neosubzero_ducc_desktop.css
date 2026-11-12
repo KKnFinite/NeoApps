@@ -465,7 +465,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
 }
 
 /* The TV projection is a sibling of management DUCC, never a scaled copy. */
-.ucc-tv-wallboard { display:none; }
+.ucc-tv-wallboard, .neosubzero-ucc .ucc-tv-refresh-status { display:none; }
 @media (min-width:901px) {
     body.neosubzero-ucc-tv-mode .ucc-board-viewport:has(> .ucc-tv-wallboard) > .neosubzero-ucc { display:none; }
     body.neosubzero-ucc-tv-mode .ucc-tv-wallboard { display:grid; }
@@ -488,6 +488,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-wallboard :is(section,div,article) { min-width:0; }
     .ucc-tv-wallboard h2 { color:var(--tv-accent); font-size:.8em; letter-spacing:.085em; text-transform:uppercase; }
     .ucc-tv-wallboard .ucc-tv-header { display:flex; align-items:center; justify-content:flex-end; gap:1em; }
+    .ucc-tv-refresh-status { margin-inline-end:auto; font-size:.74em; color:var(--tv-muted); }
     .ucc-tv-wallboard h1 { color:#b5d9e9; font-size:.81em; letter-spacing:.12em; font-weight:650; }
     .ucc-tv-wallboard :is(.ucc-tv-exit,.ucc-tv-theme) {
         background:#101f30; border:1px solid var(--tv-edge); border-radius:.4em;

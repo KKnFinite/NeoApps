@@ -20,18 +20,19 @@ function fixture() {
             return {'[data-ucc-feedback]':feedback,'[data-ucc-current-link]':currentLink,'[data-ucc-live-board]':board,'[data-ucc-upcoming]':upcoming}[selector] || null;
         },
         addEventListener(name, callback){listeners[name] = callback;},
+        dispatchEvent(){},
     };
-    const next = {dataset:{revision:'r2'},querySelectorAll(){return [];},querySelector(selector){return ['[data-ucc-live-board]','[data-ucc-upcoming]'].includes(selector) ? {} : null;}};
+    const next = {cloneNode(){return this;},dataset:{revision:'r2'},querySelectorAll(){return [];},querySelector(selector){return ['[data-ucc-live-board]','[data-ucc-upcoming]'].includes(selector) ? {} : null;}};
     const document = {body:{classList},documentElement:{},querySelector(){return root;},addEventListener(){},activeElement:null};
     const window = {
         matchMedia(){return {matches:false};},localStorage:{getItem(){return null;}},
         setTimeout,clearTimeout,scrollY:100,scrollTo(){},location:{origin:'http://fixture.test',href:'http://fixture.test/neosubzero/ucc'},
         history:{replaceState(_state,_title,url){window.location.href=String(url);}},
-        NeoLiveUpdates:{create(options){poll=options.poll;return {setServerStatus(){}};}},
+        NeoLiveUpdates:{create(options){poll=options.poll;return {setIntervalMs(){},setServerStatus(){}};}},
     };
     const calls=[];
     const context = {
-        window,document,URL,CSS:{escape: String},AbortController,
+        window,document,URL,CSS:{escape: String},AbortController,CustomEvent:class {},
         FormData:class {set(){}},
         DOMParser:class {parseFromString(){return {querySelector(){next.dataset.revision=serverRevision;return next;}};}},
         fetch:async (url,options={}) => {

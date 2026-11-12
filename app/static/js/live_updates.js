@@ -26,6 +26,8 @@
                 throw new Error("A valid live-screen refresh interval is required.");
             }
             this.statusElement = options.statusElement || null;
+            this.statusOnlyOnFailure = options.statusOnlyOnFailure === true;
+            this.staggerOnThrottle = options.staggerOnThrottle === true;
             this.failureThreshold = Number(options.failureThreshold) || DEFAULT_FAILURE_THRESHOLD;
             this.immediate = options.immediate !== false;
             this.continuousWhileVisible = options.continuousWhileVisible === true;
@@ -61,6 +63,13 @@
         setServerStatus(status) {
             this.serverStatus = status || {};
             this.setEnabled(this.serverStatus.auto_refresh_enabled !== false);
+        }
+
+        setIntervalMs(value) {
+            const intervalMs = Math.max(MINIMUM_REFRESH_INTERVAL_MS, Number(value));
+            if (!Number.isFinite(intervalMs) || intervalMs === this.intervalMs) return;
+            this.intervalMs = intervalMs;
+            if (!this.running) this.schedule();
         }
 
         setEnabled(enabled) {
@@ -135,6 +144,10 @@
                     if (error?.sessionChanged) this.renderStatus('session_changed', error.message);
                     if (Number.isFinite(error?.retryAt)) {
                         this.retryAt = error.retryAt;
+                        if (this.staggerOnThrottle) {
+                            // Repeatedly starting at the same phase can starve a second display.
+                            this.retryAt += Math.floor(Math.random() * 1000);
+                        }
                         this.renderStatus("reconnecting", "Live updates cooling down - retrying automatically");
                     }
                     this.failures += 1;
@@ -162,8 +175,9 @@
             ) {
                 return;
             }
-            this.timer = window.setTimeout(() => this.refreshNow(),
-                Math.min(2147483647, Math.max(this.intervalMs, this.retryAt - Date.now())));
+            const cooldown = Math.max(0, this.retryAt - Date.now());
+            const delay = this.staggerOnThrottle ? this.intervalMs + cooldown : Math.max(this.intervalMs, cooldown);
+            this.timer = window.setTimeout(() => this.refreshNow(), Math.min(2147483647, delay));
         }
 
         clearTimer() {
@@ -335,6 +349,9 @@
                 return;
             }
             this.statusElement.dataset.liveUpdateState = state;
+            if (this.statusOnlyOnFailure) {
+                this.statusElement.hidden = state !== "reconnecting" && state !== "session_changed";
+            }
             if (this.statusLabelElement) {
                 this.statusLabelElement.textContent = label;
             } else {

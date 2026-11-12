@@ -779,7 +779,8 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
     from app.models import NeoSubZeroTruck
 
     operation_id = getattr(operation, "id", None)
-    payload = [("departure", departure_deice_revision(gateway, operation)),
+    payload = [("operation", operation_id),
+               ("departure", departure_deice_revision(gateway, operation)),
                ("parking_9_10_enabled", _parking_9_10_enabled(gateway))]
     if weather_revision is not None:
         payload.append(("weather", weather_revision))

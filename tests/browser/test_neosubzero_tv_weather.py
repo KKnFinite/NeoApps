@@ -10,6 +10,7 @@ from playwright.sync_api import expect
 from app.extensions import db
 from app.models import (NeoSubZeroDepartureDeiceEvent, NeoSubZeroSprayRecord, SortDateOperation,
                         SortDateParkingAssignment, StaffingDailyAttendance, StaffingPerson, StaffingUnit)
+from app.services.live_screen_refresh import save_live_screen_refresh_override
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
 from app.services.neosubzero_ucc import set_neosubzero_ucc_assignment
 from tests.browser import test_neosubzero_ucc as fixtures
@@ -38,6 +39,7 @@ class DuccTvWeatherTest(unittest.TestCase):
     def seed_wallboard(self, case):
         with case.app.app_context():
             operation = db.session.get(SortDateOperation, case.operation_id)
+            save_live_screen_refresh_override(operation.gateway, "neosubzero.ucc_tv", "5")
             crew = db.session.get(StaffingPerson, case.people[0])
             for ramp, number in (('Remote', '12'), ('Early Out', 'UCC-831')):
                 set_neosubzero_ucc_truck(operation, ramp, 1, number)
@@ -137,7 +139,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             expect(page.locator('[data-subzero-ucc]')).to_be_hidden()
             expect(board.locator('.ucc-tv-ramp > h2')).to_have_text(['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'])
             expect(board.locator('.ucc-tv-hours article')).to_have_count(12)
-            expect(board.locator('.ucc-tv-header > *')).to_have_text(['RFD DUCC · TV MODE', 'Light / Dark', 'Exit TV Mode'])
+            expect(board.locator('.ucc-tv-header > :visible')).to_have_text(['RFD DUCC · TV MODE', 'Light / Dark', 'Exit TV Mode'])
             expect(board.locator('.ucc-tv-remote .ucc-tv-plane-icon')).to_have_class('ucc-tv-plane-icon facing-up')
             expect(board.locator('.ucc-tv-early .ucc-person-unavailable')).to_contain_text('Longname-Deicer-0')
             expect(board.locator('.ucc-tv-pad .state-deicing .ucc-tv-plane-icon')).to_have_class('ucc-tv-plane-icon facing-up')

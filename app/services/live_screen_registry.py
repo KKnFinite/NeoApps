@@ -12,7 +12,11 @@ class LiveScreenDefinition:
     route_endpoint: str
     refresh_endpoint: str
     route_values: tuple[tuple[str, str], ...] = ()
+    default_interval_seconds: int | None = None
+    allow_off: bool = True
 
+
+UCC_TV_REFRESH_KEY = "neosubzero.ucc_tv"
 
 LIVE_SCREEN_REGISTRY = (
     LiveScreenDefinition("motherbrain", "NeoMotherBrain", "Arrival Planning", "neomotherbrain.arrival_planning", "neomotherbrain.alp_import", "neomotherbrain.planning_live_state", (("mission_type", "arrival"),)),
@@ -37,6 +41,11 @@ LIVE_SCREEN_REGISTRY = (
     LiveScreenDefinition("subzero", "NeoSubZero", "Outbound", "neosubzero.outbound", "neosubzero.outbound", "neosubzero.outbound_revision_endpoint"),
     LiveScreenDefinition("subzero", "NeoSubZero", "Coordinator", "neosubzero.coordinator", "neosubzero.coordinator", "neosubzero.coordinator_revision_endpoint"),
     LiveScreenDefinition("subzero", "NeoSubZero", "UCC", "neosubzero.ucc", "neosubzero.ucc", "neosubzero.ucc_revision_endpoint"),
+    LiveScreenDefinition(
+        "subzero", "NeoSubZero", "DUCC TV Mode", UCC_TV_REFRESH_KEY,
+        "neosubzero.ucc", "neosubzero.ucc_revision_endpoint",
+        (("view", "tv"),), default_interval_seconds=30, allow_off=False,
+    ),
     LiveScreenDefinition("subzero", "NeoSubZero", "Deicer Mobile", "neosubzero.deicer_mobile", "neosubzero.deicer_mobile", "neosubzero.deicer_mobile_revision_endpoint"),
 )
 
@@ -63,7 +72,7 @@ def grouped_live_screens():
 def live_screen_for_refresh_request(endpoint, view_args=None):
     values = {key: str(value).strip().lower() for key, value in (view_args or {}).items()}
     for item in LIVE_SCREEN_REGISTRY:
-        if item.refresh_endpoint != endpoint:
+        if item.refresh_endpoint != endpoint or not item.route_values:
             continue
         if all(values.get(key) == expected for key, expected in item.route_values):
             return item

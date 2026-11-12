@@ -25,7 +25,7 @@ class LiveScreenRefreshValue:
     @property
     def configured_label(self):
         if self.override_seconds is None:
-            return "Render default"
+            return self.source_label
         return _interval_label(self.override_seconds * 1000)
 
     @property
@@ -36,6 +36,8 @@ class LiveScreenRefreshValue:
     def source_label(self):
         if self.source == "override":
             return "Override"
+        if self.source == "screen_default":
+            return "Screen default"
         if self.source == "legacy_neoermac_override":
             return "Legacy NeoErmac override"
         if self.source == "unregistered":
@@ -100,7 +102,8 @@ def live_screen_refresh_values(gateway, screen_keys, *, fallback_ms=None):
     effective_fallback_ms = _effective_fallback_ms(fallback_ms)
     values = {}
     for screen_key in normalized_keys:
-        if not live_screen_definition(screen_key):
+        screen = live_screen_definition(screen_key)
+        if not screen:
             values[screen_key] = LiveScreenRefreshValue(
                 screen_key, None, 0, "unregistered"
             )
@@ -110,11 +113,15 @@ def live_screen_refresh_values(gateway, screen_keys, *, fallback_ms=None):
         if override is None and screen_key.startswith("neoermac."):
             override = overrides.get("neoermac.all")
             source = "legacy_neoermac_override"
+        if not screen.allow_off and override not in LIVE_SCREEN_REFRESH_ALLOWED_SECONDS[1:]:
+            override = None
+        default_seconds = screen.default_interval_seconds
         values[screen_key] = _refresh_value(
             screen_key,
             override,
-            effective_fallback_ms,
+            default_seconds * 1000 if default_seconds is not None else effective_fallback_ms,
             override_source=source,
+            default_source="screen_default" if default_seconds is not None else "render_default",
         )
     return values
 
@@ -127,7 +134,8 @@ def save_live_screen_refresh_override(
     allowed_screen_keys=None,
 ):
     normalized_key = _normalize_screen_key(screen_key)
-    if live_screen_definition(normalized_key) is None:
+    screen = live_screen_definition(normalized_key)
+    if screen is None:
         raise ValueError("Select a registered live screen.")
     if allowed_screen_keys is not None:
         normalized_allowed = {
@@ -158,6 +166,8 @@ def save_live_screen_refresh_override(
         return LiveScreenRefreshMutationResult(True, None)
 
     interval_seconds = _parse_override_seconds(normalized_value)
+    if not screen.allow_off and interval_seconds == 0:
+        raise ValueError("Select 5, 10, 15, 30, or 60 seconds. This screen must stay live.")
     if setting is not None and setting.interval_seconds == interval_seconds:
         return LiveScreenRefreshMutationResult(False, setting)
     if setting is None:
@@ -172,13 +182,13 @@ def save_live_screen_refresh_override(
     return LiveScreenRefreshMutationResult(True, setting)
 
 
-def _refresh_value(screen_key, override_seconds, fallback_ms, *, override_source="override"):
+def _refresh_value(screen_key, override_seconds, fallback_ms, *, override_source="override", default_source="render_default"):
     if override_seconds is None:
         return LiveScreenRefreshValue(
             screen_key=screen_key,
             override_seconds=None,
             effective_interval_ms=fallback_ms,
-            source="render_default",
+            source=default_source,
         )
     return LiveScreenRefreshValue(
         screen_key=screen_key,

@@ -8,7 +8,7 @@ from flask import Flask
 
 from app import create_app
 from app.extensions import db
-from app.models import LiveScreenRefreshSetting, User
+from app.models import Gateway, LiveScreenRefreshSetting, User
 from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
@@ -79,6 +79,7 @@ class CentralLiveScreenRefreshTest(unittest.TestCase):
             "neosubzero.outbound",
             "neosubzero.coordinator",
             "neosubzero.ucc",
+            "neosubzero.ucc_tv",
             "neosubzero.deicer_mobile",
         }
         self.assertEqual(set(registered_live_screen_keys()), expected_keys)
@@ -149,6 +150,42 @@ class CentralLiveScreenRefreshTest(unittest.TestCase):
             value = live_screen_refresh_value(self.gateway, "neorain.inbound")
         self.assertFalse(value.enabled)
         self.assertEqual(value.effective_interval_ms, 0)
+
+    def test_ducc_tv_timing_is_independent_and_cannot_be_disabled(self):
+        self._login("grandmaster")
+        path = "/motherbrain/system-settings/node-refresh-timings"
+        key = "neosubzero.ucc_tv"
+        with self.app.test_request_context():
+            value = live_screen_refresh_value(self.gateway, key)
+            self.assertEqual((value.effective_interval_ms, value.source), (30_000, "screen_default"))
+        for invalid in ("off", "0", "1", "31", "600"):
+            response = self.client.post(path, data={"screen_key": key, "refresh_interval_seconds": invalid})
+            self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.client.post(
+            path, data={"screen_key": key, "refresh_interval_seconds": "15"}
+        ).status_code, 302)
+        # Read the persisted setting through a fresh app context and DB session.
+        gateway_id = self.gateway.id
+        with self.app.app_context():
+            gateway = db.session.get(Gateway, gateway_id)
+            self.assertEqual(live_screen_refresh_value(gateway, key).effective_interval_ms, 15_000)
+        self.assertEqual(live_screen_refresh_value(self.gateway, "neosubzero.ucc").effective_interval_ms, 5000)
+        with patch("app.neonodes.neosubzero.routes._ucc_staffing_operation", return_value=None):
+            tv = self.client.get("/neosubzero/ucc/revision?view=tv").get_json()
+            self.assertTrue(tv["refresh"]["auto_refresh_enabled"])
+            self.assertEqual(tv["refresh"]["live_screen_refresh_interval_ms"], 15_000)
+        self.assertEqual(self.client.post(
+            path, data={"screen_key": key, "refresh_interval_seconds": "default"}
+        ).status_code, 302)
+        self.assertEqual(live_screen_refresh_value(self.gateway, key).effective_interval_ms, 30_000)
+        with self.app.app_context():
+            self.client = self.app.test_client()
+            self._login("watcher")
+            denied = self.client.post(path, data={"screen_key": key, "refresh_interval_seconds": "5"})
+            self.assertIn(denied.status_code, (302, 403))
+            self.assertNotEqual(denied.location, path)
+            gateway = db.session.get(Gateway, gateway_id)
+            self.assertEqual(live_screen_refresh_value(gateway, key).effective_interval_ms, 30_000)
 
     def test_legacy_ermac_override_seeds_effective_per_screen_values(self):
         db.session.add(

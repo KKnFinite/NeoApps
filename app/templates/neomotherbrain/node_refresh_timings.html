@@ -26,8 +26,8 @@
                     </dl>
                     <label class="sr-only" for="refresh-{{ group.key }}-{{ loop.index }}">{{ screen.label }} refresh interval</label>
                     <select id="refresh-{{ group.key }}-{{ loop.index }}" name="refresh_interval_seconds" {% if not can_edit_system_settings %}disabled{% endif %}>
-                        <option value="default" {% if setting.override_seconds is none %}selected{% endif %}>Render Default</option>
-                        {% for seconds in live_refresh_allowed_seconds %}
+                        <option value="default" {% if setting.override_seconds is none %}selected{% endif %}>{{ "Screen Default" if screen.default_interval_seconds is not none else "Render Default" }}</option>
+                        {% for seconds in live_refresh_allowed_seconds if seconds or screen.allow_off %}
                         <option value="{{ seconds }}" {% if setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
                         {% endfor %}
                     </select>

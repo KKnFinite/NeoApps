@@ -108,7 +108,7 @@
 {%- endmacro %}
 <div data-ucc-live-board>
 {# Fragment replacement also upgrades already-open tabs without stale geometry. #}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261111-crew-editor-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261111-tv-sync-v1') }}">
 {% if not operation %}<p class="neosubzero-empty">No current sort. Staffing management is unavailable.</p>{% endif %}
 <script nonce="{{ csp_nonce() }}" type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
 <header class="ucc-board-heading"><h2>RAMP OPERATIONS <span class="ucc-mobile-label">· STAFFING</span></h2><span class="ucc-desktop-label">Select an aircraft for planning information · treatment entry remains in Deice Operations</span></header>

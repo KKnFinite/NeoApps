@@ -87,6 +87,7 @@
     const cursorIdleMs = 3000;
     let tvMode = false;
     let cursorTimer = null;
+    let syncRefreshMode = () => {};
 
     const readTvMode = () => {
         try {
@@ -117,6 +118,7 @@
         }, cursorIdleMs);
     };
     const applyTvMode = (enabled, {persist = true} = {}) => {
+        const modeChanged = tvMode !== enabled;
         tvMode = enabled;
         root.classList.toggle("is-tv-mode", enabled);
         document.body.classList.toggle("neosubzero-ucc-tv-mode", enabled);
@@ -128,6 +130,7 @@
             clearCursorTimer();
             showCursor();
         }
+        if (modeChanged) syncRefreshMode();
     };
     const requestTvFullscreen = () => {
         const fullscreenTarget = document.documentElement;
@@ -533,23 +536,36 @@
     let loading = null;
     let mutationEpoch = 0;
     let deferredRevision = null;
+    const fetchLive = async (url, read) => {
+        const abort = new AbortController();
+        const timeout = window.setTimeout(() => abort.abort(), 10000);
+        try {
+            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {
+                cache: "no-store", credentials: "same-origin", signal: abort.signal,
+            });
+            if (response.redirected) {
+                throw Object.assign(new Error("Sign-in changed. Reopen DUCC to reconnect."), {sessionChanged: true});
+            }
+            if (!response.ok) throw new Error("Unable to refresh DUCC.");
+            return await read(response);
+        } finally {
+            window.clearTimeout(timeout);
+        }
+    };
     const fetchBoard = async () => {
         const requestEpoch = mutationEpoch;
         try {
             const url = new URL(window.location.href);
             url.searchParams.set("fragment", "1");
-            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: "no-store", credentials: "same-origin"});
-            if (!response.ok) throw new Error("Unable to refresh UCC. Your displayed state may be stale.");
-            const documentNext = new DOMParser().parseFromString(await response.text(), "text/html");
+            const html = await fetchLive(url, response => response.text());
+            const documentNext = new DOMParser().parseFromString(html, "text/html");
             const next = documentNext.querySelector("[data-subzero-ucc]");
             if (!next) throw new Error("UCC session expired. Open current UCC to sign in.");
             if (requestEpoch !== mutationEpoch || root.dataset.saving === "true") return false;
             const deferred = editing();
-            // The wallboard uses the saved staffing from this same response,
-            // even when an open management draft prevents replacing its controls.
-            if (tvMode) root.dispatchEvent(new CustomEvent("ucc:tv-source", {
-                detail: deferred ? next.cloneNode(true) : null,
-            }));
+            // Keep the complete committed source for TV, even if TV is entered
+            // later and the management view still contains an unsaved draft.
+            if (deferred) root.dispatchEvent(new CustomEvent("ucc:tv-source", {detail: next.cloneNode(true)}));
             const operationId = root.querySelector('[name="operation_id"]')?.value;
             const nextOperationId = next.querySelector('[name="operation_id"]')?.value;
             if (deferred && operationId !== nextOperationId) {
@@ -644,8 +660,11 @@
             applyMobileView();
             showAircraft(selectedMission);
             deferredRevision = deferred ? next.dataset.revision : null;
-            if (!deferred) root.dataset.revision = next.dataset.revision;
-            window.scrollTo({top: scroll, behavior: "instant"});
+            if (!deferred) {
+                root.dataset.revision = next.dataset.revision;
+                root.dispatchEvent(new CustomEvent("ucc:tv-source"));
+            }
+            if (!tvMode) window.scrollTo({top: scroll, behavior: "instant"});
             return !deferred;
         } finally { loading = null; }
     };
@@ -716,34 +735,46 @@
         }
     });
 
-    const refreshIntervalMs = Number(root.dataset.refreshIntervalMs);
-    if (
-        !window.NeoLiveUpdates
-        || !root.dataset.revisionUrl
-        || !Number.isFinite(refreshIntervalMs)
-        || refreshIntervalMs < 1000
-    ) return;
+    if (!window.NeoLiveUpdates || !root.dataset.revisionUrl) return;
 
-    let revision = root.dataset.revision;
+    const tvDefaultIntervalMs = Number(root.dataset.tvDefaultIntervalMs) || 30000;
+    let workingStatus = JSON.parse(root.dataset.refreshStatus || "{}");
+    let tvStatus = {live_screen_refresh_interval_ms: tvDefaultIntervalMs};
+    const currentStatus = () => tvMode ? tvStatus : workingStatus;
     const controller = window.NeoLiveUpdates.create({
-        intervalMs: refreshIntervalMs,
+        intervalMs: currentStatus().live_screen_refresh_interval_ms || tvDefaultIntervalMs,
+        statusElement: root.querySelector("[data-ucc-tv-refresh-status]"),
+        statusOnlyOnFailure: true,
         continuousWhileVisible: true,
+        staggerOnThrottle: true,
         poll: async () => {
+            const pollingTv = tvMode;
             const url = new URL(root.dataset.revisionUrl, window.location.origin);
-            url.searchParams.set("revision", revision);
-            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: "no-store"});
-            const payload = await response.json();
-            controller.setServerStatus(payload.refresh || {});
-            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "UCC refresh failed");
-            // Do not consume a revision while a draft/focused input defers it.
-            // The same pending change must still refresh after editing ends.
-            if (payload.revision !== root.dataset.revision) {
-                // Aircraft and weather already reflect this revision. Keep the
-                // staffing reconciliation pending without downloading it again.
-                if (editing() && payload.revision === deferredRevision) return;
-                if (await refreshBoard()) revision = root.dataset.revision;
-            } else if (!editing()) revision = root.dataset.revision;
+            if (pollingTv) url.searchParams.set("view", "tv");
+            const displayedRevision = editing() && deferredRevision ? deferredRevision : root.dataset.revision;
+            url.searchParams.set("revision", pollingTv ? displayedRevision : root.dataset.revision);
+            const payload = await fetchLive(url, response => response.json());
+            if (payload.ok !== true || typeof payload.revision !== "string") throw new Error("DUCC refresh failed");
+            if (payload.refresh) {
+                if (pollingTv) tvStatus = payload.refresh;
+                else workingStatus = payload.refresh;
+                if (pollingTv === tvMode) applyInterval();
+            }
+            // A deferred fragment remains pending for the management view.
+            if (payload.revision !== displayedRevision) await refreshBoard();
+            if (pollingTv === tvMode) controller.setServerStatus(currentStatus());
         },
     });
-    controller.setServerStatus(JSON.parse(root.dataset.refreshStatus || "{}"));
+    const applyInterval = () => {
+        controller.setIntervalMs(currentStatus().live_screen_refresh_interval_ms || tvDefaultIntervalMs);
+    };
+    const applyRefreshStatus = () => {
+        applyInterval();
+        controller.setServerStatus(currentStatus());
+    };
+    syncRefreshMode = () => {
+        applyRefreshStatus();
+        controller.refreshNow({force: true});
+    };
+    applyRefreshStatus();
 })();

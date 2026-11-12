@@ -8,6 +8,7 @@
     let wallboard;
     let tvDirty = true;
     let tvSource = root;
+    const refreshStatus = root.querySelector("[data-ucc-tv-refresh-status]");
     const themeKey = "neoapps.neosubzero.ucc.tv-theme";
     let tvTheme = "dark";
     try {
@@ -167,7 +168,7 @@
         theme.type = "button";
         theme.setAttribute("aria-label", "Light appearance");
         const next = element("section", "ucc-tv-wallboard",
-            element("header", "ucc-tv-header", element("h1", "", "RFD DUCC · TV MODE"), theme, exit),
+            element("header", "ucc-tv-header", refreshStatus, element("h1", "", "RFD DUCC · TV MODE"), theme, exit),
             weatherView(), element("div", "ucc-tv-ramps",
                 ...["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map(name => rampView(name, find(name)))),
             footer);
@@ -214,7 +215,6 @@
         if (wallboard) {
             wallboard.remove();
             wallboard = null;
-            tvSource = root;
         }
         if (!desktop.matches) {
             root.style.removeProperty("width");

@@ -21,6 +21,8 @@ from app.neonodes.neosubzero.services import (
     current_neosubzero_operation, mutate_pretreat, pretreat_context,
     pretreat_refresh_status, pretreat_revision, subzero_refresh_status,
 )
+from app.services.live_screen_refresh import live_screen_refresh_status
+from app.services.live_screen_registry import UCC_TV_REFRESH_KEY, live_screen_definition
 from app.services.neosubzero_departure_deice import (
     COORDINATOR_REFRESH_KEY,
     OUTBOUND_REFRESH_KEY,
@@ -407,6 +409,7 @@ def ucc():
             weather_revision=weather["revision"],
         ),
         refresh_status=_deice_staffing_refresh(gateway, operation),
+        tv_default_interval_ms=live_screen_definition(UCC_TV_REFRESH_KEY).default_interval_seconds * 1000,
         weather=weather,
         weather_animations_enabled=neosubzero_weather_animations_enabled(
             current_user
@@ -482,7 +485,7 @@ def ucc_planning_mutate(planning_action):
 @bp.route("/ucc/revision")
 @gateway_node_required("subzero")
 def ucc_revision_endpoint():
-    if not user_can("neosubzero.ucc.view"):
+    if not permission_access("neosubzero.ucc.view", "neosubzero.ucc.edit")["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
     gateway = get_current_gateway()
     operation = _ucc_staffing_operation(gateway)
@@ -496,7 +499,11 @@ def ucc_revision_endpoint():
             "ok": True,
             "revision": revision,
             "changed": revision != str(request.args.get("revision") or ""),
-            "refresh": _deice_staffing_refresh(gateway, operation),
+            "refresh": (
+                live_screen_refresh_status(gateway, UCC_TV_REFRESH_KEY)
+                if request.args.get("view") == "tv"
+                else _deice_staffing_refresh(gateway, operation)
+            ),
         }
     )
     response.headers["Cache-Control"] = "no-store"

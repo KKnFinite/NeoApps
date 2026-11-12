@@ -5,7 +5,7 @@
 {% set ramp_names = ramps|map(attribute='name')|list %}
 {% set requested_ramp = request.args.get('ramp', 'Alpha')|title %}
 {% set mobile_ramp = requested_ramp if requested_ramp in ramp_names else ramp_names|first|default('Alpha') %}
-<div class="ucc-board-viewport"><section class="neosubzero-shell neosubzero-ucc" data-subzero-ucc data-ucc-mobile-view="{{ mobile_view }}" data-ucc-selected-ramp="{{ mobile_ramp }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.ucc_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
+<div class="ucc-board-viewport"><section class="neosubzero-shell neosubzero-ucc" data-subzero-ucc data-ucc-mobile-view="{{ mobile_view }}" data-ucc-selected-ramp="{{ mobile_ramp }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.ucc_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}" data-tv-default-interval-ms="{{ tv_default_interval_ms }}">
     <header class="neosubzero-head">
         <div><p>NEOSUB-ZERO</p><h1>DUCC</h1></div>
         <div class="neosubzero-ucc-head-actions">
@@ -15,6 +15,7 @@
         </div>
     </header>
     {% if not live_fragment %}
+    <span class="ucc-tv-refresh-status" data-ucc-tv-refresh-status role="status" hidden></span>
     {% include "neonodes/neosubzero/_nav.html" %}
 
     <div class="ucc-mobile-controls">
@@ -112,7 +113,7 @@
     {% endif %}
 </section></div>
 {% if not live_fragment %}
-<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261111-crew-editor-v1') }}" defer></script>
-<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='20261111-tv-appearance-v1') }}" defer></script>
+<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261111-tv-sync-v1') }}" defer></script>
+<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='20261111-tv-sync-v1') }}" defer></script>
 {% endif %}
 {% endblock %}
