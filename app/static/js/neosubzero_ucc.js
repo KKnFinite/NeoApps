@@ -6,7 +6,6 @@
     root.dataset.uccInlineReady = 'true';
 
     let forms = Array.from(root.querySelectorAll("[data-ucc-assignment-form]"));
-    let staffingSurnames = {};
     const dialog = root.querySelector("[data-ucc-move-dialog]");
     let pendingForm = null;
 
@@ -193,109 +192,103 @@
             text.textContent = selected?.textContent || '';
             text.classList.toggle(unavailableClass, unavailable);
         }
-        const choice = form.querySelector("[data-ucc-staffing-choice]");
-        if (choice) {
-            const label = choice.querySelector("[data-ucc-short-value]");
-            label.textContent = selected?.dataset.uccShort || staffingSurnames[select.value] || "—";
-            label.classList.toggle(unavailableClass, unavailable);
-            choice.title = selected?.textContent.trim() || "";
-            choice.setAttribute("aria-label", `${select.getAttribute("aria-label")}: ${choice.title}`);
-        }
     }
 
-    const staffingPicker = root.querySelector("#ucc-staffing-picker");
-    let pickerTrigger = null;
-    const pickerOpen = () => pickerTrigger && staffingPicker.matches(":popover-open");
-    if (typeof staffingPicker?.showPopover === "function") {
-        root.dataset.uccStaffingPicker = "true";
-        staffingPicker.hidden = false;
-        const positionPicker = () => {
-            if (!pickerOpen()) return;
-            const anchor = pickerTrigger.getBoundingClientRect();
-            const {width, height} = staffingPicker.getBoundingClientRect();
-            const gap = 6;
-            const left = pickerTrigger.closest(".is-mirrored") ? anchor.right - width : anchor.left;
-            const below = anchor.bottom + gap;
-            const above = anchor.top - height - gap;
-            staffingPicker.style.left = `${Math.max(gap, Math.min(left, document.documentElement.clientWidth - width - gap))}px`;
-            staffingPicker.style.top = `${below + height <= innerHeight - gap ? below : Math.max(gap, above)}px`;
-        };
-        const closePicker = () => { if (pickerOpen()) staffingPicker.hidePopover(); };
-        root.addEventListener("click", (event) => {
-            const trigger = event.target.closest("[data-ucc-staffing-choice]");
-            if (!trigger || !normalDesktop()) return;
-            if (pickerOpen() && pickerTrigger === trigger) { closePicker(); return; }
-            pickerTrigger?.setAttribute("aria-expanded", "false");
-            pickerTrigger = trigger;
-            trigger.setAttribute("aria-expanded", "true");
-            const select = trigger.form.querySelector("select");
-            staffingPicker.setAttribute("aria-label", select.getAttribute("aria-label"));
-            // Use exactly the choices (including unavailable/retained values) in the canonical form.
-            const options = Array.from(select.options).filter(option => !option.hidden);
-            staffingPicker.replaceChildren(...options.map(option => {
-                const button = document.createElement("button");
-                button.type = "button";
-                button.textContent = option.textContent;
-                button.dataset.value = option.value;
-                button.disabled = option.disabled;
-                button.setAttribute("aria-pressed", String(option.selected));
-                return button;
-            }));
-            if (!pickerOpen()) staffingPicker.showPopover();
-            positionPicker();
-            const selected = staffingPicker.querySelector('[aria-pressed="true"]:enabled') || staffingPicker.querySelector("button:enabled");
-            selected?.focus({preventScroll: true});
-            staffingPicker.scrollTop = Math.max(0, (document.activeElement.offsetTop || 0) - staffingPicker.clientHeight / 2);
+    let crewEditor = null;
+    let crewTrigger = null;
+    let crewSaving = false;
+    let savedCrewForm = null;
+    let crewFocusId = "";
+    const crewTeam = key => root.querySelector(`.ucc-team[data-ucc-editor="${CSS.escape(key)}"]`);
+    const positionCrew = () => {
+        if (!crewEditor) return;
+        const anchor = crewTrigger.getBoundingClientRect();
+        const {width, height} = crewEditor.getBoundingClientRect();
+        const gap = 8;
+        const left = crewTrigger.closest(".is-mirrored") ? anchor.right - width : anchor.left;
+        const below = anchor.bottom + gap;
+        const above = anchor.top - height - gap;
+        crewEditor.style.left = `${Math.max(gap, Math.min(left, document.documentElement.clientWidth - width - gap))}px`;
+        crewEditor.style.top = `${Math.max(gap, Math.min(below + height <= innerHeight - gap ? below : above, innerHeight - height - gap))}px`;
+    };
+    function closeCrew({restoreFocus = true, force = false} = {}) {
+        if (!crewEditor || (crewSaving && !force)) return;
+        const trigger = crewTrigger;
+        crewEditor.hidePopover();
+        crewEditor.removeAttribute("popover");
+        crewEditor.removeAttribute("role");
+        crewEditor.removeAttribute("aria-labelledby");
+        trigger.setAttribute("aria-expanded", "false");
+        crewEditor = crewTrigger = null;
+        if (restoreFocus && trigger.isConnected) trigger.focus({preventScroll: true});
+    }
+    function openCrew(team) {
+        if (!normalDesktop() || !team) return;
+        const editor = team.querySelector(".ucc-team-controls");
+        if (!editor || crewEditor === editor) return;
+        closeCrew({restoreFocus: false, force: true});
+        crewEditor = editor;
+        crewTrigger = team.querySelector("[data-ucc-crew-edit]");
+        editor.setAttribute("popover", "manual");
+        editor.setAttribute("role", "dialog");
+        editor.setAttribute("aria-labelledby", `${editor.id}-title`);
+        crewTrigger.setAttribute("aria-expanded", "true");
+        // Start inside the viewport so native popover autofocus cannot scroll
+        // to the editor's former in-flow position before it is anchored.
+        editor.style.left = editor.style.top = "8px";
+        const {scrollX, scrollY} = window;
+        editor.showPopover();
+        if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+            window.scrollTo({left: scrollX, top: scrollY, behavior: "instant"});
+        }
+        positionCrew();
+        (editor.querySelector(crewFocusId ? `#${CSS.escape(crewFocusId)}` : 'select:enabled')
+            || editor.querySelector("[data-ucc-crew-close]")).focus({preventScroll: true});
+    }
+    const setMoveChoices = (button, enabled) => {
+        button.setAttribute("aria-pressed", String(enabled));
+        button.closest(".ucc-team").querySelectorAll("option[data-ucc-assigned-elsewhere]").forEach(option => {
+            option.hidden = !enabled;
         });
-        staffingPicker.addEventListener("click", (event) => {
-            const choice = event.target.closest("button[data-value]");
-            if (!choice || !pickerTrigger) return;
-            const form = pickerTrigger.form;
-            const select = form.querySelector("select");
-            closePicker();
-            if (select.value === choice.dataset.value && form.dataset.dirty !== "true") return;
-            select.value = choice.dataset.value;
-            select.dispatchEvent(new Event("change", {bubbles: true}));
+    };
+    if (typeof root.showPopover === "function") {
+        root.dataset.uccCrewEditor = "true";
+        window.addEventListener("scroll", positionCrew, {passive: true});
+        window.addEventListener("resize", positionCrew);
+        tvDesktop.addEventListener("change", () => closeCrew({restoreFocus: false, force: true}));
+        tvEnter?.addEventListener("click", () => closeCrew({restoreFocus: false, force: true}));
+        document.addEventListener("neo:board-enter", () => closeCrew({restoreFocus: false, force: true}));
+        root.addEventListener("keydown", event => {
+            if (event.key === "Escape" && crewEditor && !dialog?.open) {
+                event.preventDefault();
+                closeCrew();
+            }
         });
-        staffingPicker.addEventListener("keydown", (event) => {
-            const options = Array.from(staffingPicker.querySelectorAll("button:enabled"));
-            const index = options.indexOf(document.activeElement);
-            const targets = {ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: options.length - 1};
-            if (!Object.hasOwn(targets, event.key)) return;
-            event.preventDefault();
-            options[Math.max(0, Math.min(targets[event.key], options.length - 1))]?.focus();
-        });
-        staffingPicker.addEventListener("toggle", () => {
-            if (pickerOpen()) return;
-            pickerTrigger?.setAttribute("aria-expanded", "false");
-            pickerTrigger = null;
-        });
-        window.addEventListener("scroll", positionPicker, {passive: true});
-        window.addEventListener("resize", positionPicker);
-        tvDesktop.addEventListener("change", closePicker);
-        tvEnter?.addEventListener("click", closePicker);
-        document.addEventListener("neo:board-enter", closePicker);
+        root.addEventListener("toggle", event => {
+            if (event.target.matches(".ucc-team-controls details")) positionCrew();
+        }, true);
     }
 
     let lastStaffingFeedback;
     const staffingOutput = slot => root.querySelector(`[data-ucc-editor="${CSS.escape(slot)}"] [data-ucc-management-save]`);
     function paintStaffingFeedback() {
         if (!lastStaffingFeedback) return;
-        const {slot, state} = lastStaffingFeedback;
+        const {slot, state, message} = lastStaffingFeedback;
         const output = staffingOutput(slot);
         if (!output) return;
         output.dataset.state = state;
-        output.textContent = {saving: "Saving…", saved: "Saved", error: "Not saved"}[state];
+        output.textContent = message || {saving: "Saving…", saved: "Saved", error: "Not saved"}[state];
     }
-    function setStaffingFeedback(form, state) {
+    function setStaffingFeedback(form, state, message = "") {
         const slot = form.closest(".ucc-team")?.dataset?.uccEditor;
         if (!slot) return false;
         if (lastStaffingFeedback && lastStaffingFeedback.slot !== slot) {
             const previous = staffingOutput(lastStaffingFeedback.slot);
             if (previous) previous.textContent = "";
         }
-        lastStaffingFeedback = {slot, state};
+        lastStaffingFeedback = {slot, state, message};
         paintStaffingFeedback();
+        positionCrew();
         return true;
     }
 
@@ -360,9 +353,38 @@
         return {personId, sourceForm, occupied: Boolean(currentPersonId)};
     };
 
+    function bindDropTarget(target, getForm, compact = false) {
+        target.addEventListener("dragover", (event) => {
+            if (!event.dataTransfer?.types.includes("text/plain")) return;
+            event.preventDefault();
+            target.classList.add("is-drop-target");
+        });
+        target.addEventListener("dragleave", () => target.classList.remove("is-drop-target"));
+        target.addEventListener("drop", (event) => {
+            event.preventDefault();
+            target.classList.remove("is-drop-target");
+            if (crewSaving) return;
+            const form = getForm();
+            const personId = String(event.dataTransfer?.getData("text/plain") || "");
+            const select = field(form, "person_id");
+            if (!personId || !Array.from(select.options).some(option => option.value === personId)) return;
+            if (compact) openCrew(form.closest(".ucc-team"));
+            select.value = personId;
+            if (normalDesktop()) updateSelectedText(form, select);
+            form.dataset.dirty = "true";
+            updateDirtyState();
+            const move = prepareMove(form);
+            if (move.occupied && move.personId !== form.dataset.currentPersonId) {
+                openOccupiedDialog(form, move.sourceForm);
+                return;
+            }
+            form.dataset.moveConfirmed = "true";
+            form.requestSubmit();
+        });
+    }
+
     const bindBoard = () => {
     forms = Array.from(root.querySelectorAll("[data-ucc-assignment-form]"));
-    staffingSurnames = JSON.parse(root.querySelector("[data-ucc-staffing-surnames]")?.textContent || "{}");
     root.querySelectorAll("[data-ucc-live-board] form").forEach((form) => {
         if (form.dataset.uccChangeBound) return;
         form.dataset.uccChangeBound = "true";
@@ -391,33 +413,15 @@
                 return;
             }
         });
-        form.addEventListener("dragover", (event) => {
-            if (!event.dataTransfer?.types.includes("text/plain")) return;
-            event.preventDefault();
-            form.classList.add("is-drop-target");
-        });
-        form.addEventListener("dragleave", () => form.classList.remove("is-drop-target"));
-        form.addEventListener("drop", (event) => {
-            event.preventDefault();
-            form.classList.remove("is-drop-target");
-            const personId = String(event.dataTransfer?.getData("text/plain") || "");
-            const select = field(form, "person_id");
-            const hasPerson = select && Array.from(select.options).some(
-                (option) => option.value === personId
-            );
-            if (!personId || !hasPerson) return;
-            select.value = personId;
-            if (normalDesktop()) updateSelectedText(form, select);
-            form.dataset.dirty = "true";
-            updateDirtyState();
-            const move = prepareMove(form);
-            if (move.occupied && move.personId !== form.dataset.currentPersonId) {
-                openOccupiedDialog(form, move.sourceForm);
-                return;
-            }
-            form.dataset.moveConfirmed = "true";
-            form.requestSubmit();
-        });
+        bindDropTarget(form, () => form);
+    });
+    root.querySelectorAll("[data-ucc-crew-role]").forEach(target => {
+        if (target.dataset.uccDropBound) return;
+        target.dataset.uccDropBound = "true";
+        bindDropTarget(target, () => {
+            const team = target.closest(".ucc-team");
+            return team.querySelector(`[data-ucc-crew-form="${target.dataset.uccCrewRole}"]`);
+        }, true);
     });
     root.querySelectorAll('[data-ucc-auto-save]').forEach((form) => {
         if (form.dataset.autoSaveBound) return;
@@ -439,7 +443,7 @@
         });
         handle.addEventListener("dragend", () => {
             root.classList.remove("is-dragging-assignee");
-            forms.forEach((form) => form.classList.remove("is-drop-target"));
+            root.querySelectorAll(".is-drop-target").forEach(target => target.classList.remove("is-drop-target"));
         });
     });
     };
@@ -483,13 +487,18 @@
         root.querySelectorAll("[data-ucc-aircraft]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.uccAircraft === selectedMission)));
     };
     root.addEventListener("click", (event) => {
+        const edit = event.target.closest("[data-ucc-crew-edit]");
+        if (edit) {
+            if (!crewSaving) openCrew(edit.closest(".ucc-team"));
+            return;
+        }
+        if (event.target.closest("[data-ucc-crew-close]")) {
+            closeCrew();
+            return;
+        }
         const move = event.target.closest("[data-ucc-enable-moves]");
         if (move) {
-            const enabled = move.getAttribute("aria-pressed") !== "true";
-            move.setAttribute("aria-pressed", String(enabled));
-            move.closest(".ucc-team").querySelectorAll("option[data-ucc-assigned-elsewhere]").forEach(option => {
-                option.hidden = !enabled;
-            });
+            setMoveChoices(move, move.getAttribute("aria-pressed") !== "true");
             return;
         }
         const view = event.target.closest("[data-ucc-view]");
@@ -520,7 +529,7 @@
         feedback.classList.toggle("is-inline", inline);
         currentLink.hidden = !error;
     };
-    const editing = () => root.dataset.dirty === "true" || root.dataset.saving === "true" || Boolean(root.querySelector("input:focus, select:focus, textarea:focus")) || dialog?.open || pickerOpen();
+    const editing = () => root.dataset.dirty === "true" || root.dataset.saving === "true" || Boolean(root.querySelector("input:focus, select:focus, textarea:focus")) || dialog?.open;
     let loading = null;
     let mutationEpoch = 0;
     let deferredRevision = null;
@@ -554,6 +563,30 @@
             const sortLabel = root.querySelector('.neosubzero-ucc-head-actions > strong');
             if (sortLabel) sortLabel.textContent = next.querySelector('.neosubzero-ucc-head-actions > strong').textContent;
             if (deferred) {
+                next.querySelectorAll(".ucc-team[data-ucc-editor]").forEach(team => {
+                    const current = crewTeam(team.dataset.uccEditor);
+                    if (!current) return;
+                    const lines = team.querySelector(".ucc-crew-lines");
+                    const currentLines = current.querySelector(".ucc-crew-lines");
+                    if (lines && currentLines) {
+                        // Keep the resting drop targets and their handlers in place.
+                        Array.from(lines.children).forEach((line, index) => {
+                            const currentLine = currentLines.children[index];
+                            currentLine.textContent = line.textContent;
+                            currentLine.className = line.className;
+                            currentLine.title = line.title;
+                        });
+                    }
+                    if (savedCrewForm?.closest(".ucc-team") === current && savedCrewForm.dataset.dirty !== "true") {
+                        const fieldName = savedCrewForm.dataset.uccCrewForm;
+                        const updated = team.querySelector(`[data-ucc-crew-form="${fieldName}"]`);
+                        if (updated) {
+                            savedCrewForm.replaceWith(updated);
+                            const move = current.querySelector('[data-ucc-enable-moves][aria-pressed="true"]');
+                            if (move) setMoveChoices(move, true);
+                        }
+                    }
+                });
                 root.querySelectorAll("[data-ucc-ramp]").forEach((ramp) => {
                     const newRamp = next.querySelector(`[data-ucc-ramp="${CSS.escape(ramp.dataset.uccRamp)}"]`);
                     ramp.dataset.uccRelevant = newRamp?.dataset.uccRelevant || 'false';
@@ -581,9 +614,19 @@
                 else if (locationsNext) root.querySelector('.ucc-ramp-board').before(locationsNext);
                 root.querySelector("[data-ucc-info]")?.replaceWith(next.querySelector("[data-ucc-info]"));
             } else {
+                const team = crewEditor?.closest(".ucc-team");
+                const crewKey = operationId === nextOperationId ? team?.dataset.uccEditor : null;
+                const movesEnabled = Boolean(team?.querySelector('[data-ucc-enable-moves][aria-pressed="true"]'));
+                closeCrew({restoreFocus: false, force: true});
                 root.querySelector("[data-ucc-live-board]").replaceWith(next.querySelector("[data-ucc-live-board]"));
                 expanded.forEach((key) => root.querySelector(`[data-ucc-editor="${CSS.escape(key)}"]`)?.setAttribute("open", ""));
                 bindBoard();
+                if (crewKey) {
+                    const current = crewTeam(crewKey);
+                    const move = current?.querySelector("[data-ucc-enable-moves]");
+                    if (movesEnabled && move) setMoveChoices(move, true);
+                    openCrew(current);
+                }
             }
             if (deferred) bindBoard();
             paintStaffingFeedback();
@@ -616,12 +659,15 @@
         const form = event.target;
         if (event.defaultPrevented || !form.closest("[data-ucc-live-board]")) return;
         event.preventDefault();
-        if (root.dataset.saving === "true") return;
+        if (root.dataset.saving === "true" || crewSaving) return;
+        crewSaving = Boolean(crewEditor?.contains(form));
+        crewFocusId = crewSaving ? document.activeElement?.id || form.querySelector("select")?.id || "" : "";
         mutationEpoch += 1;
         root.dataset.saving = "true";
         const buttons = Array.from(form.querySelectorAll('button[type="submit"]'));
         const body = new FormData(form);
-        const controls = Array.from(root.querySelectorAll('[data-ucc-live-board] :is(select,[data-ucc-staffing-choice]):enabled'));
+        const controls = Array.from(root.querySelectorAll('[data-ucc-live-board] :is(select,[data-ucc-crew-edit],[data-ucc-crew-close]):enabled'));
+        if (crewSaving) controls.push(...document.querySelectorAll('[data-ucc-tv-enter]:enabled,[data-operational-board-toggle]:enabled'));
         controls.forEach(control => { control.disabled = true; });
         if (event.submitter?.name) body.set(event.submitter.name, event.submitter.value);
         buttons.forEach((button) => { button.disabled = true; });
@@ -644,8 +690,10 @@
             const hasDraft = root.dataset.dirty === "true";
             notify(payload.message + (hasDraft ? " Other unsaved drafts are preserved; live display will reconcile after editing." : ""), false, setStaffingFeedback(form, "saved") && !hasDraft);
         } catch (error) {
-            setStaffingFeedback(form, "error");
-            notify(error.name === "AbortError" ? "Request timed out; its outcome is unknown. Check current UCC before retrying. Your draft is preserved." : (error.message || "Unable to save. Your draft is preserved; check current UCC before retrying."), true);
+            const message = error.name === "AbortError" ? "Request timed out; its outcome is unknown. Check current UCC before retrying. Your draft is preserved."
+                : error.message || "Unable to save. Your draft is preserved; check current UCC before retrying.";
+            setStaffingFeedback(form, "error", crewSaving ? message : "");
+            notify(message, true);
         } finally {
             window.clearTimeout(timeout);
             delete root.dataset.saving;
@@ -654,9 +702,17 @@
             if (!reconcileFirst) restoreControls();
             if (accepted) {
                 if (form.contains(document.activeElement)) document.activeElement.blur();
+                if (crewSaving) savedCrewForm = form;
                 try { await refreshBoard(true); } catch (error) { notify("Saved, but " + error.message, true); }
             }
             if (reconcileFirst) restoreControls();
+            if (!accepted && crewFocusId && crewEditor) {
+                crewEditor.querySelector(`#${CSS.escape(crewFocusId)}`)?.focus({preventScroll: true});
+            }
+            crewSaving = false;
+            savedCrewForm = null;
+            crewFocusId = "";
+            positionCrew();
         }
     });
 

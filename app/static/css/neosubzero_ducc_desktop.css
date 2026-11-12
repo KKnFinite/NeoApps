@@ -179,6 +179,7 @@
 .blueprint-neosubzero .neosubzero-ucc .ucc-team.position-3 { grid-column:3; grid-row:2; }
 .blueprint-neosubzero .neosubzero-ucc .ucc-team.is-mirrored { text-align:right; }
 .neosubzero-ucc .ucc-team-controls { display:grid; gap:3px; }
+.neosubzero-ucc :is(.ucc-crew-compact,.ucc-crew-editor-head,.ucc-pill .ucc-crew-field-label) { display:none; }
 .neosubzero-ucc[data-ucc-inline-ready="true"] .ucc-legacy-save { display:none; }
 .blueprint-neosubzero .neosubzero-ucc .ucc-team form { display:block; margin:0; }
 .blueprint-neosubzero .neosubzero-ucc .ucc-team .ucc-pill {
@@ -375,32 +376,61 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         }
         & .ucc-team .ucc-pill:is(:hover,:focus-within) { border-color:#79b4ce; }
         & .ucc-team .ucc-pill span { overflow-wrap:anywhere; }
-        &[data-ucc-staffing-picker="true"] .ucc-team .ucc-pill { display:none; }
-        &[data-ucc-staffing-picker="true"] .ucc-staffing-choice {
-            display:flex; align-items:center; gap:3px; width:100%; min-width:0; min-height:21px;
-            padding:2px 4px; border:1px solid #36546b; border-radius:4px; background:#102330;
-            color:#dcecf5; font:500 .73rem/1.2 NeoFontPlain,"Segoe UI",sans-serif; white-space:nowrap; cursor:pointer;
+        &[data-ucc-crew-editor="true"] {
+            & .ucc-crew-compact {
+                display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px;
+                align-items:start; color:#dcecf5;
+                font:500 .73rem/1.24 NeoFontPlain,"Segoe UI",sans-serif;
+            }
+            & .is-mirrored .ucc-crew-compact { grid-template-columns:auto minmax(0,1fr); }
+            & .ucc-crew-lines { display:contents; }
+            & .ucc-crew-lines > * { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+            & .ucc-crew-lines > strong { grid-column:1 / -1; }
+            & .ucc-crew-lines > span { grid-column:1; }
+            & .is-mirrored .ucc-crew-lines > span { grid-column:2; }
+            & .ucc-crew-lines .is-drop-target { outline:1px dashed #9bd4ee; outline-offset:-1px; }
+            & .ucc-crew-edit {
+                display:grid; grid-area:2 / 2 / span 2; align-self:center;
+                place-items:center; width:22px; height:22px; padding:0; border:0;
+                border-radius:4px; background:none; color:#acd3e7; cursor:pointer;
+            }
+            & .is-mirrored .ucc-crew-edit { grid-column:1; }
+            & .ucc-crew-edit:is(:hover,[aria-expanded="true"]) { background:#21465e; color:#f0f8fc; }
+            & .ucc-crew-edit:focus-visible { outline:2px solid #b6e1f9; outline-offset:1px; }
+            & .ucc-team-controls:not(:popover-open) { display:none; }
+            & .ucc-team-controls:popover-open {
+                position:fixed; inset:auto; margin:0; box-sizing:border-box; display:grid;
+                width:min(22rem,calc(100vw - 16px)); max-height:calc(100dvh - 16px);
+                overflow:auto; overscroll-behavior:contain; padding:10px; gap:7px;
+                border:1px solid #55758b; border-radius:8px; background:#102839; color:#dcecf5;
+                text-align:left; font:500 .81rem/1.25 NeoFontPlain,"Segoe UI",sans-serif;
+                box-shadow:0 6px 18px #0008;
+            }
+            & .ucc-crew-editor-head { display:flex; align-items:center; justify-content:space-between; gap:8px; grid-column:1 / -1; }
+            & .ucc-crew-editor-head button { border:0; background:none; color:#dcecf5; font:inherit; padding:3px 6px; cursor:pointer; }
+            & .ucc-crew-editor-head button:disabled { opacity:.55; cursor:default; }
+            & .ucc-team-controls:popover-open .ucc-pill {
+                display:grid; grid-template-columns:4em minmax(0,1fr); align-items:center; gap:5px;
+                padding:0; border:0; background:none; border-radius:0;
+            }
+            & .ucc-team-controls:popover-open .ucc-pill::after,
+            & .ucc-team-controls:popover-open [data-ucc-selected-text] { display:none; }
+            & .ucc-team-controls:popover-open .ucc-crew-field-label { display:block; }
+            & .ucc-team-controls:popover-open select {
+                position:static; opacity:1; min-width:0; max-width:100%; min-height:26px;
+                color:#dcecf5; background:#102330; border:1px solid #55758b; border-radius:4px;
+                font:inherit;
+            }
+            & .ucc-team-controls:popover-open details { grid-column:1 / -1; }
+            & .ucc-team-controls:popover-open details[open] .ucc-unit-actions {
+                position:static; width:auto; padding:4px 0; border:0; background:none;
+            }
+            & .ucc-team-controls:popover-open .ucc-unit-actions form { display:grid; gap:4px; }
+            & .ucc-team-controls:popover-open .ucc-unit-actions form label { display:flex; justify-content:space-between; gap:6px; }
+            & .ucc-team-controls:popover-open .ucc-management-save { grid-column:1 / -1; font-size:.74rem; overflow-wrap:anywhere; }
+            & .ucc-team-controls:popover-open .ucc-management-save:empty { display:none; }
         }
-        & .is-mirrored .ucc-staffing-choice { justify-content:flex-end; }
-        & .ucc-staffing-value { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-        & .ucc-staffing-choice:is(:hover,[aria-expanded="true"]) { border-color:#79b4ce; }
-        & :is(.ucc-staffing-choice,[data-ucc-weather-toggle],.ucc-staffing-picker button):focus-visible {
-            outline:2px solid #b6e1f9; outline-offset:1px;
-        }
-        & .ucc-staffing-choice:disabled { opacity:.65; cursor:default; }
-        & .ucc-staffing-picker:popover-open {
-            position:fixed; inset:auto; margin:0; box-sizing:border-box; width:min(22rem,calc(100vw - 16px));
-            max-height:min(18rem,calc(100dvh - 16px)); overflow-y:auto; overscroll-behavior:contain;
-            padding:4px; border:1px solid #55758b; border-radius:6px; background:#102839;
-            box-shadow:0 6px 18px #0008;
-        }
-        & .ucc-staffing-picker button {
-            display:block; width:100%; padding:5px 7px; border:0; border-radius:3px; text-align:left;
-            color:#dcecf5; background:transparent; font:500 .85rem/1.25 NeoFontPlain,"Segoe UI",sans-serif;
-            overflow-wrap:anywhere; cursor:pointer;
-        }
-        & .ucc-staffing-picker button:is(:hover,:focus-visible,[aria-pressed="true"]) { background:#21465e; }
-        & .ucc-staffing-picker button:disabled { color:#9ab2c1; cursor:default; }
+        & [data-ucc-weather-toggle]:focus-visible { outline:2px solid #b6e1f9; outline-offset:1px; }
         & .ucc-management-save { display:block; min-width:0; color:#9bd9bc; font-size:.6rem; line-height:1.15; }
         & .ucc-management-save[data-state="saving"] { color:#a4cfe7; }
         & .ucc-management-save[data-state="error"] { color:#ffd0d0; }

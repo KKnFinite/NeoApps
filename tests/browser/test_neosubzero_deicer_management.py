@@ -57,13 +57,15 @@ class DeicerManagementBrowserTest(unittest.TestCase):
                     rows.append(left_y)
                 self.assertTrue(all(top < bottom for top, bottom in zip(rows, rows[1:])))
             self.assertLessEqual(max(ramp_widths) - min(ramp_widths), 1)
-        picker = board.locator("#ucc-staffing-picker")
+        editor = board.locator(".ucc-team-controls:popover-open")
 
         def assign(slot, field, value, index=0):
-            form = board.locator(f'[data-ucc-editor="{slot}"] form').filter(has=board.locator(f'[name="{field}"]')).nth(index)
-            form.locator("[data-ucc-staffing-choice]").click()
+            team = board.locator(f'.ucc-team[data-ucc-editor="{slot}"]')
+            if team.locator("[data-ucc-crew-edit]").get_attribute("aria-expanded") == "false":
+                team.locator("[data-ucc-crew-edit]").click()
+            form = team.locator("form").filter(has=board.locator(f'[name="{field}"]')).nth(index)
             with board.expect_response(lambda response: response.request.method == "POST") as saved:
-                picker.locator(f'button[data-value="{value}"]').click()
+                form.locator(f'[name="{field}"]').select_option(str(value))
             self.assertEqual(saved.value.status, 200, saved.value.text())
             expect(form.locator('[name="expected_version"]')).not_to_have_value("")
             expect(form.locator(f'[name="{field}"]')).to_have_value(str(value))
@@ -76,14 +78,15 @@ class DeicerManagementBrowserTest(unittest.TestCase):
         assign("Early Out-1", "truck_number", "UCC-831")
         assign("Echo-3", "person_id", fixture.people[2], index=1)
         next_slot = board.locator('[data-ucc-editor="Bravo-2"]')
-        next_slot.locator("[data-ucc-staffing-choice]").nth(1).click()
-        expect(picker.locator(f'[data-value="{person_id}"]')).to_have_count(0)
-        board.keyboard.press("Escape")
-        next_slot.locator("summary").click()
+        next_slot.locator("[data-ucc-crew-edit]").click()
+        option = editor.locator(f'[data-ucc-crew-form="driver"] option[value="{person_id}"]')
+        expect(option).to_have_attribute("hidden", "")
+        editor.get_by_text("MOVE / SWAP", exact=True).click()
         next_slot.locator("[data-ucc-enable-moves]").click()
         assign("Bravo-2", "person_id", person_id)
         expect(board.locator('[data-ucc-editor="Remote-1"] [name="person_id"]').first).to_have_value("")
 
+        editor.get_by_role("button", name="Close crew editor").click()
         management = context.new_page()
         fixture.ready(management, "/neosubzero/deicer-management")
         select = management.locator(f'[name="status_{person_id}"]')
@@ -95,7 +98,7 @@ class DeicerManagementBrowserTest(unittest.TestCase):
         expect(select).to_have_value("call_in")
         board.bring_to_front()
         for slot in ("Bravo-2", "Early Out-1"):
-            unavailable = board.locator(f'[data-ucc-editor="{slot}"] .ucc-staffing-value.ucc-person-unavailable')
+            unavailable = board.locator(f'[data-ucc-editor="{slot}"] .ucc-crew-lines .ucc-person-unavailable')
             expect(unavailable).to_have_count(1, timeout=15000)
             expect(unavailable).to_have_css("color", "rgb(255, 156, 156)")
         expect(board.locator("[data-ucc-whos-left]")).not_to_contain_text(person_name)

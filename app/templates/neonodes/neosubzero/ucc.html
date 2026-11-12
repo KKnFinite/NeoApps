@@ -99,7 +99,6 @@
     </div>
     {% include "neonodes/neosubzero/_ucc_board.html" %}
     {% if can_edit and not live_fragment %}
-    <div id="ucc-staffing-picker" class="ucc-staffing-picker" role="dialog" popover="auto" hidden></div>
     <dialog class="neosubzero-ucc-move-dialog" data-ucc-move-dialog>
         <h2>OCCUPIED SLOT</h2>
         <p><strong data-ucc-move-person></strong> is already assigned here.</p>
@@ -113,7 +112,7 @@
     {% endif %}
 </section></div>
 {% if not live_fragment %}
-<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261111-ducc-trucks-v1') }}" defer></script>
+<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261111-crew-editor-v1') }}" defer></script>
 <script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='20261111-tv-appearance-v1') }}" defer></script>
 {% endif %}
 {% endblock %}

@@ -175,7 +175,7 @@ class RegistryQualificationTest(unittest.TestCase):
             for path in ('/neosubzero/settings','/neosubzero/truck-management','/neosubzero/ucc','/neosubzero/callouts'):
                 response=client.get(path); self.assertEqual(response.status_code,200,path)
             page=client.get('/neosubzero/ucc').data
-            self.assertIn(b'<select name="truck_number"',page)
+            self.assertRegex(page, rb'<select\b[^>]*\bname="truck_number"')
             self.assertNotIn(b'<input name="truck_number"',page)
             self.assertNotIn(b'>EDIT<',page)
             calls=client.get('/neosubzero/callouts').data
