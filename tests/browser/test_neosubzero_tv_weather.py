@@ -124,16 +124,16 @@ class DuccTvWeatherTest(unittest.TestCase):
         for field, text, color in (
             (remote.locator('[data-ucc-tv-crew-field="truck"]'), '1. 123456', blue),
             (early.locator('[data-ucc-tv-crew-field="truck"]'), '1. UCC-831', red),
-            (unmarked, 'D · T. Smith-Jones', '#f4f8fc'),
+            (unmarked, 'D · T. Smith-Jones', '#000000' if light else '#f4f8fc'),
             (here, "F · T. O'Neil", green),
             (absent, 'D · C. De la Cruz', red),
         ):
             expect(field).to_have_text(text)
             expect(field).to_have_css('color', rgb(color))
-            background = '#405567' if light and field == unmarked else '#f3f7fa' if light else '#07121e'
+            background = '#f3f7fa' if light else '#07121e'
             self.assertGreaterEqual(contrast(color, background), 4.5)
-        if light:
-            expect(unmarked).to_have_css('background-color', rgb('#405567'))
+        for name in (unmarked, here, absent):
+            expect(name).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
         expect(absent).to_have_attribute('title', 'Christopher De la Cruz')
         expect(here).to_have_attribute('title', "Taylor O'Neil")
         sizes = early.locator('.ucc-tv-crew').evaluate("""crew => Array.from(crew.children, field => {

@@ -662,13 +662,10 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew-column > .ucc-tv-crew + .ucc-tv-crew {
         border-top-color:var(--tv-edge);
     }
-    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew [data-ucc-attendance="unmarked"] {
-        background:#405567; border-radius:2px; width:fit-content; max-width:100%;
-    }
-    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew-column > .is-right [data-ucc-attendance="unmarked"] { justify-self:end; }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] {
         --tv-truck:#125f9d;
         --tv-person:#1d6b3c;
+        --tv-unmarked:#000000;
         --tv-unavailable:#a12a3c;
     }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-plane:not(.is-in-throat) {

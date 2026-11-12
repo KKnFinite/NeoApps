@@ -119,7 +119,10 @@ class DuccAttendanceBrowserTest(unittest.TestCase):
             names.page.wait_for_function(
                 """({selector, color}) => {
                     const fields = [...document.querySelectorAll(selector)];
-                    return fields.length === 14 && fields.every(name => getComputedStyle(name).color === color);
+                    return fields.length === 14 && fields.every(name => {
+                        const style = getComputedStyle(name);
+                        return style.color === color && style.backgroundColor === "rgba(0, 0, 0, 0)";
+                    });
                 }""",
                 arg={"selector": names_selector[names], "color": rgb},
             )
@@ -142,7 +145,7 @@ class DuccAttendanceBrowserTest(unittest.TestCase):
             ("here", green, "rgb(29, 107, 60)"),
             ("call_in", red, "rgb(161, 42, 60)"),
             ("here", green, "rgb(29, 107, 60)"),
-            ("", white, white),
+            ("", white, "rgb(0, 0, 0)"),
             ("scheduled_off", red, "rgb(161, 42, 60)"),
         )
         for width, light in ((1366, False), (1920, True)):
@@ -155,8 +158,7 @@ class DuccAttendanceBrowserTest(unittest.TestCase):
                 tick(work)
                 tick(tv)
                 assert_colors(working_names, white)
-                assert_colors(tv_names, white)
-                expect(tv_names.first).to_have_css("background-color", "rgb(64, 85, 103)")
+                assert_colors(tv_names, "rgb(0, 0, 0)")
 
             geometry = wallboard.locator(".ucc-tv-stands").first.bounding_box()
             for status, dark_color, light_color in transitions:
