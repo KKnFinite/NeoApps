@@ -110,6 +110,9 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
                 expect(pencil).to_be_visible()
                 pencil.click()
                 expect(team.locator(".ucc-team-controls:popover-open")).to_be_visible()
+                if role == "truck":
+                    position = team.get_attribute("data-ucc-editor").rsplit("-", 1)[1]
+                    expect(select.locator("option:checked")).to_have_text(f"{position}. {select.input_value()}")
             expect(select).to_be_visible()
             replacement = role != "truck" and bool(value) and bool(select.input_value())
             with work.expect_response(lambda r: r.request.method == "POST", timeout=7000) as result:
@@ -124,6 +127,10 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
                     team.locator("[data-ucc-crew-close]").click()
                 expect(pencil).to_be_visible()
                 expect(select).to_be_hidden()
+                if role == "truck":
+                    position = team.get_attribute("data-ucc-editor").rsplit("-", 1)[1]
+                    expect(team.locator('[data-ucc-crew-line="truck"] span')).to_have_text(f"{position}. {value}")
+                    expect(select).to_have_value(value)
             else:
                 expect(team.locator(".ucc-team-controls:popover-open")).to_have_count(0)
                 expect(pencil).to_be_hidden()
@@ -139,7 +146,7 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         for role, initial, replacement, label, replacement_label in (
             ("driver", case.people[1], case.people[2], "D · T. Longname-Deicer-1", "D · T. Longname-Deicer-2"),
             ("flyer", case.people[1], case.people[2], "F · T. Longname-Deicer-1", "F · T. Longname-Deicer-2"),
-            ("truck", "12", "UCC-831", "2 · TRUCK 12", "2 · TRUCK UCC-831"),
+            ("truck", "12", "UCC-831", "2. 12", "2. UCC-831"),
         ):
             for value, visible in ((initial, label), (replacement, replacement_label), ("", None)):
                 assign(role, value)
@@ -170,7 +177,10 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
             for role, value in (("truck", "UCC-831"), ("driver", case.people[1]), ("flyer", case.people[2])):
                 assign(role, value, team)
                 tick(tv, 5000)
-                expect(tv_slot.locator(f'[data-ucc-tv-crew-field="{role}"]')).to_be_visible()
+                resource = tv_slot.locator(f'[data-ucc-tv-crew-field="{role}"]')
+                expect(resource).to_be_visible()
+                if role == "truck":
+                    expect(resource).to_have_text(f"4. {value}")
                 expect(tv_slot.locator("[data-ucc-tv-crew-field]")).to_have_count(1)
                 assign(role, "", team)
                 tick(tv, 5000)
@@ -198,7 +208,7 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         expect(slot.locator("[data-ucc-management-save]")).to_have_text("Saved")
         tick(tv, 5000)
         bravo = board.locator(".ucc-tv-ramp").filter(has=tv.get_by_role("heading", name="Bravo", exact=True))
-        expect(bravo).to_contain_text("2 · TRUCK 12")
+        expect(bravo).to_contain_text("2. 12")
         expect(bravo).to_contain_text("D · T. Longname-Deicer-1")
         expect(bravo).to_contain_text("F · T. Longname-Deicer-2")
 
@@ -214,7 +224,7 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         unit.locator('button[type="submit"]').click()
         expect(bravo_slot.locator("[data-ucc-management-save]")).to_have_text("Saved")
         tick(tv, 5000)
-        expect(alpha).to_contain_text("1 · TRUCK 12")
+        expect(alpha).to_contain_text("1. 12")
         expect(bravo).to_contain_text("D · C. Longname-Deicer-0")
         expect(bravo).not_to_contain_text("F · T. Longname-Deicer-2")
 

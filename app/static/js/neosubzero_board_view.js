@@ -60,12 +60,7 @@
             let value = field.textContent.trim();
             let fullName = value;
             let stateClass = field.className;
-            if (role === "truck") {
-                const number = value.replace(new RegExp(`^${position} · | · ${position}$`, "g"), "");
-                const truck = /^TRUCK\b/i.test(number) ? number : `TRUCK ${number}`;
-                value = right ? `${truck} · ${position}` : `${position} · ${truck}`;
-                fullName = value;
-            } else if (field.dataset.uccTvLastName !== undefined) {
+            if (field.dataset.uccTvLastName !== undefined) {
                 const first = field.dataset.uccTvFirstName.trim();
                 const last = field.dataset.uccTvLastName.trim();
                 const initial = Array.from(first)[0];

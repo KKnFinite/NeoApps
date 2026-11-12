@@ -47,14 +47,19 @@
     {% endif %}
 </div>
 {%- endmacro %}
+{% macro numbered_truck(position, number) -%}
+    {{ position }}. {{ number }}
+{%- endmacro %}
 {% macro staffing_slots(ramp) -%}
         <div class="ucc-staffing-grid">
         {% set scope = 'early' if ramp.name == 'Early Out' else 'regular' %}
         {% for slot in ramp.slots %}
         {% set mirrored = slot.position in (3,4) %}
+        {% set no_truck = 'NO TRUCK · ' ~ slot.position if mirrored else slot.position ~ ' · NO TRUCK' %}
+        {% set truck_display = numbered_truck(slot.position, slot.truck_number) if slot.truck_number else no_truck %}
         <div class="ucc-team position-{{ slot.position }}{{ ' is-mirrored' if mirrored else '' }}" data-ucc-editor="{{ ramp.name }}-{{ slot.position }}">
             <div class="ucc-team-readonly">
-                <strong{% if slot.truck_number %} data-ucc-tv-crew-field="truck"{% endif %}{% if slot.truck_unavailable %} class="ucc-truck-unavailable"{% endif %}>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</strong>
+                <strong{% if slot.truck_number %} data-ucc-tv-crew-field="truck"{% endif %}{% if slot.truck_unavailable %} class="ucc-truck-unavailable"{% endif %}>{{ truck_display }}</strong>
                 {% for role in ('driver','flyer') %}{% set person_slot = slot.roles[role] %}
                 <span{% if person_slot.person %} data-ucc-tv-crew-field="{{ role }}" data-ucc-tv-first-name="{{ person_slot.person.first_name }}" data-ucc-tv-last-name="{{ person_slot.person.last_name }}"{% if person_slot.tv_attendance_unavailable %} data-ucc-tv-attendance-unavailable{% endif %}{% endif %}{% if person_slot.person and not person_slot.available %} class="ucc-person-unavailable"{% endif %}>{{ (person_slot.person.full_name if person_slot.person else 'Unassigned') ~ ' · ' ~ role[0]|upper if mirrored else role[0]|upper ~ ' · ' ~ (person_slot.person.full_name if person_slot.person else 'Unassigned') }}</span>
                 {% endfor %}
@@ -65,10 +70,10 @@
                 {% for role in ('truck', 'driver', 'flyer') %}
                 {% set person_slot = slot.roles[role] if role != 'truck' else none %}
                 {% set assigned = slot.truck_number if role == 'truck' else person_slot.person %}
-                {% set short_value = assigned if role == 'truck' and assigned else (assigned.last_name or assigned.full_name) if assigned else '' %}
-                {% set prefix = slot.position if role == 'truck' else role[0]|upper %}
+                {% set short_value = (assigned.last_name or assigned.full_name) if person_slot and assigned else '' %}
+                {% set prefix = role[0]|upper %}
                 <div class="ucc-crew-line" data-ucc-crew-line="{{ role }}"{% if assigned %} data-ucc-assigned{% endif %}>
-                    <span{% if role != 'truck' %} data-ucc-crew-role="{{ role }}"{% endif %}{% if slot.truck_unavailable and role == 'truck' %} class="ucc-truck-unavailable"{% elif person_slot and assigned and not person_slot.available %} class="ucc-person-unavailable"{% endif %} title="{{ assigned.full_name if person_slot and assigned else ('Truck ' ~ assigned) if assigned else '' }}">{{ short_value ~ ' · ' ~ prefix if mirrored else prefix ~ ' · ' ~ short_value }}</span>
+                    <span{% if role != 'truck' %} data-ucc-crew-role="{{ role }}"{% endif %}{% if slot.truck_unavailable and role == 'truck' %} class="ucc-truck-unavailable"{% elif person_slot and assigned and not person_slot.available %} class="ucc-person-unavailable"{% endif %} title="{{ truck_display if role == 'truck' and assigned else assigned.full_name if assigned else '' }}">{{ truck_display if role == 'truck' and assigned else short_value ~ ' · ' ~ prefix if mirrored else prefix ~ ' · ' ~ short_value }}</span>
                     <button type="button" class="ucc-crew-edit" data-ucc-crew-edit="{{ role }}" aria-label="Edit {{ ramp.name }} position {{ slot.position }} {{ role }}" aria-haspopup="dialog" aria-controls="{{ editor_id }}" aria-expanded="false"></button>
                 </div>
                 {% endfor %}
@@ -80,10 +85,10 @@
                 <input type="hidden" name="board" value="ucc"><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ slot.truck_version }}">
                 {% set label = ramp.name ~ ' position ' ~ slot.position ~ ' truck' %}
                 <label class="ucc-pill"><span class="ucc-crew-field-label">Truck</span><select id="{{ editor_id }}-truck" name="truck_number" aria-label="{{ label }}">
-                    <option value="">{{ 'NO TRUCK · ' ~ slot.position if mirrored else slot.position ~ ' · NO TRUCK' }}</option>
-                    {% if slot.truck_unavailable %}<option value="{{ slot.truck_number }}" selected disabled>{{ slot.truck_number }} · UNAVAILABLE</option>{% endif %}
-                    {% for truck in truck_options %}<option value="{{ truck.number }}"{% if truck.number == slot.truck_number %} selected{% endif %}>{{ truck.number ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ truck.number }}</option>{% endfor %}
-                </select><span data-ucc-selected-text{% if slot.truck_unavailable %} class="ucc-truck-unavailable"{% endif %}>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</span><span class="ucc-inline-empty" aria-hidden="true">{{ 'T · ' ~ slot.position if mirrored else slot.position ~ ' · T' }}</span></label>
+                    <option value="">{{ no_truck }}</option>
+                    {% if slot.truck_unavailable %}<option value="{{ slot.truck_number }}" selected disabled>{{ truck_display }} · UNAVAILABLE</option>{% endif %}
+                    {% for truck in truck_options %}<option value="{{ truck.number }}"{% if truck.number == slot.truck_number %} selected{% endif %}>{{ numbered_truck(slot.position, truck.number) }}</option>{% endfor %}
+                </select><span data-ucc-selected-text{% if slot.truck_unavailable %} class="ucc-truck-unavailable"{% endif %}>{{ truck_display }}</span><span class="ucc-inline-empty" aria-hidden="true">{{ 'T · ' ~ slot.position if mirrored else slot.position ~ ' · T' }}</span></label>
                 <button type="submit" class="ucc-legacy-save">SAVE</button>
             </form>
             {% for role in ('driver', 'flyer') %}{% set person_slot = slot.roles[role] %}
@@ -102,7 +107,7 @@
             <details data-ucc-editor="unit-{{ ramp.name }}-{{ slot.position }}"><summary>MOVE / SWAP</summary><div class="ucc-unit-actions"><button type="button" data-ucc-enable-moves aria-pressed="false">MOVE PERSON INTO SLOT</button>{% for role in ('driver','flyer') if slot.roles[role].person and slot.roles[role].available %}<button type="button" class="ucc-move-person" draggable="true" data-ucc-drag-assignee data-person-id="{{ slot.roles[role].person.id }}">MOVE {{ role|upper }}</button>{% endfor %}<form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='unit') }}" data-ucc-unit-form data-ucc-crew-form="unit">
                 {{ csrf_field() }}
                 <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ staffing_version }}">
-                {% if detached_units %}<label>SOURCE UNIT<select name="source_slot"><option value="{{ ramp.name }}|{{ slot.position }}">THIS POSITION</option>{% for unit in detached_units %}<option value="{{ unit.ramp }}|{{ unit.position }}">{{ unit.ramp }} P{{ unit.position }} · {{ unit.truck or 'TEAM' }}</option>{% endfor %}</select></label>{% endif %}
+                {% if detached_units %}<label>SOURCE UNIT<select name="source_slot"><option value="{{ ramp.name }}|{{ slot.position }}">THIS POSITION</option>{% for unit in detached_units %}<option value="{{ unit.ramp }}|{{ unit.position }}">{{ unit.ramp }} {{ numbered_truck(unit.position, unit.truck) if unit.truck else 'P' ~ unit.position ~ ' · TEAM' }}</option>{% endfor %}</select></label>{% endif %}
                 <label>TO RAMP<select name="destination_ramp">{% for destination in ramps if destination.slots %}<option>{{ destination.name }}</option>{% endfor %}{% if early_out %}<option>Early Out</option>{% endif %}</select></label><label>POSITION<select name="destination_position">{% for position in range(1,5) %}<option>{{ position }}</option>{% endfor %}</select></label><label>RESOLUTION<select name="resolution"><option value="move">MOVE TO EMPTY</option><option value="swap">SWAP UNITS</option></select></label><button type="submit">APPLY UNIT MOVE</button>
             </form></div></details><span class="ucc-management-only ucc-management-save" data-ucc-management-save role="status"></span>{% endif %}
             </div>{% endif %}
@@ -122,7 +127,7 @@
     <article data-ucc-info-mission="{{ row.identity_key }}" hidden><header><h2>{{ row.tail }}{% if row.flight %} · {{ row.flight }}{% endif %}</h2><button type="button" data-ucc-info-close aria-label="Close aircraft information">×</button></header>
         <dl><div><dt>LOCATION</dt><dd>{{ ramp.name }} · {% if row == ramp.pad %}DEICE PAD{% elif row in ramp.waiting_queue|default(()) %}{{ waiting_location(row) }}{% elif row in ramp.exceptions %}UNPLACED · CAPACITY REVIEW{% else %}{{ row.parking }}{% endif %}</dd></div>{% if row.destination or row.departure_time %}<div><dt>ROUTE / {{ row.departure_time_label }}</dt><dd>{{ row.destination }} · {{ row.departure_time }}</dd></div>{% endif %}<div><dt>AIRCRAFT</dt><dd>{{ row.tail_status }}</dd></div><div><dt>PRETREAT</dt><dd>{{ row.pretreat_status }}</dd></div><div><dt>DEPARTURE DEICE</dt><dd>{{ row.deice_status }}</dd></div></dl>
         {% if row.identity_note %}<p class="ucc-warning">{{ row.identity_note }}</p>{% endif %}
-        <div class="ucc-resource-context">{% for owner in ramp.slots if owner.truck_number or owner.roles.driver.person or owner.roles.flyer.person %}<span>P{{ owner.position }} · {{ owner.truck_number or 'No truck' }} · {{ owner.roles.driver.person.full_name if owner.roles.driver.person else 'No driver' }} / {{ owner.roles.flyer.person.full_name if owner.roles.flyer.person else 'No flyer' }}</span>{% endfor %}</div>
+        <div class="ucc-resource-context">{% for owner in ramp.slots if owner.truck_number or owner.roles.driver.person or owner.roles.flyer.person %}<span>{{ numbered_truck(owner.position, owner.truck_number) if owner.truck_number else 'P' ~ owner.position ~ ' · No truck' }} · {{ owner.roles.driver.person.full_name if owner.roles.driver.person else 'No driver' }} / {{ owner.roles.flyer.person.full_name if owner.roles.flyer.person else 'No flyer' }}</span>{% endfor %}</div>
         {% if row in ramp.queue and can_edit %}<form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='queue') }}" data-ucc-queue-form><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="expected_version" value="{{ ramp.queue_version }}"><span>COORDINATOR QUEUE CORRECTION</span><button type="submit" name="direction" value="forward">MOVE FORWARD</button><button type="submit" name="direction" value="back">MOVE BACK</button></form>{% endif %}
         <a href="{{ url_for('neosubzero.coordinator', mission=row.mission_id, ramp=ramp.name) }}">OPEN DEICE OPERATIONS</a>
     </article>{% endfor %}{% endfor %}

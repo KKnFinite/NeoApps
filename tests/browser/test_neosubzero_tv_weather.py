@@ -12,6 +12,7 @@ from app.models import (NeoSubZeroDepartureDeiceEvent, NeoSubZeroSprayRecord, Ne
                         SortDateParkingAssignment, StaffingDailyAttendance, StaffingPerson, StaffingUnit)
 from app.services.live_screen_refresh import save_live_screen_refresh_override
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
+from app.services.neosubzero_trucks import manage_truck
 from app.services.neosubzero_ucc import set_neosubzero_ucc_assignment
 from tests.browser import test_neosubzero_ucc as fixtures
 
@@ -43,7 +44,8 @@ class DuccTvWeatherTest(unittest.TestCase):
             crew, present, unmarked = [db.session.get(StaffingPerson, person_id) for person_id in case.people]
             crew.last_name, present.last_name, unmarked.last_name = "De la Cruz", "O'Neil", "Smith-Jones"
             db.session.flush()
-            for ramp, number in (('Remote', '12'), ('Early Out', 'UCC-831')):
+            manage_truck(operation.gateway, 'add_truck', {'truck_number': '123456'}, actor_id=None)
+            for ramp, number in (('Remote', '123456'), ('Early Out', 'UCC-831')):
                 set_neosubzero_ucc_truck(operation, ramp, 1, number)
             set_neosubzero_ucc_assignment(operation, 'Early Out', 1, 'driver', crew)
             set_neosubzero_ucc_assignment(operation, 'Early Out', 1, 'flyer', present)
@@ -120,8 +122,8 @@ class DuccTvWeatherTest(unittest.TestCase):
         here = early.locator('[data-ucc-tv-crew-field="flyer"]')
         absent = early.locator('[data-ucc-tv-crew-field="driver"]')
         for field, text, color in (
-            (remote.locator('[data-ucc-tv-crew-field="truck"]'), '1 · TRUCK 12', blue),
-            (early.locator('[data-ucc-tv-crew-field="truck"]'), '1 · TRUCK UCC-831', red),
+            (remote.locator('[data-ucc-tv-crew-field="truck"]'), '1. 123456', blue),
+            (early.locator('[data-ucc-tv-crew-field="truck"]'), '1. UCC-831', red),
             (unmarked, 'D · T. Smith-Jones', green),
             (here, "F · T. O'Neil", green),
             (absent, 'D · C. De la Cruz', red),
@@ -156,6 +158,12 @@ class DuccTvWeatherTest(unittest.TestCase):
             page = browser.new_page(viewport={'width':1920, 'height':1080})
             errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
             case.login(page); case.ready(page, '/neosubzero/ucc')
+            remote_truck = page.locator('[data-ucc-editor="Remote-1"] [data-ucc-crew-line="truck"] span')
+            expect(remote_truck).to_be_visible()
+            expect(remote_truck).to_have_text('1. 123456')
+            empty_truck = page.locator('[data-ucc-editor="Remote-2"] [data-ucc-crew-form="truck"] select')
+            expect(empty_truck).to_be_visible()
+            expect(empty_truck).to_have_value('')
             expect(page.locator('[data-ucc-upcoming] article:visible')).to_have_count(4)
             expect(page.get_by_text('MON NOV 16', exact=True)).to_be_visible()
             expect(page.locator('.neosubzero-weather-hour-secondary > span:first-child').first).to_be_visible()
