@@ -2,7 +2,6 @@
 .ucc-staffing-grid { display:contents; }
 .ucc-plane-etd { display:none; }
 .neosubzero-ucc .ucc-person-unavailable,
-.ucc-tv-crew .ucc-person-unavailable { color:#ff9c9c; }
 .neosubzero-ucc .ucc-truck-unavailable { color:#ff9c9c; }
 .neosubzero-ucc .ucc-early-out .ucc-staffing-grid {
     display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:auto; gap:6px;
@@ -489,6 +488,9 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         --tv-edge:#263c50;
         --tv-muted:#a3bbd0;
         --tv-accent:#80d1e8;
+        --tv-truck:#79c6ff;
+        --tv-person:#92dfa6;
+        --tv-unavailable:#ff9c9c;
         box-sizing:border-box;
         grid-template-rows:auto auto minmax(0,1fr) auto;
         gap:var(--tv-gap);
@@ -549,7 +551,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         .ucc-tv-wallboard .ucc-tv-ramp { grid-row:1 / -1; grid-template-rows:subgrid; }
     }
     .ucc-tv-wallboard .ucc-tv-ramp h2 {
-        font-size:1.08em; padding:0 0 .16em; border-bottom:1px solid var(--tv-edge);
+        font-size:1.08em; padding:0 0 .16em; border-bottom:1px solid var(--tv-edge); text-align:center;
     }
     .ucc-tv-staging, .ucc-tv-stands { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.36em; }
     .ucc-tv-staging { grid-template-columns:minmax(0,1fr) minmax(5.15em,25%) minmax(0,1fr); row-gap:.2em; }
@@ -565,10 +567,12 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-crew { display:grid; align-content:start; gap:.08em; font-size:.8em; overflow-wrap:anywhere; }
     .ucc-tv-crew-column > .ucc-tv-crew + .ucc-tv-crew { border-top:1px solid #213748; padding-top:.22em; }
     .ucc-tv-crew.is-right { text-align:right; }
-    .ucc-tv-crew strong { color:#d4eff9; font-weight:750; }
-    .ucc-tv-crew span { color:#bacfe0; }
+    .ucc-tv-crew [data-ucc-tv-crew-field="truck"] { color:var(--tv-truck); font-weight:750; }
+    .ucc-tv-crew :is([data-ucc-tv-crew-field="driver"],[data-ucc-tv-crew-field="flyer"]) {
+        color:var(--tv-person); font-size:1.1em; font-weight:750; line-height:1.04;
+    }
     .ucc-tv-crew > :is(strong,span) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .ucc-tv-wallboard .ucc-tv-crew strong.ucc-truck-unavailable { color:#ff9c9c; }
+    .ucc-tv-wallboard .ucc-tv-crew :is(.ucc-truck-unavailable,.ucc-person-unavailable) { color:var(--tv-unavailable); }
     .ucc-tv-pad { display:grid; align-items:center; }
     .ucc-tv-pad-idle { display:grid; justify-items:center; gap:.4em; color:#7d9aae; text-align:center; }
     .ucc-tv-pad-idle .ucc-tv-plane-icon { width:2.4em; height:2.4em; opacity:.34; }
@@ -641,16 +645,20 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(.ucc-tv-exit,.ucc-tv-theme) {
         background:var(--tv-plane-surface); color:var(--tv-muted);
     }
-    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(h1,.ucc-tv-temperature > strong,.ucc-tv-hour-head,.ucc-tv-crew strong,.ucc-tv-plane) {
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(h1,.ucc-tv-temperature > strong,.ucc-tv-hour-head,.ucc-tv-plane) {
         color:#122333;
     }
-    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(.ucc-tv-position,.ucc-tv-crew span,.ucc-tv-plane-route,.ucc-tv-plane-etd) {
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(.ucc-tv-position,.ucc-tv-plane-route,.ucc-tv-plane-etd) {
         color:var(--tv-muted);
     }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew-column > .ucc-tv-crew + .ucc-tv-crew {
         border-top-color:var(--tv-edge);
     }
-    .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-crew :is(.ucc-person-unavailable,.ucc-truck-unavailable) { color:#a12a3c; }
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] {
+        --tv-truck:#125f9d;
+        --tv-person:#1d6b3c;
+        --tv-unavailable:#a12a3c;
+    }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-plane:not(.is-in-throat) {
         background:var(--tv-plane-surface); border-color:var(--tv-edge);
     }

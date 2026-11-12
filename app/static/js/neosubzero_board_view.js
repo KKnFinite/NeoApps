@@ -56,15 +56,28 @@
         if (!assigned.length) return null;
         const right = position >= 3;
         const team = element("div", `ucc-tv-crew${right ? " is-right" : ""}`, ...assigned.map(field => {
+            const role = field.dataset.uccTvCrewField;
             let value = field.textContent.trim();
-            if (field.dataset.uccTvCrewField === "truck") {
+            let fullName = value;
+            let stateClass = field.className;
+            if (role === "truck") {
                 const number = value.replace(new RegExp(`^${position} · | · ${position}$`, "g"), "");
                 const truck = /^TRUCK\b/i.test(number) ? number : `TRUCK ${number}`;
                 value = right ? `${truck} · ${position}` : `${position} · ${truck}`;
+                fullName = value;
+            } else if (field.dataset.uccTvLastName !== undefined) {
+                const first = field.dataset.uccTvFirstName.trim();
+                const last = field.dataset.uccTvLastName.trim();
+                const initial = Array.from(first)[0];
+                const name = initial && last ? `${initial}. ${last}` : last || first;
+                fullName = [first, last].filter(Boolean).join(" ");
+                const label = role[0].toUpperCase();
+                value = right ? `${name} · ${label}` : `${label} · ${name}`;
+                stateClass = field.hasAttribute("data-ucc-tv-attendance-unavailable") ? "ucc-person-unavailable" : "";
             }
-            const line = element(field.localName, field.className, value);
-            line.title = value;
-            line.dataset.uccTvCrewField = field.dataset.uccTvCrewField;
+            const line = element(field.localName, stateClass, value);
+            line.title = fullName;
+            line.dataset.uccTvCrewField = role;
             return line;
         }));
         team.dataset.uccTvPosition = position;

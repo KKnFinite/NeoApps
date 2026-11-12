@@ -137,8 +137,8 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         second.set_viewport_size({"width": 1366, "height": 768})
         expect(second.locator(".ucc-tv-wallboard")).to_have_attribute("data-ucc-tv-theme", "dark")
         for role, initial, replacement, label, replacement_label in (
-            ("driver", case.people[1], case.people[2], "D · Taylor Longname-Deicer-1", "D · Taylor Longname-Deicer-2"),
-            ("flyer", case.people[1], case.people[2], "F · Taylor Longname-Deicer-1", "F · Taylor Longname-Deicer-2"),
+            ("driver", case.people[1], case.people[2], "D · T. Longname-Deicer-1", "D · T. Longname-Deicer-2"),
+            ("flyer", case.people[1], case.people[2], "F · T. Longname-Deicer-1", "F · T. Longname-Deicer-2"),
             ("truck", "12", "UCC-831", "2 · TRUCK 12", "2 · TRUCK UCC-831"),
         ):
             for value, visible in ((initial, label), (replacement, replacement_label), ("", None)):
@@ -199,8 +199,8 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         tick(tv, 5000)
         bravo = board.locator(".ucc-tv-ramp").filter(has=tv.get_by_role("heading", name="Bravo", exact=True))
         expect(bravo).to_contain_text("2 · TRUCK 12")
-        expect(bravo).to_contain_text("D · Taylor Longname-Deicer-1")
-        expect(bravo).to_contain_text("F · Taylor Longname-Deicer-2")
+        expect(bravo).to_contain_text("D · T. Longname-Deicer-1")
+        expect(bravo).to_contain_text("F · T. Longname-Deicer-2")
 
         # Reassign an occupied team via the audited whole-crew swap.
         case.ready(work, "/neosubzero/ucc")
@@ -215,8 +215,8 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         expect(bravo_slot.locator("[data-ucc-management-save]")).to_have_text("Saved")
         tick(tv, 5000)
         expect(alpha).to_contain_text("1 · TRUCK 12")
-        expect(bravo).to_contain_text("D · Christopher Longname-Deicer-0")
-        expect(bravo).not_to_contain_text("F · Taylor Longname-Deicer-2")
+        expect(bravo).to_contain_text("D · C. Longname-Deicer-0")
+        expect(bravo).not_to_contain_text("F · T. Longname-Deicer-2")
 
         # Attendance can change outside DUCC, while Early Out uses the same save route.
         with case.app.app_context():
@@ -235,7 +235,7 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         assign("driver", case.people[0], early)
         early.locator('[data-ucc-crew-edit="driver"]').click()
         tick(tv, 5000)
-        expect(board.locator(".ucc-tv-early")).to_contain_text("Christopher Longname-Deicer-0")
+        expect(board.locator(".ucc-tv-early")).to_contain_text("C. Longname-Deicer-0")
 
         # Submit a real stale version and verify that neither revision nor TV changes.
         form = early.locator('[data-ucc-crew-form="driver"]')
@@ -246,7 +246,7 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         expect(form.locator("select")).to_have_value("")
         expect(work.locator("[data-ucc-feedback]")).to_contain_text("changed")
         self.assertFalse(tick(tv, 5000)["changed"])
-        expect(board.locator(".ucc-tv-early")).to_contain_text("Christopher Longname-Deicer-0")
+        expect(board.locator(".ucc-tv-early")).to_contain_text("C. Longname-Deicer-0")
 
         # Failed changed-fragment downloads must show degraded status and retry.
         failures.add("fragment")

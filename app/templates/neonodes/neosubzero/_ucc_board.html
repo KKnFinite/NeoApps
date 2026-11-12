@@ -56,7 +56,7 @@
             <div class="ucc-team-readonly">
                 <strong{% if slot.truck_number %} data-ucc-tv-crew-field="truck"{% endif %}{% if slot.truck_unavailable %} class="ucc-truck-unavailable"{% endif %}>{{ (slot.truck_number or 'NO TRUCK') ~ ' · ' ~ slot.position if mirrored else slot.position ~ ' · ' ~ (slot.truck_number or 'NO TRUCK') }}</strong>
                 {% for role in ('driver','flyer') %}{% set person_slot = slot.roles[role] %}
-                <span{% if person_slot.person %} data-ucc-tv-crew-field="{{ role }}"{% endif %}{% if person_slot.person and not person_slot.available %} class="ucc-person-unavailable"{% endif %}>{{ (person_slot.person.full_name if person_slot.person else 'Unassigned') ~ ' · ' ~ role[0]|upper if mirrored else role[0]|upper ~ ' · ' ~ (person_slot.person.full_name if person_slot.person else 'Unassigned') }}</span>
+                <span{% if person_slot.person %} data-ucc-tv-crew-field="{{ role }}" data-ucc-tv-first-name="{{ person_slot.person.first_name }}" data-ucc-tv-last-name="{{ person_slot.person.last_name }}"{% if person_slot.tv_attendance_unavailable %} data-ucc-tv-attendance-unavailable{% endif %}{% endif %}{% if person_slot.person and not person_slot.available %} class="ucc-person-unavailable"{% endif %}>{{ (person_slot.person.full_name if person_slot.person else 'Unassigned') ~ ' · ' ~ role[0]|upper if mirrored else role[0]|upper ~ ' · ' ~ (person_slot.person.full_name if person_slot.person else 'Unassigned') }}</span>
                 {% endfor %}
             </div>
             {% if can_edit %}
@@ -111,7 +111,7 @@
 {%- endmacro %}
 <div data-ucc-live-board>
 {# Fragment replacement also upgrades already-open tabs without stale geometry. #}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261112-assignment-controls-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261112-tv-resource-style-v1') }}">
 {% if not operation %}<p class="neosubzero-empty">No current sort. Staffing management is unavailable.</p>{% endif %}
 <script nonce="{{ csp_nonce() }}" type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
 <header class="ucc-board-heading"><h2>RAMP OPERATIONS <span class="ucc-mobile-label">· STAFFING</span></h2><span class="ucc-desktop-label">Select an aircraft for planning information · treatment entry remains in Deice Operations</span></header>

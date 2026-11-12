@@ -211,7 +211,7 @@ def neosubzero_callout_context(operation):
             "candidates": (),
             "staffing_pool": (),
         }
-    snapshot = _subzero_staffing_snapshot(operation)
+    snapshot = subzero_staffing_snapshot(operation)
     return {
         "operation": operation,
         "permanent": snapshot["permanent"],
@@ -225,7 +225,7 @@ def current_subzero_staffing_pool(operation):
     """Return the bounded canonical permanent + selected callout pool for UCC."""
     if operation is None:
         return ()
-    return _subzero_staffing_snapshot(operation)["staffing_pool"]
+    return subzero_staffing_snapshot(operation)["staffing_pool"]
 
 
 def set_neosubzero_callout_membership(
@@ -257,7 +257,7 @@ def set_neosubzero_callout_membership(
     if selected:
         candidate_ids = {
             item["person"].id
-            for item in _subzero_staffing_snapshot(operation)["candidates"]
+            for item in subzero_staffing_snapshot(operation)["candidates"]
             if item["available"]
         }
         if person.id not in candidate_ids:
@@ -303,7 +303,8 @@ def permanent_deice_work_area_ids(units_by_id=None):
     }
 
 
-def _subzero_staffing_snapshot(operation):
+def subzero_staffing_snapshot(operation, *, attendance_person_ids=()):
+    """Project staffing and recorded attendance, including any assigned people requested by UCC."""
     units_by_id = _staffing_units_by_id(active_only=True)
     permanent_area_ids = permanent_deice_work_area_ids(units_by_id)
     qualification_join = and_(
@@ -361,7 +362,7 @@ def _subzero_staffing_snapshot(operation):
     }
     attendance = _attendance_records(
         operation,
-        set(people_by_id),
+        set(people_by_id).union(attendance_person_ids),
         units_by_id,
     )
     callout_rows = (
@@ -442,6 +443,7 @@ def _subzero_staffing_snapshot(operation):
         "callouts": tuple(sorted(callouts, key=sort_key)),
         "candidates": tuple(sorted(candidates, key=sort_key)),
         "staffing_pool": tuple(sorted(staffing_pool, key=sort_key)),
+        "recorded_attendance": attendance,
     }
 
 

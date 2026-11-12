@@ -8,7 +8,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 from app.extensions import db
-from app.models import (NeoSubZeroDepartureDeiceEvent, NeoSubZeroSprayRecord, SortDateOperation,
+from app.models import (NeoSubZeroDepartureDeiceEvent, NeoSubZeroSprayRecord, NeoSubZeroTruck, SortDateOperation,
                         SortDateParkingAssignment, StaffingDailyAttendance, StaffingPerson, StaffingUnit)
 from app.services.live_screen_refresh import save_live_screen_refresh_override
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
@@ -40,15 +40,21 @@ class DuccTvWeatherTest(unittest.TestCase):
         with case.app.app_context():
             operation = db.session.get(SortDateOperation, case.operation_id)
             save_live_screen_refresh_override(operation.gateway, "neosubzero.ucc_tv", "5")
-            crew = db.session.get(StaffingPerson, case.people[0])
+            crew, present, unmarked = [db.session.get(StaffingPerson, person_id) for person_id in case.people]
+            crew.last_name, present.last_name, unmarked.last_name = "De la Cruz", "O'Neil", "Smith-Jones"
+            db.session.flush()
             for ramp, number in (('Remote', '12'), ('Early Out', 'UCC-831')):
                 set_neosubzero_ucc_truck(operation, ramp, 1, number)
             set_neosubzero_ucc_assignment(operation, 'Early Out', 1, 'driver', crew)
-            set_neosubzero_ucc_assignment(operation, 'Remote', 1, 'driver', db.session.get(StaffingPerson, case.people[2]))
+            set_neosubzero_ucc_assignment(operation, 'Early Out', 1, 'flyer', present)
+            set_neosubzero_ucc_assignment(operation, 'Remote', 1, 'driver', unmarked)
+            NeoSubZeroTruck.query.filter_by(gateway_id=operation.gateway_id, number='UCC-831').one().active = False
             night = StaffingUnit.query.filter_by(unit_type='sort', name='Night').one()
             db.session.add(StaffingDailyAttendance(person_id=crew.id, sort_unit_id=night.id,
                 sort_date_operation_id=operation.id, attendance_date=operation.sort_date,
                 work_area_unit_id=crew.work_assignments[0].work_area_unit_id, status='call_in'))
+            db.session.add(StaffingDailyAttendance(person_id=present.id, sort_unit_id=night.id,
+                sort_date_operation_id=operation.id, attendance_date=operation.sort_date, status='here'))
             fixture = fixtures.NeoSubZeroUccTest()
             fixture.operation = operation
             remote = fixture._departure('UPSREMOTE', 'NREMOTE', 'SDF', 3)
@@ -74,8 +80,6 @@ class DuccTvWeatherTest(unittest.TestCase):
             ('.ucc-tv-observation dd', '#122333', '#ffffff'),
             ('.ucc-tv-weather .ucc-tv-source', '#405567', '#ffffff'),
             ('.ucc-tv-weather article .ucc-tv-muted', '#405567', '#f3f7fa'),
-            ('.ucc-tv-crew span:not(.ucc-person-unavailable)', '#405567', '#ffffff'),
-            ('.ucc-tv-crew .ucc-person-unavailable', '#a12a3c', '#ffffff'),
             ('.ucc-tv-plane:not(.is-in-throat) .ucc-tv-plane-route', '#405567', '#e7eff5'),
         ]
         for selector, expected, background in text_colors:
@@ -107,6 +111,35 @@ class DuccTvWeatherTest(unittest.TestCase):
         self.assertGreaterEqual(contrast('#405567', '#e7eff5'), 3)
         expect(board.locator('.ucc-tv-pad .state-deicing')).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
         expect(board.locator('.ucc-tv-pad .state-deicing .ucc-tv-plane-icon')).to_have_css('background-color', rgb('#12657d'))
+
+    def check_crew_colors(self, board, *, light):
+        blue, green, red = ('#125f9d', '#1d6b3c', '#a12a3c') if light else ('#79c6ff', '#92dfa6', '#ff9c9c')
+        remote = board.locator('.ucc-tv-remote')
+        early = board.locator('.ucc-tv-early')
+        unmarked = remote.locator('[data-ucc-tv-crew-field="driver"]')
+        here = early.locator('[data-ucc-tv-crew-field="flyer"]')
+        absent = early.locator('[data-ucc-tv-crew-field="driver"]')
+        for field, text, color in (
+            (remote.locator('[data-ucc-tv-crew-field="truck"]'), '1 · TRUCK 12', blue),
+            (early.locator('[data-ucc-tv-crew-field="truck"]'), '1 · TRUCK UCC-831', red),
+            (unmarked, 'D · T. Smith-Jones', green),
+            (here, "F · T. O'Neil", green),
+            (absent, 'D · C. De la Cruz', red),
+        ):
+            expect(field).to_have_text(text)
+            expect(field).to_have_css('color', rgb(color))
+            self.assertGreaterEqual(contrast(color, '#f3f7fa' if light else '#07121e'), 4.5)
+        expect(absent).to_have_attribute('title', 'Christopher De la Cruz')
+        expect(here).to_have_attribute('title', "Taylor O'Neil")
+        sizes = early.locator('.ucc-tv-crew').evaluate("""crew => Array.from(crew.children, field => {
+            const css = getComputedStyle(field);
+            return [parseFloat(css.fontSize), Number(css.fontWeight), css.whiteSpace,
+                    field.scrollWidth <= field.clientWidth + 1];
+        })""")
+        self.assertTrue(all(weight >= 700 and nowrap == 'nowrap' and fits for _, weight, nowrap, fits in sizes))
+        self.assertTrue(all(size > sizes[0][0] for size, *_ in sizes[1:]))
+        expect(board.locator('.ucc-tv-ramp').nth(1).locator('.ucc-tv-crew')).to_have_count(0)
+        expect(remote.locator('[data-ucc-tv-crew-field="flyer"]')).to_have_count(0)
 
     def exercise(self, engine):
         case = fixtures.UccBrowserTest(); case.setUpClass(); browser = None
@@ -141,7 +174,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             expect(board.locator('.ucc-tv-hours article')).to_have_count(12)
             expect(board.locator('.ucc-tv-header > :visible')).to_have_text(['RFD DUCC · TV MODE', 'Light / Dark', 'Exit TV Mode'])
             expect(board.locator('.ucc-tv-remote .ucc-tv-plane-icon')).to_have_class('ucc-tv-plane-icon facing-up')
-            expect(board.locator('.ucc-tv-early .ucc-person-unavailable')).to_contain_text('Longname-Deicer-0')
+            expect(board.locator('.ucc-tv-early .ucc-person-unavailable')).to_have_text('D · C. De la Cruz')
             expect(board.locator('.ucc-tv-pad .state-deicing .ucc-tv-plane-icon')).to_have_class('ucc-tv-plane-icon facing-up')
             expect(board.locator('.ucc-tv-stands .ucc-tv-plane-icon.facing-right').first).to_be_visible()
             expect(board.locator('.ucc-tv-stands .ucc-tv-plane-icon.facing-left').first).to_be_visible()
@@ -150,7 +183,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             expect(cards).to_have_count(4)
             expect(cards.last).to_contain_text('MON NOV 16')
             expect(cards.last).to_contain_text('Forecast unavailable')
-            for width, height in ((1920,1080), (1280,720), (3840,2160)):
+            for width, height in ((1920,1080), (1366,768), (1280,720), (3840,2160)):
                 page.set_viewport_size({'width':width, 'height':height})
                 measure = '''wall => {
                     const rect = node => node.getBoundingClientRect();
@@ -161,6 +194,16 @@ class DuccTvWeatherTest(unittest.TestCase):
                         sections: [...wall.querySelectorAll('.ucc-tv-weather, .ucc-tv-ramp, .ucc-tv-pad, .ucc-tv-footer')].map(node => {
                             const box = rect(node);
                             return [box.x, box.y, box.width, box.height];
+                        }),
+                        labels: ramps.map(ramp => {
+                            const heading = ramp.querySelector("h2");
+                            const range = document.createRange();
+                            range.selectNodeContents(heading);
+                            const label = range.getBoundingClientRect();
+                            const column = rect(ramp);
+                            const pad = rect(ramp.querySelector(".ucc-tv-pad"));
+                            return {y:label.y, centered:Math.abs(label.x + label.width / 2
+                                - column.x - column.width / 2) <= 1, above:label.bottom <= pad.top};
                         }),
                         ordered: ramps.every(ramp => {
                             const [left, pad, right] = ramp.querySelector('.ucc-tv-staging').children;
@@ -174,6 +217,10 @@ class DuccTvWeatherTest(unittest.TestCase):
                 self.assertLessEqual(geometry['width'], width)
                 self.assertLessEqual(geometry['height'], height)
                 self.assertTrue(geometry['ordered'])
+                self.assertTrue(all(label['centered'] and label['above'] for label in geometry['labels']))
+                self.assertLessEqual(max(label['y'] for label in geometry['labels'])
+                                     - min(label['y'] for label in geometry['labels']), 1)
+                self.check_crew_colors(board, light=False)
                 self.assertEqual(len({(round(w), round(h)) for w, h in geometry['ramps']}), 1)
                 expect(board).to_have_css('background-color', rgb('#07121e'))
                 expect(board.locator('.ucc-tv-ramp').first).to_have_css('background-color', rgb('#0a1927'))
@@ -184,6 +231,7 @@ class DuccTvWeatherTest(unittest.TestCase):
                 expect(theme).to_have_attribute('aria-pressed', 'true')
                 self.assertEqual(board.evaluate(measure), geometry)
                 self.check_light_palette(board)
+                self.check_crew_colors(board, light=True)
                 page.screenshot(path=str(EVIDENCE/f'{engine}-{width}-light.png'))
                 theme.click()
                 expect(board).to_have_attribute('data-ucc-tv-theme', 'dark')
@@ -196,10 +244,12 @@ class DuccTvWeatherTest(unittest.TestCase):
             expect(board).to_have_attribute('data-ucc-tv-theme', 'light')
             case.weather_data['tv_forecast_extra'] = (dict(sample, date_label='MON NOV 16'),)
             with case.app.app_context():
+                StaffingDailyAttendance.query.filter_by(person_id=case.people[0]).one().status = 'here'
                 set_neosubzero_ucc_assignment(db.session.get(SortDateOperation, case.operation_id), 'Bravo', 2,
                                              'driver', db.session.get(StaffingPerson, case.people[1]))
                 db.session.commit()
-            expect(board.locator('.ucc-tv-ramp').filter(has=page.get_by_text('Bravo', exact=True))).to_contain_text('Longname-Deicer-1', timeout=10000)
+            expect(board.locator('.ucc-tv-ramp').filter(has=page.get_by_text('Bravo', exact=True))).to_contain_text("T. O'Neil", timeout=10000)
+            expect(board.locator('.ucc-tv-early [data-ucc-tv-crew-field="driver"]')).to_have_css('color', rgb('#1d6b3c'))
             expect(cards.last).to_contain_text(sample['temperature_range'])
             expect(board).to_have_attribute('data-ucc-tv-theme', 'light')
             expect(draft).to_have_value(str(case.people[2]))

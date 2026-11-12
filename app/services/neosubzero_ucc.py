@@ -26,7 +26,7 @@ from app.models import (
 )
 from app.services.live_collaboration import entity_version
 from app.services.memory_diagnostics import memory_diagnostics
-from app.services.neosubzero_staffing import current_subzero_staffing_pool
+from app.services.neosubzero_staffing import current_subzero_staffing_pool, subzero_staffing_snapshot
 
 
 UCC_REFRESH_KEY = "neosubzero.ucc"
@@ -106,7 +106,11 @@ def neosubzero_ucc_context(gateway, operation):
             sort_date_operation_id=operation.id
         ).all()
     }
-    staffing_pool = current_subzero_staffing_pool(operation)
+    staffing = subzero_staffing_snapshot(
+        operation, attendance_person_ids={row.person_id for row in assignment_rows if row.person_id},
+    )
+    staffing_pool = staffing["staffing_pool"]
+    recorded_attendance = staffing["recorded_attendance"]
     available_people = {
         item["person"].id: item for item in staffing_pool
     }
@@ -126,11 +130,13 @@ def neosubzero_ucc_context(gateway, operation):
             for role in UCC_ROLES:
                 assignment = assignment_by_slot.get((ramp, position, role))
                 person = assignment.person if assignment else None
+                attendance = recorded_attendance.get(person.id) if person else None
                 roles[role] = {
                     "assignment": assignment,
                     "person": person,
                     "version": entity_version(assignment),
                     "available": bool(person and person.id in available_people),
+                    "tv_attendance_unavailable": bool(attendance and attendance.status not in {"here", "unmarked"}),
                 }
             truck = truck_by_position.get((ramp, position))
             slots.append(
