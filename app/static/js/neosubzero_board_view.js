@@ -52,14 +52,22 @@
 
     function crew(ramp, position) {
         const summary = ramp?.querySelector(`.ucc-team.position-${position} .ucc-team-readonly`);
-        const [driver, flyer] = summary?.querySelectorAll("span") || [];
-        const number = content(summary, "strong").replace(new RegExp(`^${position} · | · ${position}$`, "g"), "");
-        const unit = !number || number === "NO TRUCK" ? "NO TRUCK" : /^TRUCK\b/i.test(number) ? number : `TRUCK ${number}`;
+        const assigned = Array.from(summary?.querySelectorAll("[data-ucc-tv-crew-field]") || []);
+        if (!assigned.length) return null;
         const right = position >= 3;
-        const team = element("div", `ucc-tv-crew${right ? " is-right" : ""}`,
-            element("strong", "", right ? `${unit} · ${position}` : `${position} · ${unit}`),
-            element("span", driver?.className || "", driver?.textContent || "D · Unassigned"),
-            element("span", flyer?.className || "", flyer?.textContent || "F · Unassigned"));
+        const team = element("div", `ucc-tv-crew${right ? " is-right" : ""}`, ...assigned.map(field => {
+            let value = field.textContent.trim();
+            if (field.dataset.uccTvCrewField === "truck") {
+                const number = value.replace(new RegExp(`^${position} · | · ${position}$`, "g"), "");
+                const truck = /^TRUCK\b/i.test(number) ? number : `TRUCK ${number}`;
+                value = right ? `${truck} · ${position}` : `${position} · ${truck}`;
+            }
+            const line = element(field.localName, field.className, value);
+            line.title = value;
+            line.dataset.uccTvCrewField = field.dataset.uccTvCrewField;
+            return line;
+        }));
+        team.dataset.uccTvPosition = position;
         return team;
     }
 
@@ -143,22 +151,16 @@
         const ramps = Array.from(tvSource.querySelectorAll("[data-ucc-ramp]"));
         const find = (name) => ramps.find(ramp => ramp.dataset.uccRamp === name);
         const remote = find("Remote");
-        const staffedCrews = section => [1, 2, 3, 4].filter(position => {
-            const source = section?.querySelector(`.ucc-team.position-${position} .ucc-team-readonly`);
-            return source && (!content(source, "strong").includes("NO TRUCK")
-                || Array.from(source.querySelectorAll("span")).some(role => !role.textContent.includes("Unassigned")));
-        }).map(position => crew(section, position));
+        const staffedCrews = section => [1, 2, 3, 4].map(position => crew(section, position)).filter(Boolean);
         const remoteCrews = staffedCrews(remote);
         const earlyCrews = staffedCrews(tvSource.querySelector("[data-ucc-early-out]"));
         const remoteAircraft = Array.from(remote?.querySelectorAll(".ucc-parking-place:has(.ucc-plane)") || [],
             stand => aircraftAt(stand, stand.dataset.uccParking));
         const footer = element("footer", "ucc-tv-footer",
             element("section", "ucc-tv-remote", heading("Remote"),
-                element("div", "ucc-tv-remote-data", ...remoteCrews, ...remoteAircraft,
-                    !remoteCrews.length && !remoteAircraft.length ? element("p", "", "No current assignments or aircraft") : null)),
+                element("div", "ucc-tv-remote-data", ...remoteCrews, ...remoteAircraft)),
             element("section", "ucc-tv-early", heading("Early Out Crew"),
-                element("div", "ucc-tv-remote-data", ...earlyCrews,
-                    earlyCrews.length ? null : element("p", "", "No current assignments"))));
+                element("div", "ucc-tv-remote-data", ...earlyCrews)));
         const exit = element("button", "ucc-tv-exit", "Exit TV Mode");
         exit.type = "button";
         exit.addEventListener("click", () => root.querySelector("[data-ucc-tv-exit]")?.click());

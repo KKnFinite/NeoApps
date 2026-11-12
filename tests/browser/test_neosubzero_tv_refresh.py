@@ -98,23 +98,44 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         unchanged_bytes = sum(request.sizes()["responseBodySize"] for request in requests)
 
         slot = work.locator('[data-ucc-editor="Alpha-2"]')
-        slot.locator("[data-ucc-crew-edit]").click()
 
-        def assign(role, value):
-            form = slot.locator(f'[data-ucc-crew-form="{role}"]')
+        def assign(role, value, team=None):
+            team = team if team is not None else slot
+            form = team.locator(f'[data-ucc-crew-form="{role}"]')
+            pencil = team.locator(f'[data-ucc-crew-edit="{role}"]')
             select = form.locator("select")
             version = form.locator('[name="expected_version"]')
             previous = version.input_value()
+            if not select.is_visible():
+                expect(pencil).to_be_visible()
+                pencil.click()
+                expect(team.locator(".ucc-team-controls:popover-open")).to_be_visible()
+            expect(select).to_be_visible()
             replacement = role != "truck" and bool(value) and bool(select.input_value())
             with work.expect_response(lambda r: r.request.method == "POST", timeout=7000) as result:
                 select.select_option(str(value))
                 if replacement:
                     work.locator('[data-ucc-move-choice="remove"]').click()
             self.assertEqual(result.value.status, 200, (role, value, result.value.text()))
-            expect(slot.locator("[data-ucc-management-save]")).to_have_text("Saved")
+            expect(team.locator("[data-ucc-management-save]")).to_have_text("Saved")
             expect(version).not_to_have_value(previous)
+            if value:
+                if team.locator(".ucc-team-controls:popover-open").is_visible():
+                    team.locator("[data-ucc-crew-close]").click()
+                expect(pencil).to_be_visible()
+                expect(select).to_be_hidden()
+            else:
+                expect(team.locator(".ucc-team-controls:popover-open")).to_have_count(0)
+                expect(pencil).to_be_hidden()
+                expect(select).to_be_visible()
 
         alpha = board.locator(".ucc-tv-ramp").filter(has=tv.get_by_role("heading", name="Alpha", exact=True))
+        tv_alpha_slot = alpha.locator('[data-ucc-tv-position="2"]')
+        expect(tv_alpha_slot).to_have_count(0)
+        expect(board.locator(".ucc-tv-crew").first).not_to_contain_text("Unassigned")
+        geometry = alpha.locator(".ucc-tv-stands").bounding_box()
+        second.set_viewport_size({"width": 1366, "height": 768})
+        expect(second.locator(".ucc-tv-wallboard")).to_have_attribute("data-ucc-tv-theme", "dark")
         for role, initial, replacement, label, replacement_label in (
             ("driver", case.people[1], case.people[2], "D · Taylor Longname-Deicer-1", "D · Taylor Longname-Deicer-2"),
             ("flyer", case.people[1], case.people[2], "F · Taylor Longname-Deicer-1", "F · Taylor Longname-Deicer-2"),
@@ -125,19 +146,50 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
                 self.assertTrue(tick(tv, 5000)["changed"])
                 if visible:
                     expect(alpha).to_contain_text(visible)
+                    expect(tv_alpha_slot.locator("[data-ucc-tv-crew-field]")).to_have_count(1)
                 else:
-                    expect(alpha).not_to_contain_text(replacement_label)
+                    expect(tv_alpha_slot).to_have_count(0)
+                self.assertEqual(alpha.locator(".ucc-tv-stands").bounding_box(), geometry)
                 expect(board).to_have_attribute("data-ucc-tv-theme", "light")
                 if role == "driver" and value == initial:
                     self.assertTrue(tick(second, 5000)["changed"])
                     expect(second.locator(".ucc-tv-wallboard")).to_contain_text(label)
 
+        work.set_viewport_size({"width": 1366, "height": 768})
+        tv.set_viewport_size({"width": 1366, "height": 768})
+        for section in ("Bravo", "Charlie", "Delta", "Echo", "Remote", "Early Out"):
+            team = work.locator(f'[data-ucc-editor="{section}-4"]')
+            expect(team.locator('[data-ucc-auto-save] select:visible')).to_have_count(3)
+            expect(team.locator('[data-ucc-crew-edit]:visible')).to_have_count(0)
+            if section in ("Remote", "Early Out"):
+                target = board.locator(".ucc-tv-remote" if section == "Remote" else ".ucc-tv-early")
+            else:
+                target = board.locator(".ucc-tv-ramp").filter(has=tv.get_by_role("heading", name=section, exact=True))
+            tv_slot = target.locator('[data-ucc-tv-position="4"]')
+            geometry = alpha.locator(".ucc-tv-stands").bounding_box()
+            for role, value in (("truck", "UCC-831"), ("driver", case.people[1]), ("flyer", case.people[2])):
+                assign(role, value, team)
+                tick(tv, 5000)
+                expect(tv_slot.locator(f'[data-ucc-tv-crew-field="{role}"]')).to_be_visible()
+                expect(tv_slot.locator("[data-ucc-tv-crew-field]")).to_have_count(1)
+                assign(role, "", team)
+                tick(tv, 5000)
+                expect(tv_slot).to_have_count(0)
+                self.assertEqual(alpha.locator(".ucc-tv-stands").bounding_box(), geometry)
+        self.assertEqual(work.evaluate("document.documentElement.scrollWidth - innerWidth"), 0)
+        self.assertLessEqual(board.evaluate("el => el.scrollWidth"), 1366)
+
         assign("driver", case.people[1])
         assign("flyer", case.people[2])
         assign("truck", "12")
+        assign("truck", "")
+        tick(tv, 5000)
+        expect(tv_alpha_slot.locator("[data-ucc-tv-crew-field]")).to_have_count(2)
+        expect(tv_alpha_slot.locator('[data-ucc-tv-crew-field="truck"]')).to_have_count(0)
+        assign("truck", "12")
         work.keyboard.press("Escape")
         case.ready(work, "/neosubzero/ucc")
-        slot.locator("[data-ucc-crew-edit]").click()
+        slot.locator('[data-ucc-crew-edit="driver"]').click()
         unit = slot.locator("[data-ucc-unit-form]")
         slot.locator('[data-ucc-editor="unit-Alpha-2"] > summary').click()
         unit.locator('[name="destination_ramp"]').select_option("Bravo")
@@ -153,7 +205,7 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         # Reassign an occupied team via the audited whole-crew swap.
         case.ready(work, "/neosubzero/ucc")
         bravo_slot = work.locator('[data-ucc-editor="Bravo-2"]')
-        bravo_slot.locator("[data-ucc-crew-edit]").click()
+        bravo_slot.locator('[data-ucc-crew-edit="driver"]').click()
         bravo_slot.locator('[data-ucc-editor="unit-Bravo-2"] > summary').click()
         unit = bravo_slot.locator("[data-ucc-unit-form]")
         unit.locator('[name="destination_ramp"]').select_option("Alpha")
@@ -180,9 +232,8 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
 
         case.ready(work, "/neosubzero/ucc")
         early = work.locator('[data-ucc-early-out] .position-1')
-        early.locator("[data-ucc-crew-edit]").click()
-        early.locator('[data-ucc-crew-form="driver"] select').select_option(str(case.people[0]))
-        expect(early.locator("[data-ucc-management-save]")).to_have_text("Saved")
+        assign("driver", case.people[0], early)
+        early.locator('[data-ucc-crew-edit="driver"]').click()
         tick(tv, 5000)
         expect(board.locator(".ucc-tv-early")).to_contain_text("Christopher Longname-Deicer-0")
 
@@ -192,6 +243,8 @@ class DuccTvRefreshBrowserTest(unittest.TestCase):
         with work.expect_response(lambda r: r.request.method == "POST") as rejected:
             form.evaluate("(e) => { e.querySelector('select').value = ''; e.requestSubmit(); }")
         self.assertEqual(rejected.value.status, 409)
+        expect(form.locator("select")).to_have_value("")
+        expect(work.locator("[data-ucc-feedback]")).to_contain_text("changed")
         self.assertFalse(tick(tv, 5000)["changed"])
         expect(board.locator(".ucc-tv-early")).to_contain_text("Christopher Longname-Deicer-0")
 

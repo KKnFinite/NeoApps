@@ -203,11 +203,11 @@ class UccBrowserTest(unittest.TestCase):
                     if width in (1366, 1920):
                         picker = page.locator(".ucc-team-controls:popover-open")
                         left = page.locator('[data-ucc-editor="Alpha-1"]')
-                        button = left.locator('[data-ucc-crew-edit]')
-                        expect(left.locator(".ucc-crew-lines")).to_contain_text('D · Longname-Deicer-0')
-                        expect(left.locator(".ucc-crew-lines")).not_to_contain_text('Christopher')
+                        button = left.locator('[data-ucc-crew-edit="driver"]')
+                        expect(left.locator('[data-ucc-crew-line="driver"]')).to_contain_text('D · Longname-Deicer-0')
+                        expect(left.locator('[data-ucc-crew-line="driver"]')).not_to_contain_text('Christopher')
                         right = page.locator('[data-ucc-editor="Echo-4"]')
-                        expect(right.locator(".ucc-crew-lines strong")).to_have_text('— · 4')
+                        expect(right.locator('[data-ucc-crew-form="truck"] select')).to_be_visible()
                         button.click()
                         expect(picker.locator('[data-ucc-crew-form="driver"] option:checked')).to_contain_text('Christopher Longname-Deicer-0')
                         box = picker.bounding_box()
@@ -219,13 +219,9 @@ class UccBrowserTest(unittest.TestCase):
                         page.keyboard.press('Escape')
                         expect(picker).to_be_hidden()
                         expect(button).to_have_attribute('aria-expanded', 'false')
-                        right.locator('[data-ucc-crew-edit]').click()
-                        expect(picker).to_be_visible()
-                        box = picker.bounding_box()
-                        self.assertLessEqual(box["x"] + box["width"], width)
+                        expect(right.locator('[data-ucc-crew-edit]:visible')).to_have_count(0)
                         self.assertAlmostEqual(page.locator('[data-ucc-ramp="Echo"]').bounding_box()["width"],
                                                geometry["ramps"][-1]["width"], delta=1)
-                        page.keyboard.press('Escape')
                 else:
                     expect(page.locator('.ucc-ramp-diagram').first).to_be_hidden()
                 measurements.append({"engine":engine, **geometry})
@@ -258,10 +254,11 @@ class UccBrowserTest(unittest.TestCase):
             expect(current_weather.locator('.neosubzero-weather-current-sort')).to_be_visible()
             expect(upcoming.locator('article:visible')).to_have_count(4)
             slot = page.locator('[data-ucc-editor="Alpha-2"]')
-            slot.locator("[data-ucc-crew-edit]").click()
-            for field, value in (('truck_number', '12'), ('person_id', str(self.people[2])), ('person_id', str(self.people[1]))):
-                selector = slot.locator(f'select[name="{field}"]')
-                control = selector.last if value == str(self.people[1]) else selector.first
+            for role, value in (('truck', '12'), ('driver', str(self.people[2])), ('flyer', str(self.people[1]))):
+                control = slot.locator(f'[data-ucc-crew-form="{role}"] select')
+                pencil = slot.locator(f'[data-ucc-crew-edit="{role}"]')
+                expect(control).to_be_visible()
+                expect(pencil).to_be_hidden()
                 version = control.locator('xpath=ancestor::form').locator('[name="expected_version"]')
                 before_save = version.input_value()
                 with page.expect_response(lambda r: r.request.method == 'POST') as saved:
@@ -270,8 +267,9 @@ class UccBrowserTest(unittest.TestCase):
                 expect(slot.locator('[data-ucc-management-save]')).to_have_text('Saved')
                 expect(version).not_to_have_value(before_save)
                 expect(control).to_have_value(value)
-                if field == 'truck_number':
-                    expect(slot.locator('.ucc-crew-lines strong')).to_have_text('2 · TRUCK 12')
+                expect(control).to_be_hidden()
+                pencil.click()
+                expect(control).to_be_visible()
                 assigned_version = version.input_value()
                 with page.expect_response(lambda r: r.request.method == 'POST') as cleared:
                     control.select_option('')
@@ -324,21 +322,20 @@ class UccBrowserTest(unittest.TestCase):
             mobile_editor.locator('select[name="person_id"]').first.select_option(str(self.people[0]))
             expect(mobile.locator('[data-ucc-feedback]')).to_contain_text('saved')
             # Critical aircraft state keeps refreshing while a staffing draft has focus.
-            desktop.locator("[data-ucc-crew-edit]").click()
-            expect(picker).to_be_visible()
+            expect(desktop_select).to_be_visible()
             with self.app.app_context():
                 from app.models import NeoSubZeroDepartureDeiceEvent
                 event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.missions[0]).one()
                 event.status = "cleared"
                 db.session.commit()
             expect(page.locator('[data-ucc-aircraft="%s"]' % self.missions[0])).to_have_count(0,timeout=10000)
-            expect(picker).to_be_visible()
+            expect(desktop_select).to_be_visible()
             expect(desktop_select).to_have_value(str(self.people[2]))
             with page.expect_response(lambda r: r.url.endswith('/neosubzero/ucc') and r.request.method == 'POST') as conflict:
                 desktop_select.locator('xpath=ancestor::form').evaluate('e=>e.requestSubmit()')
             self.assertEqual(conflict.value.status, 409)
             expect(page.locator('[data-ucc-feedback]')).to_contain_text('changed')
-            expect(desktop.locator('[data-ucc-management-save]')).to_contain_text('changed')
+            expect(desktop_select).to_have_attribute("aria-invalid", "true")
             expect(desktop_select).to_have_value(str(self.people[2]))
             expect(page.locator('[data-ucc-current-link]')).to_be_visible()
             # Explicit reload resolves the draft; whole units move and swap on mobile.

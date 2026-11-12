@@ -225,13 +225,15 @@
         crewEditor = crewTrigger = null;
         if (restoreFocus && trigger.isConnected) trigger.focus({preventScroll: true});
     }
-    function openCrew(team) {
+    function openCrew(team, role) {
         if (!normalDesktop() || !team) return;
         const editor = team.querySelector(".ucc-team-controls");
-        if (!editor || crewEditor === editor) return;
+        const triggers = [...team.querySelectorAll("[data-ucc-crew-line][data-ucc-assigned] [data-ucc-crew-edit]")];
+        const trigger = triggers.find(button => button.dataset.uccCrewEdit === role) || triggers[0];
+        if (!editor || !trigger || crewEditor === editor) return;
         closeCrew({restoreFocus: false, force: true});
         crewEditor = editor;
-        crewTrigger = team.querySelector("[data-ucc-crew-edit]");
+        crewTrigger = trigger;
         editor.setAttribute("popover", "manual");
         editor.setAttribute("role", "dialog");
         editor.setAttribute("aria-labelledby", `${editor.id}-title`);
@@ -245,7 +247,8 @@
             window.scrollTo({left: scrollX, top: scrollY, behavior: "instant"});
         }
         positionCrew();
-        (editor.querySelector(crewFocusId ? `#${CSS.escape(crewFocusId)}` : 'select:enabled')
+        const selectedRole = crewTrigger.dataset.uccCrewEdit;
+        (editor.querySelector(crewFocusId ? `#${CSS.escape(crewFocusId)}` : `[data-ucc-crew-form="${selectedRole}"] select:enabled`)
             || editor.querySelector("[data-ucc-crew-close]")).focus({preventScroll: true});
     }
     const setMoveChoices = (button, enabled) => {
@@ -371,7 +374,7 @@
             const personId = String(event.dataTransfer?.getData("text/plain") || "");
             const select = field(form, "person_id");
             if (!personId || !Array.from(select.options).some(option => option.value === personId)) return;
-            if (compact) openCrew(form.closest(".ucc-team"));
+            if (compact) openCrew(form.closest(".ucc-team"), form.dataset.uccCrewForm);
             select.value = personId;
             if (normalDesktop()) updateSelectedText(form, select);
             form.dataset.dirty = "true";
@@ -492,7 +495,7 @@
     root.addEventListener("click", (event) => {
         const edit = event.target.closest("[data-ucc-crew-edit]");
         if (edit) {
-            if (!crewSaving) openCrew(edit.closest(".ucc-team"));
+            if (!crewSaving) openCrew(edit.closest(".ucc-team"), edit.dataset.uccCrewEdit);
             return;
         }
         if (event.target.closest("[data-ucc-crew-close]")) {
@@ -582,26 +585,20 @@
                 next.querySelectorAll(".ucc-team[data-ucc-editor]").forEach(team => {
                     const current = crewTeam(team.dataset.uccEditor);
                     if (!current) return;
-                    const lines = team.querySelector(".ucc-crew-lines");
-                    const currentLines = current.querySelector(".ucc-crew-lines");
-                    if (lines && currentLines) {
-                        // Keep the resting drop targets and their handlers in place.
-                        Array.from(lines.children).forEach((line, index) => {
-                            const currentLine = currentLines.children[index];
-                            currentLine.textContent = line.textContent;
-                            currentLine.className = line.className;
-                            currentLine.title = line.title;
-                        });
+                    team.querySelectorAll("[data-ucc-crew-line]").forEach(line => {
+                        const role = line.dataset.uccCrewLine;
+                        const form = current.querySelector(`[data-ucc-crew-form="${role}"]`);
+                        if (!form || form.dataset.dirty === "true" || form.contains(document.activeElement)) return;
+                        const currentLine = current.querySelector(`[data-ucc-crew-line="${role}"]`);
+                        currentLine.toggleAttribute("data-ucc-assigned", line.hasAttribute("data-ucc-assigned"));
+                        currentLine.querySelector("span").replaceWith(line.querySelector("span"));
+                        form.replaceWith(team.querySelector(`[data-ucc-crew-form="${role}"]`));
+                    });
+                    if (savedCrewForm?.closest(".ucc-team") === current && savedCrewForm.dataset.uccCrewForm === "unit") {
+                        savedCrewForm.replaceWith(team.querySelector('[data-ucc-crew-form="unit"]'));
                     }
-                    if (savedCrewForm?.closest(".ucc-team") === current && savedCrewForm.dataset.dirty !== "true") {
-                        const fieldName = savedCrewForm.dataset.uccCrewForm;
-                        const updated = team.querySelector(`[data-ucc-crew-form="${fieldName}"]`);
-                        if (updated) {
-                            savedCrewForm.replaceWith(updated);
-                            const move = current.querySelector('[data-ucc-enable-moves][aria-pressed="true"]');
-                            if (move) setMoveChoices(move, true);
-                        }
-                    }
+                    const move = current.querySelector('[data-ucc-enable-moves][aria-pressed="true"]');
+                    if (move) setMoveChoices(move, true);
                 });
                 root.querySelectorAll("[data-ucc-ramp]").forEach((ramp) => {
                     const newRamp = next.querySelector(`[data-ucc-ramp="${CSS.escape(ramp.dataset.uccRamp)}"]`);
@@ -631,6 +628,7 @@
                 root.querySelector("[data-ucc-info]")?.replaceWith(next.querySelector("[data-ucc-info]"));
             } else {
                 const team = crewEditor?.closest(".ucc-team");
+                const crewRole = crewTrigger?.dataset.uccCrewEdit;
                 const crewKey = operationId === nextOperationId ? team?.dataset.uccEditor : null;
                 const movesEnabled = Boolean(team?.querySelector('[data-ucc-enable-moves][aria-pressed="true"]'));
                 closeCrew({restoreFocus: false, force: true});
@@ -641,7 +639,7 @@
                     const current = crewTeam(crewKey);
                     const move = current?.querySelector("[data-ucc-enable-moves]");
                     if (movesEnabled && move) setMoveChoices(move, true);
-                    openCrew(current);
+                    openCrew(current, crewRole);
                 }
             }
             if (deferred) bindBoard();
@@ -684,6 +682,9 @@
         mutationEpoch += 1;
         root.dataset.saving = "true";
         const buttons = Array.from(form.querySelectorAll('button[type="submit"]'));
+        const select = "uccAutoSave" in form.dataset ? form.querySelector("select") : null;
+        select?.removeAttribute("aria-invalid");
+        select?.removeAttribute("title");
         const body = new FormData(form);
         const controls = Array.from(root.querySelectorAll('[data-ucc-live-board] :is(select,[data-ucc-crew-edit],[data-ucc-crew-close]):enabled'));
         if (crewSaving) controls.push(...document.querySelectorAll('[data-ucc-tv-enter]:enabled,[data-operational-board-toggle]:enabled'));
@@ -711,6 +712,8 @@
         } catch (error) {
             const message = error.name === "AbortError" ? "Request timed out; its outcome is unknown. Check current UCC before retrying. Your draft is preserved."
                 : error.message || "Unable to save. Your draft is preserved; check current UCC before retrying.";
+            select?.setAttribute("aria-invalid", "true");
+            select?.setAttribute("title", message);
             setStaffingFeedback(form, "error", crewSaving ? message : "");
             notify(message, true);
         } finally {
@@ -721,7 +724,10 @@
             if (!reconcileFirst) restoreControls();
             if (accepted) {
                 if (form.contains(document.activeElement)) document.activeElement.blur();
-                if (crewSaving) savedCrewForm = form;
+                if (crewSaving) {
+                    savedCrewForm = form;
+                    if (select?.value === "") closeCrew({restoreFocus: false, force: true});
+                }
                 try { await refreshBoard(true); } catch (error) { notify("Saved, but " + error.message, true); }
             }
             if (reconcileFirst) restoreControls();
