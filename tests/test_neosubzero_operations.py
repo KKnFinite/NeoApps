@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
 from app.extensions import db
-from app.models import NeoSubZeroUserPreference, SortDateOperation, SortDateMission, SortDateParkingAssignment, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateTailState
+from app.models import NeoSubZeroAuditEntry, NeoSubZeroUserPreference, SortDateOperation, SortDateMission, SortDateParkingAssignment, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateTailState
 from app.services.live_collaboration import entity_version
 from app.services.neosubzero_operations import operations_context, PRIMARY_RAMPS
 from app.services.neosubzero_preferences import neosubzero_operations_preferences, set_neosubzero_operations_preferences
@@ -145,6 +145,65 @@ class OperationsTest(unittest.TestCase):
         self.assertEqual(self.post(action='save_treatment',expected_version=version,treatment_plan='one_type_i').status_code,409)
         result=self.post(action='clear',expected_version=entity_version(event));self.assertEqual(result.status_code,200,result.json)
         self.assertEqual(event.status,'cleared');self.assertEqual(NeoSubZeroDepartureDeiceEvent.query.count(),1)
+
+    def test_explicit_pretreat_planning_never_removes_treatment(self):
+        values = dict(mode='pretreat', action='toggle_planned')
+        self.assertEqual(self.post('pretreat/mutate', **values, planned='1').status_code, 200)
+        state = NeoSubZeroPretreatState.query.one()
+        self.assertTrue(state.pretreat_planned)
+        state.pass1_started_at_utc = datetime(2026, 9, 1, 2)
+        state.pass1_ended_at_utc = datetime(2026, 9, 1, 2, 10)
+        db.session.commit()
+        self.assertEqual(self.post('pretreat/mutate', **values, planned='0').status_code, 409)
+        self.assertEqual(self.post('pretreat/mutate', **values, planned='0',
+                                   expected_version=entity_version(state)).status_code, 200)
+        self.assertFalse(state.pretreat_planned)
+        self.assertEqual(state.pass1_ended_at_utc, datetime(2026, 9, 1, 2, 10))
+
+    def test_mobile_frost_and_captain_are_explicit_versioned_evidence(self):
+        self.assertEqual(self.post(action='frost_present').status_code, 409)
+        self.assertEqual(self.post(action='initial_contact').status_code, 200)
+        event = NeoSubZeroDepartureDeiceEvent.query.one()
+        initial = entity_version(event)
+        self.assertIsNone(event.configured_at_utc)
+        self.assertEqual(NeoSubZeroAuditEntry.query.filter_by(action='departure_frost_present').count(), 0)
+        self.assertEqual(self.post(action='nervous_captain', expected_version=initial).status_code, 200)
+        self.assertEqual(event.reason_for_application, 'Nervous Captain')
+        self.assertEqual(event.status, 'deice_planned')
+        self.assertIsNone(event.pass1_started_at_utc)
+        audit = NeoSubZeroAuditEntry.query.filter_by(action='departure_nervous_captain').one()
+        self.assertEqual((audit.event_id, audit.tail_number, audit.actor_user_id),
+                         (event.id, event.tail_number, self.user.id))
+        self.assertEqual(audit.after_values['frost_observation'], 'absent')
+        self.assertTrue(audit.after_values['captain_requested_treatment'])
+        self.assertEqual(self.post(action='frost_present', expected_version=initial).status_code, 409)
+        self.assertEqual(self.post(action='frost_present', expected_version=entity_version(event)).status_code, 409)
+        self.assertEqual(self.post(action='save_notes', notes='Cabin contacted',
+                                   expected_version=entity_version(event)).status_code, 200)
+        page = self.client.get(f'/neosubzero/operations?mode=outbound&presentation=inline&mission={self.f.alpha.id}')
+        self.assertIn(b'Cabin contacted', page.data)
+        self.assertIn(b'NERVOUS CAPTAIN', page.data)
+        self.assertEqual(self.post(action='toggle_configured', expected_version=entity_version(event)).status_code, 200)
+        self.assertEqual(self.post(action='save_treatment', expected_version=entity_version(event),
+            treatment_plan='one_type_i', pass1_surface_area='wings_tail', pass1_start='2200').status_code, 200)
+        self.assertEqual(event.pass_evidence['1']['reason'], 'Nervous Captain')
+        self.assertEqual(self.post(action='set_negative', expected_version=entity_version(event)).status_code, 409)
+        self.assertEqual(self.post(action='clear', expected_version=entity_version(event)).status_code, 409)
+        self.assertEqual(self.post(action='radio_complete', expected_version=entity_version(event)).status_code, 409)
+
+    def test_mobile_frost_present_and_read_only_boundaries(self):
+        self.assertEqual(self.post(action='initial_contact').status_code, 200)
+        event = NeoSubZeroDepartureDeiceEvent.query.one()
+        watcher = self.f._user('mobile-readonly', 'watcher')
+        self.f._login(self.client, watcher)
+        self.assertEqual(self.post(action='frost_present', expected_version=entity_version(event)).status_code, 403)
+        self.f._login(self.client, self.user)
+        self.assertEqual(self.post(action='frost_present', expected_version=entity_version(event)).status_code, 200)
+        observation = NeoSubZeroAuditEntry.query.filter_by(action='departure_frost_present').one().after_values
+        self.assertEqual(observation['frost_observation'], 'present')
+        self.assertFalse(observation['captain_requested_treatment'])
+        self.assertIsNone(event.pass1_started_at_utc)
+        self.assertEqual(event.status, 'deice_planned')
 
     def test_tail_swap_keeps_old_tail_evidence_and_rejects_stale_writes(self):
         self.post(action='initial_contact')

@@ -3,6 +3,10 @@
 
     const root = document.querySelector("[data-subzero-departure-board], [data-ops-workspace]");
     if (!root) return;
+    if (root.dataset.mobileDispatch && window.matchMedia('(max-width:900px)').matches) {
+        window.location.replace(root.dataset.mobileDispatch);
+        return;
+    }
 
     const timezone = root.dataset.timezone || "America/Chicago";
     const operationalHHMM = () => {

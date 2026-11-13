@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from app.models import SortDateMission, SortDateTailState
 from app.neonodes.neosubzero.services import pretreat_context, SURFACE_LABELS
-from app.services.neosubzero_departure_deice import departure_deice_context
+from app.services.neosubzero_departure_deice import departure_deice_context, mobile_departure_evidence
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.time_display import format_local_hhmm
 
@@ -38,12 +38,13 @@ def departure_presentation(row, tail_state):
 def operations_context(gateway, operation, mode):
     context = departure_deice_context(gateway, operation)
     if operation is None:
-        return {**context, 'ramps': PRIMARY_RAMPS}
+        return {**context, 'ramps': (*PRIMARY_RAMPS, 'Remote')}
     missions = {m.id: m for m in SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all()}
     tail_states = {state.tail_number.strip().upper(): state for state in SortDateTailState.query.filter_by(
         sort_date=operation.sort_date,gateway_code=operation.gateway_code,sort_name=operation.sort_name).all()}
     departures = {row['mission_id']: row for row in context['rows']}
     rows = pretreat_context(gateway, operation)['rows'] if mode == 'pretreat' else context['rows']
+    evidence = mobile_departure_evidence(operation) if mode == 'outbound' else {}
     for row in rows:
         mission = missions[row['mission_id']]
         departure = departures.get(mission.id, {})
@@ -71,6 +72,10 @@ def operations_context(gateway, operation, mode):
             surfaces = [getattr(state, f'pass{i}_surface_area', None) for i in (1, 2)]
             row['visual_state'], row['visual_label'] = ('fin', 'PRETREATED') if row['completed'] else ('deicing', 'PRETREAT IN PROGRESS') if state and state.pass1_started_at_utc else ('configured', 'CONFIGURED') if row['configured'] else ('planned', 'PLANNED') if row['planned'] else ('untreated', 'NOT PLANNED')
         else:
+            row['mission_departure_status'] = mission.departure_status
+            row['mobile_evidence'] = evidence.get(getattr(event, 'id', None), {})
+            row['mobile_open'] = (not row['identity_conflict'] and row['tail'] != '-' and
+                                  mission.departure_status not in {'cancelled', 'departed'} and not row['terminal'])
             types = row['pass_types'] if not row['identity_conflict'] else ()
             surfaces = [row['pass1_surface'], row['pass2_surface']]
             row['visual_state'], row['visual_label'] = departure_presentation(row,tail_states.get(row['tail']))
@@ -88,5 +93,5 @@ def operations_context(gateway, operation, mode):
     if mode=='pretreat':
         from app.services.neosubzero_spray import decorate_departure_rows_with_spray
         decorate_departure_rows_with_spray(operation,rows,kind='pretreat')
-    extras = tuple(ramp for ramp in ('Remote', 'Location Review') if any(row['ramp'] == ramp for row in rows))
+    extras = ('Remote', 'Location Review') if any(row['ramp'] == 'Location Review' for row in rows) else ('Remote',)
     return {**context, 'rows': rows, 'ramps': (*PRIMARY_RAMPS, *extras)}

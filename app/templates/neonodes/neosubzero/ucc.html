@@ -26,7 +26,7 @@
         <nav class="ucc-mobile-ramp-selector" aria-label="DUCC ramp selector">
             {% for ramp in ramps %}<button type="button" data-ucc-ramp-select="{{ ramp.name }}" aria-pressed="{{ 'true' if ramp.name == mobile_ramp else 'false' }}">{{ ramp.name|upper }}</button>{% endfor %}
         </nav>
-        {% if user_can('neosubzero.coordinator.view') or user_can('neosubzero.coordinator.edit') %}<a class="ucc-back-coordinator" data-ucc-back-coordinator href="{{ url_for('neosubzero.coordinator', ramp=mobile_ramp) }}">BACK TO COORDINATOR</a>{% endif %}
+        {% if user_can('neosubzero.coordinator.view') or user_can('neosubzero.coordinator.edit') %}<a class="ucc-back-coordinator" data-ucc-back-coordinator href="{{ url_for('neosubzero.operations', mode='outbound', ramp=mobile_ramp) }}">DEICE DISPATCH · OUTBOUND</a>{% endif %}
     </div>
     {% endif %}
 
@@ -98,6 +98,7 @@
         <p class="ucc-feedback" role="status" aria-live="polite" data-ucc-feedback hidden></p>
         <a class="ucc-current-link" href="{{ url_for('neosubzero.ucc') }}" target="_blank" rel="noopener" data-ucc-current-link hidden>OPEN CURRENT UCC IN NEW TAB · PRESERVE THIS DRAFT</a>
     </div>
+    {% if not live_fragment %}<div class="ucc-mobile-projection" data-ucc-mobile-projection></div>{% endif %}
     {% include "neonodes/neosubzero/_ucc_board.html" %}
     {% if can_edit and not live_fragment %}
     <dialog class="neosubzero-ucc-move-dialog" data-ucc-move-dialog>
@@ -113,7 +114,7 @@
     {% endif %}
 </section></div>
 {% if not live_fragment %}
-<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261112-attendance-colors-v1') }}" defer></script>
-<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='20261112-attendance-colors-v1') }}" defer></script>
+<script src="{{ url_for('static', live='20261109-fragment-v1', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION, ucc='20261112-mobile-ramp-v1') }}" defer></script>
+<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='20261112-mobile-ramp-v1') }}" defer></script>
 {% endif %}
 {% endblock %}

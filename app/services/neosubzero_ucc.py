@@ -894,10 +894,13 @@ def _spray_started_at(row):
 
 def _holds_for_radio(row):
     event = row.get("event")
-    return radio_pending(event) or (_departure_event_status(row) == "cleared"
-                                    and not radio_complete(event)
-                                    and bool(_spray_started_at(row) or getattr(event, "pass1_ended_at_utc", None)
-                                             or getattr(event, "pass2_ended_at_utc", None)))
+    return radio_pending(event) or (
+        _departure_event_status(row) == "cleared"
+        and getattr(event, "clear_outcome", None) == "sprayed"
+        and not radio_complete(event)
+        and bool(_spray_started_at(row) or getattr(event, "pass1_ended_at_utc", None)
+                 or getattr(event, "pass2_ended_at_utc", None))
+    )
 
 
 def _is_active_throat(row):

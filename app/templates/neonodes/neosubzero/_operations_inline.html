@@ -1,0 +1,19 @@
+{% macro mobile_summary(row, mode) %}
+    <span class="ops-mobile-ident"><strong>{{ row.tail }}</strong><small>{{ row.flight }}</small></span>
+    {% if mode == 'pretreat' %}
+    <span class="ops-mobile-times"><strong>{{ row.parking or '—' }}</strong><small>ETA {{ row.inbound_eta or '—' }}</small><small>GT: {{ row.ground_time if row.ground_time != '-' else '—' }}</small></span>
+    {% else %}
+    <span class="ops-mobile-times"><strong>{{ row.destination }}</strong><small>ETD {{ row.etd }}</small></span>
+    {% endif %}
+    <span class="ops-mobile-status">{{ row.visual_label }}{% if mode == 'outbound' and row.pretreat_complete %}<small>PRETREATED</small>{% endif %}</span>
+    <span class="ops-chevron" aria-hidden="true"></span>
+{% endmacro %}
+
+{% macro inline_feedback() %}
+    <p class="ops-detail-feedback" data-ops-inline-feedback role="status" hidden></p>
+    <button type="button" data-ops-reload-inline hidden>RELOAD CURRENT VALUES</button>
+{% endmacro %}
+
+{% macro collapse_button() %}
+    <button type="button" class="ops-collapse" data-ops-collapse-inline>COLLAPSE <span aria-hidden="true">⌃</span></button>
+{% endmacro %}

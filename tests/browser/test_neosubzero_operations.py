@@ -101,9 +101,11 @@ class OperationsBrowserTest(unittest.TestCase):
                 for width,height in ((320,900),(375,900),(390,900),(430,900),(768,1024),(1366,768),(1920,900),(1920,1080),(3840,2160)):
                     page.set_viewport_size({'width':width,'height':height})
                     page.wait_for_function('(w)=>document.documentElement.clientWidth===w',arg=width)
-                    for layout in (('list','visual') if mode == 'outbound' else ('list',)):
-                        if mode == 'outbound':
+                    for layout in (('list','visual') if mode == 'outbound' and width > 900 else ('list',)):
+                        if mode == 'outbound' and width > 900:
                             self.layout(page,layout)
+                        elif width <= 900:
+                            expect(page.locator('[data-ops-layout]:visible')).to_have_count(0)
                         expect(root).to_have_attribute('data-layout',layout)
                         if layout=='list':
                             self.ramp(page,'All');expect(root).to_have_attribute('data-ramp','All')
@@ -116,7 +118,7 @@ class OperationsBrowserTest(unittest.TestCase):
                         self.assertLessEqual(geometry['overflow'],1,dict(engine=engine,mode=mode,width=width,layout=layout,**geometry))
                         # Take one DOM snapshot: a live board replacement must not mix
                         # geometry from different revisions or stale nth locators.
-                        visible=page.locator('[data-ops-board]').evaluate('board=>[...board.querySelectorAll("[data-ops-row]")].filter(row=>row.getBoundingClientRect().height>0).map(row=>({right:row.getBoundingClientRect().right,passes:[...row.querySelectorAll("[data-ops-primary-pass]")].map(element=>{const p=element.getBoundingClientRect();return {width:p.width,height:p.height};})}))')
+                        visible=page.locator('[data-ops-board]').evaluate('board=>[...board.querySelectorAll("[data-ops-row]")].filter(row=>row.getBoundingClientRect().height>0).map(row=>({right:row.getBoundingClientRect().right,passes:[...row.querySelectorAll("[data-ops-primary-pass]:not([hidden])")].map(element=>{const p=element.getBoundingClientRect();return {width:p.width,height:p.height};}).filter(p=>p.width>0)}))')
                         self.assertTrue(visible)
                         for row in visible:
                             self.assertLessEqual(row['right'],width+1)
@@ -129,15 +131,9 @@ class OperationsBrowserTest(unittest.TestCase):
             page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound');expect(root).to_have_attribute('data-ready','true')
             expect(root).to_have_attribute('data-layout','visual')
             self.layout(page,'list');expect(root).to_have_attribute('data-layout','list')
-            page.locator('[data-ops-context] summary').click()
-            page.locator('[data-ops-context] [name="notes"]').fill('Context draft survives modes')
+            expect(page.locator('[data-ops-context]')).to_have_count(0)
             page.locator('[data-ops-mode="pretreat"]').click();expect(root).to_have_attribute('data-mode','pretreat');expect(root).to_have_attribute('data-ready','true')
             page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound');expect(root).to_have_attribute('data-ready','true')
-            page.locator('[data-ops-context] summary').click()
-            expect(page.locator('[data-ops-context] [name="notes"]')).to_have_value('Context draft survives modes')
-            self.submit(page,page.locator('[data-ops-context] button[type="submit"]'))
-            expect(page.locator('[data-ops-feedback]')).to_contain_text('SAVED')
-            page.locator('[data-ops-context] summary').click()
             self.ramp(page,'Bravo');expect(root).to_have_attribute('data-ramp','Bravo')
             other=browser.new_context(viewport={'width':375,'height':900});other_page=other.new_page()
             self.login(other_page,'drawer-watcher');self.ready(other_page,'/neosubzero/operations')
@@ -193,7 +189,7 @@ class OperationsBrowserTest(unittest.TestCase):
             row = page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"]')
             inline = row.locator('[data-ops-inline]')
             expect(inline).to_be_hidden()
-            expect(row.locator('.ops-mobile')).to_contain_text('ETD')
+            expect(row.locator('.ops-mobile-times')).to_contain_text('ETA')
             row.locator('.ops-pretreat-summary').click()
             expect(pane).to_be_hidden()
             treatment=inline.locator('.neosubzero-treatment-form')
@@ -240,7 +236,7 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(treatment.locator('button[type="submit"]')).to_be_enabled()
             page.unroute('**/operations/mutate',fail_save)
             self.submit(page,treatment.locator('button[type="submit"]'))
-            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-status')).to_contain_text('PRETREATED')
+            expect(row.locator('.ops-mobile-status')).to_contain_text('PRETREATED')
             page.screenshot(path=str(evidence/f'{engine}-mobile-pretreat-detail.png'))
             self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
             self.assertLessEqual(inline.evaluate('e=>e.scrollWidth-e.clientWidth'),1)
@@ -250,7 +246,7 @@ class OperationsBrowserTest(unittest.TestCase):
                 self.assertEqual([saved.pass_evidence[str(i)]['reason'] for i in (1,2)], ['Pretreat','Pretreat'])
             page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound')
             expect(root).to_have_attribute('data-ready','true')
-            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-pretreated')).to_be_visible()
+            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-mobile-status')).to_contain_text('PRETREATED')
             with self.app.app_context():
                 self.assertEqual(NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.missions[1]).one().status,'configured')
             # Shared filter resets on the next canonical operation, not a wall-clock guess.
@@ -265,7 +261,7 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(root).to_have_attribute('data-operation-id',str(type(self).operation_id),timeout=10000)
             expect(root).to_have_attribute('data-ramp','All');expect(root).to_have_attribute('data-mode','outbound')
             expect(page.locator('[data-ops-row]')).to_have_count(0)
-            expect(page.locator('[data-ops-context] [name="notes"]')).to_have_value('')
+            expect(page.locator('[data-ops-context]')).to_have_count(0)
             type(self).operation_id=old_operation_id
             self.assertFalse(errors,errors)
             context.close();browser.close()

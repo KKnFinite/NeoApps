@@ -10,6 +10,7 @@ from sqlalchemy import func, literal, or_, select, union_all
 from app.extensions import db
 from app.models import (
     Gateway,
+    NeoSubZeroAuditEntry,
     NeoSubZeroDepartureDeiceEvent,
     NeoSubZeroPretreatState,
     NeoSubZeroSetting,
@@ -51,6 +52,12 @@ PLAN_PASS_TYPES = {
     "type_i_type_iv": ("Type I", "Type IV"),
 }
 TERMINAL_STATUSES = {"cleared", "negative", "not_sprayed"}
+MOBILE_OBSERVATIONS = {
+    "frost_present": "present",
+    "nervous_captain": "absent",
+}
+MOBILE_DEPARTURE_AUDITS = ("departure_frost_present", "departure_nervous_captain", "departure_save_notes")
+NERVOUS_CAPTAIN_REASON = "Nervous Captain"
 DEFAULT_TYPE_I_FLUID = "Type I"
 DEFAULT_TYPE_I_CONCENTRATION = 50
 DEFAULT_TYPE_IV_FLUID = "Type IV"
@@ -193,6 +200,7 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
     for record in recorded_sprays:
         if record.started_at_utc is not None:
             spray_starts.setdefault(record.departure_deice_event_id, []).append(record)
+    actual_event_ids = {record.departure_deice_event_id for record in recorded_sprays}
     detached_spraying = tuple(
         event for tail, event in events.items()
         if event and tail not in current_tails and not radio_pending(event) and not radio_complete(event)
@@ -208,6 +216,9 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
             row['ownership_review']='Recorded departure spray requires physical-tail evidence review.'
         if row['ownership_review']:
             row.update(gone_without_deice=False,terminal=False,collapse_state='active')
+    for row in rows:
+        event = row['event']
+        row['has_actual_spray'] = _has_pass_milestones(event) or bool(event and event.id in actual_event_ids)
     rows.sort(
         key=lambda row: (
             row["sort_time"] is None,
@@ -231,6 +242,68 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
             "detached_spraying": detached_spraying, "spray_starts": spray_starts}
 
 
+def mobile_departure_evidence(operation, event_id=None):
+    evidence = {}
+    entries = NeoSubZeroAuditEntry.query.filter(
+        NeoSubZeroAuditEntry.sort_date_operation_id == operation.id,
+        NeoSubZeroAuditEntry.action.in_(MOBILE_DEPARTURE_AUDITS),
+    )
+    if event_id is not None:
+        entries = entries.filter_by(event_id=event_id)
+    for entry in entries.order_by(NeoSubZeroAuditEntry.id):
+        evidence.setdefault(entry.event_id, {}).update(entry.after_values or {})
+    return evidence
+
+
+def _has_pass_milestones(event):
+    return bool(event and any(
+        getattr(event, f'pass{number}_{milestone}_at_utc')
+        for number in (1, 2) for milestone in ('started', 'ended')
+    ))
+
+
+def _save_mobile_departure_evidence(operation, mission, event, action, values, actor_id):
+    from app.services.neosubzero_evidence import audit_change
+
+    if not event or not actor_id or mission.departure_status == 'cancelled':
+        raise NeoSubZeroDepartureDeiceError('Choose a current departure event.')
+    prior = mobile_departure_evidence(operation, event.id).get(event.id, {})
+    if action == 'save_notes':
+        notes = str(values.get('notes') or '').strip()
+        if len(notes) > 2000:
+            raise NeoSubZeroDepartureDeiceError('Notes must be 2,000 characters or fewer.')
+        after = {'notes': notes}
+        if notes == prior.get('notes', ''):
+            return event
+    else:
+        if mission.departure_status == 'departed' or event.status in TERMINAL_STATUSES | {'finished'}:
+            raise NeoSubZeroDepartureDeiceError('This treatment is closed to new observations.')
+        observation = MOBILE_OBSERVATIONS[action]
+        if prior.get('frost_observation') == observation:
+            return event
+        if prior.get('frost_observation'):
+            raise NeoSubZeroDepartureDeiceError('A different frost observation is already recorded. Coordinator review is required.')
+        from app.services.frost_treatment_observation import latest, project
+        legacy_observation = project(latest(operation, event))
+        if legacy_observation and legacy_observation.get('state') == 'absent' and observation == 'present':
+            raise NeoSubZeroDepartureDeiceError('A no-frost observation already exists. Review it before recording a conflicting observation.')
+        if action == 'nervous_captain':
+            has_position_evidence = NeoSubZeroSprayRecord.query.filter_by(
+                departure_deice_event_id=event.id,
+            ).filter(or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),
+                         NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).first()
+            if _has_pass_milestones(event) or has_position_evidence:
+                raise NeoSubZeroDepartureDeiceError('The reason is locked by recorded spray evidence.')
+            event.reason_for_application = NERVOUS_CAPTAIN_REASON
+        after = {'frost_observation': observation, 'captain_requested_treatment': action == 'nervous_captain',
+                 'reason_for_application': event.reason_for_application}
+    now = datetime.utcnow()
+    event.updated_at = max(now, event.updated_at + timedelta(microseconds=1))
+    audit_change(operation, 'departure_' + action, actor_id=actor_id, mission=mission, event=event,
+                 before=prior, after=after)
+    return event
+
+
 def mutate_departure_deice(operation, mission, action, values, *, event=None, actor_id=None):
     _validate_mission(operation, mission)
     from app.services.neosubzero_evidence import audit_change, evidence_values, departure_event_for_tail
@@ -245,12 +318,17 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
         raise NeoSubZeroDepartureDeiceError('Treatment belongs to another physical tail. Reload current aircraft.')
     before=evidence_values(event)
     action = str(action or "").strip().lower()
+    if action in MOBILE_OBSERVATIONS or action == 'save_notes':
+        return _save_mobile_departure_evidence(operation, mission, event, action, values, actor_id)
     if radio_pending(event) and action in {'initial_contact','move_to_planned'}:
         raise NeoSubZeroDepartureDeiceError('RADIO PENDING: complete the pilot readback before starting another departure event.')
     if event and event.status=='cleared' and action not in {'initial_contact','move_to_planned','clear','save_treatment','radio_complete','undo_clear'}:
         raise NeoSubZeroDepartureDeiceError('CLEARED evidence cannot be reset. Start an explicit new event or use audited corrections.')
     from app.models import NeoSubZeroSprayRecord
-    has_actual=bool(event and (event.pass1_started_at_utc or NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id).filter(NeoSubZeroSprayRecord.ended_at_utc.is_not(None)).first()))
+    has_actual = _has_pass_milestones(event) or bool(event and NeoSubZeroSprayRecord.query.filter_by(
+        departure_deice_event_id=event.id,
+    ).filter(or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),
+                 NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).first())
     if action in {"initial_contact", "move_to_planned"}:
         if event and event.status == 'cleared': event=None
         if event and has_actual:
@@ -302,8 +380,12 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
     elif action == 'clear':
         event=event or _new_event(operation,mission)
         if event.status == 'cleared': return event
-        if has_actual and event.status != 'finished':
-            raise NeoSubZeroDepartureDeiceError('Complete the final required pass before CLEAR. Recorded spray evidence must be preserved.')
+        if has_actual or event.status == 'finished':
+            final_pass = len(PLAN_PASS_TYPES.get(event.treatment_plan, ()))
+            if (event.status != 'finished' or not final_pass
+                    or not getattr(event, f'pass{final_pass}_started_at_utc')
+                    or not getattr(event, f'pass{final_pass}_ended_at_utc')):
+                raise NeoSubZeroDepartureDeiceError('Complete the final required pass before CLEAR. Recorded spray evidence must be preserved.')
         prior=event.status
         event.clear_outcome = 'sprayed' if prior == 'finished' else prior if prior in {'negative','not_sprayed'} else 'not_sprayed' if event.treatment_plan else 'no_deice'
         if prior not in {'negative','not_sprayed'} and not event.pass1_started_at_utc and NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id,tail_number=event.tail_number).first():
@@ -368,7 +450,6 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
 
 
 def departure_deice_revision(gateway, operation):
-    from app.models import NeoSubZeroAuditEntry
     operation_id = operation.id if operation else None
     mission_ids = select(SortDateMission.id).where(
         SortDateMission.sort_date_operation_id == operation_id,
@@ -602,14 +683,14 @@ def _validate_throat_start(operation, mission):
             if conflict:
                 raise NeoSubZeroDepartureDeiceError(
                     f"Position {int(str(conflict['parking'])[-2:])} also has a parked aircraft recorded. Resolve its MotherBrain parking before START.")
-            head = ramp['throat']
-            if not head or head['mission_id'] != mission.id or head['tail'] != _tail(mission.assigned_tail_number):
+            occupant = ramp['pad']
+            if not occupant or occupant['mission_id'] != mission.id or occupant['tail'] != _tail(mission.assigned_tail_number):
                 raise NeoSubZeroDepartureDeiceError(
-                    'Only the aircraft at throat Position 10 may START. Clear the aircraft ahead or correct the waiting queue first.')
+                    'Only the aircraft selected for the DEICE PAD may START. Correct the throat queue first.')
             return
     if not mission.actual_block_out_datetime_utc:
         return  # Preserve existing off-ramp treatment eligibility.
-    raise NeoSubZeroDepartureDeiceError('Aircraft is not in a verified ramp waiting queue. Review its physical location before START.')
+    raise NeoSubZeroDepartureDeiceError('Aircraft is not in a verified ramp deice position. Review its physical location before START.')
 
 
 def _save_treatment(operation, mission, event, values):

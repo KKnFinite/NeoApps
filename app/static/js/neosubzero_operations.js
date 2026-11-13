@@ -7,7 +7,11 @@
     const feedback = root.querySelector('[data-ops-feedback]');
     const media = window.matchMedia('(max-width:900px)');
     const primaryRamps = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'];
-    let selected = pane.querySelector('[data-mission-id]')?.dataset.missionId || null;
+    let selected = new URL(location.href).searchParams.get('mission');
+    const isPretreat = root.dataset.mode === 'pretreat';
+    const usesInline = () => isPretreat || media.matches;
+    const accordion = row => row.querySelector('[data-ops-accordion]');
+    const dirtyForm = 'form[data-dirty="true"]';
     let epoch = 0, busy = false, preferenceBusy = false;
     let controller = null;
     const navigationAbort = new AbortController();
@@ -29,9 +33,9 @@
     const draftKey = detail => ['neoapps.subzero.operations.draft', root.dataset.userId,
         root.dataset.operationId, root.dataset.mode, detail.dataset.missionId, detail.dataset.tail].join(':');
     const detail = () => pane.querySelector('[data-ops-detail-content]');
-    const isPretreat = root.dataset.mode === 'pretreat';
-    const draftContents = () => isPretreat ? [...root.querySelectorAll('[data-ops-inline]')] : [detail()].filter(Boolean);
-    const inlineFor = form => form.closest('[data-ops-inline]');
+    const draftContents = () => usesInline() ? [...root.querySelectorAll('[data-ops-inline]')] : [detail()].filter(Boolean);
+    const inlineFor = element => element.closest('[data-ops-inline]') ||
+        (element.matches('[data-ops-planned]') ? element.closest('[data-ops-row]').querySelector('[data-ops-inline]') : null);
     const inlineMessage = (content, text, error = false) => {
         const line = content.querySelector('[data-ops-inline-feedback]');
         line.textContent = text;
@@ -45,14 +49,6 @@
         if (note) { note.textContent = text; note.hidden = !text; }
     };
     const saveDraft = () => {
-        const context = root.querySelector('[data-ops-context] form');
-        if (context) {
-            try {
-                const key = ['neoapps.subzero.operations.context',root.dataset.userId,root.dataset.operationId].join(':');
-                if (context.dataset.dirty === 'true') sessionStorage.setItem(key,JSON.stringify([...context.elements].filter(e=>e.name && e.name!=='csrf_token').map(e=>({name:e.name,value:e.value}))));
-                else sessionStorage.removeItem(key);
-            } catch (_) { notify('Context draft remains open. Browser storage is unavailable; save before reloading.',true); }
-        }
         for (const content of draftContents()) {
             const forms = [...content.querySelectorAll('form[data-dirty="true"]')].map(form => ({
                 key: formKey(form), unlocked: form.dataset.unlocked,
@@ -63,7 +59,7 @@
                 else sessionStorage.removeItem(draftKey(content));
             } catch (_) {
                 const message = 'Draft remains open. Browser storage is unavailable; do not reload until saved.';
-                if (isPretreat) inlineMessage(content, message, true);
+                if (usesInline()) inlineMessage(content, message, true);
                 else draftMessage(message);
             }
         }
@@ -72,6 +68,13 @@
         if (form.matches('[data-subzero-deice-form]')) {
             if (!form.dataset.unlocked) form.dataset.unlocked = form.dataset.locked === 'true' ? 'false' : 'true';
             shared.syncForm(form);
+            const correction = form.querySelector('[data-ops-correction-field]');
+            if (correction) {
+                const unlocked = form.dataset.unlocked === 'true';
+                correction.hidden = !unlocked;
+                form.querySelector('[data-subzero-edit]').hidden = unlocked;
+                form.querySelector('button[type="submit"]').hidden = !unlocked;
+            }
         } else if (form.matches('.neosubzero-treatment-form')) {
             if (!form.dataset.unlocked) form.dataset.unlocked = form.querySelector('[data-subzero-edit]:not([hidden])') || !form.querySelector('button[type="submit"]') ? 'false' : 'true';
             const unlocked = form.dataset.unlocked === 'true';
@@ -91,21 +94,27 @@
             const save = form.querySelector('button[type="submit"]');
             if (edit) edit.hidden = unlocked;
             if (save) save.hidden = !unlocked;
+            if (form.elements.correction_reason) {
+                form.elements.correction_reason.disabled = !unlocked;
+            }
         }
     };
-    const initialize = (restore = false) => {
-        if (!isPretreat) pane.querySelectorAll('form').forEach(sync);
+    const initialize = (restore = false, onlyFresh = false) => {
+        if (!usesInline()) pane.querySelectorAll('form').forEach(sync);
         for (const content of draftContents()) {
-            if (isPretreat) content.querySelectorAll('form').forEach(sync);
+            if (usesInline()) content.querySelectorAll('form').forEach(sync);
             if (!restore) continue;
             let drafts = [];
             try { drafts = JSON.parse(sessionStorage.getItem(draftKey(content)) || '[]');
                 drafts.forEach(draft => { draft.fields = draft.fields.filter(field => field.name !== 'csrf_token'); });
                 if (drafts.length) sessionStorage.setItem(draftKey(content),JSON.stringify(drafts));
             } catch (_) { /* current DOM remains usable */ }
+            let restored = false;
             for (const draft of drafts) {
                 const form = [...content.querySelectorAll('form')].find(e => formKey(e) === draft.key);
-                if (!form) continue;
+                if (!form || !form.querySelector('button[type="submit"],button[name="action"]') ||
+                    (onlyFresh && form.dataset.dirty === 'true')) continue;
+                restored = true;
                 form.dataset.unlocked = draft.unlocked || form.dataset.unlocked;
                 draft.fields.forEach(saved => {
                     const field = form.elements[saved.name];
@@ -117,13 +126,16 @@
                     if (['checkbox', 'radio'].includes(field.type)) field.checked = saved.checked;
                 });
                 form.dataset.dirty = 'true'; sync(form);
-                if (isPretreat && draft.fields.some(field => field.name === 'notes' && field.value !== form.elements.notes?.defaultValue)) {
-                    form.querySelector('.ops-pretreat-notes').open = true;
+                const disclosure = form.closest('[data-ops-disclosure]');
+                if (disclosure) disclosure.open = true;
+                if (draft.fields.some(field => field.name === 'notes' || field.name === 'correction_reason')) {
+                    const notes = form.querySelector('[data-ops-disclosure="notes"]');
+                    if (notes) notes.open = true;
                 }
             }
-            if (drafts.length) {
+            if (restored) {
                 const message = 'RESTORED UNSAVED DRAFT · Original version retained. Resolve any server conflict before saving.';
-                if (isPretreat) {
+                if (usesInline()) {
                     content.closest('details').open = true;
                     inlineMessage(content, message, true);
                 } else draftMessage(message);
@@ -137,13 +149,11 @@
         rows.sort((a,b) => Number(a.dataset.order) - Number(b.dataset.order));
         rows.forEach(row => board.append(row));
         board.querySelectorAll('.ops-ramp-column').forEach(e => e.remove());
-        if (isPretreat) root.dataset.layout = 'list';
+        root.dataset.layout = usesInline() ? 'list' : (root.dataset.desktopLayout || 'list');
         const visual = root.dataset.layout === 'visual';
-        // Desktop always shows every ramp. Keep the stored mobile selection
-        // intact, including when live refresh or a viewport change reapplies it.
-        const ramp = !media.matches ? 'All' : visual && root.dataset.ramp === 'All' ? 'Alpha' : root.dataset.ramp;
+        const ramp = media.matches ? root.dataset.rampOverride || root.dataset.ramp : 'All';
         const selector = root.querySelector('[data-ops-ramp]');
-        selector.querySelector('option[value="All"]').disabled = visual && media.matches;
+        if (![...selector.options].some(option => option.value === ramp)) selector.add(new Option(ramp.toUpperCase(), ramp));
         selector.value = ramp;
         if (visual) {
             const ramps = [...primaryRamps, ...['Remote','Location Review'].filter(r => rows.some(row => row.dataset.ramp === r))];
@@ -164,15 +174,30 @@
         const url = new URL(root.dataset.workspaceUrl, location.origin);
         url.searchParams.set('mode',root.dataset.mode);
         if (mission) url.searchParams.set('mission',mission);
+        if (root.dataset.rampOverride) url.searchParams.set('ramp',root.dataset.rampOverride);
         return url;
     };
-    const reconcilePretreat = (board, incoming, active) => {
+    const requestedDrafts = () => {
+        const prefix = draftKey({dataset:{missionId:'',tail:''}}).slice(0,-1);
+        try {
+            return [...Object.keys(sessionStorage)].filter(key => key.startsWith(prefix))
+                .map(key => key.slice(prefix.length).split(':')[0]).filter(id => /^\d+$/.test(id));
+        } catch (_) { return []; }
+    };
+    const inlineRequestUrl = mission => {
+        const url = currentUrl(mission);
+        if (!media.matches) return url;
+        url.searchParams.set('presentation','inline');
+        if (!isPretreat) new Set(requestedDrafts().slice(0,20)).forEach(id => url.searchParams.append('draft',id));
+        return url;
+    };
+    const reconcileInline = (board, incoming, active) => {
         const nextRows = new Map([...incoming.querySelectorAll('[data-ops-row]')].map(row => [row.dataset.missionId, row]));
-        if (!media.matches) nextRows.forEach(row => { row.querySelector('[data-ops-pretreat-row]').open = true; });
+        if (!media.matches) nextRows.forEach(row => { accordion(row).open = true; });
         for (const row of board.querySelectorAll('[data-ops-row]')) {
             const next = nextRows.get(row.dataset.missionId);
-            const editor = row.querySelector('[data-ops-pretreat-row]');
-            const preserve = row.contains(active) || row.querySelector('form[data-dirty="true"]');
+            const editor = accordion(row);
+            const preserve = (editor.contains(active) && active !== editor.querySelector('summary')) || editor.querySelector(dirtyForm);
             if (next?.dataset.tail !== row.dataset.tail) {
                 if (preserve) {
                     editor.open = true;
@@ -183,63 +208,78 @@
                 }
                 continue;
             }
-            const nextEditor = next.querySelector('[data-ops-pretreat-row]');
-            if (preserve) {
-                row.className = next.className;
-                row.dataset.status = next.dataset.status;
-                row.dataset.ramp = next.dataset.ramp;
-                const summary = editor.querySelector('summary');
-                summary.replaceChildren(...nextEditor.querySelector('summary').childNodes);
-                next.replaceWith(row);
-                continue;
-            }
-            nextEditor.open = editor.open;
-            const opened = new Set([...editor.querySelectorAll('details[open]')]
-                .map(section => section.querySelector(':scope > summary')?.textContent));
+            const nextEditor = accordion(next);
+            nextEditor.open = !media.matches || (isPretreat ? editor.open : next.dataset.missionId === selected || !!preserve);
+            const disclosureKey = section => section.dataset.opsDisclosure ||
+                section.querySelector(':scope > summary')?.textContent.trim();
+            const opened = new Set([...editor.querySelectorAll('details[open]')].map(disclosureKey));
             nextEditor.querySelectorAll('details').forEach(section => {
-                section.open = opened.has(section.querySelector(':scope > summary')?.textContent);
+                section.open = opened.has(disclosureKey(section));
             });
+            if (preserve) {
+                const current = editor.querySelector('[data-ops-inline]');
+                const replacement = nextEditor.querySelector('[data-ops-inline]');
+                // A draft in a different card can be intentionally kept in
+                // memory even when this response only expands the chosen card.
+                if (replacement.querySelector('.ops-inline-loading')) {
+                    const summary = editor.querySelector('summary');
+                    summary.replaceChildren(...nextEditor.querySelector('summary').childNodes);
+                    nextEditor.replaceWith(editor);
+                } else {
+                    const freshForms = [...replacement.querySelectorAll('form')];
+                    for (const form of current.querySelectorAll('form')) {
+                        if (form.dataset.dirty !== 'true' && !form.contains(active)) continue;
+                        const fresh = freshForms.find(candidate => formKey(candidate) === formKey(form));
+                        if (fresh) fresh.replaceWith(form);
+                        else {
+                            const review = document.createElement('section');
+                            review.className = 'ops-review';
+                            const notice = document.createElement('p');
+                            notice.textContent = 'This action changed on the server. The original draft is kept for review.';
+                            review.append(notice, form);
+                            replacement.append(review);
+                        }
+                    }
+                }
+            }
             const feedback = editor.querySelector('[data-ops-inline-feedback]');
-            if (!feedback.hidden) {
+            if (!feedback.hidden && nextEditor.parentElement) {
                 inlineMessage(nextEditor.querySelector('[data-ops-inline]'), feedback.textContent, feedback.classList.contains('is-error'));
             }
         }
     };
 
-    const fetchPage = async (mission = selected, saved = null) => {
+    const fetchPage = async (mission = selected, saved = null, afterSave = false) => {
         const requestEpoch = ++epoch;
-        const response = await (window.NeoLiveRevision?.fetch || fetch)(currentUrl(mission), {cache:'no-store',signal:navigationAbort.signal});
+        const response = await (window.NeoLiveRevision?.fetch || fetch)(inlineRequestUrl(mission), {cache:'no-store',signal:navigationAbort.signal});
         if (!response.ok) throw new Error(`Unable to load current operations (${response.status}). Your draft is kept.`);
         const next = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('[data-ops-workspace]');
         if (!next) throw new Error('Session expired. Sign in in another tab before continuing; your draft is kept.');
-        if (requestEpoch !== epoch || busy) return;
+        if (requestEpoch !== epoch || (busy && !afterSave)) return;
         if (next.dataset.operationId !== root.dataset.operationId && dirty()) {
             notify('The canonical sort changed. Draft retained for the original sort; reload current operations in another tab before continuing.', true); return;
         }
         const scroll = window.scrollY, paneScroll = pane.scrollTop;
-        const contextForm=root.querySelector('[data-ops-context] form');
-        if (next.dataset.operationId !== root.dataset.operationId || (!contextForm?.dataset.dirty && !contextForm?.contains(document.activeElement))) {
-            const previous = root.querySelector('[data-ops-context]');
-            const incoming = next.querySelector('[data-ops-context]');
-            if (previous && incoming) {incoming.open=previous.open;previous.replaceWith(incoming);}
-        }
         const currentBoard = root.querySelector('[data-ops-board]');
         const nextBoard = next.querySelector('[data-ops-board]');
-        const activeRowField = isPretreat && currentBoard.contains(document.activeElement) ? document.activeElement : null;
+        const activeRowField = usesInline() && currentBoard.contains(document.activeElement) ? document.activeElement : null;
         const caret = activeRowField && 'selectionStart' in activeRowField ? [activeRowField.selectionStart, activeRowField.selectionEnd] : null;
-        if (isPretreat && next.dataset.operationId === root.dataset.operationId) reconcilePretreat(currentBoard, nextBoard, activeRowField);
+        const activeTop = activeRowField?.getBoundingClientRect().top;
+        if (usesInline() && next.dataset.operationId === root.dataset.operationId) reconcileInline(currentBoard, nextBoard, activeRowField);
         currentBoard.replaceWith(nextBoard);
-        ['operationId','layout','ramp'].forEach(key => { root.dataset[key] = next.dataset[key]; });
-        if (isPretreat) {
+        ['operationId','ramp','rampOverride'].forEach(key => { root.dataset[key] = next.dataset[key]; });
+        root.dataset.desktopLayout = next.dataset.layout;
+        if (usesInline()) {
             revision = next.dataset.revision;
             tagOrder();
             applyLayout();
-            initialize();
+            initialize(!isPretreat, true);
             if (activeRowField?.isConnected) {
                 activeRowField.focus({preventScroll:true});
                 if (caret && caret[0] !== null) activeRowField.setSelectionRange(...caret);
             }
-            window.scrollTo({top:scroll,behavior:'instant'});
+            const shift = activeRowField?.isConnected ? activeRowField.getBoundingClientRect().top - activeTop : 0;
+            window.scrollTo({top:scroll + shift,behavior:'instant'});
             return;
         }
         const incoming = next.querySelector('[data-ops-detail-content]');
@@ -289,23 +329,57 @@
             const response = await fetch(root.dataset.preferenceUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...changes,operation_id:Number(root.dataset.operationId)||null})});
             const payload = await response.json();
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Unable to save presentation preference.');
-            Object.assign(root.dataset,{layout:payload.preferences.layout,ramp:payload.preferences.ramp});
+            Object.assign(root.dataset,{desktopLayout:payload.preferences.layout,ramp:payload.preferences.ramp});
+            if ('ramp' in changes) { root.dataset.rampOverride = ''; history.replaceState(null,'',currentUrl(selected)); }
             return true;
         } catch (error) { notify(error.message,true); return false; }
         finally { preferenceBusy = false; controls.forEach(control=>{control.disabled=false;}); }
     };
     root.addEventListener('input', event => {
-        const form = event.target.closest('form'); if (!form) return;
+        const form = event.target.closest('form'); if (!form || form.matches('[data-ops-autosave]')) return;
         form.dataset.dirty = 'true'; sync(form); saveDraft();
     });
     root.addEventListener('change', async event => {
         const form = event.target.closest('form');
+        if (form?.matches('[data-ops-autosave]')) {
+            if (busy || preferenceBusy) { event.target.checked = !event.target.checked; return; }
+            form.requestSubmit();
+            return;
+        }
         if (form) { form.dataset.dirty = 'true'; sync(form); saveDraft(); }
         if (event.target.matches('[data-ops-ramp]')) {
             if (await preferences({ramp:event.target.value})) applyLayout();
         }
     });
+    const openAccordion = async (card, open) => {
+        const mission = card.closest('[data-ops-row]').dataset.missionId;
+        if (open) {
+            root.querySelectorAll('[data-ops-accordion][open]').forEach(other => {
+                if (other !== card && !other.querySelector(dirtyForm)) other.open = false;
+            });
+            card.open = true;
+            selected = mission;
+        } else {
+            card.open = false;
+            if (selected === mission) selected = null;
+            card.querySelector('summary').focus({preventScroll:true});
+        }
+        history.replaceState(null,'',currentUrl(selected));
+        if (!open) ++epoch;
+        if (open && card.querySelector('.ops-inline-loading')) {
+            try { await fetchPage(mission); }
+            catch (error) { inlineMessage(card.querySelector('[data-ops-inline]'),error.message,true); }
+        }
+    };
     root.addEventListener('click', async event => {
+        const control = event.target.closest('[data-ops-accordion] > summary, [data-ops-collapse-inline]');
+        if (control && media.matches) {
+            event.preventDefault();
+            if (busy || preferenceBusy) return;
+            const card = control.closest('[data-ops-accordion]');
+            await openAccordion(card, !card.open);
+            return;
+        }
         const inspection = event.target.closest('[data-open-frost-inspection]');
         if (inspection) {
             const section = pane.querySelector('.neosubzero-frost-inspection');
@@ -329,7 +403,7 @@
                 inlineMessage(content, '');
                 saveDraft();
                 reloadInline.blur();
-                await fetchPage();
+                await fetchPage(selected || content.dataset.missionId);
             } catch (error) { inlineMessage(content, error.message, true); }
             return;
         }
@@ -346,16 +420,17 @@
         if (mode && mode.dataset.opsMode !== root.dataset.mode) {
             saveDraft();
             if (await preferences({mode:mode.dataset.opsMode})) {
+                const url = new URL(root.dataset.workspaceUrl,location.origin);
+                if (root.dataset.rampOverride) url.searchParams.set('ramp',root.dataset.rampOverride);
                 // Navigation, not a form save: drafts remain isolated by mode/tail/sort.
                 stopLive();
-                location.assign(new URL(root.dataset.workspaceUrl,location.origin));
+                location.assign(url);
             }
             return;
         }
         const layout = event.target.closest('[data-ops-layout]');
-        if (layout) {
+        if (layout && !media.matches) {
             const changes = {layout:layout.dataset.opsLayout};
-            if (changes.layout === 'visual' && media.matches && root.dataset.ramp === 'All') changes.ramp = 'Alpha';
             if (await preferences(changes)) applyLayout(); return;
         }
         const edit = event.target.closest('[data-subzero-edit]');
@@ -367,7 +442,9 @@
             if (inline) {
                 form.dataset.dirty = 'true';
                 saveDraft();
-                form.elements.pass1_surface_area.focus();
+                const correction = form.elements.correction_reason;
+                if (correction) form.querySelector('[data-ops-disclosure="notes"]')?.setAttribute('open','');
+                (correction || form.elements.pass1_surface_area).focus();
             }
             const editor = inline || pane;
             editor.querySelectorAll('[data-subzero-spray-control]').forEach(e => {e.readOnly=e.dataset.sprayReady==='false';});
@@ -381,74 +458,98 @@
     });
     root.addEventListener('submit', async event => {
         const form = event.target.closest('form'); if (!form) return;
-        event.preventDefault(); if (busy) return;
+        event.preventDefault(); if (busy || preferenceBusy) return;
         if (form.dataset.subzeroConfirm && !window.confirm(form.dataset.subzeroConfirm)) return;
         const inline = inlineFor(form);
         const body = new FormData(form), content = inline || form.closest('[data-ops-detail-content]');
         if (event.submitter?.name) body.set(event.submitter.name,event.submitter.value);
         body.set('target',formAction(form)); body.set('mode',root.dataset.mode);
         body.set('operation_id',root.dataset.operationId); if (content) body.set('physical_tail',content.dataset.tail);
+        const toggle = form.querySelector('[data-ops-quick-toggle]');
+        const planned = form.matches('[data-ops-planned]');
+        const toggleError = form.querySelector('[data-ops-toggle-error]');
+        if (planned) body.set('planned',toggle.checked ? '1' : '0');
         const key = formKey(form), abort = new AbortController();
         const timeout = setTimeout(()=>abort.abort(),25000);
         busy = true; ++epoch;
-        const buttons = [...form.querySelectorAll('button')]; buttons.forEach(button => {button.disabled=true;});
-        if (inline) inlineMessage(inline, 'SAVING…');
-        else notify('SAVING…');
+        const row = inline?.closest('[data-ops-row]');
+        const controls = [...(row || content || form)
+            .querySelectorAll('button,input:not([type="hidden"]),select,textarea')]
+            .filter(control => !control.disabled);
+        controls.forEach(control => { control.disabled = true; });
+        const unlock = () => controls.forEach(control => { control.disabled = false; });
+        if (toggleError) toggleError.hidden = true;
+        if (inline && !planned) inlineMessage(inline, 'SAVING…');
+        else if (!planned) notify('SAVING…');
+        let saved = false;
         try {
             const response = await fetch(root.dataset.mutateUrl,{method:'POST',body,signal:abort.signal});
             let payload; try { payload=await response.json(); } catch (_) { throw new Error(`Save could not be confirmed (${response.status}). Your entries are kept. Check current state before retrying.`); }
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Save rejected. Your entries are kept.');
+            saved = true;
             delete form.dataset.dirty;
             saveDraft();
+            if (planned) notify('');
             if (inline) {
                 if (form.contains(document.activeElement)) document.activeElement.blur();
-                inlineMessage(inline, payload.message);
+                if (!planned) inlineMessage(inline, payload.message);
             }
             else notify(payload.message);
-            busy = false;
-            await fetchPage(selected,key);
+            unlock();
+            await fetchPage(selected,key,true);
         } catch(error) {
             const message = error.name === 'AbortError' ? 'Save timed out. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
                 : error instanceof TypeError ? 'Network error while saving. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
                 : error.message;
-            if (inline) inlineMessage(inline, message, true);
+            if (toggle && !saved) toggle.checked = !toggle.checked;
+            if (toggleError) {
+                toggleError.textContent = 'Save error';
+                toggleError.title = message;
+                toggleError.hidden = false;
+                notify(message,true);
+            } else if (inline) inlineMessage(inline, message, true);
             else notify(message,true);
         }
-        finally { clearTimeout(timeout); busy=false; buttons.forEach(button=>{button.disabled=false;}); }
+        finally {
+            clearTimeout(timeout); busy=false; if (!saved) unlock();
+        }
     });
-    const context = root.querySelector('[data-ops-context] form');
-    if (context) {
-        try {
-            const draft = JSON.parse(sessionStorage.getItem(['neoapps.subzero.operations.context',root.dataset.userId,root.dataset.operationId].join(':')) || 'null');
-            if (draft) { const safeDraft=draft.filter(saved=>saved.name!=='csrf_token'); sessionStorage.setItem(['neoapps.subzero.operations.context',root.dataset.userId,root.dataset.operationId].join(':'),JSON.stringify(safeDraft)); safeDraft.forEach(saved=>{if (context.elements[saved.name]) context.elements[saved.name].value=saved.value;}); context.dataset.dirty='true'; notify('RESTORED UNSAVED APPLICATION CONTEXT DRAFT'); }
-        } catch (_) { /* Current server values remain available. */ }
-    }
-    if (isPretreat) root.querySelectorAll('[data-ops-pretreat-row]').forEach(row => {
-        row.open = !media.matches || row.hasAttribute('data-ops-initial-open');
+    root.dataset.desktopLayout = root.dataset.layout;
+    root.querySelectorAll('[data-ops-accordion]').forEach(card => {
+        card.open = (!media.matches && isPretreat) || card.hasAttribute('data-ops-initial-open');
     });
     tagOrder(); applyLayout(); initialize(true); syncFeedback();
     root.dataset.ready = 'true';
     media.addEventListener('change', () => {
-        if (isPretreat) root.querySelectorAll('[data-ops-pretreat-row]').forEach(row => {
-            row.open = !media.matches || row.contains(document.activeElement) || !!row.querySelector('form[data-dirty="true"]');
+        root.querySelectorAll('[data-ops-accordion]').forEach(card => {
+            card.open = (!media.matches && isPretreat) || card.contains(document.activeElement) ||
+                !!card.querySelector(dirtyForm) || card.closest('[data-ops-row]').dataset.missionId === selected;
         });
         applyLayout();
+        if (!isPretreat && selected && !busy) fetchPage().catch(error => notify(error.message,true));
     });
+    if (!isPretreat && media.matches && requestedDrafts().length) {
+        fetchPage().catch(error => notify(error.message,true));
+    }
     window.addEventListener('beforeunload',()=>{ saveDraft(); stopLive(); });
     window.addEventListener('pagehide',stopLive);
     // A back/forward-cache restore needs a fresh controller and canonical scope;
     // reload restores any saved draft with its original concurrency token.
     window.addEventListener('pageshow',event=>{ if (event.persisted) location.reload(); });
-    const interval = Number(root.dataset.refreshIntervalMs);
+    const initialRefresh = JSON.parse(root.dataset.refreshStatus || '{}');
+    const interval = Number(initialRefresh.live_screen_refresh_interval_ms || root.dataset.refreshIntervalMs);
     if (!window.NeoLiveUpdates || interval < 1000) return;
     controller = window.NeoLiveUpdates.create({intervalMs:interval,continuousWhileVisible:true,poll:async()=>{
         if (busy || preferenceBusy) return;
         const url = new URL(root.dataset.revisionUrl,location.origin); url.searchParams.set('revision',revision);
         url.searchParams.set('mode',root.dataset.mode);
+        if (media.matches) url.searchParams.set('presentation','inline');
         const response = await fetch(url,{cache:'no-store',signal:navigationAbort.signal});
         if (!response.ok) throw new Error('Unable to refresh operations.');
-        const payload = await response.json(); controller.setServerStatus(payload.refresh || {});
+        const payload = await response.json();
+        if (payload.refresh?.live_screen_refresh_interval_ms) controller.setIntervalMs(payload.refresh.live_screen_refresh_interval_ms);
+        controller.setServerStatus(payload.refresh || {});
         if (payload.changed && !busy && !preferenceBusy) await fetchPage();
     }});
-    controller.setServerStatus(JSON.parse(root.dataset.refreshStatus || '{}'));
+    controller.setServerStatus(initialRefresh);
 })();

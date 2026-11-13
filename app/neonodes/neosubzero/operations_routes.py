@@ -8,7 +8,7 @@ from app.extensions import db
 from app.models import SortDateMission, SortDateOperation, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState
 from app.neonodes.neosubzero import bp
 from app.neonodes.neosubzero import routes as legacy
-from app.services.neosubzero_preferences import neosubzero_operations_preferences, set_neosubzero_operations_preferences
+from app.services.neosubzero_preferences import OPERATIONS_RAMPS, neosubzero_operations_preferences, set_neosubzero_operations_preferences
 from app.services.permission_rules import user_can
 from app.services.live_collaboration import version_conflict
 
@@ -26,6 +26,14 @@ def operations_revision(gateway, operation, preferences):
         legacy.pretreat_revision(gateway, operation),
         legacy.departure_deice_revision(gateway, operation),
     ], sort_keys=True).encode()).hexdigest()
+
+
+def _refresh_key(mode):
+    if mode == 'pretreat':
+        return legacy.PRETREAT_REFRESH_KEY
+    if request.args.get('presentation') == 'inline' and user_can('neosubzero.coordinator.view'):
+        return legacy.COORDINATOR_REFRESH_KEY
+    return legacy.OUTBOUND_REFRESH_KEY
 
 
 def render_operations(forced_mode=None):
@@ -47,16 +55,24 @@ def render_operations(forced_mode=None):
     from app.services.neosubzero_ucc import ucc_staffing_version
     from app.services.neosubzero_staffing import current_subzero_staffing_pool
     selected = next((row for row in context['rows'] if row['mission_id'] == request.args.get('mission', type=int)), None)
+    ramp_override = request.args.get('ramp', '').strip().title()
+    if ramp_override not in OPERATIONS_RAMPS:
+        ramp_override = ''
+    mobile_missions = {selected['mission_id']} if selected else set()
+    if request.args.get('presentation') == 'inline':
+        mobile_missions.update(request.args.getlist('draft', type=int)[:20])
     session[legacy.LAST_PAGE_KEY] = 'neosubzero.operations'
     return render_template('neonodes/neosubzero/operations.html', gateway=gateway,
         mode=mode, modes=modes, preferences=preferences, board=board, can_edit=can_edit,
+        mobile_missions=mobile_missions, ramp_override=ramp_override,
+        inline_presentation=request.args.get('presentation') == 'inline',
         can_manage_staff=user_can('neosubzero.ucc.view'), selected=selected,
         staffing_version=ucc_staffing_version(operation) if operation else '',
         staffing_pool=current_subzero_staffing_pool(operation) if operation else (),
         plan_labels=legacy.PLAN_LABELS, surface_labels=legacy.SURFACE_LABELS,
-        gateway_timezone=legacy.gateway_timezone(gateway), application_context=legacy._application_context(operation),
+        gateway_timezone=legacy.gateway_timezone(gateway),
         revision=operations_revision(gateway, operation, preferences),
-        refresh_status=legacy.subzero_refresh_status(gateway, operation, legacy.PRETREAT_REFRESH_KEY if mode == 'pretreat' else legacy.OUTBOUND_REFRESH_KEY),
+        refresh_status=legacy.subzero_refresh_status(gateway, operation, _refresh_key(mode)),
         **context)
 
 
@@ -78,7 +94,7 @@ def operations_revision_endpoint():
     mode = request.args.get('mode') or preferences['mode']
     response = jsonify(ok=True, revision=revision, changed=revision != request.args.get('revision'),
         operation_id=getattr(operation, 'id', None), preferences=preferences,
-        refresh=legacy.subzero_refresh_status(gateway, operation, legacy.PRETREAT_REFRESH_KEY if mode == 'pretreat' else legacy.OUTBOUND_REFRESH_KEY))
+        refresh=legacy.subzero_refresh_status(gateway, operation, _refresh_key(mode)))
     response.headers['Cache-Control'] = 'no-store'
     return response
 

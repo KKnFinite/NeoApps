@@ -499,8 +499,17 @@
         if (empty) empty.hidden = Boolean(root.querySelector(`[data-ucc-info-mission="${CSS.escape(selectedMission)}"]`));
         const info = root.querySelector("[data-ucc-info]");
         if (info) info.hidden = !root.querySelector(`[data-ucc-info-mission="${CSS.escape(selectedMission)}"]`);
-        root.querySelectorAll("[data-ucc-aircraft]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.uccAircraft === selectedMission)));
+        root.querySelectorAll("[data-ucc-aircraft], [data-ucc-projected-aircraft]").forEach(button => {
+            const id = button.dataset.uccAircraft || button.dataset.uccProjectedAircraft;
+            button.setAttribute("aria-pressed", String(id === selectedMission));
+        });
     };
+    root.addEventListener("keydown", event => {
+        const plane = event.target.closest('[data-ucc-projected-aircraft]');
+        if (!plane || !['Enter', ' '].includes(event.key)) return;
+        event.preventDefault();
+        plane.click();
+    });
     root.addEventListener("click", (event) => {
         const edit = event.target.closest("[data-ucc-crew-edit]");
         if (edit) {
@@ -527,10 +536,10 @@
             applyMobileView({persist: true});
             return;
         }
-        const plane = event.target.closest("[data-ucc-aircraft]");
+        const plane = event.target.closest("[data-ucc-aircraft], [data-ucc-projected-aircraft]");
         if (plane) {
-            showAircraft(plane.dataset.uccAircraft);
-            if (normalDesktop()) root.querySelector('[data-ucc-info]:not([hidden])')?.scrollIntoView({block: "nearest"});
+            showAircraft(plane.dataset.uccAircraft || plane.dataset.uccProjectedAircraft);
+            if (plane.dataset.uccProjectedAircraft || normalDesktop()) root.querySelector('[data-ucc-info]:not([hidden])')?.scrollIntoView({block: "nearest"});
         }
         if (event.target.closest("[data-ucc-info-close]")) showAircraft("");
     });

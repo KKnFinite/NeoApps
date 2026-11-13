@@ -56,19 +56,25 @@ class RadioBrowserTest(unittest.TestCase):
                 pad=p.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]')
                 expect(pad.locator('.state-radio-pending')).to_have_count(1,timeout=10000)
                 expect(pad.locator('[data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[0]))
-                self.assertEqual(pad.locator('.state-radio-pending .ucc-plane-icon').evaluate('e=>getComputedStyle(e).color'),'rgb(240, 45, 159)')
+                if p == phone:
+                    plane = p.locator('[data-ucc-mobile-projection] .ucc-tv-pad .state-radio-pending')
+                    expect(plane).to_be_visible()
+                    self.assertEqual(plane.locator('.ucc-tv-plane-icon').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(240, 45, 159)')
+                else:
+                    self.assertEqual(pad.locator('.state-radio-pending .ucc-plane-icon').evaluate('e=>getComputedStyle(e).color'),'rgb(240, 45, 159)')
                 p.screenshot(path=str(EVIDENCE/f'{engine}-ducc-{p.viewport_size["width"]}-pending.png'))
             board=page();ops.OperationsBrowserTest.ready(case,board,'/neosubzero/operations?mode=outbound')
             for width in (320,375,390,430,1366,1920):
                 board.set_viewport_size({'width':width,'height':900})
-                for layout in ('list','visual'):
-                    ops.OperationsBrowserTest.layout(case,board,layout)
+                for layout in (('list','visual') if width > 900 else ('list',)):
+                    if width > 900:
+                        ops.OperationsBrowserTest.layout(case,board,layout)
                     row=board.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')
                     expect(row).to_be_visible();expect(row).to_have_attribute('data-status','radio-pending')
                     self.assertEqual(row.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(240, 45, 159)')
-                    expect(board.locator(f'[data-mission-id="{gone_id}"]')).to_have_attribute('data-status','gone')
-                    expect(board.locator(f'[data-mission-id="{neg_id}"]')).to_have_attribute('data-status','negative')
-                    expect(board.locator(f'[data-mission-id="{case.missions[1]}"]')).to_have_attribute('data-status','planned')
+                    expect(board.locator(f'[data-ops-row][data-mission-id="{gone_id}"]')).to_have_attribute('data-status','gone')
+                    expect(board.locator(f'[data-ops-row][data-mission-id="{neg_id}"]')).to_have_attribute('data-status','negative')
+                    expect(board.locator(f'[data-ops-row][data-mission-id="{case.missions[1]}"]')).to_have_attribute('data-status','planned')
                     states=board.locator('[data-ops-board]').evaluate('b=>[...b.querySelectorAll("[data-ops-row]")].filter(e=>e.getBoundingClientRect().height).map(e=>e.dataset.status)')
                     ranks=[2 if s=='gone' else 1 if s=='radio-pending' else 0 for s in states]
                     # Each visual ramp is independently ordered; this fixture's
@@ -79,7 +85,7 @@ class RadioBrowserTest(unittest.TestCase):
                     measurements.append(dict(engine=engine,layout=layout,**geometry))
                     if width in (390,1920):board.screenshot(path=str(EVIDENCE/f'{engine}-operations-{layout}-{width}-pending.png'))
             # Opening the readback through either screen never confirms it.
-            row.locator('a').click();expect(board.locator('[data-radio-script]')).to_contain_text('2210')
+            row.locator('a').click();expect(board.locator('[data-ops-detail] [data-radio-script]')).to_contain_text('2210')
             with case.app.app_context():
                 event=db.session.get(NeoSubZeroDepartureDeiceEvent,event_id)
                 self.assertIsNone(event.radio_completed_at_utc);self.assertEqual(NeoSubZeroAuditEntry.query.count(),before)
@@ -104,7 +110,7 @@ class RadioBrowserTest(unittest.TestCase):
                 pad=p.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]')
                 expect(pad.locator('[data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',f'radio-{event_id}',timeout=10000)
                 expect(pad.locator('.state-radio-pending')).to_contain_text(old_tail)
-            phone.locator(f'[data-ucc-aircraft="radio-{event_id}"]').click()
+            phone.locator(f'[data-ucc-mobile-projection] [data-ucc-projected-aircraft="radio-{event_id}"]').click()
             expect(phone.locator('[data-ucc-info]')).to_contain_text('Mission/tail identity changed')
             phone.screenshot(path=str(EVIDENCE/f'{engine}-ducc-identity-review.png'))
             with case.app.app_context():
@@ -114,8 +120,8 @@ class RadioBrowserTest(unittest.TestCase):
             with coordinator.expect_navigation():coordinator.locator('button[value="radio_complete"]').click()
             for p in (desktop,phone):
                 pad=p.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad] [data-ucc-aircraft]')
-                expect(pad).to_have_count(0,timeout=10000)
-                expect(p.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))
+                expect(pad).to_have_attribute('data-ucc-aircraft',str(case.missions[1]),timeout=10000)
+                expect(p.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[2]))
             expect(board.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')).to_have_attribute('data-status','gone',timeout=10000)
             expect(form.locator('[name="pass1_start"]')).to_have_value('22:16')
             for p in (desktop,phone):p.screenshot(path=str(EVIDENCE/f'{engine}-ducc-{p.viewport_size["width"]}-advanced.png'))

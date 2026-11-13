@@ -93,7 +93,10 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
     elif state.tail_number != tail or state.sort_date_operation_id != operation.id:
         raise NeoSubZeroPretreatError('Pretreat evidence belongs to another physical tail.')
     if action == "toggle_planned":
-        state.pretreat_planned = not state.pretreat_planned
+        requested = values.get("planned")
+        if requested not in (None, "0", "1"):
+            raise NeoSubZeroPretreatError("Choose a valid Pretreat planning state.")
+        state.pretreat_planned = not state.pretreat_planned if requested is None else requested == "1"
     elif action == "toggle_configured":
         state.configured_at_utc = None if state.configured_at_utc else datetime.utcnow().replace(second=0, microsecond=0)
     elif action == "save_treatment":

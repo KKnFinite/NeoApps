@@ -6,6 +6,10 @@
     const desktop = window.matchMedia("(min-width:901px)");
     let frame = 0;
     let wallboard;
+    const mobileRampView = root.querySelector('[data-ucc-mobile-projection]');
+    let mobileSource = root;
+    let renderedRamp;
+    let mobileDirty = true;
     let tvDirty = true;
     let tvSource = root;
     const refreshStatus = root.querySelector("[data-ucc-tv-refresh-status]");
@@ -41,6 +45,7 @@
             element("span", "ucc-tv-plane-route", route || "—"),
             !inThroat && etd !== undefined ? element("span", "ucc-tv-plane-etd", `ETD ${etd || "—"}`) : null);
         card.setAttribute("aria-label", source.getAttribute("aria-label") || "");
+        card.dataset.uccProjectedAircraft = source.dataset.uccAircraft;
         return card;
     }
 
@@ -102,6 +107,36 @@
                 element("div", "ucc-tv-crew-column", crew(source, 1), crew(source, 2)),
                 padView, element("div", "ucc-tv-crew-column", crew(source, 4), crew(source, 3))),
             stands);
+    }
+
+    function renderMobileRamp() {
+        if (!mobileRampView || root.dataset.uccMobileView !== 'ramp') return;
+        const name = root.dataset.uccSelectedRamp;
+        if (!mobileDirty && name === renderedRamp) return;
+        mobileDirty = false;
+        renderedRamp = name;
+        const source = [...mobileSource.querySelectorAll('[data-ucc-ramp]')]
+            .find(ramp => ramp.dataset.uccRamp === name);
+        let projection;
+        if (name === 'Remote') {
+            const assignments = [1, 2, 3, 4].map(position => crew(source, position));
+            const stands = Array.from(source?.querySelectorAll('[data-ucc-parking]') || [],
+                stand => aircraftAt(stand, stand.dataset.uccParking));
+            projection = element('section', 'ucc-tv-ramp ucc-mobile-remote', heading(name),
+                element('div', 'ucc-mobile-remote-crews', ...assignments),
+                element('div', 'ucc-mobile-remote-stands', ...stands));
+        } else projection = rampView(name, source);
+        const warnings = [...(source?.querySelectorAll('.ucc-queue-exception') || [])]
+            .map(warning => warning.cloneNode(true));
+        for (const warning of warnings) warning.querySelectorAll('.ucc-plane').forEach(plane => plane.replaceWith(aircraft(plane)));
+        for (const plane of projection.querySelectorAll('[data-ucc-projected-aircraft]')) {
+            plane.tabIndex = 0;
+            plane.setAttribute('role', 'button');
+            plane.setAttribute('aria-controls', 'ucc-aircraft-info');
+            plane.setAttribute('aria-pressed', root.querySelector('[data-ucc-info-mission]:not([hidden])')?.dataset.uccInfoMission === plane.dataset.uccProjectedAircraft);
+        }
+        mobileRampView.replaceChildren(projection, ...warnings);
+        root.dataset.uccMobileProjectionReady = 'true';
     }
 
     function weatherView() {
@@ -226,6 +261,7 @@
             wallboard = null;
         }
         if (!desktop.matches) {
+            renderMobileRamp();
             root.style.removeProperty("width");
             root.style.removeProperty("transform");
             root.style.removeProperty("--ucc-staffing-row-height");
@@ -265,6 +301,8 @@
     }
     root.addEventListener("ucc:tv-source", event => {
         tvSource = event.detail || root;
+        mobileSource = tvSource;
+        mobileDirty = true;
         tvDirty = true;
         schedule();
     });
@@ -277,9 +315,14 @@
         schedule();
     });
     new MutationObserver(schedule).observe(document.body, {attributes:true, attributeFilter:["class"]});
-    new MutationObserver(() => { tvDirty = true; schedule(); }).observe(root, {
+    new MutationObserver(records => {
+        if (records.every(record => mobileRampView?.contains(record.target))) return;
+        tvDirty = true;
+        mobileDirty = true;
+        schedule();
+    }).observe(root, {
         subtree:true, childList:true, characterData:true,
-        attributes:true, attributeFilter:["open", "hidden"],
+        attributes:true, attributeFilter:["open", "hidden", "data-ucc-selected-ramp", "data-ucc-mobile-view"],
     });
     window.addEventListener("resize", schedule);
     desktop.addEventListener("change", schedule);

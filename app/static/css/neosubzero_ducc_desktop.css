@@ -264,7 +264,6 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="staffing"] :is(.position-3,.position-4) { grid-column:2; }
     .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-staffing-grid { grid-template-rows:auto; min-height:0; }
     .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-deice-pad { height:110px; min-height:110px; }
-    .blueprint-neosubzero .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp-diagram.is-main-ramp { padding-top:115px; }
 }
 
 /* Ordinary desktop management only. Mobile, Board View and TV keep their own layout. */
@@ -605,20 +604,6 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-plane.is-stacked > .ucc-tv-plane-icon { width:1.8em; height:1.8em; }
     .ucc-tv-plane-route, .ucc-tv-plane-eta, .ucc-tv-plane-etd { font-size:.78em; }
     .ucc-tv-plane-route { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b9cfe1; }
-    .ucc-tv-plane-icon {
-        width:1.28em; height:1.28em; background:var(--tv-plane-color,var(--tv-plane-neutral,#adc3d6));
-        -webkit-mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
-        mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
-    }
-    .ucc-tv-plane-icon.facing-right { transform:rotate(90deg); }
-    .ucc-tv-plane-icon.facing-left { transform:rotate(-90deg); }
-    .ucc-tv-plane:is(.state-planned,.state-pretreat-planned,.state-deice-planned) { --tv-plane-color:var(--subzero-planned); }
-    .ucc-tv-plane.state-configured { --tv-plane-color:var(--subzero-configured); }
-    .ucc-tv-plane.state-deicing { --tv-plane-color:var(--subzero-deicing); }
-    .ucc-tv-plane:is(.state-fin,.state-finished) { --tv-plane-color:var(--subzero-fin); }
-    .ucc-tv-plane.state-radio-pending { --tv-plane-color:var(--subzero-radio-pending); }
-    .ucc-tv-plane.state-negative { --tv-plane-color:var(--subzero-negative); }
-    .ucc-tv-plane:is(.state-gone,.state-cleared) { --tv-plane-color:var(--subzero-gone); }
     .ucc-tv-footer {
         display:grid; grid-template-columns:minmax(0,5fr) minmax(0,1fr); align-items:center; gap:.75em;
         border-top:1px solid var(--tv-edge); padding-top:.35em; min-height:3.8em;
@@ -680,4 +665,54 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-plane .ucc-tv-plane-icon { width:.9em; height:.9em; }
     .ucc-tv-wallboard .ucc-tv-plane.is-stacked { gap:.04em; padding:.1em .18em; line-height:1; }
     .ucc-tv-plane.is-stacked > .ucc-tv-plane-icon { width:1.35em; height:1.35em; }
+}
+
+.ucc-tv-plane-icon {
+    width:1.28em; height:1.28em; background:var(--tv-plane-color,var(--tv-plane-neutral,#adc3d6));
+    -webkit-mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
+    mask:url('../images/neosubzero/ducc-aircraft.svg') center / contain no-repeat;
+}
+.ucc-tv-plane-icon.facing-right { transform:rotate(90deg); }
+.ucc-tv-plane-icon.facing-left { transform:rotate(-90deg); }
+.ucc-tv-plane:is(.state-planned,.state-pretreat-planned,.state-deice-planned) { --tv-plane-color:var(--subzero-planned); }
+.ucc-tv-plane.state-configured { --tv-plane-color:var(--subzero-configured); }
+.ucc-tv-plane.state-deicing { --tv-plane-color:var(--subzero-deicing); }
+.ucc-tv-plane:is(.state-fin,.state-finished) { --tv-plane-color:var(--subzero-fin); }
+.ucc-tv-plane.state-radio-pending { --tv-plane-color:var(--subzero-radio-pending); }
+.ucc-tv-plane.state-negative { --tv-plane-color:var(--subzero-negative); }
+.ucc-tv-plane:is(.state-gone,.state-cleared) { --tv-plane-color:var(--subzero-gone); }
+
+.ucc-mobile-projection { display:none; }
+@media (max-width:900px) {
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"][data-ucc-mobile-projection-ready] .ucc-ramp-board { display:none; }
+    .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-mobile-projection {
+        display:block; min-width:0; color:#e4eff7; font:500 .79rem/1.15 "Segoe UI",system-ui,sans-serif;
+        --tv-edge:#263c50; --tv-truck:#79c6ff; --tv-person:#92dfa6;
+        --tv-unmarked:#f4f8fc; --tv-unavailable:#ff9c9c;
+    }
+    .ucc-mobile-projection .ucc-tv-ramp { display:grid; gap:6px; padding:7px; background:#0a1927; border:1px solid var(--tv-edge); border-radius:7px; }
+    .ucc-mobile-projection .ucc-tv-ramp h2 { margin:0; padding-bottom:5px; border-bottom:1px solid var(--tv-edge); color:#80d1e8; font-size:1em; text-align:center; text-transform:uppercase; }
+    .ucc-mobile-projection :is(.ucc-tv-staging,.ucc-tv-stands) { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+    .ucc-mobile-projection .ucc-tv-stands { align-items:start; padding-top:6px; border-top:1px solid var(--tv-edge); }
+    .ucc-mobile-projection .ucc-tv-crew-column { display:grid; gap:5px; align-content:start; }
+    .ucc-mobile-projection [data-ucc-tv-position="2"], .ucc-mobile-projection [data-ucc-tv-position="3"] { grid-row:2; }
+    .ucc-mobile-projection .ucc-tv-crew { display:grid; gap:2px; font-size:.75rem; overflow-wrap:anywhere; }
+    .ucc-mobile-projection .ucc-tv-crew.is-right { text-align:right; }
+    .ucc-mobile-projection .ucc-tv-crew [data-ucc-tv-crew-field="truck"] { color:var(--tv-truck); }
+    .ucc-mobile-projection .ucc-tv-crew :is([data-ucc-tv-crew-field="driver"],[data-ucc-tv-crew-field="flyer"]) { color:var(--tv-person); }
+    .ucc-mobile-projection .ucc-tv-crew [data-ucc-attendance="unmarked"] { color:var(--tv-unmarked); }
+    .ucc-mobile-projection .ucc-tv-crew :is(.ucc-truck-unavailable,.ucc-person-unavailable,[data-ucc-attendance="unavailable"]) { color:var(--tv-unavailable); }
+    .ucc-mobile-projection .ucc-tv-pad { display:grid; align-items:center; min-height:48px; }
+    .ucc-mobile-projection :is(.ucc-tv-pad-idle,.ucc-tv-stand,.ucc-tv-plane) { display:grid; justify-items:center; min-width:0; gap:3px; text-align:center; }
+    .ucc-mobile-projection .ucc-tv-stand > .ucc-tv-plane { width:100%; box-sizing:border-box; }
+    .ucc-mobile-projection .ucc-tv-position { color:#a4c3d8; font-size:.69rem; font-weight:700; }
+    .ucc-mobile-projection .ucc-tv-plane { padding:3px; background:#0e2133; border:1px solid #32475a; border-radius:5px; }
+    .ucc-mobile-projection .ucc-tv-plane.is-in-throat { border:0; background:none; padding:0; }
+    .ucc-mobile-projection .ucc-tv-plane-icon { width:1.8em; height:1.8em; }
+    .ucc-mobile-projection .ucc-tv-pad-idle .ucc-tv-plane-icon { opacity:.34; }
+    .ucc-mobile-projection :is(.ucc-tv-plane-route,.ucc-tv-plane-etd) { color:#b9cfe1; font-size:.68rem; }
+    .ucc-mobile-projection .ucc-tv-plane-route { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ucc-mobile-projection :is(.ucc-mobile-remote-stands,.ucc-mobile-remote-crews) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }
+    .ucc-mobile-projection .ucc-mobile-remote-crews:empty { display:none; }
+    .ucc-mobile-projection .ucc-mobile-remote-crews .ucc-tv-crew { grid-row:auto; text-align:left; }
 }

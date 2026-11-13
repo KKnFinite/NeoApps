@@ -38,7 +38,7 @@
 </form>
 {% endmacro %}
 
-{% macro spray_reason(row, can_edit, board, selected_ramp='') %}
+{% macro spray_reason(row, can_edit, board, selected_ramp='', show_observation=true) %}
 <div class="neosubzero-spray-reason">
     {% if can_edit %}
     <form method="post" action="{{ url_for('neosubzero.spray_reason_mutate') }}" data-subzero-operational-form>
@@ -53,7 +53,7 @@
     <p><span>Reason for Application</span><strong>{{ row.reason_for_application }}</strong></p>
     {% endif %}
 </div>
-{{ frost_treatment_observation(row, can_edit, board, selected_ramp) }}
+{% if show_observation %}{{ frost_treatment_observation(row, can_edit, board, selected_ramp) }}{% endif %}
 {% endmacro %}
 
 {% macro frost_treatment_observation(row, can_edit, board, selected_ramp='') %}
@@ -300,8 +300,8 @@
 </details>{% endif %}
 {% endmacro %}
 
-{% macro treatment_form(row, can_edit, board, selected_ramp='') %}
-{% set locked = not can_edit or row.event.status == 'cleared' %}
+{% macro treatment_form(row, can_edit, board, selected_ramp='', compact=false, correction=false) %}
+{% set locked = not can_edit or row.event.status == 'cleared' or correction %}
 <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" class="neosubzero-deice-form" data-subzero-deice-form data-locked="{{ 'true' if locked else 'false' }}">
     {{ mutation_identity(row, board, selected_ramp) }}
     <input type="hidden" name="action" value="save_treatment">
@@ -319,10 +319,10 @@
         <legend data-subzero-pass2-type>PASS 2 · {{ row.pass_types[1] if row.pass_types|length > 1 else 'TYPE I' }}</legend>
         {{ pass_controls(row, 2, locked) }}
     </fieldset>
-    {% if can_edit and row.event.status in ('finished','cleared') %}<label>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
+    {% if can_edit and row.event.status in ('finished','cleared') %}<label{% if correction %} data-ops-correction-field hidden{% endif %}>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
     {% if can_edit %}
-        <button type="button" data-subzero-edit {% if row.event.status != 'cleared' %}hidden{% endif %}>EDIT</button>
-        <button type="submit" {% if row.event.status == 'cleared' %}hidden{% endif %}>SAVE TREATMENT</button>
+        <button type="button" data-subzero-edit {% if not locked %}hidden{% endif %}>{{ 'CORRECT RECORDED TREATMENT' if correction else 'EDIT' }}</button>
+        <button type="submit" {% if locked %}hidden{% endif %}>{{ 'SAVE' if compact else 'SAVE TREATMENT' }}</button>
     {% endif %}
 </form>
 {% endmacro %}

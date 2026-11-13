@@ -153,12 +153,12 @@ class UccBrowserTest(unittest.TestCase):
 
             page.set_viewport_size({"width": 390, "height": 844})
             page.locator('[data-ucc-view="ramp"]').click()
-            expect(alpha.locator("[data-ucc-deice-pad] " + aircraft)).to_be_visible()
-            expect(alpha.locator("[data-ucc-queue-position] " + aircraft)).to_have_count(0)
+            projection = page.locator('[data-ucc-mobile-projection]')
+            expect(projection.locator(".ucc-tv-pad")).to_contain_text("N440UP")
+            expect(projection.locator(".ucc-tv-stands")).not_to_contain_text("N440UP")
             previous = float("-inf")
             for left, right in order:
-                left_box = alpha.locator(f'[data-ucc-parking="A{left:02d}"]').bounding_box()
-                right_box = alpha.locator(f'[data-ucc-parking="A{right:02d}"]').bounding_box()
+                left_box, right_box = [projection.get_by_text(f"A{stand:02d}", exact=True).bounding_box() for stand in (left,right)]
                 self.assertAlmostEqual(left_box["y"], right_box["y"], delta=1)
                 self.assertGreater(left_box["y"], previous)
                 previous = left_box["y"]
@@ -300,11 +300,14 @@ class UccBrowserTest(unittest.TestCase):
             expect(mobile.locator('[data-ucc-crew-edit]:visible')).to_have_count(0)
             expect(mobile.locator('.ucc-pill select:visible').first).to_be_visible()
             mobile.locator('[data-ucc-view="ramp"]').click()
-            expect(mobile.locator('[data-ucc-ramp="Alpha"] .ucc-ramp-diagram')).to_be_visible()
+            expect(mobile.locator('[data-ucc-mobile-projection] .ucc-tv-ramp')).to_be_visible()
+            expect(mobile.locator('[data-ucc-mobile-projection] h2')).to_have_text('Alpha')
             expect(mobile.locator('[data-ucc-crew-edit]:visible')).to_have_count(0)
             mobile.locator('[data-ucc-view="staffing"]').click()
             self.assertFalse(mobile.locator('body').evaluate("el=>el.classList.contains('neosubzero-ucc-tv-mode')"))
-            page.get_by_role('button', name='Exit TV Mode').click()
+            page.bring_to_front()
+            page.get_by_role('button', name='Exit TV Mode').evaluate('button => button.click()')
+            expect(page.locator('body')).not_to_have_class(re.compile('neosubzero-ucc-tv-mode'))
             page.set_viewport_size({"width":1440,"height":1000})
             # Real mobile staffing mutation; desktop receives it without a reload.
             editor = mobile.locator('[data-ucc-editor="Bravo-2"]')

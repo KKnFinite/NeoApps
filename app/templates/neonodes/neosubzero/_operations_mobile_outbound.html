@@ -1,0 +1,109 @@
+{% from 'neonodes/neosubzero/_operations_inline.html' import mobile_summary, inline_feedback, collapse_button %}
+{% from 'neonodes/neosubzero/_departure_deice.html' import mutation_identity, treatment_form, spray_reason, spray_position_forms, inspection_form with context %}
+{% macro action(row, key, label, primary=false, confirm='') %}
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if confirm %} data-subzero-confirm="{{ confirm }}"{% endif %}>
+    {{ mutation_identity(row, board, row.ramp) }}
+    <button name="action" value="{{ key }}"{% if primary %} class="ops-primary"{% endif %}>{{ label }}</button>
+</form>
+{% endmacro %}
+<details class="ops-mobile-card ops-mobile-outbound" data-ops-accordion{% if selected and row.mission_id == selected.mission_id %} open data-ops-initial-open{% endif %}>
+    <summary class="ops-mobile-summary">{{ mobile_summary(row, 'outbound') }}</summary>
+    <div class="ops-pretreat-inline ops-mobile-workspace" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
+        {% if row.mission_id in mobile_missions %}
+        <div class="ops-mobile-crews" data-ops-mobile-crews aria-label="Assigned ramp crews">
+            {% for crew in row.spray_positions if crew.truck_number or crew.driver or crew.flyer %}
+            <div><strong>{{ crew.position }} · {{ crew.truck_number or '—' }}</strong>{% if crew.driver %}<span>Driver {{ crew.driver.full_name }}</span>{% endif %}{% if crew.flyer %}<span>Flyer {{ crew.flyer.full_name }}</span>{% endif %}</div>
+            {% else %}<small>No crews assigned to {{ row.ramp }}.</small>{% endfor %}
+        </div>
+        {{ inline_feedback() }}
+        {% if row.identity_conflict %}
+            <p class="ops-review">{{ row.ownership_review or 'Treatment belongs to a different physical tail. Review the recorded evidence.' }}</p>
+        {% else %}
+            {% set editable = can_edit and row.mobile_open %}
+            {% set corrections = can_edit and row.mission_departure_status != 'cancelled' %}
+            {% set event_status = row.event.status if row.event else '' %}
+            {% if row.radio_pending %}
+                {% if row.script %}<p class="ops-radio-script" data-radio-script>{{ row.script.text }}</p>
+                    {% if editable and user_can('neosubzero.coordinator.edit') %}{{ action(row, 'radio_complete', 'RADIO COMPLETE', true) }}<small>Confirm after reading the script to the pilot.</small>{% endif %}
+                {% else %}<p class="ops-review">Final readback evidence needs review before RADIO COMPLETE.</p>{% endif %}
+            {% elif editable and not row.event %}
+                {{ action(row, 'initial_contact', 'INITIAL CONTACT', true, 'Start departure deicing? Pretreat history will remain available.' if row.pretreat_complete else '') }}
+            {% elif editable and event_status == 'finished' %}
+                {{ action(row, 'clear', 'CLEAR', true) }}
+            {% elif editable and event_status in ('negative', 'not_sprayed') %}
+                {{ action(row, 'move_to_planned', 'MOVE TO DEICE PLANNED', true) }}
+            {% elif editable and not row.configured and not row.has_actual_spray %}
+                {{ action(row, 'toggle_configured', 'CONFIGURED', true) }}
+            {% endif %}
+
+            {% if editable and not row.radio_pending and not row.has_actual_spray and event_status != 'finished' %}
+            <div class="ops-mobile-actions">
+                {% if event_status not in ('negative', 'not_sprayed') %}
+                    {{ action(row, 'set_negative', 'NEGATIVE DEICE') }}
+                    {% if board == 'coordinator' %}{{ action(row, 'manual_not_sprayed', 'NOT SPRAYED') }}{% endif %}
+                {% endif %}
+                {% if row.event %}{{ action(row, 'clear', 'CLEAR') }}{% endif %}
+            </div>
+            {% endif %}
+
+            {% if row.event and event_status not in ('negative', 'not_sprayed') %}
+                {% set frost = row.mobile_evidence.get('frost_observation') %}
+                {% if (editable and event_status not in ('finished','cleared')) or frost %}
+                <div class="ops-mobile-actions ops-mobile-observations">
+                    {% if frost == 'present' %}<span>FROST PRESENT · RECORDED</span>
+                    {% elif frost == 'absent' %}<span>NERVOUS CAPTAIN · RECORDED</span>
+                    {% else %}
+                        <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-ops-autosave>
+                            {{ mutation_identity(row, board, row.ramp) }}
+                            <input type="hidden" name="action" value="frost_present">
+                            <label><input type="checkbox" data-ops-quick-toggle role="switch"> FROST PRESENT</label>
+                        </form>
+                        {% if not row.has_actual_spray %}{{ action(row, 'nervous_captain', 'NERVOUS CAPTAIN', confirm='Confirm that you observed no frost and the captain requested deicing.') }}{% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if editable and event_status not in ('finished','cleared') %}
+                    {{ treatment_form(row, true, board, row.ramp, compact=true) }}
+                {% endif %}
+            {% endif %}
+
+            {% if row.event %}
+            <details class="ops-inline-notes" data-ops-disclosure="notes">
+                <summary>NOTES</summary>
+                <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+                    {{ mutation_identity(row, board, row.ramp) }}
+                    <input type="hidden" name="action" value="save_notes">
+                    <textarea name="notes" aria-label="Departure notes" maxlength="2000"{% if not corrections %} readonly{% endif %}>{{ row.mobile_evidence.get('notes','') }}</textarea>
+                    {% if corrections %}<button type="submit">SAVE NOTES</button>{% endif %}
+                </form>
+            </details>
+            <details data-ops-disclosure="evidence" class="ops-inline-evidence">
+                <summary>TREATMENT RECORDS / CORRECTIONS</summary>
+                {% if editable and not row.has_actual_spray and row.configured and not row.radio_pending %}
+                    {{ action(row, 'toggle_configured', 'CLEAR CONFIGURED') }}
+                {% endif %}
+                {% if row.radio_pending and can_edit and user_can('neosubzero.coordinator.edit') %}
+                    <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-confirm="Undo CLEAR and preserve the recorded spray?">
+                        {{ mutation_identity(row, board, row.ramp) }}
+                        <label>Correction reason<input name="correction_reason" maxlength="500" required></label>
+                        <button name="action" value="undo_clear">UNDO CLEAR</button>
+                    </form>
+                {% endif %}
+                {% if event_status in ('finished', 'cleared') %}{{ treatment_form(row, corrections, board, row.ramp, compact=true, correction=true) }}{% endif %}
+                {{ spray_reason(row, editable and not row.has_actual_spray, board, row.ramp, show_observation=false) }}
+                {{ spray_position_forms(row, corrections, board, row.ramp) }}
+                {% if editable and row.frost_inspection %}<details><summary>PHYSICAL FROST INSPECTION / CORRECTION</summary>
+                    {{ inspection_form(row, board) }}
+                    {% if row.frost_inspection.last %}{{ inspection_form(row, board, true) }}{% endif %}
+                </details>{% endif %}
+                <a href="{{ url_for('neosubzero.deice_log') }}">DEICE LOG</a>
+            </details>
+            {% endif %}
+        {% endif %}
+        {% else %}
+        {{ inline_feedback() }}
+        <p class="ops-inline-loading" role="status">Loading current aircraft…</p>
+        {% endif %}
+        {{ collapse_button() }}
+    </div>
+</details>

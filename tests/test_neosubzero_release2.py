@@ -78,6 +78,9 @@ class Release2Test(unittest.TestCase):
         f=self.f;event,values=self.flow('type_i_type_iv')
         first=participation_query(event).filter_by(pass_number=1).one()
         self.assertEqual(first.driver_person_id,f.permanent.id)
+        from app.services.neosubzero_trucks import manage_truck
+        manage_truck(f.gateway, 'add_truck', {'truck_number': 'T18'}, actor_id=None)
+        db.session.commit()
         client=self.client()
         result=self.post(client,'team',action='change_truck',ramp='Alpha',position_number=1,truck_number='T18',staffing_version=ucc_staffing_version(f.operation))
         self.assertEqual(result.status_code,200,result.json)
@@ -205,8 +208,8 @@ class Release2Test(unittest.TestCase):
             for path in ('/neosubzero/operations?mode=outbound','/neosubzero/outbound'):
                 page=client.get(path)
                 self.assertEqual(page.status_code,200,path)
-                self.assertIn(b'neosubzero-application-context',page.data,path)
-                self.assertIn(b'SAVE CONTEXT',page.data,path)
+                self.assertNotIn(b'neosubzero-application-context',page.data,path)
+                self.assertNotIn(b'SAVE CONTEXT',page.data,path)
         self.assertEqual(evidence_values(NeoSubZeroOperationContext.query.one()),before_context)
         self.assertEqual([evidence_values(row) for row in participation_query(event).all()],before_sprays)
         self.assertEqual(NeoSubZeroAuditEntry.query.count(),before_audits)
