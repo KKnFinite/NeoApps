@@ -257,7 +257,10 @@ class OperationsBrowserTest(unittest.TestCase):
             page.once('dialog',lambda dialog:dialog.accept());inline.locator('[data-ops-reload-inline]').click()
             expect(notes).to_have_value('')
             expect(treatment.locator('[name="reason_for_application"]')).to_have_count(0)
-            expect(treatment.locator('[name="pass1_plan"]')).to_have_value('type_i')
+            expect(treatment.locator('select, [data-subzero-stamp]')).to_have_count(0)
+            expect(treatment.locator('[data-pass="1"] .ops-pretreat-treatment')).to_contain_text('Type I')
+            expect(treatment.locator('[data-pass="2"] .ops-pretreat-treatment')).to_contain_text('Type IV')
+            expect(treatment.get_by_text('Wings + Tail',exact=True)).to_have_count(2)
             expect(inline.get_by_role('button',name='SAVE',exact=True)).to_have_count(0)
             expect(inline.get_by_text('PLANNING / TREATMENT RECORDS')).to_have_count(0)
 
@@ -266,14 +269,24 @@ class OperationsBrowserTest(unittest.TestCase):
                     action()
                 self.assertEqual(pending.value.status,200,pending.value.text())
                 expect(inline.locator('[data-ops-inline-feedback]')).to_be_hidden()
+            def background(locator):
+                return locator.evaluate("""e => {
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    context.fillStyle = getComputedStyle(e).backgroundColor;
+                    context.fillRect(0,0,1,1);
+                    return [...context.getImageData(0,0,1,1).data].slice(0,3);
+                }""")
             configure = inline.locator('button[value="toggle_configured"]')
             autosave(configure.click)
             expect(configure).to_have_attribute('aria-pressed','true')
             expect(row).to_have_attribute('data-status','configured')
-            self.assertEqual(row.locator('.ops-mobile-status').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(39, 135, 86)')
-            self.assertNotEqual(row.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(39, 135, 86)')
+            summary = row.locator('.ops-mobile-summary')
+            green = background(summary)
+            self.assertGreater(green[1],green[2])
+            self.assertNotEqual(background(row),green)
             page.set_viewport_size({'width':1366,'height':900})
-            self.assertEqual(configure.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(39, 135, 86)')
+            self.assertEqual(background(row.locator('.ops-identity')),green)
             autosave(configure.click)
             expect(configure).to_have_attribute('aria-pressed','false')
             plan = row.get_by_role('checkbox',name='Pretreat planned for N441UP')
@@ -281,6 +294,12 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(row).to_have_attribute('data-status','untreated')
             autosave(plan.check)
             expect(row).to_have_attribute('data-status','planned')
+            yellow = background(row.locator('.ops-identity'))
+            self.assertGreater(yellow[0],yellow[1])
+            self.assertGreater(yellow[1],yellow[2])
+            self.assertEqual(row.evaluate('e=>getComputedStyle(e).borderLeftWidth'),'1px')
+            self.assertEqual(background(treatment.locator('[data-pass="1"]')),[58,42,36])
+            self.assertEqual(background(treatment.locator('[data-pass="2"]')),[24,53,47])
             if notes.is_visible():
                 notes_form.locator('summary').click()
             height = row.evaluate('e => e.offsetHeight')
@@ -288,9 +307,7 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(notes).to_be_visible()
             notes_form.locator('summary').click()
             self.assertEqual(row.evaluate('e => e.offsetHeight'),height)
-            autosave(lambda:treatment.locator('[name="pass1_surface_area"]').select_option('wings_only'))
-            autosave(lambda:treatment.locator('[name="pass2_plan"]').select_option('type_iv'))
-            autosave(lambda:treatment.locator('[name="pass2_surface_area"]').select_option('entire_aircraft'))
+            start = treatment.locator('[name="pass1_start"]')
             # A committed edit queued during a save survives reconciliation of the same row.
             page.evaluate("""() => {
                 const fetch = window.fetch;
@@ -301,7 +318,8 @@ class OperationsBrowserTest(unittest.TestCase):
                 };
             }""")
             with page.expect_response(lambda r: 'Queued during a treatment save' in (r.request.post_data or '')) as queued:
-                treatment.locator('[name="pass1_surface_area"]').select_option('wings_tail')
+                start.fill('21:00')
+                start.press('Tab')
                 page.wait_for_function('typeof window.releasePretreat === "function"')
                 expect(row).to_have_attribute('aria-busy','true')
                 notes_form.locator('summary').click()
@@ -311,23 +329,29 @@ class OperationsBrowserTest(unittest.TestCase):
             self.assertEqual(queued.value.status,200,queued.value.text())
             expect(row).not_to_have_attribute('aria-busy','true')
             expect(notes).to_have_value('Queued during a treatment save')
+            expect(configure).to_have_attribute('aria-pressed','true')
+            expect(row).to_have_attribute('data-status','configured')
+            expect(row.locator('.ops-pretreat-state')).to_have_text('IN PROGRESS')
             page.set_viewport_size({'width':375,'height':900})
             if not inline.is_visible():
                 row.locator('.ops-pretreat-summary').click()
-            # A controlled operational clock keeps NOW independent of the host time.
-            page.evaluate("window.NeoSubZeroDepartureForms.operationalHHMM = () => '2100'")
-            start = treatment.locator('[name="pass1_start"]')
-            start.fill('24')
-            start.press('Tab')
+            end = treatment.locator('[name="pass1_end"]')
+            end.focus()
+            end.fill('24')
+            end.evaluate('field => field.blur()')
             expect(inline.locator('[data-ops-inline-feedback]')).to_contain_text('Enter a valid time')
-            expect(start).to_have_value('24')
-            autosave(treatment.get_by_role('button',name='Set Pass 1 start to now').click)
-            expect(treatment.locator('[name="pass1_start"]')).to_have_value('21:00')
-            for name,value in (('pass1_end','21:02'),('pass2_start','21:04'),('pass2_end','21:08')):
+            expect(end).to_have_value('24')
+            for name,value in (('pass1_end','21:00'),('pass2_start','21:00'),('pass2_end','21:00')):
                 field = treatment.locator('[name="'+name+'"]')
-                field.fill(value)
-                autosave(lambda:field.press('Tab'))
+                def commit_time():
+                    field.fill(value)
+                    field.evaluate('field => field.blur()')
+                autosave(commit_time)
             expect(row).to_have_attribute('data-status','fin')
+            blue = background(summary)
+            self.assertGreater(blue[2],blue[1])
+            self.assertNotEqual(blue,green)
+            expect(configure).to_have_attribute('aria-pressed','true')
             self.assertEqual(notes_form.locator('[name="expected_version"]').input_value(),
                              treatment.locator('[name="expected_version"]').input_value())
             if not notes.is_visible():
@@ -359,6 +383,8 @@ class OperationsBrowserTest(unittest.TestCase):
                 saved = NeoSubZeroPretreatState.query.filter_by(tail_number='N441UP').one()
                 self.assertEqual(saved.reason_for_application, 'Pretreat')
                 self.assertEqual([saved.pass_evidence[str(i)]['reason'] for i in (1,2)], ['Pretreat','Pretreat'])
+                self.assertEqual(saved.configured_at_utc,saved.pass1_started_at_utc)
+                self.assertEqual(saved.pass1_started_at_utc,saved.pass2_ended_at_utc)
                 self.assertEqual(saved.notes, 'Mobile pretreat independent notes')
             page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound')
             expect(root).to_have_attribute('data-ready','true')

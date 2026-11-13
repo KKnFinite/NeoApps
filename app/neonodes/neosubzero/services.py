@@ -20,8 +20,14 @@ from app.services.time_display import format_local_hhmm
 
 PRETREAT_REFRESH_KEY = "neosubzero.pretreat"
 DEFAULT_PRETREAT_REASON = "Pretreat"
-SURFACE_AREAS = ("wings_only", "wings_tail", "entire_aircraft")
 SURFACE_LABELS = {"wings_only": "Wings Only", "wings_tail": "Wings + Tail", "entire_aircraft": "Entire Aircraft"}
+PRETREAT_SURFACE = "wings_tail"
+PRETREAT_PLANS = ("type_i", "type_iv")
+PRETREAT_MILESTONES = tuple(
+    (f"pass{number}_{milestone}", f"pass{number}_{attribute}_at_utc")
+    for number in (1, 2)
+    for milestone, attribute in (("start", "started"), ("end", "ended"))
+)
 _OPERATION_UNSET = object()
 
 
@@ -64,7 +70,7 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
         state = states.get(tail)
         tail_state = tail_states.get(tail)
         assignment = parking.get(tail)
-        completed = bool(tail_state and tail_state.pretreat_status)
+        completed = _pretreat_complete(state)
         rows.append({
             "mission_id": mission.id, "tail": tail or "-", "inbound_eta": format_local_hhmm(inbound_eta, mission.timezone or None),
             "tail_status": tail_operational_status_label(tail_operational_status(tail_state, assignment=assignment)) or "NORMAL",
@@ -73,6 +79,7 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
             "reason_for_application": pretreat_reason(state),
             "deice_status": str(getattr(tail_state, "deice_status", "unknown") or "unknown").replace("_", " ").upper(),
             "configured": format_local_hhmm(state.configured_at_utc, mission.timezone or None) if state else "", "completed": completed,
+            "recorded_passes": _nonstandard_passes(state),
             "pass1_start": _display(state, "pass1_started_at_utc", mission), "pass1_end": _display(state, "pass1_ended_at_utc", mission),
             "pass2_start": _display(state, "pass2_started_at_utc", mission), "pass2_end": _display(state, "pass2_ended_at_utc", mission),
             "version": entity_version(state), "sort_eta": inbound_eta or datetime.max,
@@ -111,39 +118,31 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
             state.reason_for_application = _pretreat_reason_value(
                 values.get("reason_for_application")
             )
-        inline = "pass1_plan" in values or "pass2_plan" in values
-        if inline and (values.get("pass1_plan") != "type_i" or values.get("pass2_plan") not in {"", "type_iv"}):
-            raise NeoSubZeroPretreatError("Pretreat supports Type I on Pass 1 and optional Type IV on Pass 2.")
-        unused_second_pass = inline and not values.get("pass2_plan")
-        if unused_second_pass and any(values.get(name) for name in ("pass2_start", "pass2_end", "pass2_surface_area")):
-            raise NeoSubZeroPretreatError("Choose Type IV before recording Pass 2 treatment.")
-        if inline:
-            state.pass2_plan = "unused" if unused_second_pass else "type_iv"
-        state.pass1_surface_area = _surface(values.get("pass1_surface_area"), optional=inline)
-        state.pass2_surface_area = None if unused_second_pass else _surface(values.get("pass2_surface_area"), optional=inline)
-        state.pass1_started_at_utc = _parse_hhmm(values.get("pass1_start"), operation, mission)
-        state.pass1_ended_at_utc = _parse_hhmm(values.get("pass1_end"), operation, mission)
-        state.pass2_started_at_utc = _parse_hhmm(values.get("pass2_start"), operation, mission)
-        state.pass2_ended_at_utc = _parse_hhmm(values.get("pass2_end"), operation, mission)
+        for number, plan in enumerate(PRETREAT_PLANS, 1):
+            if (values.get(f"pass{number}_plan", plan) != plan or
+                    values.get(f"pass{number}_surface_area", PRETREAT_SURFACE) != PRETREAT_SURFACE):
+                raise NeoSubZeroPretreatError("Pretreat uses Type I on Pass 1 and Type IV on Pass 2, both on Wings + Tail.")
+        existing_evidence = state.pass_evidence or {}
+        for number in (1, 2):
+            has_recorded_pass = (getattr(state, f"pass{number}_started_at_utc") or
+                                 getattr(state, f"pass{number}_ended_at_utc") or existing_evidence.get(str(number)))
+            if not has_recorded_pass:
+                setattr(state, f"pass{number}_surface_area", PRETREAT_SURFACE)
+                if number == 2:
+                    state.pass2_plan = PRETREAT_PLANS[1]
+        for field, attribute in PRETREAT_MILESTONES:
+            original = getattr(state, attribute)
+            entered = _parse_hhmm(values.get(field), operation, mission)
+            if original and entered is None:
+                raise NeoSubZeroPretreatError("Recorded physical treatment cannot be erased.")
+            if original and entered == original.replace(second=0, microsecond=0):
+                entered = original
+            setattr(state, attribute, entered)
         if "notes" in values:
             state.notes = str(values.get("notes") or "").strip() or None
         _validate_sequence(state)
-        if inline:
-            for number in (1, 2):
-                if getattr(state, f"pass{number}_started_at_utc") and not getattr(state, f"pass{number}_surface_area"):
-                    raise NeoSubZeroPretreatError(f"Choose a Pass {number} surface before recording START.")
-                if (before or {}).get(f"pass{number}_started_at_utc") and not getattr(state, f"pass{number}_started_at_utc"):
-                    raise NeoSubZeroPretreatError("Recorded physical treatment cannot be erased.")
-        if inline and any(start and end and start == end for start, end in (
-            (state.pass1_started_at_utc, state.pass1_ended_at_utc),
-            (state.pass2_started_at_utc, state.pass2_ended_at_utc),
-        )):
-            raise NeoSubZeroPretreatError("A pass END must be later than its START.")
-        if unused_second_pass and (before or {}).get("pass2_started_at_utc"):
-            raise NeoSubZeroPretreatError("Recorded physical treatment cannot be erased.")
-        for number in (1,2):
-            if (before or {}).get(f'pass{number}_ended_at_utc') and not getattr(state,f'pass{number}_ended_at_utc'):
-                raise NeoSubZeroPretreatError('Recorded physical treatment cannot be erased.')
+        if state.pass1_started_at_utc and not (before or {}).get("pass1_started_at_utc") and not state.configured_at_utc:
+            state.configured_at_utc = state.pass1_started_at_utc
     else:
         raise NeoSubZeroPretreatError("Choose a valid Pretreat action.")
     if before is not None and before == evidence_values(state):
@@ -220,28 +219,58 @@ def _parse_hhmm(value, operation, mission):
 
 
 def _validate_sequence(state):
-    values = [state.pass1_started_at_utc, state.pass1_ended_at_utc, state.pass2_started_at_utc, state.pass2_ended_at_utc]
-    for index in range(1, len(values)):
-        if values[index] is not None and values[index - 1] is None: raise NeoSubZeroPretreatError("Complete Pretreat milestones in pass order.")
-        if values[index] is not None and values[index] < values[index - 1]: raise NeoSubZeroPretreatError("Pretreat times must remain chronological.")
+    values = [getattr(state, attribute) for _, attribute in PRETREAT_MILESTONES]
+    for previous, current in zip(values, values[1:]):
+        if current is None:
+            continue
+        if previous is None:
+            raise NeoSubZeroPretreatError("Complete Pretreat milestones in pass order.")
+        if current < previous:
+            raise NeoSubZeroPretreatError("Pretreat times must remain chronological.")
+
+
+def _pretreat_complete(state):
+    if state is None or not all(getattr(state, attribute) for _, attribute in PRETREAT_MILESTONES):
+        return False
+    try:
+        _validate_sequence(state)
+    except NeoSubZeroPretreatError:
+        return False
+    return True
+
+
+def _nonstandard_passes(state):
+    if state is None:
+        return {}
+    review = {}
+    for number, plan in enumerate(PRETREAT_PLANS, 1):
+        evidence = (state.pass_evidence or {}).get(str(number)) or {}
+        surface = getattr(state, f"pass{number}_surface_area")
+        recorded_surface = evidence.get("surface", surface)
+        recorded_plan = evidence.get("pass_type") or (state.pass2_plan if number == 2 else None)
+        if (recorded_plan not in (None, plan) or
+                (number == 2 and state.pass2_plan not in (None, plan)) or
+                recorded_surface not in (None, PRETREAT_SURFACE) or
+                (getattr(state, f"pass{number}_started_at_utc") and not recorded_surface) or
+                (evidence and surface != recorded_surface)):
+            review[number] = {
+                "plan": {"type_i": "Type I", "type_iv": "Type IV", "unused": "Unused"}.get(recorded_plan, recorded_plan),
+                "surface": SURFACE_LABELS.get(recorded_surface, recorded_surface),
+                "stored_surface": SURFACE_LABELS.get(surface, surface) if surface != recorded_surface else None,
+                "stored_plan_conflict": number == 2 and bool(state.pass2_plan and state.pass2_plan != recorded_plan),
+            }
+    return review
 
 
 def _sync_completion(operation, tail, state):
     row = SortDateTailState.query.filter_by(sort_date=operation.sort_date, gateway_code=operation.gateway_code, sort_name=operation.sort_name, tail_number=tail).one_or_none()
-    completed = bool(state.pass1_started_at_utc and state.pass1_ended_at_utc and state.pass2_started_at_utc and state.pass2_ended_at_utc)
+    completed = _pretreat_complete(state)
     if row is None and completed:
         row = SortDateTailState(sort_date=operation.sort_date, gateway_code=operation.gateway_code, sort_name=operation.sort_name, tail_number=tail)
         db.session.add(row)
     if row is not None:
         row.pretreat_status = completed
 
-
-def _surface(value, *, optional=False):
-    value = str(value or "").strip().lower()
-    if optional and not value:
-        return None
-    if value not in SURFACE_AREAS: raise NeoSubZeroPretreatError("Choose a valid Surface Area for both passes.")
-    return value
 
 def _display(state, attribute, mission):
     return format_local_hhmm(getattr(state, attribute, None), mission.timezone or None) if state else ""

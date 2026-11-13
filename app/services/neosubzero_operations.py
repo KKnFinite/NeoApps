@@ -1,7 +1,7 @@
 """Read-only presentation adapter; physical treatment state remains canonical."""
 from datetime import datetime, timedelta
 from app.models import SortDateMission, SortDateTailState
-from app.neonodes.neosubzero.services import pretreat_context, SURFACE_LABELS
+from app.neonodes.neosubzero.services import PRETREAT_SURFACE, pretreat_context, SURFACE_LABELS
 from app.services.neosubzero_departure_deice import departure_deice_context, mobile_departure_evidence
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.time_display import format_local_hhmm
@@ -64,13 +64,15 @@ def operations_context(gateway, operation, mode):
         row['history_event'] = event if row['identity_conflict'] else None
         row['primary_passes'] = []
         if mode == 'pretreat':
-            state = row['state']
             row['parking'] = departure.get('parking') or row['parking']
             row['destination'] = mission.destination or '—'
-            planned = bool(state and (row['planned'] or state.configured_at_utc or state.pass1_surface_area or state.pass1_started_at_utc))
-            types = ('Type I', 'Type IV') if planned else ()
-            surfaces = [getattr(state, f'pass{i}_surface_area', None) for i in (1, 2)]
-            row['visual_state'], row['visual_label'] = ('fin', 'PRETREATED') if row['completed'] else ('deicing', 'PRETREAT IN PROGRESS') if state and state.pass1_started_at_utc else ('configured', 'CONFIGURED') if row['configured'] else ('planned', 'PLANNED') if row['planned'] else ('untreated', 'NOT PLANNED')
+            types = ('Type I', 'Type IV')
+            surfaces = [PRETREAT_SURFACE, PRETREAT_SURFACE]
+            row['visual_state'], row['visual_label'] = (
+                ('fin', 'PRETREATED') if row['completed'] else
+                ('configured', 'CONFIGURED') if row['configured'] else
+                ('planned', 'PLANNED') if row['planned'] else ('untreated', 'NOT PLANNED')
+            )
         else:
             row['mission_departure_status'] = mission.departure_status
             row['mobile_evidence'] = evidence.get(getattr(event, 'id', None), {})

@@ -120,6 +120,8 @@ def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='dep
                         for field in ('surface_area','started_at_utc','ended_at_utc'))
             if changed and not str(correction_reason or '').strip():
                 raise NeoSubZeroEvidenceError('Enter a correction reason before changing an ended pass. Original spray evidence must remain auditable.')
+            if kind == 'pretreat' and not changed:
+                continue
         start=getattr(parent,f'pass{number}_started_at_utc')
         end=getattr(parent,f'pass{number}_ended_at_utc')
         if not start: continue
@@ -135,8 +137,9 @@ def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='dep
             # A retrospectively entered END does not establish pass-start weather.
             if (previous or {}).get(f'pass{number}_started_at_utc'):
                 captured['context_capture']='start_not_snapshotted'
-        captured.update(start=start.isoformat(),end=end.isoformat() if end else None,
-                        surface=getattr(parent,f'pass{number}_surface_area'))
+        captured.update(start=start.isoformat(),end=end.isoformat() if end else None)
+        if kind != 'pretreat' or 'surface' not in captured:
+            captured['surface'] = getattr(parent, f'pass{number}_surface_area')
         evidence[str(number)]=captured
         if not end: continue  # Crew becomes official only at END.
         records=ensure_planned_participants(operation,mission,parent,kind,number,settings)

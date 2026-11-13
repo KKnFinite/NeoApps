@@ -48,7 +48,7 @@ class Release4PostgresTest(contracts.FrostVaultTest):
                 position_number=1,truck_number='T-'+ramp))
         save_application_context(op,dict(active_precipitation='None',ambient_temperature='25 F',dew_point='24 F',reason_for_application='Frost'),actor_id=None)
         from app.neonodes.neosubzero.services import mutate_pretreat,pretreat_context
-        pretreat=mutate_pretreat(op,f.alpha,'save_treatment',dict(pass1_surface_area='wings_tail',pass2_surface_area='entire_aircraft',
+        pretreat=mutate_pretreat(op,f.alpha,'save_treatment',dict(
             pass1_start='2100',pass1_end='2102',pass2_start='2103',pass2_end='2105'))
         db.session.commit()
         self.assertTrue(next(row for row in pretreat_context(f.gateway,op)['rows'] if row['tail']==f.alpha.assigned_tail_number)['completed'])

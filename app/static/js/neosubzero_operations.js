@@ -85,13 +85,9 @@
                 continue;
             }
             const endedPassChanged = [1, 2].some(number => {
+                const start = form.elements['pass' + number + '_start'];
                 const end = form.elements['pass' + number + '_end'];
-                return end?.defaultValue && ['surface_area', 'start', 'end'].some(field => {
-                    const input = form.elements['pass' + number + '_' + field];
-                    return input.tagName === 'SELECT'
-                        ? input.value !== [...input.options].find(option => option.defaultSelected)?.value
-                        : input.value !== input.defaultValue;
-                });
+                return end?.defaultValue && (start.value !== start.defaultValue || end.value !== end.defaultValue);
             });
             if (endedPassChanged) {
                 form.querySelector('[data-ops-disclosure="correction"]')?.setAttribute('open','');
@@ -162,20 +158,13 @@
                 form.querySelector('[data-subzero-edit]').hidden = unlocked;
                 form.querySelector('button[type="submit"]').hidden = !unlocked;
             }
-        } else if (form.matches('.neosubzero-treatment-form')) {
+        } else if (form.matches('[data-ops-inline-treatment]')) {
             if (!form.dataset.unlocked) form.dataset.unlocked = form.matches(autosaveSelector) && form.dataset.opsCompleted !== 'true' ? 'true' : 'false';
             const unlocked = form.dataset.unlocked === 'true';
             const names = ['pass1_start', 'pass1_end', 'pass2_start', 'pass2_end'];
-            const useSecond = !form.elements.pass2_plan || form.elements.pass2_plan.value === 'type_iv';
             names.forEach((name, index) => {
-                const enabled = unlocked && (index < 2 || useSecond) && (!index || !!form.elements[names[index-1]].value);
-                form.elements[name].readOnly = !enabled;
-                if (index >= 2) form.elements[name].disabled = !useSecond;
-                const stamp = form.querySelector(`[data-subzero-stamp="${name}"]`);
-                if (stamp) stamp.hidden = !enabled;
+                form.elements[name].readOnly = !unlocked || (index > 0 && !form.elements[names[index-1]].value);
             });
-            form.querySelectorAll('select').forEach(e => { e.disabled = !unlocked; });
-            form.elements.pass2_surface_area.disabled = !unlocked || !useSecond;
 
             const edit = form.querySelector('[data-subzero-edit]');
             const save = form.querySelector('[data-ops-apply-correction]');
@@ -462,7 +451,8 @@
     });
     root.addEventListener('focusout', event => {
         const form = event.target.closest(autosaveSelector);
-        if (!reconcilingPretreat && form && event.target.name === 'notes' && form.dataset.dirty) queuePretreat(form);
+        if (!reconcilingPretreat && form?.dataset.dirty === 'true' &&
+            (event.target.name === 'notes' || event.target.matches('[data-clock-time]'))) queuePretreat(form);
     });
     root.addEventListener('change', async event => {
         if (reconcilingPretreat) return;
@@ -600,17 +590,16 @@
                 const correction = form.elements.correction_reason;
                 if (correction) form.querySelector('[data-ops-disclosure="notes"]')?.setAttribute('open','');
                 if (isPretreat && correction) form.querySelector('[data-ops-disclosure="correction"]').open = true;
-                (correction || form.elements.pass1_surface_area).focus();
+                correction?.focus();
             }
             const editor = inline || pane;
             editor.querySelectorAll('[data-subzero-spray-control]').forEach(e => {e.readOnly=e.dataset.sprayReady==='false';});
             editor.querySelectorAll('[data-subzero-spray-save]').forEach(e => {e.hidden=false;}); return;
         }
-        const stamp = event.target.closest('[data-subzero-deice-stamp], [data-subzero-stamp]');
+        const stamp = event.target.closest('[data-subzero-deice-stamp]');
         if (stamp) {
-            const input = stamp.closest('form').elements[stamp.dataset.subzeroDeiceStamp || stamp.dataset.subzeroStamp];
+            const input = stamp.closest('form').elements[stamp.dataset.subzeroDeiceStamp];
             input.value = window.NeoAppsClockTime.normalize(shared.operationalHHMM()); input.dispatchEvent(new Event('input',{bubbles:true}));
-            if (input.form.matches(autosaveSelector)) queuePretreat(input.form);
         }
     });
     root.addEventListener('submit', async event => {
@@ -630,7 +619,7 @@
         body.set('operation_id',root.dataset.operationId); if (content) body.set('physical_tail',content.dataset.tail);
         const toggle = form.querySelector('[data-ops-quick-toggle]');
         const planned = form.matches('[data-ops-planned]');
-        const quiet = isPretreat && (autosave || planned || form.matches('[data-ops-pretreat-config]'));
+        const quiet = isPretreat && (autosave || planned || form.matches('[data-ops-pretreat-config], [data-ops-inline-treatment]'));
         const toggleError = form.querySelector('[data-ops-toggle-error]');
         if (planned) body.set('planned',toggle.checked ? '1' : '0');
         const key = formKey(form), abort = new AbortController();
@@ -662,13 +651,8 @@
             }
             if (autosave) {
                 form.dataset.savedValues = sentValues;
-                for (const field of form.querySelectorAll('[data-clock-time],select')) {
-                    if (!body.has(field.name)) continue;
-                    if (field.tagName === 'SELECT') {
-                        const currentValue = field.value;
-                        for (const option of field.options) option.defaultSelected = option.value === body.get(field.name);
-                        field.value = currentValue;
-                    } else field.defaultValue = body.get(field.name);
+                for (const field of form.querySelectorAll('[data-clock-time]')) {
+                    if (body.has(field.name)) field.defaultValue = body.get(field.name);
                 }
             }
             if (!autosave || autosaveValues(form) === sentValues) delete form.dataset.dirty;

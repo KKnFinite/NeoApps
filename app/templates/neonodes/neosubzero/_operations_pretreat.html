@@ -9,26 +9,18 @@
 {%- endmacro %}
 {% macro pass_fields(row, number, locked) -%}
     {% set prefix = 'pass' ~ number %}
-    {% set active = number == 1 or row[prefix ~ '_start'] or row[prefix ~ '_end'] or (row.state and (row.state.pass2_plan == 'type_iv' or row.state.pass2_surface_area)) %}
-    <fieldset class="ops-pretreat-pass">
+    {% set treatment = row.primary_passes[number - 1] %}
+    {% set recorded = row.recorded_passes.get(number) %}
+    <fieldset class="ops-pretreat-pass" data-pass="{{ number }}">
         <legend>PASS {{ number }}</legend>
-        <label>Plan<select name="{{ prefix }}_plan" {% if locked %}disabled{% endif %}>
-            {% if number == 1 %}<option value="type_i">Type I</option>
-            {% else %}<option value="">Unused</option><option value="type_iv"{% if active %} selected{% endif %}>Type IV</option>{% endif %}
-        </select></label>
-        <label>Surface<select name="{{ prefix }}_surface_area" {% if locked or not active %}disabled{% endif %}>
-            <option value="">Choose surface</option>
-            {% for value, label in surface_labels.items() %}<option value="{{ value }}"{% if row.state and row.state[prefix ~ '_surface_area'] == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select></label>
+        <div class="ops-pretreat-treatment">
+            <strong>{{ treatment.type }}</strong><span>{{ treatment.surface }}</span>
+            {% if recorded %}<span class="ops-pretreat-review" title="Recorded: {{ recorded.plan or treatment.type }} · {{ recorded.surface or 'Surface unavailable' }}">Review record</span>{% endif %}
+        </div>
         {% for milestone in ('start', 'end') %}
         {% set name = prefix ~ '_' ~ milestone %}
-        {% set enabled = not locked and active and (row[prefix ~ '_start'] if milestone == 'end' else number == 1 or row.pass1_end) %}
-        <div class="ops-pretreat-clock">
-            <label>{{ milestone|upper }}<input name="{{ name }}" value="{{ row[name] }}" inputmode="numeric" maxlength="5" placeholder="HH:MM" data-clock-time{% if not enabled %} readonly{% endif %}></label>
-            <button type="button" aria-label="Set Pass {{ number }} {{ milestone }} to now" title="Use current local time" data-subzero-stamp="{{ name }}"{% if not enabled %} hidden{% endif %}>
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5v4l2.5 1.5"/></svg>
-            </button>
-        </div>
+        {% set enabled = not locked and (row[prefix ~ '_start'] if milestone == 'end' else number == 1 or row.pass1_end) %}
+        <label>{{ milestone|upper }}<input name="{{ name }}" value="{{ row[name] }}" inputmode="numeric" maxlength="5" placeholder="HH:MM" autocomplete="off" data-clock-time{% if not enabled %} readonly{% endif %}></label>
         {% endfor %}
     </fieldset>
 {%- endmacro %}
@@ -48,7 +40,7 @@
                 <button name="action" value="toggle_configured" aria-pressed="{{ 'true' if row.configured else 'false' }}">CONFIGURED</button>
             </form>
             {% endif %}
-            {% if row.completed or row.pass1_start or not can_edit %}<span class="ops-pretreat-state">{{ row.visual_label }}</span>{% endif %}
+            {% if row.completed or row.pass1_start or not can_edit %}<span class="ops-pretreat-state">{{ 'IN PROGRESS' if row.pass1_start and not row.completed else row.visual_label }}</span>{% endif %}
         </div>
         <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" class="neosubzero-treatment-form ops-pretreat-form" data-ops-inline-treatment data-ops-completed="{{ 'true' if row.completed else 'false' }}" {% if can_edit %}data-ops-pretreat-autosave{% endif %}>
             {{ identity(row) }}
@@ -81,6 +73,9 @@
             <summary aria-label="More actions for {{ row.tail }}" title="More actions">⋯</summary>
             <div class="ops-pretreat-menu-panel">
             <a class="ops-staff-link" href="{{ url_for('neosubzero.deice_log', activity='pretreat', tail=row.tail) }}">Treatment history · {{ row.tail }}</a>
+            {% for number, recorded in row.recorded_passes.items() %}
+                <p class="ops-pretreat-review">Review recorded Pass {{ number }} · {{ recorded.plan or row.primary_passes[number - 1].type }} · {{ recorded.surface or 'Surface unavailable' }}{% if recorded.stored_surface %} · Stored surface {{ recorded.stored_surface }}{% endif %}{% if recorded.stored_plan_conflict %} · Stored plan differs{% endif %}</p>
+            {% endfor %}
             {% if can_edit and (row.pass1_start or row.pass2_start or row.completed) %}<button type="button" data-ops-pretreat-correction>Correct recorded treatment</button>{% endif %}
             {% if row.pass1_start or row.pass2_start %}{{ spray_position_forms(row, can_edit, board) }}{{ team_controls(row, board) }}{% endif %}
             </div>

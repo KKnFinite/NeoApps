@@ -55,12 +55,12 @@ class Release3Test(r2.Release2Test):
     def test_report_includes_pretreat_but_never_unsprayed_clear(self):
         f=self.f
         from app.neonodes.neosubzero.services import mutate_pretreat
-        mutate_pretreat(f.operation,f.alpha,'save_treatment',dict(pass1_surface_area='wings_tail',pass2_surface_area='entire_aircraft',pass1_start='2100',pass1_end='2102',pass2_start='2103',pass2_end='2106'))
+        mutate_pretreat(f.operation,f.alpha,'save_treatment',dict(pass1_start='2100',pass1_end='2102',pass2_start='2103',pass2_end='2106'))
         mutate_departure_deice(f.operation,f.alpha,'clear',{});db.session.commit()
         rows=actual_passes(f.operation)
         self.assertEqual(len(rows),2);self.assertEqual({r['activity'] for r in rows},{'pretreat'})
         self.assertEqual(actual_passes(f.operation,activity='departure'),[])
-        self.assertEqual(rows[1]['surface'],'ENTIRE AIRCRAFT')
+        self.assertEqual(rows[1]['surface'],'WINGS + TAIL')
 
     def test_in_progress_evidence_retained_without_fake_end_or_participants(self):
         event,_=self.flow(end='');row=actual_passes(self.f.operation)[0]

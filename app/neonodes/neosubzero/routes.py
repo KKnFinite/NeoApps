@@ -18,7 +18,7 @@ from app.models import (
 from app.neonodes.neosubzero import bp
 from app.neonodes.neosubzero.services import (
     PRETREAT_REFRESH_KEY, SURFACE_LABELS, NeoSubZeroPretreatError,
-    current_neosubzero_operation, mutate_pretreat, pretreat_context,
+    current_neosubzero_operation, mutate_pretreat, pretreat_reason,
     pretreat_refresh_status, pretreat_revision, subzero_refresh_status,
 )
 from app.services.live_screen_refresh import live_screen_refresh_status
@@ -1136,8 +1136,7 @@ def pretreat_mutate():
             raise NeoSubZeroPretreatError("This departure is no longer open for Pretreat.")
         values = request.form.to_dict()
         if values.get("action") == "save_treatment":
-            from app.neonodes.neosubzero.services import DEFAULT_PRETREAT_REASON
-            values["reason_for_application"] = DEFAULT_PRETREAT_REASON
+            values["reason_for_application"] = pretreat_reason(state)
         state = mutate_pretreat(
             operation,
             mission,
@@ -1148,8 +1147,7 @@ def pretreat_mutate():
         )
         db.session.commit()
         if request.endpoint == "neosubzero.operations_mutate":
-            return jsonify(ok=True, message="PRETREAT SAVED.", version=entity_version(state))
-        flash("PRETREAT SAVED.", "success")
+            return jsonify(ok=True, version=entity_version(state))
     except (ValueError, IntegrityError) as exc:
         db.session.rollback()
         message = (

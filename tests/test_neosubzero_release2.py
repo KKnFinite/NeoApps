@@ -240,7 +240,7 @@ class Release2Test(unittest.TestCase):
         f=self.f
         set_neosubzero_ucc_assignment(f.operation,'Alpha',1,'driver',f.permanent)
         db.session.add(NeoSubZeroUccTruckAssignment(sort_date_operation_id=f.operation.id,ramp='Alpha',position_number=1,truck_number='PT12'))
-        values=dict(pass1_surface_area='wings_only',pass2_surface_area='entire_aircraft',pass1_start='2100',pass1_end='2102',pass2_start='2103',pass2_end='2106')
+        values=dict(pass1_start='2100',pass1_end='2102',pass2_start='2103',pass2_end='2106')
         state=mutate_pretreat(f.operation,f.alpha,'save_treatment',values);db.session.commit()
         self.assertEqual(participation_query(state,'pretreat').count(),2)
         self.assertTrue(all(r.departure_deice_event_id is None and r.gallons is None for r in participation_query(state,'pretreat')))

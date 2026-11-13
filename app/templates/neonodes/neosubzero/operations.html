@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261112-pretreat-grid-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261113-pretreat-fixed-v1') }}">
 <section class="neosubzero-shell neosubzero-operations" data-ops-workspace data-mode="{{ mode }}" data-layout="{{ 'list' if mode == 'pretreat' else preferences.layout }}" data-ramp="{{ preferences.ramp }}" data-ramp-override="{{ ramp_override }}" data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}" data-timezone="{{ gateway_timezone }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.operations_revision_endpoint') }}" data-workspace-url="{{ url_for('neosubzero.operations') }}" data-preference-url="{{ url_for('neosubzero.operations_preferences_mutate') }}" data-mutate-url="{{ url_for('neosubzero.operations_mutate') }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}">
     <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE DISPATCH</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
     {% include 'neonodes/neosubzero/_nav.html' %}
@@ -48,5 +48,5 @@
     </aside>
 </section>
 <script src="{{ url_for('static',live='20261101-poll-v1', filename='js/neosubzero_departure.js',ops='20261112-shared-forms-v3') }}" defer></script>
-<script src="{{ url_for('static',live='20261101-poll-v1', filename='js/neosubzero_operations.js',v='20261112-pretreat-grid-v1') }}" defer></script>
+<script src="{{ url_for('static',live='20261101-poll-v1', filename='js/neosubzero_operations.js',v='20261113-pretreat-fixed-v1') }}" defer></script>
 {% endblock %}

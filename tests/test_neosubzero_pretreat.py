@@ -53,9 +53,9 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         mutate_pretreat(self.operation, self.departure, "toggle_configured", {}, state); self.assertIsNone(state.configured_at_utc)
         db.session.commit()
         with self.assertRaises(NeoSubZeroPretreatError):
-            mutate_pretreat(self.operation, self.departure, "save_treatment", {"pass1_surface_area":"wings_only","pass2_surface_area":"entire_aircraft","pass1_start":"2300","pass1_end":"2259"}, state)
+            mutate_pretreat(self.operation, self.departure, "save_treatment", {"pass1_start":"2300","pass1_end":"2259"}, state)
         db.session.rollback()  # Match the route's rejected-mutation transaction boundary.
-        values = {"pass1_surface_area":"wings_only","pass2_surface_area":"wings_tail","pass1_start":"2300","pass1_end":"2310","pass2_start":"2310","pass2_end":"2320","notes":"  done  "}
+        values = {"pass1_start":"23:59","pass1_end":"00:00","pass2_start":"00:00","pass2_end":"00:00","notes":"  done  "}
         mutate_pretreat(self.operation, self.departure, "save_treatment", values, state); db.session.flush()
         tail_state = SortDateTailState.query.filter_by(tail_number="T1").one(); self.assertTrue(tail_state.pretreat_status); self.assertEqual(state.notes,"done")
         values["pass2_end"] = ""; values["correction_reason"]="Do not erase real treatment"
@@ -69,6 +69,46 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         self.assertEqual(_parse_hhmm("09:30", self.operation, self.departure), expected)
         with self.assertRaises(NeoSubZeroPretreatError):
             _parse_hhmm("2360", self.operation, self.departure)
+
+    def test_existing_configuration_and_nonstandard_treatment_survive_correction(self):
+        start = _parse_hhmm("23:59", self.operation, self.departure)
+        end = _parse_hhmm("00:00", self.operation, self.departure)
+        config = start - timedelta(minutes=5)
+        state = NeoSubZeroPretreatState(
+            sort_date_operation_id=self.operation.id, tail_number="T1", configured_at_utc=config,
+            pass1_started_at_utc=start, pass1_ended_at_utc=end, pass1_surface_area="wings_only",
+            pass2_plan="unused", pass_evidence={"1": {"pass_type": "type_i", "surface": "wings_only"}},
+        )
+        db.session.add(state)
+        db.session.commit()
+        row = pretreat_context(self.gateway, self.operation)["rows"][0]
+        self.assertEqual(row["recorded_passes"][1]["surface"], "Wings Only")
+        self.assertEqual(row["recorded_passes"][2]["plan"], "Unused")
+        self.assertFalse(row["completed"])
+
+        values = dict(pass1_start="23:59", pass1_end="00:00", pass2_start="00:00", pass2_end="00:00")
+        mutate_pretreat(self.operation, self.departure, "save_treatment", values, state)
+        db.session.commit()
+        self.assertEqual(state.configured_at_utc, config)
+        self.assertEqual(state.pass1_surface_area, "wings_only")
+        self.assertEqual(state.pass_evidence["1"]["surface"], "wings_only")
+        self.assertEqual(state.pass2_surface_area, "wings_tail")
+        self.assertEqual(state.pass2_plan, "type_iv")
+        self.assertTrue(pretreat_context(self.gateway, self.operation)["rows"][0]["completed"])
+        with self.assertRaisesRegex(NeoSubZeroPretreatError, "correcting completed"):
+            mutate_pretreat(self.operation, self.departure, "save_treatment", {**values, "pass2_end": "00:01"}, state)
+        mutate_pretreat(self.operation, self.departure, "save_treatment", {
+            **values, "pass2_end": "00:01", "correction_reason": "Verified recorded end time"
+        }, state)
+        self.assertEqual(state.configured_at_utc, config)
+        self.assertEqual(state.pass_evidence["1"]["surface"], "wings_only")
+
+    def test_first_start_keeps_existing_explicit_configuration(self):
+        state = mutate_pretreat(self.operation, self.departure, "toggle_configured", {})
+        original = state.configured_at_utc
+        self.assertIsNone(state.pass1_started_at_utc)
+        mutate_pretreat(self.operation, self.departure, "save_treatment", {"pass1_start": "23:10"}, state)
+        self.assertEqual(state.configured_at_utc, original)
 
     def test_revision_changes_with_shared_pretreat_state(self):
         before = pretreat_revision(self.gateway, self.operation)
@@ -98,8 +138,6 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
             "reason_for_application", NeoSubZeroPretreatState.__table__.columns
         )
         values = {
-            "pass1_surface_area": "wings_only",
-            "pass2_surface_area": "wings_tail",
             "pass1_start": "",
             "pass1_end": "",
             "pass2_start": "",

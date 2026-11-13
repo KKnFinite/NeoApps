@@ -41,21 +41,41 @@ class OperationsTest(unittest.TestCase):
                 self.assertEqual(page.data.count(b'data-ops-primary-pass="2"'), 3)
         self.assertEqual(self.client.get('/neosubzero/coordinator').status_code,200)
 
-    def test_inline_pretreat_records_reason_and_does_not_invent_an_unused_pass(self):
+    def test_inline_pretreat_records_same_minute_and_configures_atomically(self):
         values = dict(mode='pretreat', action='save_treatment', expected_version='',
-            pass1_plan='type_i', pass2_plan='', pass1_surface_area='wings_only',
-            pass1_start='2200', pass1_end='2210', reason_for_application='Outbound weather')
-        unsupported = self.post('pretreat/mutate', **{**values, 'pass1_plan': 'type_iv'})
-        self.assertEqual(unsupported.status_code, 409)
-        equal_times = self.post('pretreat/mutate', **{**values, 'pass1_end': '2200'})
-        self.assertEqual(equal_times.status_code, 409)
-        self.assertEqual(self.post('pretreat/mutate', **values).status_code, 200)
+                      pass1_start='2200', pass1_end='2200', reason_for_application='Outbound weather')
+        for invalid in ({'pass1_plan': 'type_iv'}, {'pass2_plan': ''}, {'pass2_surface_area': 'wings_only'},
+                        {'pass1_start': '2260'}, {'pass1_end': '2159'}):
+            self.assertEqual(self.post('pretreat/mutate', **{**values, **invalid}).status_code, 409)
+            self.assertEqual(NeoSubZeroPretreatState.query.count(), 0)
+        response = self.post('pretreat/mutate', **values)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('message', response.json)
         state = NeoSubZeroPretreatState.query.one()
         self.assertEqual(state.reason_for_application, 'Pretreat')
         self.assertEqual(state.pass_evidence['1']['reason'], 'Pretreat')
         self.assertEqual(set(state.pass_evidence), {'1'})
-        self.assertIsNone(state.pass2_surface_area)
+        self.assertEqual(state.pass1_surface_area, 'wings_tail')
+        self.assertEqual(state.pass2_surface_area, 'wings_tail')
+        self.assertEqual(state.pass2_plan, 'type_iv')
         self.assertIsNone(state.pass2_started_at_utc)
+        self.assertEqual(state.configured_at_utc, state.pass1_started_at_utc)
+        self.assertEqual(state.pass1_started_at_utc, state.pass1_ended_at_utc)
+        entry = NeoSubZeroAuditEntry.query.filter_by(action='pretreat_save_treatment').one()
+        self.assertEqual(entry.actor_user_id, self.user.id)
+        self.assertEqual(entry.after_values['configured_at_utc'], entry.after_values['pass1_started_at_utc'])
+        self.assertFalse(SortDateTailState.query.filter_by(tail_number=state.tail_number, pretreat_status=True).count())
+        with patch('app.services.neosubzero_participation.snapshot_treatment_passes', side_effect=ValueError('Failed')):
+            failed = self.post('pretreat/mutate', **{**values, 'mission_id': self.f.bravo.id,
+                               'physical_tail': self.f.bravo.assigned_tail_number})
+        self.assertEqual(failed.status_code, 409)
+        self.assertEqual(NeoSubZeroPretreatState.query.count(), 1)
+        self.assertEqual(self.post('pretreat/mutate', **{**values, 'expected_version': response.json['version'],
+                         'pass2_start': '2200', 'pass2_end': '2200'}).status_code, 200)
+        self.assertEqual(state.pass2_started_at_utc, state.pass2_ended_at_utc)
+        self.assertEqual(state.pass1_started_at_utc, state.pass2_started_at_utc)
+        self.assertEqual(state.pass_evidence['2']['pass_type'], 'type_iv')
+        self.assertTrue(SortDateTailState.query.filter_by(tail_number=state.tail_number).one().pretreat_status)
 
     def test_pretreat_autosave_persists_plan_only_and_notes_with_versions(self):
         values = dict(mode='pretreat', action='save_treatment', pass1_plan='type_i', pass2_plan='type_iv')
@@ -64,12 +84,12 @@ class OperationsTest(unittest.TestCase):
         state = NeoSubZeroPretreatState.query.one()
         original = response.json['version']
         self.assertEqual(state.pass2_plan, 'type_iv')
-        self.assertIsNone(state.pass1_surface_area)
+        self.assertEqual(state.pass1_surface_area, 'wings_tail')
         self.assertIsNone(state.pass_evidence)
         initial_audits = NeoSubZeroAuditEntry.query.count()
         self.assertEqual(self.post('pretreat/mutate', **values, expected_version=original).json['version'], original)
         self.assertEqual(NeoSubZeroAuditEntry.query.count(), initial_audits)
-        bad = self.post('pretreat/mutate', **values, expected_version=original, pass1_start='2100')
+        bad = self.post('pretreat/mutate', **values, expected_version=original, pass2_start='2100')
         self.assertEqual(bad.status_code, 409)
         self.assertIsNone(state.pass1_started_at_utc)
         notes = self.post('pretreat/mutate', mode='pretreat', action='save_notes',
