@@ -240,7 +240,7 @@
 <section class="neosubzero-spray-positions" data-subzero-spray-positions>
 <h3>AIRCRAFT PASS PARTICIPATION</h3>
 {% for pass_row in row.application_passes %}
-<section class="neosubzero-spray-pass">
+<section class="neosubzero-spray-pass{% if pass_row.type in ('Type I', 'Type IV') %} {{ 'type-iv' if pass_row.type == 'Type IV' else 'type-i' }}{% endif %}">
 <header><strong>PASS {{ pass_row.number }} · {{ pass_row.type }}</strong><span>{{ pass_row.start or '—' }}–{{ pass_row.end or '—' }}</span></header>
 {% if pass_row.participation_review %}<p class="ops-review">Official participation missing — confirm actual truck, crew and product through an audited correction. Current staffing is not historical proof.</p>{% endif %}
 <div class="neosubzero-spray-position-grid">

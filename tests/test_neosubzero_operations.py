@@ -180,6 +180,20 @@ class OperationsTest(unittest.TestCase):
         row=next(r for r in operations_context(self.f.gateway,self.f.operation,'outbound')['rows'] if r['mission_id']==self.f.alpha.id)
         self.assertEqual(row['visual_label'],'CONFIGURED')
 
+    def test_outbound_mobile_pretreat_uses_milestones_independently_of_departure(self):
+        from app.neonodes.neosubzero.services import mutate_pretreat
+
+        mission = self.f.alpha
+        fields = ('pass1_start', 'pass1_end', 'pass2_start', 'pass2_end')
+        mutate_pretreat(self.f.operation, mission, 'save_treatment', dict.fromkeys(fields, '22:15'))
+        db.session.flush()
+        SortDateTailState.query.filter_by(tail_number=mission.assigned_tail_number).one().pretreat_status = False
+        db.session.commit()
+        row = next(row for row in operations_context(self.f.gateway, self.f.operation, 'outbound')['rows']
+                   if row['mission_id'] == mission.id)
+        self.assertTrue(row['pretreat_milestones_complete'])
+        self.assertEqual(row['visual_state'], 'untreated')
+
     def test_existing_handler_fin_clear_and_duplicate_submission(self):
         result=self.post(action='initial_contact');self.assertEqual(result.status_code,200,result.json)
         event=NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.f.alpha.id).one()

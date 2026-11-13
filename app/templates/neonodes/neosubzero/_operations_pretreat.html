@@ -11,7 +11,7 @@
     {% set prefix = 'pass' ~ number %}
     {% set treatment = row.primary_passes[number - 1] %}
     {% set recorded = row.recorded_passes.get(number) %}
-    <fieldset class="ops-pretreat-pass" data-pass="{{ number }}">
+    <fieldset class="ops-pretreat-pass {{ 'type-iv' if treatment.type == 'Type IV' else 'type-i' }}" data-pass="{{ number }}">
         <legend>PASS {{ number }}</legend>
         <div class="ops-pretreat-treatment">
             <strong>{{ treatment.type }}</strong><span>{{ treatment.surface }}</span>

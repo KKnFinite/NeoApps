@@ -17,7 +17,7 @@
 {% for pass in passes %}<article class="sz-log-pass" data-report-pass="{{ pass.id }}">
 <header><strong>{{ pass.tail }} · {{ pass.flight or 'ORIGINAL FLIGHT NOT RECORDED' }}</strong><span>{{ pass.activity|upper }} · PASS {{ pass.pass_number }}</span><button type="button" data-spray-copy="sz-pass-{{ loop.index }}">COPY PASS</button></header>
 <pre id="sz-pass-{{ loop.index }}" hidden>{{ pass.copy_text }}</pre>
-<div class="sz-pass-facts"><span>{{ pass.type or 'TYPE NOT RECORDED' }} · {{ pass.fluid or 'PRODUCT NOT RECORDED' }} · {{ pass.concentration if pass.concentration is not none else '—' }}%</span><span>{{ pass.surface or 'SURFACE NOT RECORDED' }}</span><span>{{ pass.ramp or 'RAMP NOT RECORDED' }} / {{ pass.location or 'LOCATION NOT RECORDED' }}</span><span>{{ pass.start }}–{{ pass.end }}</span></div>
+<div class="sz-pass-facts{% if pass.type in ('TYPE I', 'TYPE IV') %} {{ 'type-iv' if pass.type == 'TYPE IV' else 'type-i' }}{% endif %}"><span>{{ pass.type or 'TYPE NOT RECORDED' }} · {{ pass.fluid or 'PRODUCT NOT RECORDED' }} · {{ pass.concentration if pass.concentration is not none else '—' }}%</span><span>{{ pass.surface or 'SURFACE NOT RECORDED' }}</span><span>{{ pass.ramp or 'RAMP NOT RECORDED' }} / {{ pass.location or 'LOCATION NOT RECORDED' }}</span><span>{{ pass.start }}–{{ pass.end }}</span></div>
 <p>TEMP {{ pass.temperature or '—' }} · DEW {{ pass.dew_point or '—' }} · PRECIP {{ pass.precipitation or '—' }} · REASON {{ pass.reason or 'NOT RECORDED' }}</p>
 <small>Weather/context: {{ pass.weather_label }} · Original mission {{ pass.original_mission_id or 'NOT RECORDED' }}</small>
 {% if pass.notes %}<p>{{ pass.notes }}</p>{% endif %}

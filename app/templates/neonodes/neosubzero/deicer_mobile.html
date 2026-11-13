@@ -15,7 +15,7 @@
 <article class="sz-aircraft state-{{ row.visual_state }}" data-driver-aircraft="{{ row.mission_id }}">
 <header><strong>{{ row.tail }} <span>{{ row.flight }}</span></strong><b>{{ row.visual_label }}</b></header>
 <div class="sz-aircraft-facts"><span>{{ row.parking or '—' }}</span><span>ETD {{ row.etd }}</span>{% if row.pretreat_complete %}<span>PRETREATED</span>{% endif %}</div>
-{% for pass in row.primary_passes %}<p class="sz-pass-line"><b>PASS {{ pass.number }}</b> {{ (pass.type or '—')|upper }} · {{ (pass.surface or '—')|upper }}</p>{% endfor %}
+{% for pass in row.primary_passes %}<p class="sz-pass-line{% if pass.type in ('Type I', 'Type IV') %} {{ 'type-iv' if pass.type == 'Type IV' else 'type-i' }}{% endif %}"><b>PASS {{ pass.number }}</b> {{ (pass.type or '—')|upper }} · {{ (pass.surface or '—')|upper }}</p>{% endfor %}
 {% set own=namespace(count=0) %}{% for record in own_records if (record.tail_number_snapshot or (record.pretreat_state or record.departure_deice_event).tail_number)==row.tail %}
 {% set own.count=own.count+1 %}{{ gallons_entry(record) }}{% endfor %}
 {% if not own.count %}<small>No official truck/pass participation recorded for you on this aircraft. Gallons become available after the coordinator records END.</small>{% endif %}

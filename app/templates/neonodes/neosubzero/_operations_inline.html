@@ -5,7 +5,13 @@
     {% else %}
     <span class="ops-mobile-times"><strong>{{ row.destination }}</strong><small>ETD {{ row.etd }}</small></span>
     {% endif %}
-    <span class="ops-mobile-status">{{ row.visual_label }}{% if mode == 'outbound' and row.pretreat_complete %}<small>PRETREATED</small>{% endif %}</span>
+    <span class="ops-mobile-status">
+        {% if mode == 'pretreat' %}{{ row.visual_label }}
+        {% else %}
+            {% if row.visual_state != 'untreated' %}<span>{{ 'DEICE PLANNED' if row.visual_state == 'planned' else row.visual_label }}</span>{% endif %}
+            {% if row.pretreat_milestones_complete %}<strong class="ops-mobile-pretreated">PRETREATED</strong>{% endif %}
+        {% endif %}
+    </span>
     <span class="ops-chevron" aria-hidden="true"></span>
 {% endmacro %}
 

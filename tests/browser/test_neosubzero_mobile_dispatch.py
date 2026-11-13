@@ -7,12 +7,105 @@ from urllib.parse import parse_qs, urlsplit
 from playwright.sync_api import expect
 
 from app.extensions import db
-from app.models import NeoSubZeroAuditEntry, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateMission, SortDateOperation, SortDateParkingAssignment
+from app.models import NeoSubZeroAuditEntry, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateMission, SortDateOperation, SortDateParkingAssignment, SortDateTailState
+from app.neonodes.neosubzero.services import mutate_pretreat
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
 from tests.browser import test_neosubzero_operations as fixtures
+from tests import test_neosubzero_ucc
 
 
 class MobileDispatchBrowserTest(unittest.TestCase):
+    def exercise_status_and_fluid_colors(self, engine):
+        case = fixtures.OperationsBrowserTest()
+        case.setUpClass()
+        self.addCleanup(case.tearDownClass)
+        with case.app.app_context():
+            for mission_id in case.missions[:2]:
+                mission = db.session.get(SortDateMission, mission_id)
+                mission.actual_block_out_datetime_utc = None
+                NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mission_id).delete()
+            db.session.commit()
+
+        browser = getattr(case.pw, engine).launch()
+        self.addCleanup(browser.close)
+        page = browser.new_page(viewport={"width": 390, "height": 844}, has_touch=True)
+        case.login(page)
+        case.ready(page, "/neosubzero/operations?mode=outbound")
+        row = page.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')
+        summary = row.locator(".ops-mobile-outbound > summary")
+        status = summary.locator(".ops-mobile-status")
+        badge = status.locator(".ops-mobile-pretreated")
+        untreated = page.locator(f'[data-ops-row][data-mission-id="{case.missions[1]}"] .ops-mobile-status')
+        expect(status).to_have_text("")
+        expect(untreated).to_have_text("")
+        height = summary.evaluate("e => e.offsetHeight")
+
+        with case.app.app_context():
+            operation = db.session.get(SortDateOperation, case.operation_id)
+            mission = db.session.get(SortDateMission, case.missions[0])
+            fields = ("pass1_start", "pass1_end", "pass2_start", "pass2_end")
+            mutate_pretreat(operation, mission, "save_treatment", dict.fromkeys(fields, "21:00"))
+            db.session.flush()
+            SortDateTailState.query.filter_by(tail_number=mission.assigned_tail_number).one().pretreat_status = False
+            db.session.commit()
+
+        expect(status).to_have_text("PRETREATED", timeout=12000)
+        expect(badge).to_have_css("font-weight", "800")
+        expect(badge).to_have_css("color", "rgb(167, 210, 255)")
+        self.assertEqual(summary.evaluate("e => e.offsetHeight"), height)
+        evidence = Path("instance/browser-evidence/subzero-mobile-outbound-status")
+        evidence.mkdir(parents=True, exist_ok=True)
+        for width in (375, 390, 430):
+            page.set_viewport_size({"width": width, "height": 844})
+            expect(badge).to_be_visible()
+            expect(untreated).to_have_text("")
+            self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth - innerWidth"), 1)
+            page.screenshot(path=str(evidence / f"{engine}-after-{width}.png"))
+
+        with case.app.app_context():
+            builder = test_neosubzero_ucc.NeoSubZeroUccTest()
+            builder.operation = db.session.get(SortDateOperation, case.operation_id)
+            mission = db.session.get(SortDateMission, case.missions[0])
+            event = builder._deice_event(mission, "configured", configured_at=datetime(2026, 10, 23, 4))
+            event.treatment_plan = "two_type_i"
+            event_id = event.id
+            db.session.commit()
+        expect(status.locator("span")).to_have_text("CONFIGURED", timeout=12000)
+        expect(badge).to_have_count(1)
+        self.assertEqual(summary.evaluate("e => e.offsetHeight"), height)
+        summary.click()
+        form = row.locator(".ops-mobile-outbound [data-subzero-deice-form]")
+        pass1 = form.locator('[data-subzero-pass="1"]')
+        pass2 = form.locator('[data-subzero-pass="2"]')
+        expect(pass1).to_have_css("background-color", "rgb(58, 42, 36)")
+        expect(pass2).to_have_css("background-color", "rgb(58, 42, 36)")
+        form.locator('[name="treatment_plan"]').select_option("type_i_type_iv")
+        expect(pass2).to_have_css("background-color", "rgb(24, 53, 47)")
+        expect(pass2.locator("legend")).to_contain_text("TYPE IV")
+        page.screenshot(path=str(evidence / f"{engine}-fluid-types-430.png"))
+        page.once("dialog", lambda dialog: dialog.accept())
+        # Navigation starts a clean synthetic session after the unsaved plan preview.
+        page.goto(page.url.split("&mission=")[0])
+        expect(page.locator('[data-ops-workspace]')).to_have_attribute("data-ready", "true")
+        for label, change in (
+            ("DEICING", {"pass1_started_at_utc": datetime(2026, 10, 23, 4, 1)}),
+            ("NEGATIVE DEICE", {"status": "negative", "pass1_started_at_utc": None}),
+            ("CLEARED · RADIO PENDING", {"status": "cleared", "radio_state": "pending"}),
+        ):
+            with case.app.app_context():
+                event = db.session.get(NeoSubZeroDepartureDeiceEvent, event_id)
+                for field, value in change.items():
+                    setattr(event, field, value)
+                db.session.commit()
+            expect(status.locator("span")).to_have_text(label, timeout=12000)
+            expect(badge).to_have_count(1)
+
+    def test_status_and_fluid_colors_chromium(self):
+        self.exercise_status_and_fluid_colors("chromium")
+
+    def test_status_and_fluid_colors_webkit(self):
+        self.exercise_status_and_fluid_colors("webkit")
+
     def exercise(self, engine):
         case = fixtures.OperationsBrowserTest()
         case.setUpClass()

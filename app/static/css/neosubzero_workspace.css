@@ -8,6 +8,12 @@
     --subzero-negative:#C34854; --subzero-negative-border:#d47b84;
     --subzero-gone:#687480; --subzero-gone-border:#929ba4;
     --subzero-status-dark:#101b26; --subzero-status-light:#fff;
+    --subzero-fin-text:#a7d2ff;
+}
+.blueprint-neosubzero .type-i { --subzero-pass-bg:#3a2a24; --subzero-pass-edge:#986446; }
+.blueprint-neosubzero .type-iv { --subzero-pass-bg:#18352f; --subzero-pass-edge:#4d846c; }
+.blueprint-neosubzero :is(.neosubzero-deice-pass,.neosubzero-pass,.neosubzero-spray-pass,.neosubzero-deicer-pass,.sz-pass-line,.sz-pass-facts,.sz-gallons):is(.type-i,.type-iv) {
+    background:var(--subzero-pass-bg); border-color:var(--subzero-pass-edge);
 }
 .blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-planned,.state-deice-planned,.state-pretreat-planned) {
     --aircraft-fill:var(--subzero-planned); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-planned-border);

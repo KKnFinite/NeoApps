@@ -1,6 +1,6 @@
 {% macro gallons_entry(record) %}
 {% set parent=record.pretreat_state or record.departure_deice_event %}
-<section class="sz-gallons" data-own-participant="{{ record.id }}">
+<section class="sz-gallons{% if record.pass_type in ('type_i', 'type_iv') %} {{ 'type-iv' if record.pass_type == 'type_iv' else 'type-i' }}{% endif %}" data-own-participant="{{ record.id }}">
 <strong>TRUCK {{ record.truck_number_snapshot }} · PASS {{ record.pass_number }} · {{ 'TYPE IV' if record.pass_type=='type_iv' else 'TYPE I' }}</strong>
 <span>{{ {'wings_only':'WINGS ONLY','wings_tail':'WINGS + TAIL','entire_aircraft':'ENTIRE AIRCRAFT'}.get(record.surface_area,'SURFACE NOT RECORDED') }} · {{ 'PRETREAT' if record.pretreat_state_id else 'DEPARTURE' }}</span>
 <small>{{ record.flight_number_snapshot or 'ORIGINAL FLIGHT NOT RECORDED' }} · {{ record.driver_name_snapshot or 'DRIVER NOT RECORDED' }} / {{ record.flyer_name_snapshot or 'FLYER NOT RECORDED' }} · {{ record.started_at_utc|local_time(record.timezone_snapshot) }}–{{ record.ended_at_utc|local_time(record.timezone_snapshot) }}</small>

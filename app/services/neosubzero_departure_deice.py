@@ -530,6 +530,8 @@ def _departure_row(
     settings,
     now_utc,
 ):
+    from app.neonodes.neosubzero.services import pretreat_complete as has_complete_pretreat
+
     timing = mission_display_timing_data(mission, operation)
     adjusted = timing.get("adjusted_planned_departure_time")
     base_local = timing.get("base_planned_departure_time")
@@ -620,6 +622,7 @@ def _departure_row(
         "block_out_at_utc": block_out,
         "block_out_variance": _variance(mission.planned_datetime_utc, block_out),
         "pretreat_complete": pretreat_complete,
+        "pretreat_milestones_complete": has_complete_pretreat(pretreat),
         "pretreat_configured": bool(
             pretreat and getattr(pretreat, "configured_at_utc", None)
         ),
