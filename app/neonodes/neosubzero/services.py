@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, literal, select, union_all
@@ -51,13 +51,22 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
         and str(m.departure_status or "scheduled").strip().lower() not in {"cancelled", "departed"}
     ]
     arrivals_by_tail = {}
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     for mission in missions:
         tail = _tail(mission.assigned_tail_number)
         if mission.mission_type != "arrival" or not tail or mission.arrival_status == "cancelled":
             continue
-        value = mission.eta_datetime_utc
-        if tail not in arrivals_by_tail or (value is not None and (arrivals_by_tail[tail] is None or value < arrivals_by_tail[tail])):
-            arrivals_by_tail[tail] = value
+        # Keep the existing earliest ETA for display, Ground Time and ordering.
+        # Prefer confirmed evidence only when the ETA is otherwise identical.
+        block_in = mission.actual_block_in_datetime_utc
+        confirmed = mission.arrival_status in {"arrived", "unloaded"} or (
+            block_in is not None and block_in <= now_utc
+        )
+        previous = arrivals_by_tail.get(tail)
+        if previous is None or (mission.eta_datetime_utc or datetime.max, not confirmed) < (
+            previous[0] or datetime.max, not previous[1]
+        ):
+            arrivals_by_tail[tail] = (mission.eta_datetime_utc, confirmed)
     tail_keys = {_tail(m.assigned_tail_number) for m in departures if _tail(m.assigned_tail_number)}
     states = {_tail(row.tail_number): row for row in NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id).all()}
     tail_states = {_tail(row.tail_number): row for row in SortDateTailState.query.filter_by(sort_date=operation.sort_date, gateway_code=operation.gateway_code, sort_name=operation.sort_name).all() if _tail(row.tail_number) in tail_keys}
@@ -65,7 +74,7 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
     rows = []
     for mission in departures:
         tail = _tail(mission.assigned_tail_number)
-        inbound_eta = arrivals_by_tail.get(tail)
+        inbound_eta, inbound_arrived = arrivals_by_tail.get(tail, (None, False))
         outbound_std = mission.planned_datetime_utc
         state = states.get(tail)
         tail_state = tail_states.get(tail)
@@ -73,6 +82,7 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
         completed = pretreat_complete(state)
         rows.append({
             "mission_id": mission.id, "tail": tail or "-", "inbound_eta": format_local_hhmm(inbound_eta, mission.timezone or None),
+            "inbound_arrived": inbound_arrived,
             "tail_status": tail_operational_status_label(tail_operational_status(tail_state, assignment=assignment)) or "NORMAL",
             "outbound_std": format_local_hhmm(outbound_std, mission.timezone or None), "parking": assignment.position_code if assignment else "TBD",
             "ground_time": _ground_time(inbound_eta, outbound_std), "state": state, "planned": bool(state and state.pretreat_planned),

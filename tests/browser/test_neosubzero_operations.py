@@ -54,10 +54,13 @@ class OperationsBrowserTest(unittest.TestCase):
             inbound.mission_type='arrival';inbound.origin='SDF'
             inbound.eta_datetime_utc=datetime(2026,10,23,2,35)
             inbound.planned_datetime_utc=datetime(2026,10,23,2,30)
+            cls.inbound_id=inbound.id
             cls.flow_id=mission.id;db.session.commit()
 
     def seed(self):
         with self.app.app_context():
+            inbound=db.session.get(SortDateMission,self.inbound_id)
+            inbound.arrival_status='scheduled'
             NeoSubZeroUserPreference.query.delete();NeoSubZeroPretreatState.query.delete();SortDateTailState.query.delete()
             NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.flow_id).delete()
             for index,mid in enumerate(self.missions):
@@ -237,6 +240,27 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(page.locator('[data-ops-row]:visible')).to_have_count(1)
             notes.fill('Concurrent creation draft')
             notes.focus()
+            scroll = page.evaluate('window.scrollY')
+            main_requests = []
+            def watch_navigation(request):
+                if request.is_navigation_request():
+                    main_requests.append(request.url)
+            page.on('request', watch_navigation)
+            with self.app.app_context():
+                db.session.get(SortDateMission,self.inbound_id).arrival_status='arrived'
+                db.session.commit()
+            arrival = row.locator('.ops-mobile-times')
+            expect(arrival.locator('.ops-pretreat-arrived')).to_have_text('ARRIVED',timeout=12000)
+            expect(arrival.locator('.ops-pretreat-arrived')).to_have_css('color','rgb(143, 255, 168)')
+            expect(arrival.locator('strong')).to_have_text('A04')
+            expect(arrival).to_contain_text('GT: 2:45')
+            expect(arrival).not_to_contain_text('ETA')
+            expect(notes).to_be_focused()
+            expect(notes).to_have_value('Concurrent creation draft')
+            expect(search).to_have_value('ups201 A04')
+            self.assertAlmostEqual(page.evaluate('window.scrollY'),scroll,delta=1)
+            self.assertEqual(main_requests, [])
+            page.remove_listener('request', watch_navigation)
             with self.app.app_context():
                 db.session.add(NeoSubZeroPretreatState(sort_date_operation_id=self.operation_id,tail_number='N441UP',pretreat_planned=True))
                 db.session.commit()
@@ -286,6 +310,17 @@ class OperationsBrowserTest(unittest.TestCase):
             self.assertGreater(green[1],green[2])
             self.assertNotEqual(background(row),green)
             page.set_viewport_size({'width':1366,'height':900})
+            desktop_arrival = row.locator('[data-ops-pretreat-location]')
+            expect(desktop_arrival.locator('strong')).to_have_text('A04')
+            expect(desktop_arrival.locator('.ops-pretreat-arrived')).to_have_css('color','rgb(143, 255, 168)')
+            with self.app.app_context():
+                db.session.get(SortDateMission,self.inbound_id).arrival_status='on_ground'
+                db.session.commit()
+            expect(desktop_arrival).to_contain_text('ETA 21:35',timeout=12000)
+            with self.app.app_context():
+                db.session.get(SortDateMission,self.inbound_id).arrival_status='unloaded'
+                db.session.commit()
+            expect(desktop_arrival.locator('.ops-pretreat-arrived')).to_have_text('ARRIVED',timeout=12000)
             self.assertEqual(background(row.locator('.ops-identity')),green)
             autosave(configure.click)
             expect(configure).to_have_attribute('aria-pressed','false')

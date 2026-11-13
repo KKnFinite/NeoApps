@@ -1,4 +1,4 @@
-{% from 'neonodes/neosubzero/_operations_inline.html' import mobile_summary, inline_feedback, collapse_button %}
+{% from 'neonodes/neosubzero/_operations_inline.html' import mobile_summary, inline_feedback, collapse_button, pretreat_arrival %}
 {% from 'neonodes/neosubzero/_departure_deice.html' import spray_position_forms, team_controls with context %}
 {% macro identity(row) -%}
     {{ csrf_field() }}
@@ -31,7 +31,7 @@
     </summary>
     <div class="ops-pretreat-inline" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
         <div class="ops-identity ops-desktop"><strong>{{ row.tail }}</strong><span>{{ row.flight }}</span></div>
-        <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-location><strong>{{ row.parking or '—' }}</strong><span>ETA {{ row.inbound_eta or '—' }}</span></div>
+        <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-location><strong>{{ row.parking or '—' }}</strong>{{ pretreat_arrival(row) }}</div>
         <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-route><strong>GT: {{ row.ground_time if row.ground_time != '-' else '—' }}</strong><span>{{ row.destination }} · ETD {{ row.etd }}</span></div>
         <div class="ops-pretreat-config">
             {% if can_edit %}

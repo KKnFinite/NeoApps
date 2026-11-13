@@ -8,7 +8,6 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.neonodes.neosubzero.services import pretreat_complete
 from app.services.neosubzero_radio import radio_pending, radio_complete
 from app.models import (
     NeoSubZeroCalloutAssignment,
@@ -848,6 +847,8 @@ _PRETREAT_LABELS = {
 
 
 def _pretreat_state(treatment):
+    from app.neonodes.neosubzero.services import pretreat_complete
+
     if pretreat_complete(treatment):
         return "pretreated"
     if treatment is None:

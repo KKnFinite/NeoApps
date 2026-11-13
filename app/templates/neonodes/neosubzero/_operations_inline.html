@@ -1,7 +1,11 @@
+{% macro pretreat_arrival(row) -%}
+    {% if row.inbound_arrived %}<span class="ops-pretreat-arrived">ARRIVED</span>{% else %}<span>ETA {{ row.inbound_eta or '—' }}</span>{% endif %}
+{%- endmacro %}
+
 {% macro mobile_summary(row, mode) %}
     <span class="ops-mobile-ident"><strong>{{ row.tail }}</strong><small>{{ row.flight }}</small></span>
     {% if mode == 'pretreat' %}
-    <span class="ops-mobile-times"><strong>{{ row.parking or '—' }}</strong><small>ETA {{ row.inbound_eta or '—' }}</small><small>GT: {{ row.ground_time if row.ground_time != '-' else '—' }}</small><small>{{ row.destination }} · {{ row.etd }}</small></span>
+    <span class="ops-mobile-times"><strong>{{ row.parking or '—' }}</strong><small>{{ pretreat_arrival(row) }}</small><small>GT: {{ row.ground_time if row.ground_time != '-' else '—' }}</small><small>{{ row.destination }} · {{ row.etd }}</small></span>
     {% else %}
     <span class="ops-mobile-times"><strong>{{ row.destination }}</strong><small>ETD {{ row.etd }}</small></span>
     {% endif %}

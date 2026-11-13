@@ -45,6 +45,53 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         self.assertFalse(row["inbound_eta"])
         self.assertEqual(row["ground_time"], "-")
 
+    def test_arrival_confirmation_is_independent_of_eta_and_treatment(self):
+        original_eta = self.arrival.eta_datetime_utc
+        actual = datetime(2026, 8, 31, 22, 50)
+        for status, block_in, confirmed in (
+            ("scheduled", None, False),
+            ("en_route", None, False),
+            ("on_ground", None, False),
+            ("arrived", None, True),
+            ("unloaded", None, True),
+            ("cancelled", actual, False),
+            ("scheduled", actual, True),
+            ("on_ground", actual, True),
+            ("scheduled", datetime(9998, 1, 1), False),
+        ):
+            with self.subTest(status=status, block_in=block_in):
+                self.arrival.arrival_status = status
+                self.arrival.actual_block_in_datetime_utc = block_in
+                db.session.commit()
+                row = next(row for row in pretreat_context(self.gateway, self.operation)["rows"]
+                           if row["tail"] == "T1")
+                self.assertEqual(row["inbound_arrived"], confirmed)
+                if status != "cancelled":
+                    self.assertEqual(row["inbound_eta"], "17:45")
+                    self.assertEqual(row["ground_time"], "2:15")
+                    self.assertEqual(row["sort_eta"], original_eta)
+                self.assertEqual(self.arrival.eta_datetime_utc, original_eta)
+                self.assertFalse(row["completed"])
+
+    def test_missing_eta_and_same_tail_return_keep_existing_eta_selection(self):
+        self.arrival.eta_datetime_utc = None
+        self.arrival.arrival_status = "arrived"
+        db.session.commit()
+        row = next(row for row in pretreat_context(self.gateway, self.operation)["rows"] if row["tail"] == "T1")
+        self.assertTrue(row["inbound_arrived"])
+        self.assertFalse(row["inbound_eta"])
+        self.assertEqual(row["ground_time"], "-")
+
+        self.arrival.eta_datetime_utc = datetime(2026, 8, 31, 22, 45)
+        self.arrival.arrival_status = "en_route"
+        later = self._mission("arrival", "A2", "T1", datetime(2026, 9, 1, 1, 30),
+                              eta=datetime(2026, 9, 1, 1, 30))
+        later.arrival_status = "arrived"
+        db.session.commit()
+        row = next(row for row in pretreat_context(self.gateway, self.operation)["rows"] if row["tail"] == "T1")
+        self.assertFalse(row["inbound_arrived"])
+        self.assertEqual(row["inbound_eta"], "17:45")
+
     def test_reversible_plan_config_chronology_and_completion(self):
         state = mutate_pretreat(self.operation, self.departure, "toggle_planned", {}, None)
         self.assertTrue(state.pretreat_planned)

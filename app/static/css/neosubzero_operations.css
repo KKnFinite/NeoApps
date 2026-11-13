@@ -187,6 +187,7 @@
 .neosubzero-operations[data-mode="pretreat"] .ops-mobile-ident strong { font-size:1.22rem; line-height:1.08; }
 .neosubzero-operations[data-mode="pretreat"] .ops-pretreat-meta span,
 .neosubzero-operations[data-mode="pretreat"] .ops-identity span { color:#bed3e0; }
+.neosubzero-operations[data-mode="pretreat"] span.ops-pretreat-arrived { color:#8fffa8; font-weight:700; }
 .neosubzero-operations[data-mode="pretreat"] .ops-pretreat-inline { border-color:#314b5d; }
 .neosubzero-operations[data-mode="pretreat"] .ops-pretreat-pass {
     padding:5px 8px; border:1px solid var(--subzero-pass-edge); border-radius:4px;
