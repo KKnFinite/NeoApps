@@ -7,7 +7,7 @@ from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
 )
-from app.services.permission_rules import ensure_default_permission_rules
+from app.services.permission_rules import ensure_default_permission_rules, neosubzero_management_minimums
 from app.services.password_policy import set_user_password
 from app.services.schema_sync import sync_database_schema
 from app.services.database_startup_retry import run_startup_database_action
@@ -61,7 +61,9 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
 
         verify_neosubzero_schema_contract(db.session.connection())
     gateway = ensure_default_gateway_and_nodes()
+    prior_subzero_minimums = neosubzero_management_minimums()
     ensure_default_permission_rules()
+    subzero_minimums = neosubzero_management_minimums()
     ensure_sheets_compatibility_setting(gateway)
     ensure_google_motherbrain_live_polling_setting(gateway)
     _ensure_staffing_sort_roots()
@@ -109,6 +111,12 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     return {
         "username": user.username,
         "shift_door_finals_corrected": shift_door_finals_corrected,
+        "neosubzero_management_minimums": subzero_minimums,
+        "neosubzero_management_rule_changes": {
+            key: (prior_subzero_minimums.get(key), role)
+            for key, role in subzero_minimums.items()
+            if prior_subzero_minimums.get(key) != role
+        },
         "email": user.email,
         "gateway_code": membership.gateway.code,
         "created_user": created_user,

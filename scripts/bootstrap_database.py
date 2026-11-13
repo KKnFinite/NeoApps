@@ -102,6 +102,14 @@ def main():
     )
     print("NeoApps bootstrap phase 3/3: schema and seed data ready.", flush=True)
     print("NeoGateway database bootstrap complete.")
+    if minimums := result.get("neosubzero_management_minimums"):
+        print("NeoSubZero permission rules: " + ", ".join(
+            f"{key}={role}" for key, role in sorted(minimums.items())
+        ), flush=True)
+    if changes := result.get("neosubzero_management_rule_changes"):
+        print("NeoSubZero permission rule changes: " + ", ".join(
+            f"{key}={old or 'missing'}->{new}" for key, (old, new) in sorted(changes.items())
+        ), flush=True)
     print(f"NeoStaffing Door Final repair: corrected={result.get('shift_door_finals_corrected', 0)}", flush=True)
     print(f"Username: {result['username']}")
     print(f"Email: {result['email']}")

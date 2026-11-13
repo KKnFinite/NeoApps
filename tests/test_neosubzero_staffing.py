@@ -372,7 +372,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         self.assertEqual(defaults["neosubzero.qualifications.view"], "watcher")
         self.assertEqual(defaults["neosubzero.qualifications.edit"], "simulator")
         self.assertEqual(defaults["neosubzero.callouts.view"], "watcher")
-        self.assertEqual(defaults["neosubzero.callouts.edit"], "master")
+        self.assertEqual(defaults["neosubzero.callouts.edit"], "simulator")
         self.assertIn("staffing_person_qualifications", db.metadata.tables)
         self.assertIn("neosubzero_callout_assignments", db.metadata.tables)
 

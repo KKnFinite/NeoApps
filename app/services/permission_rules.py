@@ -569,7 +569,7 @@ DEFAULT_PERMISSION_RULES = (
     ),
     (
         "neosubzero.callouts.edit",
-        "master",
+        "simulator",
         "Manage NeoSub-Zero current-sort Deice callouts.",
     ),
     (
@@ -581,6 +581,16 @@ DEFAULT_PERMISSION_RULES = (
         "neosubzero.qualifications.edit",
         "simulator",
         "Grant or remove shared employee Deice qualifications.",
+    ),
+    (
+        "neosubzero.truck_management.view",
+        "watcher",
+        "View the NeoSub-Zero deice truck registry.",
+    ),
+    (
+        "neosubzero.truck_management.edit",
+        "simulator",
+        "Register, edit, change service status, and archive NeoSub-Zero deice trucks.",
     ),
     (
         "neosubzero.settings.view",
@@ -1483,6 +1493,16 @@ PERMISSION_RULE_ITEMS = (
     ),
     (
         "subzero",
+        "neosubzero.truck_management",
+        "Truck Management",
+        "Deice truck registry and service status.",
+        {
+            "view": "neosubzero.truck_management.view",
+            "edit": "neosubzero.truck_management.edit",
+        },
+    ),
+    (
+        "subzero",
         "neosubzero.settings",
         "Settings",
         "NeoSub-Zero operational settings.",
@@ -1695,7 +1715,10 @@ def ensure_default_permission_rules():
             rule.minimum_role = minimum_role
         elif rule.minimum_role in LEGACY_PERMISSION_MINIMUM_ROLES.get(permission_key, set()):
             rule.minimum_role = minimum_role
-        elif (permission_key == "neosubzero.qualifications.edit" and rule.minimum_role == "master"
+        # Seeded rows have nearly identical creation/update timestamps. Keep
+        # administrator-edited rules, even if they use the old default role.
+        elif (permission_key in {"neosubzero.qualifications.edit", "neosubzero.callouts.edit"}
+              and rule.minimum_role == "master"
               and rule.description == description and rule.created_at and rule.updated_at
               and 0 <= (rule.updated_at - rule.created_at).total_seconds() < 1):
             rule.minimum_role = minimum_role
@@ -1704,6 +1727,16 @@ def ensure_default_permission_rules():
             rule.description = description
 
     db.session.flush()
+
+
+def neosubzero_management_minimums():
+    keys = (
+        "neosubzero.callouts.edit", "neosubzero.qualifications.edit",
+        "neosubzero.truck_management.view", "neosubzero.truck_management.edit",
+        "neosubzero.ucc.edit", "neosubzero.settings.edit",
+    )
+    rows = PermissionRule.query.filter(PermissionRule.permission_key.in_(keys)).all()
+    return {rule.permission_key: rule.minimum_role for rule in rows}
 
 
 def get_permission_rule(permission_key):

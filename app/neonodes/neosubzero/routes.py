@@ -131,8 +131,8 @@ NEOSUBZERO_PAGES = (
     (
         "Truck Management",
         "neosubzero.truck_management",
-        "neosubzero.settings.view",
-        "neosubzero.settings.edit",
+        "neosubzero.truck_management.view",
+        "neosubzero.truck_management.edit",
     ),
     (
         "Settings",
@@ -1212,7 +1212,7 @@ def settings():
 def truck_management():
     from app.services.neosubzero_trucks import manage_truck, registered_trucks
 
-    access = permission_access("neosubzero.settings.view", "neosubzero.settings.edit")
+    access = permission_access("neosubzero.truck_management.view", "neosubzero.truck_management.edit")
     if request.method == "POST" and not access["can_edit"]:
         return "Access denied.", 403
     if not access["can_view"]:
