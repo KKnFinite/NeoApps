@@ -61,6 +61,15 @@
         for (const form of pendingPretreat) {
             pendingPretreat.delete(form);
             if (!form.isConnected || form.dataset.autosaveConflict === 'true') continue;
+            if (form.matches('[data-ops-planned], [data-ops-pretreat-config]')) {
+                const toggle = form.querySelector('[data-ops-quick-toggle]');
+                if (toggle && toggle.checked === toggle.defaultChecked) continue;
+                const button = form.querySelector('button[value="toggle_configured"]');
+                if (button) form.requestSubmit(button);
+                else form.requestSubmit();
+                if (busy) break;
+                continue;
+            }
             const invalid = [...form.querySelectorAll('[data-clock-time]:not([disabled])')]
                 .some(field => window.NeoAppsClockTime.normalizeInput(field) === null);
             if (invalid) {
@@ -285,7 +294,8 @@
         for (const row of board.querySelectorAll('[data-ops-row]')) {
             const next = nextRows.get(row.dataset.missionId);
             const editor = accordion(row);
-            const preserve = (editor.contains(active) && active !== editor.querySelector('summary')) || editor.querySelector(dirtyForm);
+            const preserve = (editor.contains(active) && active !== editor.querySelector('summary')) ||
+                editor.querySelector(dirtyForm) || (isPretreat && [...pendingPretreat].some(form => editor.contains(form)));
             if (next?.dataset.tail !== row.dataset.tail) {
                 if (preserve) {
                     editor.open = true;
@@ -296,6 +306,8 @@
                 }
                 continue;
             }
+            const plan = isPretreat && row.querySelector('[data-ops-planned]');
+            if (plan && pendingPretreat.has(plan)) next.querySelector('[data-ops-planned]')?.replaceWith(plan);
             const nextEditor = accordion(next);
             nextEditor.open = !media.matches || (isPretreat ? editor.open : next.dataset.missionId === selected || !!preserve);
             const disclosureKey = section => section.dataset.opsDisclosure ||
@@ -316,7 +328,7 @@
                 } else {
                     const freshForms = [...replacement.querySelectorAll('form')];
                     for (const form of current.querySelectorAll('form')) {
-                        if (form.dataset.dirty !== 'true' && (!form.contains(active) || form === savedForm)) continue;
+                        if (form.dataset.dirty !== 'true' && !pendingPretreat.has(form) && (!form.contains(active) || form === savedForm)) continue;
                         const fresh = freshForms.find(candidate => formKey(candidate) === formKey(form));
                         if (fresh) fresh.replaceWith(form);
                         else {
@@ -351,6 +363,8 @@
             notify('The canonical sort changed. Draft retained for the original sort; reload current operations in another tab before continuing.', true); return;
         }
         const scroll = window.scrollY, paneScroll = pane.scrollTop;
+        const grid = isPretreat && root.querySelector('.ops-pretreat-scroll');
+        const gridScroll = grid ? grid.scrollLeft : 0;
         const currentBoard = root.querySelector('[data-ops-board]');
         const nextBoard = next.querySelector('[data-ops-board]');
         const activeRowField = usesInline() && currentBoard.contains(document.activeElement) ? document.activeElement : null;
@@ -376,6 +390,7 @@
                 focus.focus({preventScroll:true});
                 if (caret && caret[0] !== null) focus.setSelectionRange(...caret);
             }
+            if (grid) grid.scrollLeft = gridScroll;
             reconcilingPretreat = false;
             const shift = focus?.isConnected ? focus.getBoundingClientRect().top - activeTop : 0;
             window.scrollTo({top:scroll + shift,behavior:'instant'});
@@ -453,6 +468,10 @@
         if (reconcilingPretreat) return;
         const form = event.target.closest('form');
         if (form?.matches('[data-ops-autosave]')) {
+            if (isPretreat && form.matches('[data-ops-planned]')) {
+                queuePretreat(form);
+                return;
+            }
             if (busy || preferenceBusy) { event.target.checked = !event.target.checked; return; }
             form.requestSubmit();
             return;
@@ -496,6 +515,21 @@
         if (retry) {
             const form = retry.closest('[data-ops-inline]').querySelector(autosaveSelector + '[data-autosave-retry]');
             if (form) queuePretreat(form);
+            return;
+        }
+        const config = event.target.closest('[data-ops-pretreat-config] button');
+        if (config && (busy || preferenceBusy)) {
+            event.preventDefault();
+            queuePretreat(config.form);
+            return;
+        }
+        const correct = event.target.closest('[data-ops-pretreat-correction]');
+        if (correct) {
+            const inline = inlineFor(correct);
+            const section = inline.querySelector('[data-ops-disclosure="correction"]');
+            correct.closest('details').open = false;
+            section.open = true;
+            section.querySelector('[data-subzero-edit]:not([hidden]), input[name="correction_reason"]:not([disabled])')?.focus();
             return;
         }
         const inspection = event.target.closest('[data-open-frost-inspection]');
@@ -596,19 +630,22 @@
         body.set('operation_id',root.dataset.operationId); if (content) body.set('physical_tail',content.dataset.tail);
         const toggle = form.querySelector('[data-ops-quick-toggle]');
         const planned = form.matches('[data-ops-planned]');
+        const quiet = isPretreat && (autosave || planned || form.matches('[data-ops-pretreat-config]'));
         const toggleError = form.querySelector('[data-ops-toggle-error]');
         if (planned) body.set('planned',toggle.checked ? '1' : '0');
         const key = formKey(form), abort = new AbortController();
         const timeout = setTimeout(()=>abort.abort(),25000);
         busy = true; ++epoch;
         const row = inline?.closest('[data-ops-row]');
+        if (quiet) row.setAttribute('aria-busy', 'true');
         const controls = [...(row || content || form)
             .querySelectorAll('button,input:not([type="hidden"]),select,textarea')]
             .filter(control => !control.disabled);
         if (!autosave) controls.forEach(control => { control.disabled = true; });
         const unlock = () => { if (!autosave) controls.forEach(control => { control.disabled = false; }); };
         if (toggleError) toggleError.hidden = true;
-        if (inline && !planned) inlineMessage(inline, 'SAVING…');
+        if (quiet) inlineMessage(inline, '');
+        else if (inline && !planned) inlineMessage(inline, 'SAVING…');
         else if (!planned) notify('SAVING…');
         let saved = false;
         try {
@@ -639,7 +676,7 @@
             if (planned) notify('');
             if (inline) {
                 if (!autosave && form.contains(document.activeElement)) document.activeElement.blur();
-                if (!planned) inlineMessage(inline, payload.message);
+                if (!planned && !quiet) inlineMessage(inline, payload.message);
             }
             else notify(payload.message);
             unlock();
@@ -654,7 +691,8 @@
                 toggleError.textContent = 'Save error';
                 toggleError.title = message;
                 toggleError.hidden = false;
-                notify(message,true);
+                if (isPretreat && (!media.matches || accordion(row).open)) inlineMessage(inline, message, true);
+                else notify(message,true);
             } else if (inline) {
                 inlineMessage(inline, message, true);
                 if (autosave && !saved && !message.includes('changed')) {
@@ -665,6 +703,7 @@
         }
         finally {
             clearTimeout(timeout); busy=false; if (!saved) unlock();
+            if (quiet) row.removeAttribute('aria-busy');
             drainPretreat();
         }
     });

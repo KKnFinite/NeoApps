@@ -97,7 +97,7 @@ class OperationsBrowserTest(unittest.TestCase):
                     expect(page.locator('[data-ops-layout]')).to_have_count(0)
                     row = root.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"]')
                     expect(row.locator('[data-ops-pretreat-location] > *')).to_have_text(['A04', 'ETA 21:35'])
-                    expect(row.locator('[data-ops-pretreat-route] > *')).to_have_text(['GT: 2:45', 'SDF - 00:20'])
+                    expect(row.locator('[data-ops-pretreat-route] > *')).to_have_text(['GT: 2:45', 'SDF · ETD 00:20'])
                     search = page.locator('[data-ops-search]')
                     for query in ('n441up', 'ups201', 'A04'):
                         search.fill(query)
@@ -126,13 +126,39 @@ class OperationsBrowserTest(unittest.TestCase):
                         page.screenshot(path=str(evidence/f'{engine}-{mode}-{layout}-{width}.png'))
                         geometry=page.evaluate('() => ({overflow:document.documentElement.scrollWidth-innerWidth,culprits:[...document.querySelectorAll("main.content *")].filter(e=>e.getBoundingClientRect().right>innerWidth+1 && !e.closest("[hidden]")).slice(0,12).map(e=>({tag:e.tagName,cls:e.className,width:e.getBoundingClientRect().width,right:e.getBoundingClientRect().right}))})')
                         self.assertLessEqual(geometry['overflow'],1,dict(engine=engine,mode=mode,width=width,layout=layout,**geometry))
+                        if mode == 'pretreat' and width > 900:
+                            grid = page.locator('.ops-pretreat-scroll')
+                            cells = row.evaluate("""row => {
+                                const selectors = ['.ops-identity','[data-ops-pretreat-location]',
+                                    '[data-ops-pretreat-route]','.ops-plan-toggle','.ops-pretreat-config',
+                                    '.ops-pretreat-pass:first-of-type','.ops-pretreat-pass:nth-of-type(2)',
+                                    '.ops-pretreat-notes summary'];
+                                return {height: row.offsetHeight, cells: selectors.map(selector => {
+                                    const {left,right,top,bottom} = row.querySelector(selector).getBoundingClientRect();
+                                    return {left,right,top,bottom};
+                                })};
+                            }""")
+                            self.assertTrue(60 <= cells['height'] <= 75, cells)
+                            self.assertLess(max(c['top'] for c in cells['cells']), min(c['bottom'] for c in cells['cells']), cells)
+                            self.assertTrue(all(a['right'] <= b['left'] + 1 for a,b in zip(cells['cells'],cells['cells'][1:])), cells)
+                            if width == 1366:
+                                grid.evaluate('e => e.scrollLeft = e.scrollWidth')
+                                self.assertLessEqual(
+                                    row.locator('.ops-identity').evaluate('e => e.getBoundingClientRect().left'),
+                                    grid.evaluate('e => e.getBoundingClientRect().left') + 1
+                                )
+                                page.screenshot(path=str(evidence/f'{engine}-pretreat-scrolled-1366.png'))
+                                grid.evaluate('e => e.scrollLeft = 0')
+                            if width == 1920:
+                                self.assertLessEqual(grid.evaluate('e=>e.scrollWidth-e.clientWidth'),1)
                         # Take one DOM snapshot: a live board replacement must not mix
                         # geometry from different revisions or stale nth locators.
                         visible=page.locator('[data-ops-board]').evaluate('board=>[...board.querySelectorAll("[data-ops-row]")].filter(row=>row.getBoundingClientRect().height>0).map(row=>({right:row.getBoundingClientRect().right,passes:[...row.querySelectorAll("[data-ops-primary-pass]:not([hidden])")].map(element=>{const p=element.getBoundingClientRect();return {width:p.width,height:p.height};}).filter(p=>p.width>0)}))')
                         self.assertTrue(visible)
-                        for row in visible:
-                            self.assertLessEqual(row['right'],width+1)
-                            for bounds in row['passes']:
+                        for bounds_row in visible:
+                            if mode != 'pretreat' or width <= 900:
+                                self.assertLessEqual(bounds_row['right'],width+1)
+                            for bounds in bounds_row['passes']:
                                 self.assertGreater(bounds['width'],0);self.assertGreater(bounds['height'],0)
                         measurements.append(dict(engine=engine,mode=mode,width=width,layout=layout,overflow=page.evaluate('document.documentElement.scrollWidth-innerWidth')))
                         page.screenshot(path=str(evidence/f'{engine}-{mode}-{layout}-{width}.png'))
@@ -239,34 +265,71 @@ class OperationsBrowserTest(unittest.TestCase):
                 with page.expect_response(lambda r:r.url.endswith('/operations/mutate'), timeout=10000) as pending:
                     action()
                 self.assertEqual(pending.value.status,200,pending.value.text())
-                expect(inline.locator('[data-ops-inline-feedback]')).to_contain_text('PRETREAT SAVED.')
+                expect(inline.locator('[data-ops-inline-feedback]')).to_be_hidden()
             configure = inline.locator('button[value="toggle_configured"]')
             autosave(configure.click)
-            expect(configure).to_have_text('CLEAR CONFIGURED')
+            expect(configure).to_have_attribute('aria-pressed','true')
             expect(row).to_have_attribute('data-status','configured')
             self.assertEqual(row.locator('.ops-mobile-status').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(39, 135, 86)')
             self.assertNotEqual(row.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(39, 135, 86)')
             page.set_viewport_size({'width':1366,'height':900})
-            self.assertEqual(row.locator('.ops-status strong').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(39, 135, 86)')
+            self.assertEqual(configure.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(39, 135, 86)')
             autosave(configure.click)
-            expect(configure).to_have_text('CONFIGURED')
+            expect(configure).to_have_attribute('aria-pressed','false')
+            plan = row.get_by_role('checkbox',name='Pretreat planned for N441UP')
+            autosave(plan.uncheck)
+            expect(row).to_have_attribute('data-status','untreated')
+            autosave(plan.check)
+            expect(row).to_have_attribute('data-status','planned')
+            if notes.is_visible():
+                notes_form.locator('summary').click()
+            height = row.evaluate('e => e.offsetHeight')
+            notes_form.locator('summary').click()
+            expect(notes).to_be_visible()
+            notes_form.locator('summary').click()
+            self.assertEqual(row.evaluate('e => e.offsetHeight'),height)
             autosave(lambda:treatment.locator('[name="pass1_surface_area"]').select_option('wings_only'))
             autosave(lambda:treatment.locator('[name="pass2_plan"]').select_option('type_iv'))
             autosave(lambda:treatment.locator('[name="pass2_surface_area"]').select_option('entire_aircraft'))
+            # A committed edit queued during a save survives reconciliation of the same row.
+            page.evaluate("""() => {
+                const fetch = window.fetch;
+                window.fetch = (url, options) => {
+                    if (!String(url).endsWith('/operations/mutate')) return fetch(url, options);
+                    window.fetch = fetch;
+                    return new Promise(resolve => { window.releasePretreat = () => resolve(fetch(url, options)); });
+                };
+            }""")
+            with page.expect_response(lambda r: 'Queued during a treatment save' in (r.request.post_data or '')) as queued:
+                treatment.locator('[name="pass1_surface_area"]').select_option('wings_tail')
+                page.wait_for_function('typeof window.releasePretreat === "function"')
+                expect(row).to_have_attribute('aria-busy','true')
+                notes_form.locator('summary').click()
+                notes.fill('Queued during a treatment save')
+                notes.press('Tab')
+                page.evaluate('window.releasePretreat()')
+            self.assertEqual(queued.value.status,200,queued.value.text())
+            expect(row).not_to_have_attribute('aria-busy','true')
+            expect(notes).to_have_value('Queued during a treatment save')
             page.set_viewport_size({'width':375,'height':900})
             if not inline.is_visible():
                 row.locator('.ops-pretreat-summary').click()
             # A controlled operational clock keeps NOW independent of the host time.
             page.evaluate("window.NeoSubZeroDepartureForms.operationalHHMM = () => '2100'")
+            start = treatment.locator('[name="pass1_start"]')
+            start.fill('24')
+            start.press('Tab')
+            expect(inline.locator('[data-ops-inline-feedback]')).to_contain_text('Enter a valid time')
+            expect(start).to_have_value('24')
             autosave(treatment.get_by_role('button',name='Set Pass 1 start to now').click)
             expect(treatment.locator('[name="pass1_start"]')).to_have_value('21:00')
             for name,value in (('pass1_end','21:02'),('pass2_start','21:04'),('pass2_end','21:08')):
                 field = treatment.locator('[name="'+name+'"]')
                 field.fill(value)
                 autosave(lambda:field.press('Tab'))
-            expect(notes_form.locator('[name="expected_version"]')).to_have_value(
-                treatment.locator('[name="expected_version"]').input_value()
-            )
+            expect(row).to_have_attribute('data-status','fin')
+            self.assertEqual(notes_form.locator('[name="expected_version"]').input_value(),
+                             treatment.locator('[name="expected_version"]').input_value())
             if not notes.is_visible():
                 notes_form.locator('summary').click()
             notes.fill('Mobile pretreat independent notes')
@@ -280,6 +343,15 @@ class OperationsBrowserTest(unittest.TestCase):
             page.locator('[data-ops-search-clear]').click()
             expect(search).to_have_value('')
             expect(row.locator('.ops-mobile-status')).to_contain_text('PRETREATED')
+            more = inline.get_by_label('More actions for N441UP')
+            more.click()
+            expect(inline.get_by_role('link',name='Treatment history · N441UP')).to_have_attribute(
+                'href','/neosubzero/deice-log?activity=pretreat&tail=N441UP'
+            )
+            inline.get_by_role('button',name='Correct recorded treatment').click()
+            expect(inline.get_by_role('button',name='UNLOCK CORRECTION')).to_be_visible()
+            expect(treatment.locator('[name="pass2_end"]')).to_have_attribute('readonly','')
+            treatment.locator('[data-ops-disclosure="correction"] > summary').click()
             page.screenshot(path=str(evidence/f'{engine}-mobile-pretreat-detail.png'))
             self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
             self.assertLessEqual(inline.evaluate('e=>e.scrollWidth-e.clientWidth'),1)
