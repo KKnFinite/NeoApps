@@ -70,7 +70,7 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
         state = states.get(tail)
         tail_state = tail_states.get(tail)
         assignment = parking.get(tail)
-        completed = _pretreat_complete(state)
+        completed = pretreat_complete(state)
         rows.append({
             "mission_id": mission.id, "tail": tail or "-", "inbound_eta": format_local_hhmm(inbound_eta, mission.timezone or None),
             "tail_status": tail_operational_status_label(tail_operational_status(tail_state, assignment=assignment)) or "NORMAL",
@@ -229,7 +229,7 @@ def _validate_sequence(state):
             raise NeoSubZeroPretreatError("Pretreat times must remain chronological.")
 
 
-def _pretreat_complete(state):
+def pretreat_complete(state):
     if state is None or not all(getattr(state, attribute) for _, attribute in PRETREAT_MILESTONES):
         return False
     try:
@@ -264,7 +264,7 @@ def _nonstandard_passes(state):
 
 def _sync_completion(operation, tail, state):
     row = SortDateTailState.query.filter_by(sort_date=operation.sort_date, gateway_code=operation.gateway_code, sort_name=operation.sort_name, tail_number=tail).one_or_none()
-    completed = _pretreat_complete(state)
+    completed = pretreat_complete(state)
     if row is None and completed:
         row = SortDateTailState(sort_date=operation.sort_date, gateway_code=operation.gateway_code, sort_name=operation.sort_name, tail_number=tail)
         db.session.add(row)

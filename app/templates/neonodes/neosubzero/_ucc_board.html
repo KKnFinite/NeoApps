@@ -1,11 +1,12 @@
 {% macro aircraft(row, location, facing='up') -%}
-<button type="button" class="ucc-plane state-{{ row.visual_state }}" data-ucc-aircraft="{{ row.identity_key }}" data-ucc-tv-destination="{{ row.get('tv_destination', row.destination) }}"{% if not row.block_out_at_utc %} data-ucc-tv-etd="{{ row.get('tv_etd', row.get('etd', '')) }}"{% endif %} aria-label="{{ row.tail }} {{ row.flight }}, {{ location }}, {{ row.visual_label }}">
+<button type="button" class="ucc-plane state-{{ row.visual_state }}" data-ucc-aircraft="{{ row.identity_key }}" data-ucc-tv-destination="{{ row.get('tv_destination', row.destination) }}"{% if not row.block_out_at_utc %} data-ucc-tv-etd="{{ row.get('tv_etd', row.get('etd', '')) }}"{% endif %} aria-label="{{ row.tail }} {{ row.flight }}, {{ location }}, {{ row.visual_label }}{% if row.pretreat_label and row.pretreat_label != row.visual_label %}, {{ row.pretreat_label }}{% endif %}">
     <span class="ucc-plane-icon facing-{{ facing }}" aria-hidden="true"></span><strong>{{ row.tail }}</strong>
     {% if row.flight %}<span class="ucc-plane-flight">{{ row.flight }}</span>{% endif %}
     <span class="ucc-plane-etd">{{ row.etd or '—' }}{% if row.destination %} · {{ row.destination }}{% endif %}</span>
     {% set destination = row.get('tv_destination', row.destination) %}
     {% if row.flight or destination %}<span class="ucc-management-only ucc-management-plane-route">{{ row.flight }}{% if row.flight and destination %} · {% endif %}{{ destination }}</span>{% endif %}
     {% if not row.block_out_at_utc %}<span class="ucc-management-only ucc-management-plane-etd">ETD {{ row.get('tv_etd', row.get('etd')) or '—' }}</span>{% endif %}
+    {% if row.pretreat_state in ('pretreated', 'pretreat-in-progress') %}<span class="ucc-plane-pretreat" data-pretreat-state="{{ row.pretreat_state }}">{{ row.pretreat_label }}</span>{% endif %}
 </button>
 {%- endmacro %}
 {% macro waiting_location(row) -%}
@@ -116,7 +117,7 @@
 {%- endmacro %}
 <div data-ucc-live-board>
 {# Fragment replacement also upgrades already-open tabs without stale geometry. #}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261112-mobile-ramp-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='20261113-ducc-pretreat-v1') }}">
 {% if not operation %}<p class="neosubzero-empty">No current sort. Staffing management is unavailable.</p>{% endif %}
 <script nonce="{{ csp_nonce() }}" type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
 <header class="ucc-board-heading"><h2>RAMP OPERATIONS <span class="ucc-mobile-label">· STAFFING</span></h2><span class="ucc-desktop-label">Select an aircraft for planning information · treatment entry is in Deice Dispatch</span></header>

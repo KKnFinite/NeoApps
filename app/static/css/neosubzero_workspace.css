@@ -22,6 +22,9 @@
 .blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-fin,.state-finished) {
     --aircraft-fill:var(--subzero-fin); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-fin-border);
 }
+.blueprint-neosubzero .ucc-plane:is(.state-pretreat-configured,.state-pretreat-in-progress) { --aircraft-fill:var(--subzero-configured); }
+.blueprint-neosubzero .ucc-plane.state-pretreated { --aircraft-fill:var(--subzero-fin); }
+.blueprint-neosubzero .ucc-plane.state-review { --aircraft-fill:var(--subzero-planned-border); }
 .blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-radio-pending {
     --aircraft-fill:var(--subzero-radio-pending); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-radio-pending-border);
 }

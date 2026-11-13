@@ -312,7 +312,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         remote = self._ramp_context("Remote")
         self.assertIsNone(remote["throat"])
         self.assertEqual(remote["aircraft"][0]["parking"], "R09")
-        self.assertEqual(remote["aircraft"][0]["visual_state"], "configured")
+        self.assertEqual(remote["aircraft"][0]["visual_state"], "pretreat-configured")
 
     def test_driver_flyer_assignment_and_duplicate_prevention(self):
         driver = set_neosubzero_ucc_assignment(
@@ -1225,6 +1225,68 @@ class NeoSubZeroUccTest(unittest.TestCase):
             for row in neosubzero_ucc_context(self.gateway, self.operation)["ramps"]
             if row["name"] == ramp_name
         )
+
+    def test_pretreat_uses_tail_milestones_and_preserves_departure_precedence(self):
+        from app.neonodes.neosubzero.services import mutate_pretreat
+
+        mission = self.alpha
+        event = self._deice_event(mission, "deice_planned")
+        tail = SortDateTailState(sort_date=self.operation.sort_date, gateway_code="RFD",
+                                 sort_name="night", tail_number=mission.assigned_tail_number,
+                                 pretreat_status=True)
+        db.session.add(tail)
+        db.session.commit()
+
+        def projected():
+            return next(row for row in self._ramp_context("Alpha")["aircraft"] if row["mission_id"] == mission.id)
+
+        self.assertEqual(projected()["visual_state"], "deice-planned")
+        self.assertEqual(projected()["pretreat_label"], "")
+        state = mutate_pretreat(self.operation, mission, "toggle_planned", {})
+        db.session.commit()
+        self.assertEqual(projected()["visual_state"], "pretreat-planned")
+        mutate_pretreat(self.operation, mission, "toggle_configured", {}, state)
+        db.session.commit()
+        self.assertEqual(projected()["visual_state"], "pretreat-configured")
+        values = {}
+        for field in ("pass1_start", "pass1_end", "pass2_start", "pass2_end"):
+            values[field] = "22:15"
+            mutate_pretreat(self.operation, mission, "save_treatment", values, state)
+            db.session.commit()
+            expected = "pretreated" if field == "pass2_end" else "pretreat-in-progress"
+            self.assertEqual(projected()["visual_state"], expected)
+        tail.pretreat_status = False
+        db.session.commit()
+        row = projected()
+        self.assertEqual(row["pretreat_label"], "PRETREATED")
+        self.assertIsNone(self._ramp_context("Alpha")["pad"])
+        self.assertEqual(self._ramp_context("Alpha")["waiting_queue"], ())
+        self.assertEqual(
+            [place["code"] for place in self._ramp_context("Alpha")["parking_positions"]
+             for aircraft in place["aircraft"] if aircraft["mission_id"] == mission.id],
+            ["A03"],
+        )
+        event.status = "negative"
+        db.session.commit()
+        self.assertEqual(projected()["visual_state"], "negative")
+        self.assertEqual(projected()["pretreat_label"], "PRETREATED")
+        event.status = "configured"
+        event.pass1_started_at_utc = datetime(2026, 9, 1, 5)
+        db.session.commit()
+        self.assertEqual(projected()["visual_state"], "deicing")
+        self.assertEqual(self._ramp_context("Alpha")["pad"]["pretreat_label"], "PRETREATED")
+        event.status = "cleared"
+        event.radio_state = "pending"
+        db.session.commit()
+        self.assertEqual(projected()["visual_state"], "radio-pending")
+        self.assertEqual(projected()["pretreat_label"], "PRETREATED")
+        event.radio_state = None
+        event.status = "configured"
+        event.pass_evidence = {"1": {"start": "2026-09-01T05:00:00", "tail": "DIFFERENT"}}
+        db.session.commit()
+        self.assertEqual(projected()["visual_state"], "review")
+        self.assertEqual(projected()["pretreat_label"], "PRETREATED")
+        self.assertIsNone(self._ramp_context("Alpha")["pad"])
 
     def _departure_rows(self):
         from app.services.neosubzero_departure_deice import departure_deice_context

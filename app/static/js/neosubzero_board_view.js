@@ -39,11 +39,13 @@
         icon.setAttribute("aria-hidden", "true");
         const route = [content(source, ".ucc-plane-flight"), source.dataset.uccTvDestination].filter(Boolean).join(" · ");
         const etd = source.dataset.uccTvEtd;
+        const pretreat = source.querySelector(".ucc-plane-pretreat");
         const card = element("div", `ucc-tv-plane is-stacked ${state}${inThroat ? " is-in-throat" : ""}`,
             element("strong", "", content(source, "strong")),
             icon,
             element("span", "ucc-tv-plane-route", route || "—"),
-            !inThroat && etd !== undefined ? element("span", "ucc-tv-plane-etd", `ETD ${etd || "—"}`) : null);
+            !inThroat && etd !== undefined ? element("span", "ucc-tv-plane-etd", `ETD ${etd || "—"}`) : null,
+            pretreat?.cloneNode(true));
         card.setAttribute("aria-label", source.getAttribute("aria-label") || "");
         card.dataset.uccProjectedAircraft = source.dataset.uccAircraft;
         return card;

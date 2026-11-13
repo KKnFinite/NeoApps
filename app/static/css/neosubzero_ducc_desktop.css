@@ -675,12 +675,23 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
 .ucc-tv-plane-icon.facing-right { transform:rotate(90deg); }
 .ucc-tv-plane-icon.facing-left { transform:rotate(-90deg); }
 .ucc-tv-plane:is(.state-planned,.state-pretreat-planned,.state-deice-planned) { --tv-plane-color:var(--subzero-planned); }
-.ucc-tv-plane.state-configured { --tv-plane-color:var(--subzero-configured); }
+.ucc-tv-plane:is(.state-configured,.state-pretreat-configured,.state-pretreat-in-progress) { --tv-plane-color:var(--subzero-configured); }
 .ucc-tv-plane.state-deicing { --tv-plane-color:var(--subzero-deicing); }
-.ucc-tv-plane:is(.state-fin,.state-finished) { --tv-plane-color:var(--subzero-fin); }
+.ucc-tv-plane:is(.state-fin,.state-finished,.state-pretreated) { --tv-plane-color:var(--subzero-fin); }
+.ucc-tv-plane.state-review { --tv-plane-color:var(--subzero-planned-border); }
 .ucc-tv-plane.state-radio-pending { --tv-plane-color:var(--subzero-radio-pending); }
 .ucc-tv-plane.state-negative { --tv-plane-color:var(--subzero-negative); }
 .ucc-tv-plane:is(.state-gone,.state-cleared) { --tv-plane-color:var(--subzero-gone); }
+
+.blueprint-neosubzero :is(.ucc-plane,.ucc-tv-plane) > .ucc-plane-pretreat {
+    color:#b9d9ef; font-size:.64em; font-weight:750; line-height:1.08; text-align:center;
+    overflow-wrap:normal;
+}
+.blueprint-neosubzero :is(.ucc-plane,.ucc-tv-plane) > .ucc-plane-pretreat[data-pretreat-state="pretreated"] {
+    color:#a7d2ff; white-space:nowrap; font-size:.58rem; letter-spacing:-.015em;
+}
+.blueprint-neosubzero .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-plane > .ucc-plane-pretreat { color:#294967; }
+.blueprint-neosubzero .ucc-tv-wallboard[data-ucc-tv-theme="light"] .ucc-tv-plane > .ucc-plane-pretreat[data-pretreat-state="pretreated"] { color:#234f8c; }
 
 .ucc-mobile-projection { display:none; }
 @media (max-width:900px) {

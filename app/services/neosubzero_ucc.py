@@ -8,6 +8,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
+from app.neonodes.neosubzero.services import pretreat_complete
 from app.services.neosubzero_radio import radio_pending, radio_complete
 from app.models import (
     NeoSubZeroCalloutAssignment,
@@ -119,6 +120,8 @@ def neosubzero_ucc_context(gateway, operation):
         ramp = row.get("ramp")
         ramp = ramp if ramp in rows_by_ramp else "Unlocated"
         item = dict(row)
+        item["pretreat_label"] = _PRETREAT_LABELS.get(item["pretreat_state"], "")
+        item["pretreat_status"] = item["pretreat_label"] or "—"
         item["visual_state"] = _visual_state(item)
         item["visual_label"] = _visual_label(item["visual_state"])
         rows_by_ramp[ramp].append(item)
@@ -320,20 +323,20 @@ def _physical_aircraft_rows(operation, departure_context):
         if not tail or tail in departure_tails:
             continue
         assignment = parking.get(tail)
-        state, treatment = states.get(tail), pretreat.get(tail)
+        state = states.get(tail)
         rows.append({
             "mission_id": None, "identity_key": f"parking-{assignment.id}" if assignment else f"tail-state-{state.id}",
             "flight": "", "tail": tail, "destination": "", "parking": getattr(assignment, 'position_code', None) or "TBD",
             "sort_time": None, "block_out_at_utc": None, "departure_time": "", "departure_time_label": "",
             "tail_status": tail_operational_status_label(tail_operational_status(state, assignment=assignment)),
-            "pretreat_complete": bool(state and state.pretreat_status),
-            "pretreat_configured": bool(treatment and treatment.configured_at_utc),
-            "pretreat_status": "PRETREATED" if state and state.pretreat_status else "PRETREAT PLANNED" if treatment and treatment.pretreat_planned else "—",
             "deice_status": str(getattr(state, "deice_status", "unknown")).upper(), "event": None,
         })
     spray_starts = departure_context.get("spray_starts", {})
     for row in rows:
         _project_spray_start(row, spray_starts)
+        treatment = pretreat.get(row["tail"])
+        row["pretreat_state"] = _pretreat_state(treatment)
+        row["pretreat_complete"] = row["pretreat_state"] == "pretreated"
 
     def identity_order(row):
         # A different mission may reference this same tail. Keep the active
@@ -836,42 +839,63 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
+_PRETREAT_LABELS = {
+    "pretreated": "PRETREATED",
+    "pretreat-in-progress": "PRETREAT IN PROGRESS",
+    "pretreat-configured": "PRETREAT CONFIGURED",
+    "pretreat-planned": "PRETREAT PLANNED",
+}
+
+
+def _pretreat_state(treatment):
+    if pretreat_complete(treatment):
+        return "pretreated"
+    if treatment is None:
+        return ""
+    if treatment.pass1_started_at_utc:
+        return "pretreat-in-progress"
+    if treatment.configured_at_utc:
+        return "pretreat-configured"
+    if treatment.pretreat_planned:
+        return "pretreat-planned"
+    return ""
+
+
 def _visual_state(row):
-    event = row.get("event")
     status = _departure_event_status(row)
     if _holds_for_radio(row): return 'radio-pending'
     if status == "cleared":
         return "gone"
+    if row.get("pad_evidence_review") or row.get("ownership_review") or _is_unverified_finish(row):
+        return "review"
     if status == "negative" or row.get("collapse_state") == "negative":
         return "negative"
     if status == "finished":
         return "finished"
     if _spray_started_at(row):
         return 'deicing'
+    pretreat_state = row.get("pretreat_state")
+    if pretreat_state and not row.get("block_out_at_utc"):
+        return pretreat_state
     if status == "deice_planned":
         return "deice-planned"
     if status == "configured":
         return "configured"
-    if row.get("pretreat_complete"):
-        return "pretreated"
-    if row.get("pretreat_configured"):
-        return "configured"
-    if row.get("pretreat_status") == "PRETREAT PLANNED":
-        return "pretreat-planned"
-    return "normal"
+    return pretreat_state or "normal"
 
 
 def _visual_label(state):
+    if state in _PRETREAT_LABELS:
+        return _PRETREAT_LABELS[state]
     return {
-        "pretreat-planned": "PRETREAT PLANNED",
         "configured": "CONFIGURED",
-        "pretreated": "PRETREATED",
         "deice-planned": "DEICE PLANNED",
         "deicing": "DEICING",
         "finished": "FINISHED / AWAITING CLEARANCE",
         "negative": "NEGATIVE DEICE",
         "gone": "GONE / COMPLETED",
         "radio-pending": "CLEARED · RADIO PENDING",
+        "review": "DEICE REVIEW",
     }.get(state, "NO DEICE RECORDED")
 
 
