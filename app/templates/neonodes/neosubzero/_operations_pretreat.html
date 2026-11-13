@@ -9,7 +9,7 @@
 {%- endmacro %}
 {% macro pass_fields(row, number, locked) -%}
     {% set prefix = 'pass' ~ number %}
-    {% set active = number == 1 or row[prefix ~ '_start'] or row[prefix ~ '_end'] or (row.state and row.state.pass2_surface_area) %}
+    {% set active = number == 1 or row[prefix ~ '_start'] or row[prefix ~ '_end'] or (row.state and (row.state.pass2_plan == 'type_iv' or row.state.pass2_surface_area)) %}
     <fieldset class="ops-pretreat-pass">
         <legend>PASS {{ number }}</legend>
         <label>Plan<select name="{{ prefix }}_plan" {% if locked %}disabled{% endif %}>
@@ -33,35 +33,49 @@
 {% set locked = not can_edit or row.completed %}
 <details class="ops-mobile-card" data-ops-accordion data-ops-pretreat-row{% if selected and row.mission_id == selected.mission_id %} data-ops-initial-open{% endif %}>
     <summary class="ops-pretreat-summary">
-        <div class="ops-identity ops-desktop"><span class="ops-desktop">{{ row.flight }}</span><strong>{{ row.tail }}</strong></div>
+        <div class="ops-identity ops-desktop"><strong>{{ row.tail }}</strong><span>{{ row.flight }}</span></div>
         <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-location><strong>{{ row.parking or '—' }}</strong><span>ETA {{ row.inbound_eta or '—' }}</span></div>
         <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-route><strong>GT: {{ row.ground_time if row.ground_time != '-' else '—' }}</strong><span>{{ row.destination }} - {{ row.etd }}</span></div>
         <span class="ops-mobile-summary">{{ mobile_summary(row, "pretreat") }}</span>
         <div class="ops-status ops-desktop"><strong>{{ row.visual_label }}</strong></div>
     </summary>
     <div class="ops-pretreat-inline" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
-        {{ inline_feedback() }}
-        <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" class="neosubzero-treatment-form ops-pretreat-form" data-ops-inline-treatment>
+        <div class="ops-pretreat-tools">
+            {% if can_edit %}
+            <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}">
+                {{ identity(row) }}
+                <button name="action" value="toggle_configured" aria-pressed="{{ 'true' if row.configured else 'false' }}">{{ 'CLEAR CONFIGURED' if row.configured else 'CONFIGURED' }}</button>
+            </form>
+            {% endif %}
+            {{ inline_feedback() }}
+            {% if can_edit %}<button type="button" data-ops-pretreat-retry hidden>RETRY</button>{% endif %}
+        </div>
+        <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" class="neosubzero-treatment-form ops-pretreat-form" data-ops-inline-treatment data-ops-completed="{{ 'true' if row.completed else 'false' }}" {% if can_edit %}data-ops-pretreat-autosave{% endif %}>
             {{ identity(row) }}
             <input type="hidden" name="action" value="save_treatment">
             {{ pass_fields(row, 1, locked) }}
             {{ pass_fields(row, 2, locked) }}
-            <div class="ops-pretreat-actions">
-                {% if can_edit %}
-                <button type="button" data-subzero-edit{% if not row.completed %} hidden{% endif %}>{{ "CORRECT RECORDED TREATMENT" if row.completed else "EDIT" }}</button>
-                <button type="submit"{% if row.completed %} hidden{% endif %}>SAVE</button>
-                {% endif %}
-            </div>
-            <details class="ops-pretreat-notes" data-ops-disclosure="notes"{% if can_edit and row.completed %} open{% endif %}><summary>{% if can_edit and row.completed %}NOTES / CORRECTION{% else %}NOTES{% endif %}</summary>
-                <label>Notes<textarea name="notes"{% if locked %} readonly{% endif %}>{{ row.state.notes or '' if row.state else '' }}</textarea></label>
-                {% if can_edit and (row.pass1_end or row.pass2_end) %}<label>Correction reason<input name="correction_reason" maxlength="500"{% if row.completed %} required{% endif %}></label>{% endif %}
+            {% if can_edit and (row.pass1_start or row.pass2_start or row.completed) %}
+            <details class="ops-pretreat-correction" data-ops-disclosure="correction">
+                <summary>Correct recorded treatment</summary>
+                {% if row.completed %}<button type="button" data-subzero-edit>UNLOCK CORRECTION</button>{% endif %}
+                <label>Correction reason<input name="correction_reason" maxlength="500"></label>
+                <button type="submit" data-ops-apply-correction {% if row.completed %}hidden{% endif %}>APPLY CORRECTION</button>
             </details>
+            {% endif %}
         </form>
+        <details class="ops-pretreat-notes" data-ops-disclosure="notes">
+            <summary>Notes</summary>
+            <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" {% if can_edit %}data-ops-pretreat-autosave{% endif %}>
+                {{ identity(row) }}
+                <input type="hidden" name="action" value="save_notes">
+                <label><span class="visually-hidden">Pretreat notes</span><textarea name="notes" rows="2" maxlength="2000"{% if not can_edit %} readonly{% endif %}>{{ row.state.notes or '' if row.state else '' }}</textarea></label>
+            </form>
+        </details>
         {% if can_edit or row.pass1_start or row.pass2_start %}
-        <details class="ops-pretreat-support"><summary>PLANNING / TREATMENT RECORDS</summary>
-            {% if can_edit %}<form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}">{{ identity(row) }}<button class="ops-desktop" name="action" value="toggle_planned">{{ 'UNPLAN' if row.planned else 'PRETREAT PLANNED' }}</button><button name="action" value="toggle_configured">{{ 'CLEAR CONFIGURED' if row.configured else 'CONFIGURED' }}</button></form>{% endif %}
+        <details class="ops-pretreat-support"><summary>Treatment history</summary>
             {% if row.pass1_start or row.pass2_start %}{{ spray_position_forms(row, can_edit, board) }}{{ team_controls(row, board) }}{% endif %}
-            <a class="ops-staff-link" href="{{ url_for('neosubzero.deice_log') }}">TAIL-OWNED APPLICATION HISTORY / AUDITED CORRECTIONS</a>
+            <a class="ops-staff-link" href="{{ url_for('neosubzero.deice_log') }}">Deice Log · audited history</a>
         </details>
         {% endif %}
         {{ collapse_button() }}

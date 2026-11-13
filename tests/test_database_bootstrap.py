@@ -203,6 +203,20 @@ class DatabaseBootstrapTest(unittest.TestCase):
             )},
         )
 
+    def test_subzero_bootstrap_adds_optional_pretreat_plan_column(self):
+        from app.services.neosubzero_schema import verify_neosubzero_schema_contract
+
+        db.create_all()
+        db.session.execute(text("ALTER TABLE neosubzero_pretreat_states DROP COLUMN pass2_plan"))
+        db.session.commit()
+        with self.assertRaisesRegex(RuntimeError, "pass2_plan"):
+            verify_neosubzero_schema_contract(db.session.connection())
+        db.session.rollback()
+        bootstrap_database(self.app)
+        verify_neosubzero_schema_contract(db.session.connection())
+        columns = {column["name"]: column for column in inspect(db.engine).get_columns("neosubzero_pretreat_states")}
+        self.assertTrue(columns["pass2_plan"]["nullable"])
+
     def test_schema_sync_creates_missing_rain_and_calibration_tables_only_once(self):
         from app.models import NeoRainFuelReviewAcknowledgement, NeoRainGoogleFuelValue, NeoScorpionSpearCalibrationReset
         db.create_all()

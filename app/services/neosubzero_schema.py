@@ -46,6 +46,7 @@ NEOSUBZERO_OPTIONAL_COLUMNS = {
         "pass_evidence": "JSON",
     },
     NeoSubZeroPretreatState.__tablename__: {
+        "pass2_plan": "VARCHAR(16)",
         "reason_for_application": "VARCHAR(120)",
         "original_mission_id": "INTEGER REFERENCES sort_date_missions(id)",
         "flight_number_snapshot": "VARCHAR(32)",

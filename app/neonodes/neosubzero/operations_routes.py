@@ -170,6 +170,8 @@ def operations_mutate():
     if response.status_code >= 400:
         db.session.rollback()
         return jsonify(ok=False, error=response.get_data(as_text=True)[:300]), response.status_code
+    if target == url_for('neosubzero.pretreat_mutate') and response.is_json:
+        return response
     errors = [message for category, message in messages if category == 'error']
     if errors:
         return jsonify(ok=False, error=' '.join(errors)), 409

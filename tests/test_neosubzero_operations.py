@@ -57,6 +57,30 @@ class OperationsTest(unittest.TestCase):
         self.assertIsNone(state.pass2_surface_area)
         self.assertIsNone(state.pass2_started_at_utc)
 
+    def test_pretreat_autosave_persists_plan_only_and_notes_with_versions(self):
+        values = dict(mode='pretreat', action='save_treatment', pass1_plan='type_i', pass2_plan='type_iv')
+        response = self.post('pretreat/mutate', **values)
+        self.assertEqual(response.status_code, 200, response.json)
+        state = NeoSubZeroPretreatState.query.one()
+        original = response.json['version']
+        self.assertEqual(state.pass2_plan, 'type_iv')
+        self.assertIsNone(state.pass1_surface_area)
+        self.assertIsNone(state.pass_evidence)
+        initial_audits = NeoSubZeroAuditEntry.query.count()
+        self.assertEqual(self.post('pretreat/mutate', **values, expected_version=original).json['version'], original)
+        self.assertEqual(NeoSubZeroAuditEntry.query.count(), initial_audits)
+        bad = self.post('pretreat/mutate', **values, expected_version=original, pass1_start='2100')
+        self.assertEqual(bad.status_code, 409)
+        self.assertIsNone(state.pass1_started_at_utc)
+        notes = self.post('pretreat/mutate', mode='pretreat', action='save_notes',
+                          expected_version=original, notes='Check tail')
+        self.assertEqual(notes.status_code, 200)
+        self.assertNotEqual(notes.json['version'], original)
+        self.assertEqual(state.notes, 'Check tail')
+        self.assertIsNone(state.pass_evidence)
+        self.assertEqual(self.post('pretreat/mutate', **values, expected_version=original).status_code, 409)
+        self.assertIn(b'Type IV', self.client.get('/neosubzero/operations?mode=pretreat').data)
+
     def test_no_current_sort_is_safe_in_both_modes_and_revision(self):
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=None):
             for mode in ('pretreat','outbound'):

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261112-mobile-dispatch-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261112-pretreat-autosave-v1') }}">
 <section class="neosubzero-shell neosubzero-operations" data-ops-workspace data-mode="{{ mode }}" data-layout="{{ 'list' if mode == 'pretreat' else preferences.layout }}" data-ramp="{{ preferences.ramp }}" data-ramp-override="{{ ramp_override }}" data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}" data-timezone="{{ gateway_timezone }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.operations_revision_endpoint') }}" data-workspace-url="{{ url_for('neosubzero.operations') }}" data-preference-url="{{ url_for('neosubzero.operations_preferences_mutate') }}" data-mutate-url="{{ url_for('neosubzero.operations_mutate') }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}">
     <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE DISPATCH</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
     {% include 'neonodes/neosubzero/_nav.html' %}
@@ -8,12 +8,18 @@
         <div class="ops-modes" aria-label="Operational mode">{% for choice in modes %}<button type="button" data-ops-mode="{{ choice }}" aria-pressed="{{ 'true' if mode == choice else 'false' }}">{{ choice|upper }}</button>{% endfor %}</div>
         {% if mode == "outbound" %}<div class="ops-layouts" aria-label="Display layout"><button type="button" data-ops-layout="list" aria-pressed="{{ 'true' if preferences.layout == 'list' else 'false' }}">DISPATCH LIST</button><button type="button" data-ops-layout="visual" aria-pressed="{{ 'true' if preferences.layout == 'visual' else 'false' }}">RAMP COLUMNS</button></div>{% endif %}
         <label class="ops-ramp-filter">RAMP<select data-ops-ramp aria-label="Ramp filter"><option value="All">ALL RAMPS</option>{% for ramp in ramps %}<option value="{{ ramp }}" {% if preferences.ramp == ramp %}selected{% endif %}>{{ ramp|upper }}</option>{% endfor %}</select></label>
+        {% if mode == 'pretreat' %}
+        <div class="ops-pretreat-search" role="search" aria-label="Locate Pretreat missions">
+            <input type="search" data-ops-search aria-label="Search Pretreat missions" placeholder="Search tail, flight, destination or parking" autocomplete="off" spellcheck="false">
+            <button type="button" data-ops-search-clear aria-label="Clear mission search" hidden>×</button>
+        </div>
+        {% endif %}
     </nav>
     <p class="ops-feedback" data-ops-feedback role="status" hidden></p>
     {% if not operation %}<p class="neosubzero-empty">No current sort.</p>{% endif %}
     <div class="ops-aircraft-board" data-ops-board>
         {% for row in rows %}
-        <article class="ops-aircraft state-{{ row.visual_state }}" data-ops-row data-mission-id="{{ row.mission_id }}" data-detail-key="{{ row.detail_key }}" data-tail="{{ row.tail }}" data-ramp="{{ row.ramp }}" data-status="{{ row.visual_state }}">
+        <article class="ops-aircraft state-{{ row.visual_state }}" data-ops-row data-mission-id="{{ row.mission_id }}" data-detail-key="{{ row.detail_key }}" data-tail="{{ row.tail }}" data-ramp="{{ row.ramp }}" data-status="{{ row.visual_state }}"{% if mode == 'pretreat' %} data-ops-search-text="{{ row.tail }} {{ row.flight }} {{ row.destination }} {{ row.parking }}"{% endif %}>
             {% if mode == 'pretreat' %}
                 {% include 'neonodes/neosubzero/_operations_pretreat.html' %}
             {% else %}
@@ -28,10 +34,11 @@
         </article>
         {% else %}<p class="neosubzero-empty">No applicable aircraft in the current sort.</p>{% endfor %}
     </div>
+    {% if mode == 'pretreat' %}<p class="neosubzero-empty" data-ops-search-empty role="status" hidden>No Pretreat missions match your search.</p>{% endif %}
     <aside class="ops-detail" data-ops-detail aria-label="Aircraft operational details" {% if mode != 'outbound' or not selected or inline_presentation %}hidden{% endif %}>
         {% if mode == 'outbound' and not inline_presentation %}{% include 'neonodes/neosubzero/_operations_detail.html' %}{% endif %}
     </aside>
 </section>
 <script src="{{ url_for('static',live='20261101-poll-v1', filename='js/neosubzero_departure.js',ops='20261112-shared-forms-v3') }}" defer></script>
-<script src="{{ url_for('static',live='20261101-poll-v1', filename='js/neosubzero_operations.js',v='20261112-mobile-dispatch-v1') }}" defer></script>
+<script src="{{ url_for('static',live='20261101-poll-v1', filename='js/neosubzero_operations.js',v='20261112-pretreat-autosave-v1') }}" defer></script>
 {% endblock %}

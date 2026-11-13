@@ -282,6 +282,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "ucc_queue_history": "TEXT",
     },
     "neosubzero_pretreat_states": {
+        "pass2_plan": "VARCHAR(16)",
         "reason_for_application": "VARCHAR(120)",
     },
     "neosubzero_user_preferences": {
@@ -587,6 +588,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "ucc_queue_history": "TEXT",
     },
     "neosubzero_pretreat_states": {
+        "pass2_plan": "VARCHAR(16)",
         "reason_for_application": "VARCHAR(120)",
     },
     "neosubzero_user_preferences": {

@@ -1138,7 +1138,7 @@ def pretreat_mutate():
         if values.get("action") == "save_treatment":
             from app.neonodes.neosubzero.services import DEFAULT_PRETREAT_REASON
             values["reason_for_application"] = DEFAULT_PRETREAT_REASON
-        mutate_pretreat(
+        state = mutate_pretreat(
             operation,
             mission,
             values.get("action"),
@@ -1147,6 +1147,8 @@ def pretreat_mutate():
             actor_id=current_user.id,
         )
         db.session.commit()
+        if request.endpoint == "neosubzero.operations_mutate":
+            return jsonify(ok=True, message="PRETREAT SAVED.", version=entity_version(state))
         flash("PRETREAT SAVED.", "success")
     except (ValueError, IntegrityError) as exc:
         db.session.rollback()

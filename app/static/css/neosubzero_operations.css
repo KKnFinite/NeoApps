@@ -163,3 +163,60 @@
     .neosubzero-operations .ops-mobile-workspace .ops-inline-evidence { overflow-wrap:anywhere; }
     .neosubzero-operations .ops-mobile-workspace .ops-inline-evidence .neosubzero-spray-position-grid { grid-template-columns:minmax(0,1fr); }
 }
+
+/* Pretreat uses the shared aircraft palette as a status accent. */
+.blueprint-neosubzero .neosubzero-operations[data-mode="pretreat"] .ops-aircraft[data-ops-row] {
+    position:relative; background:#10202c; color:#edf6fb; border-color:#314b5d;
+    border-inline-start:3px solid var(--aircraft-fill,#314b5d);
+}
+.neosubzero-operations[data-mode="pretreat"] .ops-status strong,
+.neosubzero-operations[data-mode="pretreat"] .ops-mobile-status {
+    width:fit-content; padding:3px 6px; border:1px solid var(--aircraft-edge,#526978);
+    border-radius:4px; background:var(--aircraft-fill,#203848); color:var(--aircraft-ink,#edf6fb);
+    font-size:.69rem; font-weight:700;
+}
+.neosubzero-operations[data-mode="pretreat"] .ops-identity strong,
+.neosubzero-operations[data-mode="pretreat"] .ops-mobile-ident strong { font-size:1.22rem; line-height:1.08; }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-summary { grid-template-columns:1.05fr 1fr 1.2fr .9fr; }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-meta span,
+.neosubzero-operations[data-mode="pretreat"] .ops-identity span { color:#bed3e0; }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-inline { border-color:#314b5d; }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-pass { border:0; padding:0; }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-pass legend { padding:0 0 3px; color:#b0ccdc; }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-form { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-inline :is(input,select,textarea) {
+    background:#0c1923; color:#f0f7fb; border:1px solid #41627a; border-radius:4px;
+}
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-inline :is(input,select):disabled { opacity:.65; }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-notes textarea { max-width:42rem; }
+.neosubzero-operations .ops-pretreat-tools { display:flex; flex-wrap:wrap; align-items:center; gap:5px 8px; margin-bottom:5px; }
+.neosubzero-operations .ops-pretreat-tools [data-ops-inline-feedback] { margin:0; padding:4px 7px; }
+.neosubzero-operations .ops-pretreat-tools [aria-pressed="true"] { border-color:var(--subzero-configured-border); }
+.neosubzero-operations .ops-pretreat-correction { grid-column:1 / -1; font-size:.72rem; }
+.neosubzero-operations .ops-pretreat-correction input { max-width:22rem; }
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-notes,
+.neosubzero-operations[data-mode="pretreat"] .ops-pretreat-support { color:#bfd5e2; }
+.neosubzero-operations .ops-pretreat-search {
+    display:flex; align-items:center; gap:4px; flex:0 1 24rem; min-width:0;
+}
+.neosubzero-operations .ops-pretreat-search input {
+    flex:1; min-width:0; min-height:34px; color:#edf6fb; background:#0b1a26;
+    border:1px solid #41627a; border-radius:4px; padding:5px 8px; font:inherit;
+}
+.neosubzero-operations .ops-pretreat-search input::-webkit-search-cancel-button { display:none; }
+.neosubzero-operations[data-mode="pretreat"] .ops-plan-toggle {
+    display:grid; position:absolute; top:0; right:7px; min-height:52px; align-content:center;
+}
+.neosubzero-operations[data-mode="pretreat"] .ops-plan-toggle label { display:flex; align-items:center; min-height:32px; font-size:.69rem; }
+.neosubzero-operations[data-mode="pretreat"] .ops-plan-toggle input { accent-color:#8dd3ff; width:17px; height:17px; }
+@media (min-width:901px) {
+    .neosubzero-operations[data-mode="pretreat"] .ops-pretreat-summary { padding-right:90px; }
+}
+@media (max-width:900px) {
+    .neosubzero-operations .ops-pretreat-search { flex:1 1 100%; }
+    .neosubzero-operations[data-mode="pretreat"] .ops-mobile-summary { min-height:66px; }
+    .neosubzero-operations[data-mode="pretreat"] .ops-mobile-ident strong { font-size:1rem; }
+    .neosubzero-operations[data-mode="pretreat"] .ops-mobile-status { font-size:.59rem; padding:2px 3px; }
+    .neosubzero-operations[data-mode="pretreat"] .ops-plan-toggle { min-height:66px; right:3px; }
+    .neosubzero-operations[data-mode="pretreat"] .ops-plan-toggle label { font-size:.62rem; }
+}

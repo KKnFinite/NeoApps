@@ -17,6 +17,82 @@
     const navigationAbort = new AbortController();
     const stopLive = () => { navigationAbort.abort(); controller?.destroy(); };
     let revision = root.dataset.revision;
+    const searchInput = root.querySelector('[data-ops-search]');
+    const searchClear = root.querySelector('[data-ops-search-clear]');
+    const searchEmpty = root.querySelector('[data-ops-search-empty]');
+    const normalizeSearch = value => value.trim().toLowerCase().replace(/\s+/g,' ');
+    const filterPretreat = () => {
+        if (!searchInput) return;
+        const terms = normalizeSearch(searchInput.value).split(' ').filter(Boolean);
+        const ramp = media.matches ? root.dataset.rampOverride || root.dataset.ramp : 'All';
+        let matches = 0;
+        for (const row of root.querySelectorAll('[data-ops-row]')) {
+            const text = normalizeSearch(row.dataset.opsSearchText || '');
+            row.hidden = (ramp !== 'All' && row.dataset.ramp !== ramp) || !terms.every(term => text.includes(term));
+            if (!row.hidden) matches++;
+        }
+        searchClear.hidden = !searchInput.value;
+        searchEmpty.hidden = !terms.length || matches > 0;
+    };
+    searchInput?.addEventListener('input', filterPretreat);
+    searchClear?.addEventListener('click', () => {
+        searchInput.value = '';
+        searchInput.focus({preventScroll:true});
+        filterPretreat();
+    });
+    const autosaveSelector = '[data-ops-pretreat-autosave]';
+    const pendingPretreat = new Set();
+    let reconcilingPretreat = false;
+    const autosaveValues = form => new URLSearchParams([...new FormData(form)].filter(([name]) =>
+        !['csrf_token', 'expected_version', 'correction_reason'].includes(name))).toString();
+    const rememberAutosave = form => {
+        if (form.matches(autosaveSelector) && form.dataset.savedValues === undefined) {
+            form.dataset.savedValues = autosaveValues(form);
+        }
+    };
+    const queuePretreat = form => {
+        const correction = form.elements.correction_reason;
+        if (form.dataset.opsCompleted === 'true' || correction?.value.trim()) return;
+        pendingPretreat.add(form);
+        setTimeout(drainPretreat,0);
+    };
+    const drainPretreat = () => {
+        if (busy || preferenceBusy) return;
+        for (const form of pendingPretreat) {
+            pendingPretreat.delete(form);
+            if (!form.isConnected || form.dataset.autosaveConflict === 'true') continue;
+            const invalid = [...form.querySelectorAll('[data-clock-time]:not([disabled])')]
+                .some(field => window.NeoAppsClockTime.normalizeInput(field) === null);
+            if (invalid) {
+                inlineMessage(inlineFor(form), 'Enter a valid time from 00:00 to 23:59. Your draft is kept.', true);
+                continue;
+            }
+            if (autosaveValues(form) === form.dataset.savedValues) {
+                if (form.dataset.dirty === 'true') {
+                    delete form.dataset.dirty;
+                    saveDraft();
+                    inlineMessage(inlineFor(form), '');
+                }
+                continue;
+            }
+            const endedPassChanged = [1, 2].some(number => {
+                const end = form.elements['pass' + number + '_end'];
+                return end?.defaultValue && ['surface_area', 'start', 'end'].some(field => {
+                    const input = form.elements['pass' + number + '_' + field];
+                    return input.tagName === 'SELECT'
+                        ? input.value !== [...input.options].find(option => option.defaultSelected)?.value
+                        : input.value !== input.defaultValue;
+                });
+            });
+            if (endedPassChanged) {
+                form.querySelector('[data-ops-disclosure="correction"]')?.setAttribute('open','');
+                inlineMessage(inlineFor(form), 'Enter a correction reason and apply the audited correction. Your draft is kept.', true);
+                continue;
+            }
+            form.requestSubmit();
+            if (busy) break;
+        }
+    };
     const syncFeedback = () => {
         const inline = pane.querySelector('[data-ops-detail-feedback]');
         if (inline) { inline.textContent = feedback.textContent; inline.hidden = feedback.hidden; inline.classList.toggle('is-error', feedback.classList.contains('is-error')); }
@@ -42,6 +118,8 @@
         line.hidden = !text;
         line.classList.toggle('is-error', error);
         content.querySelector('[data-ops-reload-inline]').hidden = !error;
+        const retry = content.querySelector('[data-ops-pretreat-retry]');
+        if (retry) retry.hidden = true;
     };
     const dirty = () => !!root.querySelector('form[data-dirty="true"]');
     const draftMessage = text => {
@@ -76,7 +154,7 @@
                 form.querySelector('button[type="submit"]').hidden = !unlocked;
             }
         } else if (form.matches('.neosubzero-treatment-form')) {
-            if (!form.dataset.unlocked) form.dataset.unlocked = form.querySelector('[data-subzero-edit]:not([hidden])') || !form.querySelector('button[type="submit"]') ? 'false' : 'true';
+            if (!form.dataset.unlocked) form.dataset.unlocked = form.matches(autosaveSelector) && form.dataset.opsCompleted !== 'true' ? 'true' : 'false';
             const unlocked = form.dataset.unlocked === 'true';
             const names = ['pass1_start', 'pass1_end', 'pass2_start', 'pass2_end'];
             const useSecond = !form.elements.pass2_plan || form.elements.pass2_plan.value === 'type_iv';
@@ -89,9 +167,9 @@
             });
             form.querySelectorAll('select').forEach(e => { e.disabled = !unlocked; });
             form.elements.pass2_surface_area.disabled = !unlocked || !useSecond;
-            form.elements.notes.readOnly = !unlocked;
+
             const edit = form.querySelector('[data-subzero-edit]');
-            const save = form.querySelector('button[type="submit"]');
+            const save = form.querySelector('[data-ops-apply-correction]');
             if (edit) edit.hidden = unlocked;
             if (save) save.hidden = !unlocked;
             if (form.elements.correction_reason) {
@@ -102,17 +180,26 @@
     const initialize = (restore = false, onlyFresh = false) => {
         if (!usesInline()) pane.querySelectorAll('form').forEach(sync);
         for (const content of draftContents()) {
-            if (usesInline()) content.querySelectorAll('form').forEach(sync);
+            if (usesInline()) content.querySelectorAll('form').forEach(form => { sync(form); rememberAutosave(form); });
             if (!restore) continue;
             let drafts = [];
             try { drafts = JSON.parse(sessionStorage.getItem(draftKey(content)) || '[]');
                 drafts.forEach(draft => { draft.fields = draft.fields.filter(field => field.name !== 'csrf_token'); });
                 if (drafts.length) sessionStorage.setItem(draftKey(content),JSON.stringify(drafts));
             } catch (_) { /* current DOM remains usable */ }
+            const notesForm = isPretreat && content.querySelector('.ops-pretreat-notes form[data-ops-pretreat-autosave]');
+            if (notesForm && !drafts.some(draft => draft.key === formKey(notesForm))) {
+                const combinedDraft = drafts.find(draft => draft.key.endsWith(':save_treatment'));
+                const savedNotes = combinedDraft?.fields.find(field => field.name === 'notes');
+                if (savedNotes && savedNotes.value !== notesForm.elements.notes.value) {
+                    drafts.push({key: formKey(notesForm), fields: combinedDraft.fields.filter(field =>
+                        ['notes', 'expected_version'].includes(field.name))});
+                }
+            }
             let restored = false;
             for (const draft of drafts) {
                 const form = [...content.querySelectorAll('form')].find(e => formKey(e) === draft.key);
-                if (!form || !form.querySelector('button[type="submit"],button[name="action"]') ||
+                if (!form || (!form.matches(autosaveSelector) && !form.querySelector('button[type="submit"],button[name="action"]')) ||
                     (onlyFresh && form.dataset.dirty === 'true')) continue;
                 restored = true;
                 form.dataset.unlocked = draft.unlocked || form.dataset.unlocked;
@@ -167,6 +254,7 @@
                 board.append(column);
             });
         } else rows.forEach(row => { row.hidden = ramp !== 'All' && row.dataset.ramp !== ramp; });
+        filterPretreat();
         root.querySelectorAll('[data-ops-layout]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.opsLayout === root.dataset.layout)));
     };
     const tagOrder = () => root.querySelectorAll('[data-ops-row]').forEach((row,index) => { row.dataset.order = index; });
@@ -191,7 +279,7 @@
         if (!isPretreat) new Set(requestedDrafts().slice(0,20)).forEach(id => url.searchParams.append('draft',id));
         return url;
     };
-    const reconcileInline = (board, incoming, active) => {
+    const reconcileInline = (board, incoming, active, savedForm) => {
         const nextRows = new Map([...incoming.querySelectorAll('[data-ops-row]')].map(row => [row.dataset.missionId, row]));
         if (!media.matches) nextRows.forEach(row => { accordion(row).open = true; });
         for (const row of board.querySelectorAll('[data-ops-row]')) {
@@ -228,7 +316,7 @@
                 } else {
                     const freshForms = [...replacement.querySelectorAll('form')];
                     for (const form of current.querySelectorAll('form')) {
-                        if (form.dataset.dirty !== 'true' && !form.contains(active)) continue;
+                        if (form.dataset.dirty !== 'true' && (!form.contains(active) || form === savedForm)) continue;
                         const fresh = freshForms.find(candidate => formKey(candidate) === formKey(form));
                         if (fresh) fresh.replaceWith(form);
                         else {
@@ -244,7 +332,10 @@
             }
             const feedback = editor.querySelector('[data-ops-inline-feedback]');
             if (!feedback.hidden && nextEditor.parentElement) {
-                inlineMessage(nextEditor.querySelector('[data-ops-inline]'), feedback.textContent, feedback.classList.contains('is-error'));
+                const content = nextEditor.querySelector('[data-ops-inline]');
+                inlineMessage(content, feedback.textContent, feedback.classList.contains('is-error'));
+                const retry = content.querySelector('[data-ops-pretreat-retry]');
+                if (retry && content.querySelector('[data-autosave-retry]')) retry.hidden = false;
             }
         }
     };
@@ -265,7 +356,8 @@
         const activeRowField = usesInline() && currentBoard.contains(document.activeElement) ? document.activeElement : null;
         const caret = activeRowField && 'selectionStart' in activeRowField ? [activeRowField.selectionStart, activeRowField.selectionEnd] : null;
         const activeTop = activeRowField?.getBoundingClientRect().top;
-        if (usesInline() && next.dataset.operationId === root.dataset.operationId) reconcileInline(currentBoard, nextBoard, activeRowField);
+        reconcilingPretreat = isPretreat;
+        if (usesInline() && next.dataset.operationId === root.dataset.operationId) reconcileInline(currentBoard, nextBoard, activeRowField, isPretreat ? saved : null);
         currentBoard.replaceWith(nextBoard);
         ['operationId','ramp','rampOverride'].forEach(key => { root.dataset[key] = next.dataset[key]; });
         root.dataset.desktopLayout = next.dataset.layout;
@@ -274,11 +366,18 @@
             tagOrder();
             applyLayout();
             initialize(!isPretreat, true);
-            if (activeRowField?.isConnected) {
-                activeRowField.focus({preventScroll:true});
-                if (caret && caret[0] !== null) activeRowField.setSelectionRange(...caret);
+            const activeContent = activeRowField?.closest('[data-ops-inline]');
+            const newRow = activeContent && [...nextBoard.querySelectorAll('[data-ops-inline]')].find(content =>
+                content.dataset.missionId === activeContent.dataset.missionId && content.dataset.tail === activeContent.dataset.tail);
+            const replacement = isPretreat && activeRowField?.form && activeRowField.name && newRow && [...newRow.querySelectorAll('form')].find(form =>
+                formKey(form) === formKey(activeRowField.form))?.elements[activeRowField.name];
+            const focus = activeRowField?.isConnected ? activeRowField : replacement;
+            if (focus && !focus.disabled && !focus.readOnly) {
+                focus.focus({preventScroll:true});
+                if (caret && caret[0] !== null) focus.setSelectionRange(...caret);
             }
-            const shift = activeRowField?.isConnected ? activeRowField.getBoundingClientRect().top - activeTop : 0;
+            reconcilingPretreat = false;
+            const shift = focus?.isConnected ? focus.getBoundingClientRect().top - activeTop : 0;
             window.scrollTo({top:scroll + shift,behavior:'instant'});
             return;
         }
@@ -333,13 +432,25 @@
             if ('ramp' in changes) { root.dataset.rampOverride = ''; history.replaceState(null,'',currentUrl(selected)); }
             return true;
         } catch (error) { notify(error.message,true); return false; }
-        finally { preferenceBusy = false; controls.forEach(control=>{control.disabled=false;}); }
+        finally { preferenceBusy = false; controls.forEach(control=>{control.disabled=false;}); drainPretreat(); }
     };
     root.addEventListener('input', event => {
         const form = event.target.closest('form'); if (!form || form.matches('[data-ops-autosave]')) return;
         form.dataset.dirty = 'true'; sync(form); saveDraft();
     });
+    root.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' || !event.target.matches('[data-clock-time]')) return;
+        const form = event.target.closest(autosaveSelector);
+        if (!form) return;
+        event.preventDefault();
+        event.target.blur();
+    });
+    root.addEventListener('focusout', event => {
+        const form = event.target.closest(autosaveSelector);
+        if (!reconcilingPretreat && form && event.target.name === 'notes' && form.dataset.dirty) queuePretreat(form);
+    });
     root.addEventListener('change', async event => {
+        if (reconcilingPretreat) return;
         const form = event.target.closest('form');
         if (form?.matches('[data-ops-autosave]')) {
             if (busy || preferenceBusy) { event.target.checked = !event.target.checked; return; }
@@ -347,6 +458,7 @@
             return;
         }
         if (form) { form.dataset.dirty = 'true'; sync(form); saveDraft(); }
+        if (form?.matches(autosaveSelector) && !['notes','correction_reason'].includes(event.target.name)) queuePretreat(form);
         if (event.target.matches('[data-ops-ramp]')) {
             if (await preferences({ramp:event.target.value})) applyLayout();
         }
@@ -380,6 +492,12 @@
             await openAccordion(card, !card.open);
             return;
         }
+        const retry = event.target.closest('[data-ops-pretreat-retry]');
+        if (retry) {
+            const form = retry.closest('[data-ops-inline]').querySelector(autosaveSelector + '[data-autosave-retry]');
+            if (form) queuePretreat(form);
+            return;
+        }
         const inspection = event.target.closest('[data-open-frost-inspection]');
         if (inspection) {
             const section = pane.querySelector('.neosubzero-frost-inspection');
@@ -399,7 +517,10 @@
             const content = inlineFor(reloadInline);
             if (content.querySelector('form[data-dirty="true"]') && !window.confirm('Discard unsaved entries for this aircraft?')) return;
             try {
-                content.querySelectorAll('form[data-dirty="true"]').forEach(form => delete form.dataset.dirty);
+                content.querySelectorAll('form[data-dirty="true"]').forEach(form => {
+                    pendingPretreat.delete(form);
+                    delete form.dataset.dirty;
+                });
                 inlineMessage(content, '');
                 saveDraft();
                 reloadInline.blur();
@@ -444,6 +565,7 @@
                 saveDraft();
                 const correction = form.elements.correction_reason;
                 if (correction) form.querySelector('[data-ops-disclosure="notes"]')?.setAttribute('open','');
+                if (isPretreat && correction) form.querySelector('[data-ops-disclosure="correction"]').open = true;
                 (correction || form.elements.pass1_surface_area).focus();
             }
             const editor = inline || pane;
@@ -454,6 +576,7 @@
         if (stamp) {
             const input = stamp.closest('form').elements[stamp.dataset.subzeroDeiceStamp || stamp.dataset.subzeroStamp];
             input.value = window.NeoAppsClockTime.normalize(shared.operationalHHMM()); input.dispatchEvent(new Event('input',{bubbles:true}));
+            if (input.form.matches(autosaveSelector)) queuePretreat(input.form);
         }
     });
     root.addEventListener('submit', async event => {
@@ -461,6 +584,12 @@
         event.preventDefault(); if (busy || preferenceBusy) return;
         if (form.dataset.subzeroConfirm && !window.confirm(form.dataset.subzeroConfirm)) return;
         const inline = inlineFor(form);
+        const autosave = form.matches(autosaveSelector) && !event.submitter;
+        if (form.matches(autosaveSelector) && !autosave && !form.elements.correction_reason?.value.trim()) {
+            inlineMessage(inline, 'Enter a correction reason before applying changes.', true);
+            return;
+        }
+        const sentValues = autosave ? autosaveValues(form) : null;
         const body = new FormData(form), content = inline || form.closest('[data-ops-detail-content]');
         if (event.submitter?.name) body.set(event.submitter.name,event.submitter.value);
         body.set('target',formAction(form)); body.set('mode',root.dataset.mode);
@@ -476,8 +605,8 @@
         const controls = [...(row || content || form)
             .querySelectorAll('button,input:not([type="hidden"]),select,textarea')]
             .filter(control => !control.disabled);
-        controls.forEach(control => { control.disabled = true; });
-        const unlock = () => controls.forEach(control => { control.disabled = false; });
+        if (!autosave) controls.forEach(control => { control.disabled = true; });
+        const unlock = () => { if (!autosave) controls.forEach(control => { control.disabled = false; }); };
         if (toggleError) toggleError.hidden = true;
         if (inline && !planned) inlineMessage(inline, 'SAVING…');
         else if (!planned) notify('SAVING…');
@@ -487,31 +616,56 @@
             let payload; try { payload=await response.json(); } catch (_) { throw new Error(`Save could not be confirmed (${response.status}). Your entries are kept. Check current state before retrying.`); }
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Save rejected. Your entries are kept.');
             saved = true;
-            delete form.dataset.dirty;
+            delete form.dataset.autosaveRetry;
+            if (isPretreat && typeof payload.version === 'string') {
+                const previous = body.get('expected_version'), endpoint = formAction(form);
+                for (const field of row.querySelectorAll('[name="expected_version"]')) {
+                    if (field.value === previous && formAction(field.form) === endpoint) field.value = payload.version;
+                }
+            }
+            if (autosave) {
+                form.dataset.savedValues = sentValues;
+                for (const field of form.querySelectorAll('[data-clock-time],select')) {
+                    if (!body.has(field.name)) continue;
+                    if (field.tagName === 'SELECT') {
+                        const currentValue = field.value;
+                        for (const option of field.options) option.defaultSelected = option.value === body.get(field.name);
+                        field.value = currentValue;
+                    } else field.defaultValue = body.get(field.name);
+                }
+            }
+            if (!autosave || autosaveValues(form) === sentValues) delete form.dataset.dirty;
             saveDraft();
             if (planned) notify('');
             if (inline) {
-                if (form.contains(document.activeElement)) document.activeElement.blur();
+                if (!autosave && form.contains(document.activeElement)) document.activeElement.blur();
                 if (!planned) inlineMessage(inline, payload.message);
             }
             else notify(payload.message);
             unlock();
-            await fetchPage(selected,key,true);
+            await fetchPage(selected,isPretreat ? form : key,true);
         } catch(error) {
             const message = error.name === 'AbortError' ? 'Save timed out. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
                 : error instanceof TypeError ? 'Network error while saving. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
                 : error.message;
+            if (autosave && !saved) form.dataset.autosaveRetry = '';
             if (toggle && !saved) toggle.checked = !toggle.checked;
             if (toggleError) {
                 toggleError.textContent = 'Save error';
                 toggleError.title = message;
                 toggleError.hidden = false;
                 notify(message,true);
-            } else if (inline) inlineMessage(inline, message, true);
+            } else if (inline) {
+                inlineMessage(inline, message, true);
+                if (autosave && !saved && !message.includes('changed')) {
+                    inline.querySelector('[data-ops-pretreat-retry]').hidden = false;
+                } else if (autosave && !saved) form.dataset.autosaveConflict = 'true';
+            }
             else notify(message,true);
         }
         finally {
             clearTimeout(timeout); busy=false; if (!saved) unlock();
+            drainPretreat();
         }
     });
     root.dataset.desktopLayout = root.dataset.layout;

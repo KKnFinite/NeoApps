@@ -99,6 +99,11 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
         state.pretreat_planned = not state.pretreat_planned if requested is None else requested == "1"
     elif action == "toggle_configured":
         state.configured_at_utc = None if state.configured_at_utc else datetime.utcnow().replace(second=0, microsecond=0)
+    elif action == "save_notes":
+        notes = str(values.get("notes") or "").strip()
+        if len(notes) > 2000:
+            raise NeoSubZeroPretreatError("Notes must be 2,000 characters or fewer.")
+        state.notes = notes or None
     elif action == "save_treatment":
         if (before or {}).get('pass2_ended_at_utc') and not str(values.get('correction_reason') or '').strip():
             raise NeoSubZeroPretreatError('Enter a reason for correcting completed Pretreat evidence.')
@@ -112,14 +117,23 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
         unused_second_pass = inline and not values.get("pass2_plan")
         if unused_second_pass and any(values.get(name) for name in ("pass2_start", "pass2_end", "pass2_surface_area")):
             raise NeoSubZeroPretreatError("Choose Type IV before recording Pass 2 treatment.")
-        state.pass1_surface_area = _surface(values.get("pass1_surface_area"))
-        state.pass2_surface_area = None if unused_second_pass else _surface(values.get("pass2_surface_area"))
+        if inline:
+            state.pass2_plan = "unused" if unused_second_pass else "type_iv"
+        state.pass1_surface_area = _surface(values.get("pass1_surface_area"), optional=inline)
+        state.pass2_surface_area = None if unused_second_pass else _surface(values.get("pass2_surface_area"), optional=inline)
         state.pass1_started_at_utc = _parse_hhmm(values.get("pass1_start"), operation, mission)
         state.pass1_ended_at_utc = _parse_hhmm(values.get("pass1_end"), operation, mission)
         state.pass2_started_at_utc = _parse_hhmm(values.get("pass2_start"), operation, mission)
         state.pass2_ended_at_utc = _parse_hhmm(values.get("pass2_end"), operation, mission)
-        state.notes = str(values.get("notes") or "").strip() or None
+        if "notes" in values:
+            state.notes = str(values.get("notes") or "").strip() or None
         _validate_sequence(state)
+        if inline:
+            for number in (1, 2):
+                if getattr(state, f"pass{number}_started_at_utc") and not getattr(state, f"pass{number}_surface_area"):
+                    raise NeoSubZeroPretreatError(f"Choose a Pass {number} surface before recording START.")
+                if (before or {}).get(f"pass{number}_started_at_utc") and not getattr(state, f"pass{number}_started_at_utc"):
+                    raise NeoSubZeroPretreatError("Recorded physical treatment cannot be erased.")
         if inline and any(start and end and start == end for start, end in (
             (state.pass1_started_at_utc, state.pass1_ended_at_utc),
             (state.pass2_started_at_utc, state.pass2_ended_at_utc),
@@ -132,6 +146,8 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
                 raise NeoSubZeroPretreatError('Recorded physical treatment cannot be erased.')
     else:
         raise NeoSubZeroPretreatError("Choose a valid Pretreat action.")
+    if before is not None and before == evidence_values(state):
+        return state
     if action == "save_treatment":
         _sync_completion(operation, tail, state)
         from app.models import Gateway
@@ -220,8 +236,10 @@ def _sync_completion(operation, tail, state):
         row.pretreat_status = completed
 
 
-def _surface(value):
+def _surface(value, *, optional=False):
     value = str(value or "").strip().lower()
+    if optional and not value:
+        return None
     if value not in SURFACE_AREAS: raise NeoSubZeroPretreatError("Choose a valid Surface Area for both passes.")
     return value
 
