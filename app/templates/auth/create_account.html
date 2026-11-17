@@ -20,8 +20,8 @@
             <input name="last_name" value="{{ form.last_name }}" autocomplete="family-name" required>
         </label>
         <label>
-            <span>Employee ID</span>
-            <input name="employee_id" value="{{ form.employee_id }}" required>
+            <span>Employee / Contractor ID (optional)</span>
+            <input name="employee_id" value="{{ form.employee_id }}">
         </label>
         <label>
             <span>Supervisor / Manager</span>
@@ -62,6 +62,7 @@
             <span>Confirm Password</span>
             <input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
         </label>
+        <p class="muted">Truck drivers use this same account request and sign-in. An administrator selects your account type during approval.</p>
         <p class="muted">Use 12–128 characters. Longer passphrases are recommended. Common or compromised passwords are not allowed.</p>
         <button type="submit">Request Access</button>
     </form>
