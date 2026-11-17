@@ -1,6 +1,7 @@
 """Actual shared navigation at desktop/mobile widths; isolated authenticated data."""
 import unittest
 import re
+from contextlib import closing
 from pathlib import Path
 from playwright.sync_api import expect
 from app.extensions import db
@@ -19,6 +20,55 @@ class SubZeroNavigationBrowserTest(unittest.TestCase):
     tearDownClass = classmethod(fixtures.UccBrowserTest.tearDownClass.__func__)
     login = fixtures.UccBrowserTest.login
     ready = fixtures.UccBrowserTest.ready
+
+    def test_desktop_sidebar_fits_and_scrolls_when_short(self):
+        for engine in ('chromium', 'webkit'):
+            with closing(getattr(self.pw, engine).launch()) as browser:
+                page = browser.new_page(viewport={'width': 1366, 'height': 768})
+                self.login(page)
+                self.ready(page, '/neosubzero/ucc')
+                sidebar = page.locator('[data-operational-sidebar]')
+                primary = sidebar.locator('.operational-sidebar-primary')
+                menu = primary.locator('.node-desktop-side-menu')
+                utilities = sidebar.locator('.operational-sidebar-utilities')
+                toggle = primary.locator('[data-operational-sidebar-toggle]')
+                for collapsed in (False, True):
+                    if collapsed:
+                        toggle.click()
+                    expect(toggle).to_have_attribute('aria-expanded', 'false' if collapsed else 'true')
+                    for width, height in ((1366, 768), (1920, 1080), (2560, 1440), (1366, 600)):
+                        with self.subTest(engine=engine, width=width, height=height, collapsed=collapsed):
+                            page.set_viewport_size({'width': width, 'height': height})
+                            primary.evaluate('el => { el.scrollTop = 0; }')
+                            self.assertEqual(menu.locator('a').evaluate_all(
+                                '(links) => links.map(link => link.getAttribute("aria-label"))'), LABELS)
+                            expect(primary.locator('.operational-sidebar-logo img')).to_be_visible()
+                            context = primary.locator('.node-desktop-side-context')
+                            if collapsed:
+                                expect(context).to_be_hidden()
+                            else:
+                                expect(context).to_be_visible()
+                            available, required, overflow = primary.evaluate(
+                                'el => [el.clientHeight, el.scrollHeight, getComputedStyle(el).overflowY]')
+                            self.assertEqual(overflow, 'auto')
+                            self.assertEqual(required > available, height == 600, (available, required))
+                            self.assertEqual(utilities.locator('strong').all_text_contents(),
+                                             ['Board View', 'NeoGateway', 'NeoPortal'])
+                            footer_before = utilities.bounding_box()
+                            for link in menu.locator('a').all():
+                                if height == 600:
+                                    link.scroll_into_view_if_needed()
+                                self.assertTrue(link.evaluate('''el => {
+                                    const box = el.getBoundingClientRect();
+                                    const primary = el.closest('.operational-sidebar-primary').getBoundingClientRect();
+                                    return box.top >= primary.top && box.bottom <= primary.bottom + 1 &&
+                                        el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+                                }'''), link.get_attribute('aria-label'))
+                            self.assertEqual(utilities.bounding_box(), footer_before)
+                            self.assertLessEqual(footer_before['y'] + footer_before['height'], height)
+                            if height == 600:
+                                self.assertGreater(primary.evaluate('el => el.scrollTop'), 0)
+                    primary.evaluate('el => { el.scrollTop = 0; }')
 
     def test_desktop_mobile_collapsed_links_and_direct_routes(self):
         evidence = Path('instance/browser-evidence/subzero-navigation').resolve()
