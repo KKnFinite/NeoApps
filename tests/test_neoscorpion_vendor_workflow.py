@@ -2,14 +2,15 @@
 from datetime import datetime, timedelta
 from io import BytesIO
 import json
+import re
 from unittest import TestCase
 from unittest.mock import patch
 from urllib.parse import urlparse
-from tests.neoscorpion_handoff_fixture import submit_and_verify
+from tests.neoscorpion_handoff_fixture import submit_and_verify, submit_fueler_only
 from app.extensions import db
 from app.models import (User, NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
     NeoScorpionTruckDriver, NeoScorpionSortTruck, NeoScorpionFuelTruck, NeoScorpionFuelingEvent,
-    NeoScorpionInventoryReading, NeoScorpionVendorAudit)
+    NeoScorpionInventoryReading, NeoScorpionVendorAudit, SortDateOperation)
 from app.services import neoscorpion_vendors as vendors, neoscorpion_inventory as inventory, neoscorpion as service
 from app.services.neoscorpion_drivers import change_driver
 from tests import test_neoscorpion_operational_timeline as timeline
@@ -38,6 +39,100 @@ class VendorWorkflowTest(TestCase):
         claim=vendors.request_claim(account,self.operation,self.truck.id);db.session.commit()
         vendors.decide_claim(self.gateway,self.operation,self.dispatcher,claim.id,True,0);db.session.commit()
         return user,account
+
+    def sort_mission_groups(self):
+        response = self.client.get(f'{DRIVER}/my-truck')
+        self.assertEqual(response.status_code, 200)
+        section = response.get_data(as_text=True).split('data-vendor-sort-missions', 1)[1].split('</section>', 1)[0]
+        return {
+            group: re.findall(r'<tr>((?:<td>.*?</td>){4})</tr>', content)
+            for group, content in re.findall(r'data-sort-mission-group="(\w+)">(.*?)</tbody>', section, re.S)
+        }
+
+    def test_sort_missions_follow_canonical_physical_and_dispatch_lifecycle(self):
+        self.prepare()
+        self.fixture._mission('UPS987', 'N876UP', 25000, 13, destination='PHX')
+        self.fixture._mission('UPS986', 'N875UP', 25000, 9, destination='ONT')
+        user, _ = self.connect()
+        self.client.post(f'{DRIVER}/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+
+        groups = self.sort_mission_groups()
+        self.assertEqual(list(groups), ['working', 'left', 'complete'])
+        self.assertEqual(groups['left'], [
+            '<td>N875UP</td><td>ONT</td><td>-</td><td>22:09</td>',
+            '<td>N876UP</td><td>PHX</td><td>-</td><td>22:13</td>',
+        ])
+        self.assertIn('<td>B06</td>', groups['working'][0])
+        self.assertFalse(groups['complete'])
+
+        prior_status = self.assignment.operational_status
+        self.assignment.operational_status = 'hold_review'
+        db.session.commit()
+        self.assertIn('N491UP', self.sort_mission_groups()['working'][0])
+        self.assignment.operational_status = prior_status
+        db.session.commit()
+        self.save(self.start + timedelta(minutes=10), **self.final_data())
+        self.off()
+        self.assertIn('N491UP', self.sort_mission_groups()['working'][0])
+        submit_fueler_only(self.gateway, self.assignment.id)
+        db.session.commit()
+        self.assertIn('N491UP', self.sort_mission_groups()['working'][0])
+        self.assertFalse(self.sort_mission_groups()['complete'])
+
+        service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id)
+        db.session.commit()
+        groups = self.sort_mission_groups()
+        self.assertFalse(groups['working'])
+        self.assertIn('N491UP', groups['complete'][0])
+
+        service.start_follow_up_fuel_cycle(self.gateway, self.dispatcher, self.assignment.id, 'uplift', '35',
+            self.fueler.id, self.truck.id, expected_cycle=1, expected_tail=self.mission.assigned_tail_number)
+        db.session.commit()
+        groups = self.sort_mission_groups()
+        self.assertFalse(groups['working'])
+        self.assertFalse(groups['complete'])
+        self.assertIn('N491UP', ''.join(groups['left']))
+
+    def test_sort_missions_fob_awaits_dispatch_completion(self):
+        self.truck = self.fixture._nightly_truck()
+        self.assignment.assigned_fueler_user_id = self.fueler.id
+        service.save_fueler_entry(self.gateway, self.fueler, dict(assignment_id=self.assignment.id,
+            apu_running='no', remaining_left='30', remaining_ctr='0', remaining_right='0',
+            actual_left='30', actual_ctr='0', actual_right='0'))
+        db.session.commit()
+        user, _ = self.connect()
+        self.client.post(f'{DRIVER}/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+        self.assertIn('N491UP', self.sort_mission_groups()['left'][0])
+        service.complete_fuel_on_board(self.gateway, self.dispatcher, self.assignment.id)
+        db.session.commit()
+        self.assertIn('N491UP', self.sort_mission_groups()['complete'][0])
+
+    def test_sort_missions_hide_on_sort_change_and_revocation(self):
+        self.prepare()
+        user, _ = self.connect()
+        old_operation = self.operation.id
+        other_sort = SortDateOperation(sort_date=self.operation.sort_date, gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code, sort_name='different-sort')
+        other_mission = self.fixture._mission('UPS999', 'N999UP', 25000, 20)
+        other_mission.sort_date_operation = other_sort
+        db.session.commit()
+
+        self.client.post(f'{DRIVER}/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+        page = self.client.get(f'{DRIVER}/my-truck').data
+        self.assertIn(b'ALL SORT MISSIONS', page)
+        self.assertNotIn(b'N999UP', page)
+        revision_url = f'{DRIVER}/revision?operation_id={old_operation}'
+        self.assertIsNotNone(self.client.get(revision_url).json['sort_missions_revision'])
+        with patch.object(service, 'current_sort_operation', return_value=other_sort):
+            self.assertEqual(self.client.get(revision_url).status_code, 403)
+            page = self.client.get(f'{DRIVER}/my-truck').data
+            self.assertNotIn(b'ALL SORT MISSIONS', page)
+            self.assertNotIn(b'N491UP', page)
+            self.assertNotIn(b'N999UP', page)
+        vendors.set_participation(self.gateway, self.operation, self.dispatcher, user.id, 'revoked', 1)
+        db.session.commit()
+        self.assertEqual(self.client.get(revision_url).status_code, 403)
+        self.assertNotIn(b'ALL SORT MISSIONS', self.client.get(f'{DRIVER}/my-truck').data)
 
     def test_invitation_single_use_and_no_staffing_identity(self):
         user,account,token=self.vendor()
@@ -79,6 +174,7 @@ class VendorWorkflowTest(TestCase):
         driver_url = '/neoscorpion/driver'
         tail = self.mission.assigned_tail_number.encode()
         self.assertNotIn(tail, self.client.get(f'{driver_url}/my-truck').data)
+        self.assertIsNone(self.client.get(f'{driver_url}/revision').json['sort_missions_revision'])
         self.assertEqual(self.client.get(f'{driver_url}/live').status_code, 403)
         claim = vendors.request_claim(account, self.operation, self.truck.id)
         vendors.decide_claim(self.gateway, self.operation, self.dispatcher, claim.id, True, 0)
@@ -94,6 +190,8 @@ class VendorWorkflowTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'NO APPROVED TRUCK', response.data)
         self.assertNotIn(tail, response.data)
+        self.assertNotIn(b'ALL SORT MISSIONS', response.data)
+        self.assertIsNone(self.client.get(f'{driver_url}/revision').json['sort_missions_revision'])
         self.assertEqual(self.client.get(f'{driver_url}/live').status_code, 403)
 
     def test_invitation_cannot_complete_via_portal_verification_and_disable_blocks_login(self):

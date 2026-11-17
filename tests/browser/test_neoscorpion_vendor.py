@@ -6,13 +6,155 @@ from unittest.mock import patch
 from playwright.sync_api import expect
 from app.extensions import db
 from app.models import (User,Gateway,SortDateOperation,SortDateMission,NeoScorpionFuelAssignment,
-    NeoScorpionFuelTruck,NeoScorpionSortTruck,NeoScorpionSortAssetState,NeoScorpionSettings)
+    NeoScorpionFuelTruck,NeoScorpionSortTruck,NeoScorpionSortAssetState,NeoScorpionSettings,
+    NeoScorpionVendorRequest, SortDateParkingAssignment)
 from app.services import neoscorpion as service, neoscorpion_vendors as vendors
 from app.services.access_control import ensure_default_gateway_and_nodes
 from tests.browser import test_mobile_drawer as fixtures
+from tests.neoscorpion_handoff_fixture import submit_and_verify
 
 
 class VendorBrowserTest(unittest.TestCase):
+    def test_all_sort_missions_refresh_on_vendor_truck(self):
+        F = fixtures.MobileDrawerBrowserTest
+        F.setUpClass()
+        browser = None
+        try:
+            def departure(operation, tail, dest, departure_at):
+                return SortDateMission(sort_date_operation_id=operation.id, sort_date=operation.sort_date,
+                    gateway_code=operation.gateway_code, sort_name=operation.sort_name, mission_type='departure',
+                    mission_source='manual', flight_number='FIX' + tail[1:4], origin=operation.gateway_code,
+                    destination=dest, assigned_tail_number=tail, planned_datetime_utc=departure_at,
+                    timezone='UTC', planned_fuel_load=25000)
+
+            with F.app.app_context():
+                gateway = ensure_default_gateway_and_nodes()
+                actor = User.query.filter_by(username='drawer-admin').one()
+                operation = SortDateOperation(generated_by_user_id=actor.id, gateway_id=gateway.id,
+                    gateway_code=gateway.code, sort_date=date.today(), sort_name='night', window_minutes=60)
+                vendor_truck, working_truck = [NeoScorpionFuelTruck(gateway_id=gateway.id, truck_number=number,
+                    capacity_gallons=10000) for number in ('422808', '426606')]
+                db.session.add_all([operation, vendor_truck, working_truck])
+                db.session.flush()
+                db.session.add_all([NeoScorpionSortTruck(sort_date_operation_id=operation.id, fuel_truck_id=truck.id,
+                    status='available', starting_gallons=6000, current_gallons=6000) for truck in (vendor_truck, working_truck)])
+                db.session.add(NeoScorpionSettings(gateway_id=gateway.id))
+                at = datetime.utcnow().replace(second=0, microsecond=0) - timedelta(minutes=15)
+                work_mission = departure(operation, 'N491UP', 'SDF', at + timedelta(hours=2))
+                edit_mission = departure(operation, 'N350UP', 'ONT', at + timedelta(hours=3))
+                delete_mission = departure(operation, 'N440UP', 'PHX', at + timedelta(hours=4))
+                parking = SortDateParkingAssignment(sort_date_operation_id=operation.id,
+                    tail_number='N350UP', ramp_code='B', position_code='06')
+                db.session.add_all([work_mission, edit_mission, delete_mission, parking])
+                db.session.flush()
+                assignment = NeoScorpionFuelAssignment(sort_date_operation_id=operation.id,
+                    sort_date_mission_id=work_mission.id, assigned_fueler_user_id=actor.id,
+                    assigned_truck_id=working_truck.id, review_status='assigned')
+                db.session.add(assignment)
+                vendor, token = vendors.invite(gateway, actor, 'missions-vendor@example.test', 'Missions Contractor')
+                db.session.commit()
+                vendors.accept_invitation(token, 'BrowserFixture123!', 'BrowserFixture123!')
+                db.session.commit()
+                op_id, actor_id, vendor_id, gateway_id = operation.id, actor.id, vendor.id, gateway.id
+                vendor_truck_id, working_truck_id = vendor_truck.id, working_truck.id
+                assignment_id, edit_id, delete_id, parking_id = assignment.id, edit_mission.id, delete_mission.id, parking.id
+
+            with patch('app.services.neoscorpion.current_existing_operational_sort_operations',
+                       side_effect=lambda gateway, now=None: [db.session.get(SortDateOperation, op_id)]):
+                browser = F.pw.chromium.launch()
+                driver = browser.new_page(viewport={'width': 375, 'height': 760})
+                errors = []
+                driver.on('pageerror', lambda error: errors.append(str(error)))
+                F().login(driver, 'missions-vendor', path='/neoscorpion/driver/login')
+                section = driver.locator('[data-vendor-sort-missions]')
+                working = section.locator('[data-sort-mission-group=working]')
+                left = section.locator('[data-sort-mission-group=left]')
+                complete = section.locator('[data-sort-mission-group=complete]')
+                expect(driver.get_by_text('AWAITING DISPATCHER APPROVAL')).to_be_visible()
+                expect(section).to_have_count(0)
+                with F.app.app_context():
+                    vendors.set_participation(db.session.get(Gateway, gateway_id), db.session.get(SortDateOperation, op_id),
+                        db.session.get(User, actor_id), vendor_id, 'approved', 0)
+                    db.session.commit()
+                expect(driver.get_by_text('NO APPROVED TRUCK')).to_be_visible(timeout=22000)
+                expect(section).to_have_count(0)
+                driver.get_by_text('REQUEST / CHANGE TRUCK', exact=True).click()
+                driver.locator('select[name=truck_id]').select_option(str(vendor_truck_id))
+                with driver.expect_navigation(wait_until='domcontentloaded'):
+                    driver.get_by_role('button', name='REQUEST DISPATCH APPROVAL').click()
+                expect(section).to_have_count(0)
+                with F.app.app_context():
+                    claim = NeoScorpionVendorRequest.query.filter_by(user_id=vendor_id, kind='claim').one()
+                    vendors.decide_claim(db.session.get(Gateway, gateway_id), db.session.get(SortDateOperation, op_id),
+                        db.session.get(User, actor_id), claim.id, True, 0)
+                    db.session.commit()
+                expect(section).to_be_visible(timeout=22000)
+                self.assertEqual(section.locator('thead th').all_text_contents(), ['TAIL', 'DEST', 'PARKING', 'ETD'])
+                self.assertEqual(section.locator('tbody th').all_text_contents(), ['CURRENTLY WORKING', 'LEFT TO WORK', 'COMPLETE'])
+                self.assertEqual(section.locator('button, a, form, input').count(), 0)
+                self.assertEqual(section.locator('xpath=preceding-sibling::*[1]').get_attribute('data-vendor-truck-controls'),
+                    driver.locator('[data-vendor-truck-controls]').get_attribute('data-vendor-truck-controls'))
+                expect(driver.get_by_text('TRUCK 422808', exact=True)).to_be_visible()
+                expect(working).to_contain_text('None.')
+                expect(complete).to_contain_text('None.')
+                expect(left.locator('tr td:first-child')).to_have_text(['N491UP', 'N350UP', 'N440UP'])
+                for width in (375, 1440):
+                    driver.set_viewport_size({'width': width, 'height': 760})
+                    self.assertTrue(section.evaluate('''el => {
+                        const table = el.querySelector('table');
+                        return table.getBoundingClientRect().right <= innerWidth
+                            && parseFloat(getComputedStyle(table).fontSize) >= 12
+                            && Array.from(table.querySelectorAll('th, td')).every(cell => cell.scrollWidth <= cell.clientWidth);
+                    }'''))
+                driver.set_viewport_size({'width': 375, 'height': 760})
+
+                driver.get_by_text('REQUEST / CHANGE TRUCK', exact=True).click()
+                draft = driver.get_by_label('Current gallons (only for a truck not yet configured)', exact=True)
+                draft.fill('4321')
+                new_departure = at + timedelta(hours=1)
+                with F.app.app_context():
+                    operation = db.session.get(SortDateOperation, op_id)
+                    db.session.get(SortDateMission, edit_id).eta_datetime_utc = new_departure
+                    db.session.get(SortDateParkingAssignment, parking_id).position_code = '08'
+                    db.session.delete(db.session.get(SortDateMission, delete_id))
+                    db.session.add(departure(operation, 'N560UP', 'DEN', at + timedelta(hours=5)))
+                    db.session.commit()
+                expect(left.locator('tr td:first-child')).to_have_text(['N350UP', 'N491UP', 'N560UP'], timeout=22000)
+                expect(left.locator('tr').nth(1).locator('td')).to_have_text(['N350UP', 'ONT', 'B08', new_departure.strftime('%H:%M')])
+                expect(draft).to_be_focused()
+                expect(draft).to_have_value('4321')
+
+                with F.app.app_context():
+                    gateway, actor = db.session.get(Gateway, gateway_id), db.session.get(User, actor_id)
+                    service.confirm_fueler_truck_on(gateway, actor, assignment_id, expected_cycle=1,
+                        expected_tail='N491UP', expected_truck_id=working_truck_id, now_utc=at)
+                    db.session.commit()
+                expect(working).to_contain_text('N491UP', timeout=22000)
+                expect(left).not_to_contain_text('N491UP')
+                with F.app.app_context():
+                    gateway, actor = db.session.get(Gateway, gateway_id), db.session.get(User, actor_id)
+                    service.save_fueler_entry(gateway, actor, dict(assignment_id=assignment_id,
+                        apu_running='no', remaining_left='6',remaining_ctr='0',remaining_right='6',
+                        actual_left='15',actual_ctr='0',actual_right='15',transfer_fuel_gallons='3000'))
+                    service.mark_fueler_off(gateway, actor, assignment_id)
+                    submit_and_verify(gateway, actor, assignment_id)
+                    db.session.commit()
+                expect(complete).to_contain_text('N491UP', timeout=22000)
+                expect(working).to_contain_text('None.')
+                self.assertEqual(driver.request.get(F.origin + '/neoscorpion/fuel-dispatch').status, 403)
+
+                with F.app.app_context():
+                    vendors.set_participation(db.session.get(Gateway, gateway_id), db.session.get(SortDateOperation, op_id),
+                        db.session.get(User, actor_id), vendor_id, 'revoked', 1)
+                    db.session.commit()
+                expect(section).to_have_count(0, timeout=22000)
+                expect(driver.get_by_text('DISPATCHER APPROVAL REVOKED')).to_be_visible()
+                self.assertFalse(errors, errors)
+        finally:
+            if browser:
+                browser.close()
+            F.tearDownClass()
+
     def test_vendor_approval_claim_inventory_and_responsive_board(self):
         F=fixtures.MobileDrawerBrowserTest
         F.setUpClass();browser=None

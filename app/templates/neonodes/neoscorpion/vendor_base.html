@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/neofontplain.css',v=config.STATIC_ASSET_VERSION) }}">
 <link rel="stylesheet" href="{{ url_for('static',filename='css/14-neoscorpion.css',v='vendor-20261015') }}">
 <link rel="stylesheet" href="{{ url_for('static',filename='css/26-neoscorpion.css',v='vendor-20261015') }}">
-<link rel="stylesheet" href="{{ url_for('static',filename='css/neoscorpion_vendor.css',v='20261116-driver-login') }}"></head>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neoscorpion_vendor.css',v='20261116-sort-missions') }}"></head>
 <body class="vendor-driver"><main{% block main_attributes %}{% endblock %}><header class="vendor-header"><h1>NeoScorpion</h1>
 {% block sign_out %}{% endblock %}</header>
 {% for category,message in get_flashed_messages(with_categories=true) %}<p role="{{ 'alert' if category == 'error' else 'status' }}">{{ message }}</p>{% endfor %}

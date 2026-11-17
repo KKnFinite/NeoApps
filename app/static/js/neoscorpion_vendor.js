@@ -5,14 +5,30 @@
  const root=document.querySelector('[data-vendor-refresh]');if(!root)return;
  const access = document.querySelector('[data-vendor-access]');
  let revision = JSON.stringify(JSON.parse(root.dataset.revision));
+ let pendingPage = null;
  let busy = false;
  let denied = false;
  const options = {credentials: 'same-origin', cache: 'no-store'};
+ const missionsSelector = '[data-vendor-sort-missions]';
 
  function showDenied(message) {
     denied = true;
+    pendingPage = null;
     access.setAttribute('role', 'alert');
     access.textContent = message;
+ }
+
+ function updateTruckRegions() {
+    if (!pendingPage || document.activeElement?.closest('form')) return;
+    const live = access.querySelector('[data-vendor-live]');
+    live.replaceChildren(...pendingPage.querySelector('[data-vendor-live]').childNodes);
+    const controls = access.querySelector('[data-vendor-truck-controls]');
+    const nextControls = pendingPage.querySelector('[data-vendor-truck-controls]');
+    if (controls && nextControls && controls.dataset.vendorTruckControls !== nextControls.dataset.vendorTruckControls) {
+        controls.replaceChildren(...nextControls.childNodes);
+        controls.dataset.vendorTruckControls = nextControls.dataset.vendorTruckControls;
+    }
+    pendingPage = null;
  }
 
  async function refresh() {
@@ -34,8 +50,19 @@
             return;
         }
         if (!response.ok) return;
-        const next = JSON.stringify(await response.json());
-        if (revision === next || document.activeElement?.closest('form')) return;
+        const state = await response.json();
+        const next = JSON.stringify(state);
+        if (state.sort_missions_revision === null && access.querySelector(missionsSelector)) {
+            showDenied('Your truck connection ended.');
+            window.location.replace(root.dataset.workspaceUrl);
+            return;
+        }
+        if (revision === next) {
+            updateTruckRegions();
+            return;
+        }
+        pendingPage = null;
+        if (!state.sort_missions_revision && document.activeElement?.closest('form')) return;
 
         if (root.dataset.waiting === 'true') {
             window.location.reload();
@@ -50,18 +77,26 @@
         }
         if (!page.ok) return;
         const doc = new DOMParser().parseFromString(await page.text(), 'text/html');
-        if (document.activeElement?.closest('form')) return;
-        const live = access.querySelector('[data-vendor-live]');
-        const nextLive = doc.querySelector('[data-vendor-live]');
-        if (!nextLive) return;
-        live.replaceChildren(...nextLive.childNodes);
-        const controls = access.querySelector('[data-vendor-truck-controls]');
-        const nextControls = doc.querySelector('[data-vendor-truck-controls]');
-        if (controls && nextControls && controls.dataset.vendorTruckControls !== nextControls.dataset.vendorTruckControls) {
-            controls.replaceChildren(...nextControls.childNodes);
-            controls.dataset.vendorTruckControls = nextControls.dataset.vendorTruckControls;
+        if (!doc.querySelector('[data-vendor-live]')) {
+            if (root.dataset.workspaceUrl) {
+                showDenied('Operational access changed. Return to Truck Driver for your status.');
+                window.location.replace(root.dataset.workspaceUrl);
+            }
+            return;
         }
+        const missions = access.querySelector(missionsSelector);
+        const nextMissions = doc.querySelector(missionsSelector);
+        if (missions && !nextMissions) {
+            showDenied('Operational access changed. Return to Truck Driver for your status.');
+            window.location.replace(root.dataset.workspaceUrl);
+            return;
+        }
+        if (missions) missions.replaceWith(nextMissions);
+        else if (nextMissions) access.append(nextMissions);
+
         revision = next;
+        pendingPage = doc;
+        updateTruckRegions();
     } catch (_) {
         // Keep the current form during a transient network failure.
     } finally {

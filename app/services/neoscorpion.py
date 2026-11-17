@@ -7818,8 +7818,19 @@ def _attach_dispatch_load_planners(rows):
         row["load_planner_name"] = planner.full_name if planner else "UNASSIGNED"
 
 
+def departure_mission_query(operation):
+    return SortDateMission.query.filter(
+        SortDateMission.sort_date_operation_id == operation.id,
+        SortDateMission.mission_type == "departure",
+        db.or_(
+            SortDateMission.departure_status.is_(None),
+            SortDateMission.departure_status != "cancelled",
+        ),
+    )
+
+
 def _departure_missions(operation, *, include_load_planners=False):
-    query = SortDateMission.query
+    query = departure_mission_query(operation)
     if include_load_planners:
         query = query.options(
             joinedload(SortDateMission.load_planner_person),
@@ -7828,15 +7839,7 @@ def _departure_missions(operation, *, include_load_planners=False):
             ),
         )
     return (
-        query.filter(
-            SortDateMission.sort_date_operation_id == operation.id,
-            SortDateMission.mission_type == "departure",
-            db.or_(
-                SortDateMission.departure_status.is_(None),
-                SortDateMission.departure_status != "cancelled",
-            ),
-        )
-        .order_by(SortDateMission.planned_datetime_utc, SortDateMission.flight_number)
+        query.order_by(SortDateMission.planned_datetime_utc, SortDateMission.flight_number)
         .all()
     )
 

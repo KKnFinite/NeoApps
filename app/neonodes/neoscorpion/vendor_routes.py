@@ -12,6 +12,7 @@ from app.services import neoscorpion_vendors as vendors
 from app.services import neoscorpion_inventory as inventory
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion_assets import lock_nightly_asset_scope_for_mutation, record_nightly_operational_change
+from app.services.neoscorpion_driver_missions import group_missions, sort_missions_revision
 
 bp = Blueprint('scorpion_vendor', __name__)
 
@@ -185,13 +186,19 @@ def my_truck(account):
     if waiting_status:
         return render_template('neonodes/neoscorpion/vendor_truck.html', waiting_status=waiting_status)
     vendors.require_approved(account, operation)
-    fingerprint = vendor_fingerprint(account, operation)
+    fingerprint = vendor_fingerprint(account, operation, include_sort_missions=True)
+    context = my_truck_context(account, operation)
+    if fingerprint['sort_missions_revision'] is not None and context['selection'] is not None:
+        from app.services.neoscorpion import fuel_dispatch_context
+        dispatch = fuel_dispatch_context(account.gateway, include_spear=False, display_nicknames=False)
+        require_same_operation(dispatch['operation'], operation)
+        context['sort_missions'] = group_missions(dispatch['rows'])
     return render_template('neonodes/neoscorpion/vendor_truck.html', fingerprint=fingerprint,
-        **my_truck_context(account, operation))
+        **context)
 
 
-def require_connected_truck(account, operation):
-    connected = db.session.query(NeoScorpionTruckDriver.fuel_truck_id).join(
+def connected_truck(account, operation):
+    return db.session.query(NeoScorpionTruckDriver.fuel_truck_id).join(
         NeoScorpionSortTruck,
         (NeoScorpionSortTruck.sort_date_operation_id == NeoScorpionTruckDriver.sort_date_operation_id)
         & (NeoScorpionSortTruck.fuel_truck_id == NeoScorpionTruckDriver.fuel_truck_id),
@@ -199,7 +206,10 @@ def require_connected_truck(account, operation):
         NeoScorpionTruckDriver.sort_date_operation_id == operation.id,
         NeoScorpionTruckDriver.driver_user_id == account.user_id,
     ).first()
-    if not connected:
+
+
+def require_connected_truck(account, operation):
+    if not connected_truck(account, operation):
         raise PermissionError('An approved truck connection is required to view the live operation.')
 
 
@@ -208,11 +218,15 @@ def require_same_operation(current, expected):
         raise PermissionError('The active sort changed or ended. Return to Truck Driver for your status.')
 
 
-def vendor_fingerprint(account, operation):
+def vendor_fingerprint(account, operation, *, include_sort_missions=False):
     from app.services.neoscorpion import fuel_assignments_live_revision
     fingerprint = fuel_assignments_live_revision(account.gateway)
     if fingerprint['operation_id'] != operation.id:
         raise PermissionError('The active sort changed or ended. Return to Truck Driver for your status.')
+    if include_sort_missions:
+        fingerprint['sort_missions_revision'] = (
+            sort_missions_revision(operation) if connected_truck(account, operation) else None
+        )
     return fingerprint
 
 
@@ -237,7 +251,8 @@ def revision(account):
     operation = operational(account)
     if request.args.get('view') == 'live':
         require_connected_truck(account, operation)
-    return jsonify(vendor_fingerprint(account, operation))
+        return jsonify(vendor_fingerprint(account, operation))
+    return jsonify(vendor_fingerprint(account, operation, include_sort_missions=True))
 
 
 @bp.post('/fuel-reading')
