@@ -1300,7 +1300,7 @@ def _build_user_from_account_form(form):
     username = email
     first_name = form["first_name"].strip()
     last_name = form["last_name"].strip()
-    employee_id = form["employee_id"].strip()
+    employee_id = form["employee_id"].strip() or None
     password = request.form.get("password", "")
     confirm_password = request.form.get("confirm_password", "")
 
@@ -1422,7 +1422,7 @@ def _apply_user_edit_form(user, form):
     first_name = form["first_name"].strip()
     last_name = form["last_name"].strip()
     email = _normalize_email(form["email"])
-    employee_id = form["employee_id"].strip()
+    employee_id = form["employee_id"].strip() or None
 
     required_values = {
         "First name": first_name,
