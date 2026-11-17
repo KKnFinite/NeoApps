@@ -17,13 +17,15 @@ jobs:
           node-version: "22"
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-      - name: Fuel Dispatch regression
+      - name: Complete Fuel Dispatch workflow tests
+        run: python -m unittest tests.test_neoscorpion_dispatch_workflow
+      - name: MotherBrain mission form regressions
         run: |
           python -m unittest \
-            tests.test_neoscorpion_dispatch_workflow.NeoScorpionDispatchWorkflowTest.test_legacy_precision_can_be_corrected_from_exact_stored_baseline \
-            tests.test_neoscorpion_dispatch_workflow.NeoScorpionDispatchWorkflowTest.test_fuel_load_requires_exactly_one_decimal_and_cannot_mutate_on_reject \
-            tests.test_neoscorpion_dispatch_workflow.NeoScorpionDispatchWorkflowTest.test_inbound_autosave_uses_exact_stored_baseline_too
-      - name: MotherBrain isolation regression
-        run: python -m unittest tests.test_motherbrain_routes.MotherBrainRoutesTest.test_motherbrain_mission_form_cannot_overwrite_scorpion_fuel_load
+            tests.test_motherbrain_routes.MotherBrainRoutesTest.test_motherbrain_mission_form_cannot_overwrite_scorpion_fuel_load \
+            tests.test_motherbrain_routes.MotherBrainRoutesTest.test_edit_departure_mission_into_arrival_clears_pull_times \
+            tests.test_motherbrain_routes.MotherBrainRoutesTest.test_create_manual_departure_mission_with_pull_times
+      - name: Dispatch client syntax check
+        run: node --check app/static/js/neoscorpion_fuel_dispatch_live.js
       - name: Dispatch client regression
         run: node --test tests/js/neoscorpion_dispatch_workflow.test.js
