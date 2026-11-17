@@ -475,7 +475,7 @@ def _is_public_asset_request():
 
 
 def register_request_guards(app):
-    from app.services.neoscorpion_vendors import VENDOR_ENDPOINTS, vendor_request_boundary
+    from app.services.neoscorpion_vendors import vendor_request_boundary
 
     @app.before_request
     def retire_legacy_flight_api_auto_poll_client():
@@ -571,10 +571,6 @@ def register_request_guards(app):
     def protect_unsafe_requests_with_csrf():
         if validate_csrf_request():
             return None
-        if request.endpoint in VENDOR_ENDPOINTS:
-            return render_template("neonodes/neoscorpion/vendor_auth.html", screen="expired"), 400, {
-                "X-NeoApps-CSRF-Rejected": "1",
-            }
         return csrf_failure_response()
 
     @app.before_request

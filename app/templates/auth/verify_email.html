@@ -19,6 +19,7 @@
     {% endif %}
     <div class="action-row">
         <a class="action-button" href="{{ url_for('auth.login') }}">Return to Login</a>
+        {% if driver_recovery %}<a class="action-button" href="{{ url_for('auth.forgot_password') }}">Set or Reset Password</a>{% endif %}
     </div>
 </section>
 {% endblock %}

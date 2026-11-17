@@ -1,12 +1,11 @@
 """Separate vendor surface; normal Dispatch remains employee-only."""
 from functools import wraps
 from datetime import datetime
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, abort, jsonify, flash
+from flask import Blueprint, render_template, request, redirect, url_for, abort, jsonify, flash
 from flask_login import login_required, current_user
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from app.auth import routes as auth
+from sqlalchemy.exc import IntegrityError
 from app.extensions import db
-from app.models import (NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
+from app.models import (User, NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
     NeoScorpionVendorAudit, NeoScorpionTruckDriver, NeoScorpionSortTruck, NeoScorpionFuelTruck)
 from app.services import neoscorpion_vendors as vendors
 from app.services import neoscorpion_inventory as inventory
@@ -43,37 +42,29 @@ def vendor_only(view):
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == "GET":
-        return redirect(url_for("auth.login"))
-    return auth.login_response()
+    return redirect(url_for("auth.login"), code=307 if request.method == "POST" else 302)
 
 
 @bp.post('/logout')
 @vendor_only
 def logout(account):
-    return auth.logout_response()
+    return redirect(url_for("auth.logout"), code=307)
 
 
 @bp.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    if request.method == "GET":
-        return redirect(url_for("auth.forgot_password"))
-    return auth.forgot_password_response()
+    return redirect(url_for("auth.forgot_password"), code=307 if request.method == "POST" else 302)
 
 
 @bp.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-    if request.method == "GET":
-        return redirect(url_for("auth.reset_password", token=token))
-    return auth.reset_password_response(token)
+    return redirect(url_for("auth.reset_password", token=token), code=307 if request.method == "POST" else 302)
 
 
 @bp.route('/change-password', methods=['GET', 'POST'])
 @vendor_only
 def change_password(account):
-    if request.method == "GET":
-        return redirect(url_for("auth.change_password"))
-    return auth.change_password_response()
+    return redirect(url_for("auth.change_password"), code=307 if request.method == "POST" else 302)
 
 
 def driver_access(account):
@@ -114,12 +105,10 @@ def denied(error):
     return str(error), 403
 
 
-def workspace_result(gateway, *, message=None, account_id=None):
+def workspace_result(gateway, *, account_id=None):
     """Read the existing revision after commit; never create a parallel state."""
     from app.services.neoscorpion import fuel_assignments_live_revision
     payload = dict(ok=True, changed=True, **fuel_assignments_live_revision(gateway))
-    if message:
-        payload['message'] = message
     if account_id is not None:
         profile = NeoScorpionVendorAccount.query.filter_by(user_id=account_id, gateway_id=gateway.id).first()
         if profile:
@@ -132,26 +121,9 @@ def workspace_result(gateway, *, message=None, account_id=None):
 
 @bp.route('/invitation/<token>', methods=['GET','POST'])
 def invitation(token):
-    error = None
-    valid = False
-    try:
-        if request.method == 'POST':
-            vendors.accept_invitation(token,request.form.get('password',''),request.form.get('confirm_password',''))
-            db.session.commit()
-            flash('Registration complete. Sign in with your email and password.', 'success')
-            return redirect(url_for('scorpion_vendor.login'))
-        vendors.invitation_record(token)
-        valid = True
-    except (ValueError, IntegrityError) as exc:
-        db.session.rollback()
-        error = str(exc) if isinstance(exc, ValueError) else 'Registration changed. Try opening the link again.'
-        if request.method == 'POST':
-            try:
-                vendors.invitation_record(token)
-                valid = True
-            except ValueError as unavailable:
-                error = str(unavailable)
-    return render_template('neonodes/neoscorpion/vendor_invitation.html', error=error, valid=valid), 400 if error else 200
+    # Old links reference already-created identities. Verify them through the
+    # shared email flow; never accept a password through the retired form.
+    return redirect(url_for('auth.verify_email', token=token), code=303)
 
 
 @bp.get('/account')
@@ -321,32 +293,6 @@ def manage_inventory():
     return redirect(url_for('neoscorpion.fuel_dispatch'))
 
 
-def send_invitation(gateway, actor, action):
-    from app.services.email_service import send_vendor_invitation
-
-    if action == 'invite':
-        user, token = vendors.invite(gateway, actor, request.form.get('email'), request.form.get('name'))
-    else:
-        user, token = vendors.renew_invitation(gateway, actor, request.form.get('user_id'))
-
-    delivery = send_vendor_invitation(user, token)
-    if not delivery['sent']:
-        reason = delivery.get('reason')
-        if reason == 'missing_config':
-            failure = 'Brevo mail configuration is incomplete.'
-        elif reason == 'provider_rejected':
-            failure = 'Brevo rejected the invitation email. Check Brevo transactional email settings.'
-        else:
-            failure = 'Brevo acceptance could not be confirmed.'
-        state = ('No account was created. Retry Send Invitation.' if action == 'invite'
-                 else 'The prior invitation is unchanged. Retry Resend Invitation.')
-        raise ValueError(f'{failure} {state}')
-
-    vendors.audit(gateway, actor, 'invitation_accepted_by_brevo', subject=user,
-        message_id=delivery.get('message_id'), invitation_action=action)
-    return 'Brevo accepted the invitation email. Inbox delivery is pending verification.'
-
-
 @bp.route('/manage',methods=['GET','POST'])
 @login_required
 def manage():
@@ -355,7 +301,6 @@ def manage():
     operation=current_sort_operation(gateway)
     if request.method=='POST':
         action = request.form.get('action')
-        message = None
         try:
             if action not in {'invite','resend','disable','enable'}:
                 operation=vendors.current_operation(gateway,request.form.get('operation_id'))
@@ -370,8 +315,10 @@ def manage():
                 state=None
                 if operation:
                     operation,state=lock_nightly_asset_scope_for_mutation(operation)
+                user_id = int(request.form.get('user_id'))
+                User.query.with_entities(User.id).filter_by(id=user_id).with_for_update(key_share=True).first()
                 profile = NeoScorpionVendorAccount.query.filter_by(
-                    user_id=int(request.form.get('user_id')), gateway_id=gateway.id,
+                    user_id=user_id, gateway_id=gateway.id,
                 ).with_for_update().populate_existing().one_or_none()
                 if not profile:
                     raise ValueError('Select a driver account at this gateway.')
@@ -419,13 +366,7 @@ def manage():
                 vendors.audit(gateway,current_user,'manual_driver',operation=operation,truck_id=truck.id,name=name)
                 record_nightly_operational_change(state,operation.id)
             else:raise ValueError('Unsupported driver action.')
-            try:
-                db.session.commit()
-            except SQLAlchemyError:
-                if not message:
-                    raise
-                current_app.logger.warning('Vendor invitation was accepted by Brevo but its save could not be confirmed.')
-                raise ValueError('Brevo accepted the email, but the registration link could not be confirmed. Refresh the account list before retrying.') from None
+            db.session.commit()
         except (ValueError,TypeError,IntegrityError) as exc:
             db.session.rollback()
             message=str(exc) if isinstance(exc,ValueError) else 'Driver state changed. Refresh.'
@@ -433,25 +374,10 @@ def manage():
                 return jsonify(ok=False,error=message),400
             flash(message,'error')
             return redirect(url_for('scorpion_vendor.manage'))
-        if message:
-            # Release account and token locks before taking the nightly lock.
-            # Account management remains committed even if this refresh fails.
-            try:
-                operation = current_sort_operation(gateway)
-                if operation:
-                    operation, state = lock_nightly_asset_scope_for_mutation(operation)
-                    record_nightly_operational_change(state, operation.id)
-                    db.session.commit()
-            except (ValueError, SQLAlchemyError):
-                db.session.rollback()
-                current_app.logger.warning('Could not publish the vendor invitation refresh.')
-                message += ' Refresh Nightly Trucks to update the account list.'
         if request.form.get('dispatch_assets_workspace')=='1':
             account_id = (int(request.form['user_id'])
                           if action in {'approved', 'denied', 'revoked', 'enable', 'disable'} else None)
-            return workspace_result(gateway, message=message, account_id=account_id)
-        if message:
-            flash(message, 'success')
+            return workspace_result(gateway, account_id=account_id)
         return redirect(url_for('scorpion_vendor.manage'))
     return render_template('neonodes/neoscorpion/vendor_manage.html',gateway=gateway,operation=operation,
         **driver_management_context(gateway,operation))

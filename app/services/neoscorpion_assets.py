@@ -24,6 +24,7 @@ from app.models import (
     NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
     NeoScorpionSortTruck,
+    NeoScorpionVendorAccount,
     PortalAppAccess,
     SortDateMission,
     SortDateOperation,
@@ -219,6 +220,9 @@ def eligible_nightly_fueler_users(gateway, *, active_users=None, permission_key=
             GatewayMembership.status == "approved",
             GatewayMembership.is_active.is_(True),
             GatewayMembership.user_id.in_(users_by_id),
+            ~NeoScorpionVendorAccount.query.filter(
+                NeoScorpionVendorAccount.user_id == GatewayMembership.user_id,
+            ).exists(),
         )
         .all()
     )

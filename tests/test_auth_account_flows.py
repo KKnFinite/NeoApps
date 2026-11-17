@@ -12,6 +12,7 @@ from create_grandmaster import create_grandmaster_user
 from app.extensions import db
 from app.models import (
     AuthRateLimitState,
+    Gateway,
     GatewayMembership,
     GatewayNodeRole,
     NeoScorpionVendorAccount,
@@ -2334,6 +2335,47 @@ class AuthAccountFlowsTest(unittest.TestCase):
             user_id=person.id, app_code="neogateway").one()
         self.assertEqual((grant.status, grant.is_active), ("denied", False))
         self.assertFalse(user_can_access_node(person, "RFD", "motherbrain"))
+
+    def test_conversion_blocks_last_grandmaster_and_clears_other_gateway_grants(self):
+        admin = self._admin('classification_admin', 'grandmaster')
+        target, membership = self._approved_user('multi_gateway', 'multi-gateway@example.com')
+        gateway = Gateway(code='TST', name='Disposable gateway')
+        db.session.add(gateway)
+        db.session.flush()
+        other = GatewayMembership(gateway_id=gateway.id, user_id=target.id, status='approved', is_active=True)
+        db.session.add(other)
+        db.session.flush()
+        node = NeoNode.query.filter_by(code='motherbrain').one()
+        grant = GatewayNodeRole(gateway_membership_id=other.id, node_id=node.id, role='grandmaster', is_active=True)
+        db.session.add(grant)
+        db.session.commit()
+        self._login(admin.username)
+        path = f'/portal/manage/users/{target.id}/account-type'
+        self.client.post(path, data={'account_type': 'vendor'})
+        self.assertIsNone(db.session.get(NeoScorpionVendorAccount, target.id))
+        self.assertTrue(grant.is_active)
+
+        grant.role = 'operator'
+        db.session.commit()
+        self.client.post(path, data={'account_type': 'vendor'})
+        self.assertIsNotNone(db.session.get(NeoScorpionVendorAccount, target.id))
+        self.assertEqual((other.status, other.is_active, grant.is_active), ('denied', False, False))
+        self.assertFalse(user_can_access_node(target, 'TST', 'motherbrain'))
+        self.client.post(path, data={'account_type': 'full'})
+        self.client.post(f'/portal/manage/access-requests/{membership.id}/approve', data={'role': 'watcher'})
+        self.assertEqual(membership.status, 'approved')
+        self.assertFalse(user_can_access_node(target, 'RFD', 'motherbrain'))
+        self.assertFalse(user_can_access_node(target, 'TST', 'motherbrain'))
+
+    def test_password_only_login_cannot_create_session_for_mfa_required_account(self):
+        user = self._user('mfa_guard', verified=True)
+        user.mfa_required = True
+        db.session.commit()
+        response = self._login(user.username)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn(b'requires additional verification', response.data)
+        with self.client.session_transaction() as browser:
+            self.assertNotIn(AUTH_SESSION_VERSION_SESSION_KEY, browser)
 
     def test_regular_registration_accepts_vendor_without_employee_id(self):
         data = self._account_form(

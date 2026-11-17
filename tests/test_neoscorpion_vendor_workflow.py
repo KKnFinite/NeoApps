@@ -54,7 +54,7 @@ class VendorWorkflowTest(TestCase):
         self.fixture._mission('UPS987', 'N876UP', 25000, 13, destination='PHX')
         self.fixture._mission('UPS986', 'N875UP', 25000, 9, destination='ONT')
         user, _ = self.connect()
-        self.client.post(f'{DRIVER}/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+        self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
 
         groups = self.sort_mission_groups()
         self.assertEqual(list(groups), ['working', 'left', 'complete'])
@@ -101,7 +101,7 @@ class VendorWorkflowTest(TestCase):
             actual_left='30', actual_ctr='0', actual_right='0'))
         db.session.commit()
         user, _ = self.connect()
-        self.client.post(f'{DRIVER}/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+        self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
         self.assertIn('N491UP', self.sort_mission_groups()['left'][0])
         service.complete_fuel_on_board(self.gateway, self.dispatcher, self.assignment.id)
         db.session.commit()
@@ -117,7 +117,7 @@ class VendorWorkflowTest(TestCase):
         other_mission.sort_date_operation = other_sort
         db.session.commit()
 
-        self.client.post(f'{DRIVER}/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+        self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
         page = self.client.get(f'{DRIVER}/my-truck').data
         self.assertIn(b'ALL SORT MISSIONS', page)
         self.assertNotIn(b'N999UP', page)
@@ -148,6 +148,16 @@ class VendorWorkflowTest(TestCase):
             convert_account(self.gateway, self.dispatcher, self.fueler, "vendor")
         db.session.rollback()
         self.assertIsNone(db.session.get(NeoScorpionVendorAccount, self.fueler.id))
+
+    def test_conversion_with_sort_rollover_leaves_existing_classification_intact(self):
+        from app.services.neoscorpion_account_types import convert_account
+        user, _account, _token = self.vendor()
+        with patch.object(service, 'current_sort_operation', side_effect=[self.operation, None]):
+            with self.assertRaisesRegex(ValueError, 'active Sort changed'):
+                convert_account(self.gateway, self.dispatcher, user, 'full')
+        db.session.rollback()
+        self.assertIsNotNone(db.session.get(NeoScorpionVendorAccount, user.id))
+        self.assertEqual(db.session.get(NeoScorpionVendorNight, (self.operation.id, user.id)).status, 'approved')
 
     def test_active_driver_conversion_revokes_live_access_without_erasing_history(self):
         self.prepare()
@@ -225,7 +235,7 @@ class VendorWorkflowTest(TestCase):
 
     def test_default_deny_all_other_routes_and_apis(self):
         user,account,_=self.vendor()
-        self.client.post(f'{DRIVER}/login',data={'email':user.email,'password':'VendorPassword123!'})
+        self.client.post('/login',data={'email':user.email,'password':'VendorPassword123!'})
         for method,path in [('get','/neostaffing/'),('get','/motherbrain/'),('get','/neoscorpion/fuel-dispatch'),
                 ('get','/neoscorpion/fuel-assignments/revision'),('get','/neorain/'),('post','/neoscorpion/fuel-dispatch/assets'),
                 ('get','/portal'),('get','/admin/users'),('get','/neoscorpion/driver/manage'),
@@ -241,7 +251,7 @@ class VendorWorkflowTest(TestCase):
         vendors.set_participation(self.gateway,self.operation,self.dispatcher,user.id,'revoked',1);db.session.commit()
         with self.assertRaises(PermissionError):vendors.request_claim(account,self.operation,123)
         db.session.rollback()
-        self.client.post(f'{DRIVER}/login',data={'email':user.email,'password':'VendorPassword123!'})
+        self.client.post('/login',data={'email':user.email,'password':'VendorPassword123!'})
         response = self.client.get(f'{DRIVER}/my-truck')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'DISPATCHER APPROVAL REVOKED', response.data)
@@ -251,7 +261,7 @@ class VendorWorkflowTest(TestCase):
     def test_approved_truck_unlocks_missions_and_inactive_truck_can_be_disconnected(self):
         self.prepare()
         user, account, _ = self.vendor()
-        self.client.post(f'{DRIVER}/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+        self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
         driver_url = '/neoscorpion/driver'
         tail = self.mission.assigned_tail_number.encode()
         self.assertNotIn(tail, self.client.get(f'{driver_url}/my-truck').data)
@@ -275,17 +285,27 @@ class VendorWorkflowTest(TestCase):
         self.assertIsNone(self.client.get(f'{driver_url}/revision').json['sort_missions_revision'])
         self.assertEqual(self.client.get(f'{driver_url}/live').status_code, 403)
 
-    def test_legacy_invitation_still_works_but_unified_login_enforces_disable(self):
-        # Previously issued invitations may be redeemed while valid; new
-        # applicants no longer use this separate registration path.
+    def test_legacy_invitation_uses_shared_verification_and_password_recovery(self):
         user, token = vendors.invite(self.gateway, self.dispatcher, 'isolated@example.test', 'Isolated Driver')
         db.session.commit()
         password = 'VendorPassword123!'
         response = self.client.post(f'{DRIVER}/invitation/{token}', data={
             'password': password, 'confirm_password': password,
         })
-        self.assertEqual(response.location, f'{DRIVER}/login')
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.location, f'/verify-email/{token}')
+        self.assertIsNone(user.email_verified_at)
+        self.assertFalse(user.check_password(password))
+        verified = self.client.get(response.location)
+        self.assertIn(b'Set or Reset Password', verified.data)
         self.assertIsNotNone(user.email_verified_at)
+        with patch('app.auth.routes.email_service.send_password_reset') as send:
+            self.client.post('/forgot-password', data={'email': user.email})
+            reset_token = send.call_args.args[1]
+        old_reset = self.client.get(f'{DRIVER}/reset-password/{reset_token}')
+        self.assertEqual(old_reset.location, f'/reset-password/{reset_token}')
+        self.client.post(old_reset.location, data={'password': password, 'confirm_password': password})
+        self.assertTrue(user.check_password(password))
         self.login(self.dispatcher)
         self.client.post(f'{DRIVER}/manage', data={'action': 'disable', 'user_id': user.id})
         self.client.post('/logout')
@@ -299,11 +319,11 @@ class VendorWorkflowTest(TestCase):
         db.session.commit()
         password = 'VendorPassword123!'
         credentials = {'email': user.email, 'password': password}
-        self.assertEqual(self.client.post(f'{DRIVER}/invitation/{token}', data={
-            'password': password, 'confirm_password': password,
-        }).location, f'{DRIVER}/login')
+        vendors.accept_invitation(token, password, password)
+        db.session.commit()
         self.assertEqual(self.client.get(f'{DRIVER}/my-truck').location, '/login')
         self.assertEqual(self.client.get(f'{DRIVER}/login').location, '/login')
+        self.assertEqual(self.client.post(f'{DRIVER}/login', data=credentials).status_code, 307)
         self.assertEqual(self.client.post('/login', data=credentials).location, f'{DRIVER}/my-truck')
         waiting = self.client.get(f'{DRIVER}/my-truck')
         self.assertEqual(waiting.status_code, 200)

@@ -65,7 +65,7 @@ class VendorBrowserTest(unittest.TestCase):
                 driver = browser.new_page(viewport={'width': 375, 'height': 760})
                 errors = []
                 driver.on('pageerror', lambda error: errors.append(str(error)))
-                F().login(driver, 'missions-vendor', path='/neoscorpion/driver/login')
+                F().login(driver, 'missions-vendor', path='/login')
                 section = driver.locator('[data-vendor-sort-missions]')
                 working = section.locator('[data-sort-mission-group=working]')
                 left = section.locator('[data-sort-mission-group=left]')
@@ -186,7 +186,7 @@ class VendorBrowserTest(unittest.TestCase):
                 admin=browser.new_context(viewport={'width':1440,'height':900}).new_page();admin.on('pageerror',lambda e:errors.append(str(e)))
                 F().login(admin);F().ready(admin,'/neoscorpion/driver/manage')
                 driver=browser.new_context(viewport={'width':390,'height':844}).new_page();driver.on('pageerror',lambda e:errors.append(str(e)))
-                F().login(driver,'browser-vendor',path='/neoscorpion/driver/login')
+                F().login(driver,'browser-vendor',path='/login')
                 expect(driver).to_have_url(F.origin+'/neoscorpion/driver/my-truck')
                 self.assertEqual(driver.request.get(F.origin+'/neoscorpion/driver/live').status,403)
                 submit(admin,admin.get_by_role('button',name='APPROVE TONIGHT',exact=True))
@@ -205,17 +205,21 @@ class VendorBrowserTest(unittest.TestCase):
                         expected_cycle=1,expected_tail='N491UP',expected_truck_id=truck_id,now_utc=at);db.session.commit()
                 driver.reload()
                 driver.get_by_text('REQUEST / CHANGE TRUCK',exact=True).click()
-                driver.locator('input[name=gallons]').fill('1234')
+                driver.get_by_label('Current gallons (only for a truck not yet configured)', exact=True).fill('1234')
                 with F.app.app_context():
                     service.save_fueler_entry(db.session.get(Gateway,gateway_id),db.session.get(User,actor_id),
                         dict(assignment_id=assignment_id,apu_running='no',remaining_left='6',remaining_ctr='0',remaining_right='6'));db.session.commit()
                 driver.locator('h2').first.click()  # Editing finishes without submitting the truck request.
                 expect(driver.locator('[data-tank-code=left] [role=cell]').first).to_have_text('6.0',timeout=20000)
-                expect(driver.locator('input[name=gallons]')).to_have_value('1234')
+                expect(driver.get_by_label('Current gallons (only for a truck not yet configured)', exact=True)).to_have_value('1234')
                 admin.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1','seen')")
-                F().ready(admin,'/neoscorpion/fuel-dispatch')
-                correction=admin.locator('.scorpion-inventory-inline').first
-                correction.locator('[name=gallons]').fill('5500');submit(admin,correction.get_by_role('button',name='CORRECT'))
+                F().ready(admin,'/neoscorpion/fuel-dispatch?assets=open')
+                correction=admin.locator('#nightly-trucks .scorpion-inventory-inline').first
+                correction.locator('[name=gallons]').fill('5500')
+                with admin.expect_response(lambda response: response.request.method == 'POST'
+                        and response.url.endswith('/driver/inventory')) as corrected:
+                    correction.get_by_role('button', name='CORRECT').click()
+                self.assertEqual(corrected.value.status, 200)
                 expect(admin.locator('.neoscorpion-truck-visual-values').first).to_contain_text('5,500')
                 with F.app.app_context():
                     service.mark_fueler_off(db.session.get(Gateway,gateway_id),db.session.get(User,actor_id),assignment_id);db.session.commit()
@@ -223,7 +227,7 @@ class VendorBrowserTest(unittest.TestCase):
                 driver.reload();driver.get_by_text('OPTIONAL FUEL VERIFICATION · SKIP',exact=True).click()
                 reading=driver.locator('form[action$="fuel-reading"]');reading.locator('[name=gallons]').fill('4000')
                 submit(driver,reading.get_by_role('button',name='SUBMIT READING'))
-                admin.reload();expect(admin.locator('.scorpion-inventory-pending')).to_contain_text('4000')
+                admin.reload();expect(admin.locator('#nightly-trucks .scorpion-inventory-pending')).to_contain_text('4000')
                 # Actual Board View mode, not a separate imitation of truck cards.
                 admin.locator('[data-operational-board-toggle]:visible').first.click()
                 card=admin.locator('.neoscorpion-truck-visual-card').first
@@ -232,8 +236,8 @@ class VendorBrowserTest(unittest.TestCase):
                     panel=admin.locator('.neoscorpion-truck-visual-panel')
                     if width>900:
                         self.assertLessEqual(panel.bounding_box()['height'],291)
-                    for control in card.locator('input:not([type=hidden]),button').all():
-                        self.assertTrue(control.is_visible())
+                    for control in card.locator('form input:not([type=hidden]), form button').all():
+                        self.assertEqual(control.is_visible(), width > 900)
                         if width>900:
                             self.assertLessEqual(control.bounding_box()['y']+control.bounding_box()['height'],panel.bounding_box()['y']+panel.bounding_box()['height']+1)
                     self.assertFalse(admin.evaluate('document.documentElement.scrollWidth>innerWidth+1'))

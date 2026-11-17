@@ -156,16 +156,8 @@ def renew_csrf():
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
-    return login_response()
 
 
-def render_auth_screen(screen, vendor_driver, **context):
-    if vendor_driver:
-        return render_template("neonodes/neoscorpion/vendor_auth.html", screen=screen, **context)
-    return render_template(f"auth/{screen}.html", **context)
-
-
-def login_response(*, vendor_driver=False):
     if current_user.is_authenticated and request.method == "GET":
         destination = ("scorpion_vendor.my_truck" if current_user.scorpion_vendor
                        else "auth.portal_dashboard")
@@ -174,16 +166,15 @@ def login_response(*, vendor_driver=False):
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         legacy_username = request.form.get("username", "").strip()
-        login_identifier = email if vendor_driver else email or legacy_username
+        login_identifier = email or legacy_username
         password = request.form.get("password", "")
         client_ip = client_ip_for_request(request)
 
         if login_is_limited(client_ip, login_identifier):
             flash("Invalid email or password.", "error")
-            return render_auth_screen("login", vendor_driver), 401
+            return render_template("auth/login.html"), 401
 
-        lookup = _find_user_by_email if vendor_driver else _find_user_by_login
-        user = lookup(login_identifier) if login_identifier else None
+        user = _find_user_by_login(login_identifier) if login_identifier else None
 
         credentials_valid = bool(
             user and user.check_password(password) and user.is_active
@@ -193,14 +184,19 @@ def login_response(*, vendor_driver=False):
             record_login_failure(client_ip, login_identifier)
             db.session.commit()
             flash("Invalid email or password.", "error")
-            return render_auth_screen("login", vendor_driver), 401
+            return render_template("auth/login.html"), 401
 
         if vendor and not vendor.enabled:
             flash("Your NeoScorpion driver account is disabled. Contact Dispatch for help.", "error")
-            return render_auth_screen("login", vendor_driver), 403
+            return render_template("auth/login.html"), 403
         if vendor and not user.email_verified_at:
             flash("Verify your NeoApps email before signing in.", "error")
-            return render_auth_screen("login", vendor_driver), 403
+            return render_template("auth/login.html"), 403
+        if user.mfa_required or user.mfa_enabled:
+            # The shared login has no MFA challenge handler. A password alone
+            # must never establish a session for an account that requires MFA.
+            flash("This account requires additional verification. Contact your NeoApps administrator.", "error")
+            return render_template("auth/login.html"), 403
 
         clear_login_failures(client_ip, login_identifier)
         login_user(user)
@@ -212,7 +208,7 @@ def login_response(*, vendor_driver=False):
         except SQLAlchemyError:
             db.session.rollback()
             flash("Login failed. Please try again.", "error")
-            return render_auth_screen("login", vendor_driver), 500
+            return render_template("auth/login.html"), 500
 
         if user_requires_password_change(user):
             establish_authenticated_session(
@@ -225,21 +221,19 @@ def login_response(*, vendor_driver=False):
         establish_authenticated_session(session, user)
         return redirect(url_for("scorpion_vendor.my_truck" if vendor else "auth.portal_dashboard"))
 
-    return render_auth_screen("login", vendor_driver)
+    return render_template("auth/login.html")
 
 
 @bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
-    return logout_response()
 
 
-def logout_response(*, vendor_driver=False):
     logout_user()
     clear_authenticated_session_security_state(session)
     clear_csrf_session_state()
     flash("You have been logged out.", "info")
-    return redirect(url_for("scorpion_vendor.login" if vendor_driver else "auth.login"))
+    return redirect(url_for("auth.login"))
 
 
 @bp.route("/portal")
@@ -270,6 +264,7 @@ def request_portal_app_access():
         return redirect(url_for("auth.portal_dashboard"))
 
     try:
+        _lock_staff_account(current_user)
         if app_code == "neogateway":
             request_default_gateway_access_for_user(current_user)
         else:
@@ -376,6 +371,10 @@ def verify_email(token):
     token_record = get_token_record(token, EMAIL_VERIFICATION)
     if not token_record:
         return render_template("auth/verify_email.html", verified=False), 400
+    user = token_record.user
+    vendor = user.scorpion_vendor
+    if vendor and (not vendor.enabled or not user.is_active):
+        return render_template("auth/verify_email.html", verified=False), 400
     if token_record.user.email_verified_at and (
         token_record.is_used or token_record.is_expired()
     ):
@@ -383,6 +382,7 @@ def verify_email(token):
             "auth/verify_email.html",
             already_verified=True,
             verified=True,
+            driver_recovery=bool(vendor),
         )
     if token_record.is_used:
         return render_template("auth/verify_email.html", verified=False), 400
@@ -397,7 +397,8 @@ def verify_email(token):
     mark_token_used(token_record)
     db.session.commit()
 
-    return render_template("auth/verify_email.html", already_verified=False, verified=True)
+    return render_template("auth/verify_email.html", already_verified=False, verified=True,
+                           driver_recovery=bool(vendor))
 
 
 @bp.route("/access-pending")
@@ -417,57 +418,47 @@ def access_pending():
 
 @bp.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    return forgot_password_response()
-
-
-def password_recovery_allowed(user, vendor_driver):
-    if not user:
-        return False
-    vendor = user.scorpion_vendor
-    if vendor_driver:
-        return bool(vendor and vendor.enabled and user.is_active and user.email_verified_at)
-    return bool(user.is_active and (not vendor or vendor.enabled))
-
-
-def forgot_password_response(*, vendor_driver=False):
     if request.method == "POST":
         email = _normalize_email(request.form.get("email"))
         client_ip = client_ip_for_request(request)
 
         if not password_reset_is_limited(client_ip, email):
             user = _find_user_by_email(email) if email else None
-            eligible = password_recovery_allowed(user, vendor_driver)
+            vendor = user.scorpion_vendor if user else None
+            eligible = bool(user and user.is_active and (not vendor or vendor.enabled))
+            needs_verification = bool(eligible and vendor and not user.email_verified_at)
             record_password_reset_request(client_ip, email)
             if eligible:
-                raw_token, _token_record = create_user_token(user, PASSWORD_RESET)
+                kind = EMAIL_VERIFICATION if needs_verification else PASSWORD_RESET
+                raw_token, _token_record = create_user_token(user, kind)
             db.session.commit()
-            if eligible:
-                if vendor_driver:
-                    email_service.send_password_reset(user, raw_token, vendor_driver=True)
-                else:
-                    email_service.send_password_reset(user, raw_token)
+            if needs_verification:
+                email_service.send_email_verification(user, raw_token)
+            elif eligible:
+                email_service.send_password_reset(user, raw_token)
 
         flash(GENERIC_RESET_RESPONSE, "info")
-        return render_auth_screen("forgot_password", vendor_driver, submitted=True)
+        return render_template("auth/forgot_password.html", submitted=True)
 
-    return render_auth_screen("forgot_password", vendor_driver, submitted=False)
+    return render_template("auth/forgot_password.html", submitted=False)
+
+
+def _password_recovery_allowed(user):
+    vendor = user.scorpion_vendor
+    return bool(user.is_active and (not vendor or (vendor.enabled and user.email_verified_at)))
 
 
 @bp.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
-    return reset_password_response(token)
-
-
-def reset_password_response(token, *, vendor_driver=False):
     def render_reset(valid):
-        return render_auth_screen("reset_password", vendor_driver, token=token,
+        return render_template("auth/reset_password.html", token=token,
                                   valid=valid, password_policy_guidance=PASSWORD_POLICY_GUIDANCE)
 
     submitting = request.method == "POST"
     try:
         token_record = (claim_password_reset_token(token) if submitting
                         else get_valid_token_record(token, PASSWORD_RESET))
-        if not token_record or not password_recovery_allowed(token_record.user, vendor_driver):
+        if not token_record or not _password_recovery_allowed(token_record.user):
             if submitting:
                 db.session.rollback()
             return render_reset(False), 400
@@ -495,17 +486,13 @@ def reset_password_response(token, *, vendor_driver=False):
 
     if submitting:
         flash("Password reset complete. You can log in now.", "info")
-        return redirect(url_for("scorpion_vendor.login" if vendor_driver else "auth.login"))
+        return redirect(url_for("auth.login"))
     return render_reset(True)
 
 
 @bp.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
-    return change_password_response()
-
-
-def change_password_response(*, vendor_driver=False):
     forced_change = user_requires_password_change(
         current_user
     ) and forced_password_change_session_is_fresh(session, current_user)
@@ -514,8 +501,8 @@ def change_password_response(*, vendor_driver=False):
             request.form.get("current_password", "")
         ):
             flash("Current password is incorrect.", "error")
-            return render_auth_screen(
-                "change_password", vendor_driver,
+            return render_template(
+                "auth/change_password.html",
                 password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
                 require_current_password=True,
             ), 400
@@ -526,8 +513,8 @@ def change_password_response(*, vendor_driver=False):
             set_user_password(current_user, password, confirm_password)
         except ValueError as error:
             flash(str(error), "error")
-            return render_auth_screen(
-                "change_password", vendor_driver,
+            return render_template(
+                "auth/change_password.html",
                 password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
                 require_current_password=not forced_change,
             ), 400
@@ -540,8 +527,8 @@ def change_password_response(*, vendor_driver=False):
         flash("Password changed.", "info")
         return redirect(url_for("scorpion_vendor.my_truck" if current_user.scorpion_vendor else "auth.portal_dashboard"))
 
-    return render_auth_screen(
-        "change_password", vendor_driver,
+    return render_template(
+        "auth/change_password.html",
         password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
         require_current_password=not forced_change,
     )
@@ -608,15 +595,17 @@ def update_portal_app_access(access_id):
         if action == "approve_driver":
             _change_driver_account_type(get_current_gateway(), access.user, "vendor")
             flash("Restricted Truck Driver account approved.", "info")
-        elif access.user.scorpion_vendor and action in {"approve", "approve_without_verification"}:
-            raise ValueError("Truck Driver accounts cannot receive full NeoApps app permissions.")
         elif action in {"approve", "approve_without_verification"}:
+            _lock_staff_account(access.user)
+            db.session.refresh(access)
             _approve_portal_app_access(
                 access, role, notes,
                 bypass_email_verification=(action == "approve_without_verification"),
             )
             flash("App access approved.", "info")
         elif action == "deny":
+            _lock_staff_account(access.user)
+            db.session.refresh(access)
             _deny_portal_app_access(access, notes)
             flash("App access denied.", "info")
         else:
@@ -838,6 +827,8 @@ def edit_user(user_id):
 
     if request.method == "POST":
         try:
+            target_user = _lock_staff_account(target_user)
+            membership = _current_gateway_membership_for_user(target_user, gateway)
             _apply_user_edit_form(target_user, form)
             bypass_email_verification = _email_verification_bypass_requested()
             membership = _apply_gateway_membership_edit_form(
@@ -881,6 +872,8 @@ def user_roles(user_id):
 
     if request.method == "POST":
         try:
+            target_user = _lock_staff_account(target_user)
+            membership = _current_gateway_membership_for_user(target_user, gateway)
             _apply_node_role_form(target_user, membership)
         except ValueError as error:
             db.session.rollback()
@@ -909,10 +902,18 @@ def update_user_gateway_membership(user_id):
     action = request.form.get("action", "").strip().lower()
     membership = _current_gateway_membership_for_user(target_user, gateway)
 
-    if action in {"approve", "deny"} and not membership:
-        membership = ensure_user_gateway_membership(target_user, gateway)
-
     try:
+        if action == "approve" and request.form.get("account_type", "").strip() == "vendor":
+            if _email_verification_bypass_requested():
+                raise ValueError("Truck drivers must verify their NeoApps email before approval.")
+            _change_driver_account_type(gateway, target_user, "vendor")
+            flash("Restricted Truck Driver account approved.", "info")
+            db.session.commit()
+            return redirect(url_for("auth.user_detail", user_id=target_user.id))
+        target_user = _lock_staff_account(target_user)
+        membership = _current_gateway_membership_for_user(target_user, gateway)
+        if action in {"approve", "deny"} and not membership:
+            membership = ensure_user_gateway_membership(target_user, gateway)
         if action == "approve":
             node_role_values = _approval_node_role_values_from_form()
             _approve_account_request(
@@ -1000,10 +1001,18 @@ def approve_access_request(membership_id):
 @portal_permission_required(ACCESS_REQUESTS_EDIT_PERMISSION, "Access Requests edit access denied.")
 def deny_access_request(membership_id):
     membership = _membership_or_404(membership_id)
-    _deny_membership(
-        membership,
-        request.form.get("denial_notes", "").strip() or None,
-    )
+    try:
+        target_user = _lock_staff_account(membership.user)
+        db.session.refresh(membership)
+        _guard_last_grandmaster_gateway_change(target_user)
+        _deny_membership(
+            membership,
+            request.form.get("denial_notes", "").strip() or None,
+        )
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+        return redirect(url_for("auth.access_requests"))
     db.session.commit()
 
     flash("Access request updated.", "info")
@@ -2061,6 +2070,8 @@ def _restore_approved_membership_operational_state(membership):
     """Keep an approved active RFD membership usable for independent roles."""
     if not _membership_is_approved_active(membership):
         return
+    if membership.user.scorpion_vendor:
+        raise ValueError("Truck Driver accounts cannot receive full NeoApps access.")
     if not membership.gateway or membership.gateway.code != get_current_gateway().code:
         return
 
@@ -2077,10 +2088,17 @@ def _change_driver_account_type(gateway, target_user, account_type):
         raise ValueError("User Management edit authority is required for account conversion.")
     if target_user.id == current_user.id:
         raise ValueError("You cannot convert your own account.")
-    if account_type == "vendor":
-        _guard_last_grandmaster_gateway_change(target_user)
     from app.services.neoscorpion_account_types import convert_account
-    return convert_account(gateway, current_user, target_user, account_type)
+    return convert_account(gateway, current_user, target_user, account_type,
+                           can_change_role=_current_user_can_assign_role)
+
+
+def _lock_staff_account(user):
+    from app.services.neoscorpion_account_types import lock_account_grants
+    user = lock_account_grants(user)
+    if user.scorpion_vendor:
+        raise ValueError("Convert this Truck Driver to FULL NEO ACCOUNT before changing staff access.")
+    return user
 
 
 def _approve_account_request(membership, notes, seed_role="watcher",
@@ -2094,8 +2112,8 @@ def _approve_account_request(membership, notes, seed_role="watcher",
         return
     if account_type != "full":
         raise ValueError("Select a valid account type.")
-    if membership.user.scorpion_vendor:
-        raise ValueError("Convert this Truck Driver to FULL NEO ACCOUNT in User Management first.")
+    _lock_staff_account(membership.user)
+    db.session.refresh(membership)
     _approve_membership(membership, notes, seed_role=seed_role,
                         node_role_values=node_role_values,
                         bypass_email_verification=bypass_email_verification)
@@ -2110,6 +2128,8 @@ def _approve_membership(
 ):
     if not membership:
         raise ValueError("Gateway membership request was not found.")
+    if membership.user.scorpion_vendor:
+        raise ValueError("Truck Driver accounts cannot receive full NeoApps access.")
     if seed_role not in ROLE_CHOICES:
         raise ValueError("Unsupported node role selected.")
     if not membership.user.email_verified_at and not bypass_email_verification:

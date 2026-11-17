@@ -6,7 +6,7 @@ from flask_login import current_user
 from app.extensions import db
 from app.models import PermissionRule
 from app.models.user import ROLE_LEVELS
-from app.services.access_control import get_current_gateway, get_user_app_role, get_user_node_role
+from app.services.access_control import get_current_gateway, get_user_app_role, get_user_node_role, is_restricted_driver
 from app.services.request_cache import (
     MISSING,
     get_request_cached,
@@ -1837,7 +1837,7 @@ def grouped_permission_rules(rules):
 
 def user_can(permission_key, user=None):
     user = user or current_user
-    if not _is_authenticated_user(user):
+    if not _is_authenticated_user(user) or is_restricted_driver(user):
         return False
 
     normalized_key = normalize_permission_key(permission_key)

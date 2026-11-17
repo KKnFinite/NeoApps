@@ -2,6 +2,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from flask import current_app, g, has_request_context, request
+from flask_login import current_user
 from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import set_committed_value
@@ -11,6 +12,7 @@ from app.models import (
     Gateway,
     GatewayMembership,
     GatewayNodeRole,
+    NeoScorpionVendorAccount,
     NeoNode,
     PortalAppAccess,
     SortDateOperation,
@@ -177,6 +179,19 @@ PWA_INSTALL_TARGETS = (
 )
 
 
+def is_restricted_driver(user):
+    if not _is_real_user(user):
+        return False
+    if (has_request_context() and "scorpion_vendor_account" in g
+            and user.id == getattr(current_user, "id", None)):
+        return g.scorpion_vendor_account is not None
+    return getattr(user, "scorpion_vendor", None) is not None
+
+
+def _driver_profile_exists(user_id):
+    return NeoScorpionVendorAccount.query.filter_by(user_id=user_id).exists()
+
+
 def get_default_gateway():
     gateway_code = _default_gateway_code()
 
@@ -285,7 +300,7 @@ def prime_lightweight_live_request_scope(
             # Correlate to the same authorized Gateway; no extra entity hydration.
             query = query.add_columns(*routing_signal_columns(Gateway.id, *signal_scope))
 
-    row = query.filter(Gateway.code == gateway_code).first()
+    row = query.filter(Gateway.code == gateway_code, ~_driver_profile_exists(user.id)).first()
     if row is None:
         set_request_cached("access.default_gateway", gateway_code, None)
         return SimpleNamespace(
@@ -434,6 +449,8 @@ def get_user_gateway_membership(user, gateway_code):
 
 
 def user_has_gateway_access(user, gateway_code):
+    if is_restricted_driver(user):
+        return False
     membership = get_user_gateway_membership(user, gateway_code)
     if not _membership_is_approved_active(membership):
         return False
@@ -453,6 +470,8 @@ def get_user_node_role(user, gateway_code, node_code):
     cache_key = (user.id, gateway_code, node_code)
 
     def resolve():
+        if is_restricted_driver(user):
+            return None
         membership = get_user_gateway_membership(user, gateway_code)
         if not _membership_is_approved_active(membership):
             return None
@@ -558,7 +577,7 @@ def prime_user_node_roles_for_request(user, gateway_code, node_codes):
                     GatewayNodeRole.node_id == NeoNode.id,
                 ),
             )
-            .filter(Gateway.code == gateway_code)
+            .filter(Gateway.code == gateway_code, ~_driver_profile_exists(user.id))
             .all()
         )
         for gateway, membership, app_access, node, node_role in rows:
@@ -636,6 +655,8 @@ def backfill_default_gateway_node_roles(user, role="grandmaster"):
         raise ValueError("Unsupported node role.")
 
     gateway = ensure_default_gateway_and_nodes()
+    if is_restricted_driver(user):
+        return get_user_gateway_membership(user, gateway.code)
     # Bootstrap/legacy provisioning creates missing grants only. It is not an
     # administrator reactivation action, including for the bootstrap account.
     membership, created = _get_or_create_grant(
@@ -666,7 +687,7 @@ def seed_gateway_node_roles(membership, role="watcher", overwrite_existing=False
 
     if overwrite_existing:
         raise ValueError("Existing node grants require an explicit administrator role edit.")
-    if not _membership_is_approved_active(membership):
+    if not _membership_is_approved_active(membership) or is_restricted_driver(membership.user):
         return
 
     active_nodes = NeoNode.query.filter_by(is_active=True).all()
@@ -732,13 +753,15 @@ def ensure_user_app_access(user, app_code):
 
 
 def get_user_app_access(user, app_code):
-    if not _is_authenticated_user(user) and not _is_real_user(user):
+    if not _is_real_user(user):
         return None
 
     normalized = _normalize_app_code(app_code)
     cache_key = (user.id, normalized)
 
     def resolve():
+        if is_restricted_driver(user):
+            return None
         access = PortalAppAccess.query.filter_by(
             user_id=user.id,
             app_code=normalized,
@@ -836,7 +859,7 @@ def portal_install_rows_for_user(user):
 
 
 def _sync_neogateway_app_access_from_gateway_membership(user):
-    if not _is_real_user(user):
+    if not _is_real_user(user) or is_restricted_driver(user):
         return None
 
     gateway = get_default_gateway()

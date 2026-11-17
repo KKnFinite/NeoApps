@@ -1,10 +1,13 @@
 """Real row-lock races and additive bootstrap in disposable local PostgreSQL."""
 import unittest
 from unittest.mock import patch
-from datetime import timedelta
+from datetime import datetime, timedelta
+from threading import Barrier
+from flask_login import login_user
 from sqlalchemy import text, inspect
 from app.extensions import db
-from app.models import (User, SortDateOperation, NeoScorpionVendorAccount, NeoScorpionVendorRequest,
+from app.models import (User, SortDateOperation, NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
+    GatewayMembership, GatewayNodeRole, PortalAppAccess,
     NeoScorpionSortTruck, NeoScorpionTruckDriver, NeoScorpionInventoryReading, NeoScorpionFuelingEvent)
 from app.services import neoscorpion_vendors as vendors, neoscorpion_inventory as inventory, neoscorpion as service
 from app.services.neoscorpion_schema import ensure_neoscorpion_production_schema
@@ -28,6 +31,65 @@ class VendorPostgresTest(unittest.TestCase):
     row=submissions.SubmissionTest.row
     baseline=submissions.SubmissionTest.baseline
     submit=submissions.SubmissionTest.submit
+
+    def test_staff_approval_and_driver_conversion_serialize(self):
+        from app.auth.routes import _approve_account_request
+        from app.services.neoscorpion_account_types import convert_account
+        user = self.fueler
+        user.email_verified_at = datetime.utcnow()
+        db.session.commit()
+        # This test is about identity and grant locks, outside the active-fueler
+        # guard exercised separately by the operational workflow tests.
+        membership_id = GatewayMembership.query.filter_by(user_id=user.id, gateway_id=self.gateway.id).one().id
+        user_id = user.id
+        ready = Barrier(2)
+
+        def finish(index, gateway, _fueler, dispatcher):
+            with self.fixture.app.test_request_context(method='POST', data={'account_type': 'full'}):
+                login_user(dispatcher)
+                target = db.session.get(User, user_id)
+                membership = db.session.get(GatewayMembership, membership_id)
+                ready.wait(timeout=8)
+                if index == 0:
+                    return convert_account(gateway, dispatcher, target, 'vendor')
+                try:
+                    _approve_account_request(membership, None, seed_role='operator')
+                    return 'approved first'
+                except ValueError:
+                    db.session.rollback()
+                    return 'driver already classified'
+
+        with patch.object(service, 'current_sort_operation', return_value=None):
+            results = self.concurrent(finish)
+        self.assertTrue(results[0])
+        self.assertIn(results[1], {'approved first', 'driver already classified'})
+        self.assertIsNotNone(db.session.get(NeoScorpionVendorAccount, user_id))
+        self.assertFalse(PortalAppAccess.query.filter_by(user_id=user_id, status='approved', is_active=True).count())
+        self.assertFalse(GatewayNodeRole.query.filter_by(gateway_membership_id=membership_id, is_active=True).count())
+
+    def test_nightly_approval_racing_full_conversion_cannot_leave_driver_approved(self):
+        from app.services.neoscorpion_account_types import convert_account
+        user, _, _ = self.vendor()
+        user_id, operation_id = user.id, self.operation.id
+        ready = Barrier(2)
+
+        def finish(index, gateway, _fueler, dispatcher):
+            ready.wait(timeout=8)
+            if index == 0:
+                return convert_account(gateway, dispatcher, db.session.get(User, user_id), 'full')
+            try:
+                vendors.set_participation(gateway, db.session.get(SortDateOperation, operation_id),
+                    dispatcher, user_id, 'approved', 1)
+                return 'approved first'
+            except ValueError:
+                db.session.rollback()
+                return 'driver already converted'
+
+        results = self.concurrent(finish)
+        self.assertTrue(results[0])
+        self.assertIn(results[1], {'approved first', 'driver already converted'})
+        self.assertIsNone(db.session.get(NeoScorpionVendorAccount, user_id))
+        self.assertEqual(db.session.get(NeoScorpionVendorNight, (operation_id, user_id)).status, 'revoked')
 
     def test_competing_baselines_accept_one_version_without_duplicate_epochs(self):
         operation_id,truck_id=self.operation.id,self.truck.id

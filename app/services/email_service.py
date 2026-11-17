@@ -4,22 +4,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from flask import current_app, url_for
+from flask import current_app
 from app.services.bounded_http import ExternalResponseError, read_body
 
 
 BREVO_SMTP_EMAIL_URL = "https://api.brevo.com/v3/smtp/email"
 BREVO_SMTP_EMAIL_HOST = "api.brevo.com"
 MAX_EMAIL_RECEIPT_BYTES = 64 * 1024
-
-
-def send_vendor_invitation(user, token):
-    link = _absolute_url(url_for('scorpion_vendor.invitation', token=token))
-    return _send_transactional_email(to_email=user.email, to_name=user.display_name,
-        subject='NeoScorpion vendor driver invitation',
-        html_content=f'<p>Your individual vendor invitation expires in 24 hours.</p><p><a href="{escape(link)}">Register</a></p><p>Dispatcher approval is required for each sort.</p>',
-        text_content=f'Register within 24 hours: {link}\nDispatcher approval is required for each sort.',
-        tag='neoscorpion-vendor-invitation')
 
 
 def send_email_verification(user, token):
@@ -62,10 +53,9 @@ def send_access_approved(user, gateway):
     )
 
 
-def send_password_reset(user, token, *, vendor_driver=False):
-    path = url_for("scorpion_vendor.reset_password", token=token) if vendor_driver else f"/reset-password/{token}"
-    reset_url = _absolute_url(path)
-    account_name = "NeoScorpion driver" if vendor_driver else "NeoApps Portal"
+def send_password_reset(user, token):
+    reset_url = _absolute_url(f"/reset-password/{token}")
+    account_name = "NeoApps Portal"
     return _send_transactional_email(
         to_email=user.email,
         to_name=user.display_name,

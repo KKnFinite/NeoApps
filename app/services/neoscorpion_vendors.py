@@ -61,7 +61,9 @@ def require_approved(account, operation):
         raise PermissionError('Verified vendor account required.')
     # A request may wait on the sort lock after its authentication guard ran.
     # Never authorize that mutation from pre-lock identity-map snapshots.
-    account = NeoScorpionVendorAccount.query.filter_by(user_id=account.user_id).populate_existing().one()
+    account = NeoScorpionVendorAccount.query.filter_by(user_id=account.user_id).populate_existing().one_or_none()
+    if account is None:
+        raise PermissionError('Verified vendor account required.')
     user = User.query.filter_by(id=account.user_id).populate_existing().one()
     approval = NeoScorpionVendorNight.query.filter_by(sort_date_operation_id=operation.id,
         user_id=user.id).populate_existing().first()
