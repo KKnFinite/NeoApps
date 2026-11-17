@@ -19,13 +19,17 @@ class OperationsBrowserTest(unittest.TestCase):
     tearDownClass=classmethod(fixtures.UccBrowserTest.tearDownClass.__func__)
 
     def submit(self, page, button):
-        submitted_form = button.locator('xpath=ancestor::form[1]').element_handle()
+        submitted_form = button.evaluate_handle('button => button.form').as_element()
+        hidden_form = submitted_form.get_attribute('hidden') is not None
         with page.expect_response(lambda response: response.url.endswith('/operations/mutate') and response.request.method == 'POST') as pending:
             button.click()
         response=pending.value
         self.assertEqual(response.status,200,response.text())
         self.assertTrue(response.json()['ok'],response.json())
-        submitted_form.wait_for_element_state('hidden')
+        if hidden_form:
+            page.wait_for_function('form => !form.isConnected', arg=submitted_form)
+        else:
+            submitted_form.wait_for_element_state('hidden')
 
     def layout(self, page, value):
         with page.expect_response(lambda r:r.url.endswith('/operations/preferences') and r.request.method=='POST') as pending:
@@ -194,25 +198,25 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(page.locator(f'[data-mission-id="{self.missions[0]}"] .ops-pretreated')).to_be_visible()
             expect(page.locator(f'[data-mission-id="{self.missions[1]}"] .ops-pretreated')).to_have_count(0)
             # Canonical coordinator-capable workflow, with no gallon gate on FIN/CLEAR.
-            page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] a').click()
-            pane=page.locator('[data-ops-detail]');expect(pane).to_be_visible()
-            self.submit(page,pane.locator('button[value="initial_contact"]'))
+            page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] [data-ops-accordion] > summary').click()
+            pane=page.locator('[data-ops-inline]:visible');expect(pane).to_be_visible()
+            self.submit(page,page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] button[value="initial_contact"]'))
             expect(page.locator('[data-ops-feedback]')).to_contain_text('SAVED')
             expect(pane.locator('select[name="treatment_plan"]')).to_be_visible()
-            self.submit(page,pane.locator('button[value="toggle_configured"]'))
+            self.submit(page,page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] button[value="toggle_configured"]'))
             expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','configured')
             form=pane.locator('[data-subzero-deice-form]');form.locator('[name="treatment_plan"]').select_option('type_i_type_iv')
             form.locator('[name="pass1_surface_area"]').select_option('wings_tail');form.locator('[name="pass2_surface_area"]').select_option('wings_only')
             for name,value in (('pass1_start','22:00'),('pass1_end','22:02'),('pass2_start','22:04'),('pass2_end','22:08')):form.locator('[name="'+name+'"]').fill(value)
             self.submit(page,form.locator('button[type="submit"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','fin')
-            self.submit(page,pane.locator('button[value="clear"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','radio-pending')
+            self.submit(page,page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] button[value="clear"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','radio-pending')
             expect(pane.locator('[data-radio-script]')).to_contain_text('2204')
             self.submit(page,pane.locator('button[value="radio_complete"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','gone')
-            expect(pane.locator('.ops-readback')).to_contain_text('2204')
+            expect(page.locator('[data-ops-row][data-status="radio-pending"]')).to_have_count(0)
             page.screenshot(path=str(evidence/f'{engine}-completed-detail.png'))
-            pane.locator('[data-ops-close]').click()
+            # Radio confirmation collapsed the mission.
             # Draft, caret/focus and primary updates survive a live response and reload.
-            page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"] a').click()
+            page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"] [data-ops-accordion] > summary').click()
             field=pane.locator('[name="pass1_start"]');field.fill('21:45');field.focus()
             with self.app.app_context():
                 mission=db.session.get(SortDateMission,self.missions[1]);mission.eta_datetime_utc=datetime(2026,10,23,6,40);db.session.commit()
@@ -224,10 +228,10 @@ class OperationsBrowserTest(unittest.TestCase):
                 mission=db.session.get(SortDateMission,self.missions[0]);mission.assigned_tail_number='N-REPLACED';db.session.commit()
             expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"]')).to_have_attribute('data-status','gone',timeout=10000)
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
-            pane.locator('[data-subzero-deice-form] button[type="submit"]').click();expect(page.locator('[data-ops-feedback]')).to_contain_text('identity changed')
+            pane.locator('[data-subzero-deice-form] button[type="submit"]').click();expect(pane.locator('[data-ops-inline-feedback]')).to_contain_text('identity changed')
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
             # Actual phone Pretreat editing, failure recovery and independent completion.
-            pane.locator('[data-ops-close]').click();page.set_viewport_size({'width':375,'height':900})
+            pane.locator('[data-ops-collapse-inline]').click();page.set_viewport_size({'width':375,'height':900})
             page.locator('[data-ops-mode="pretreat"]').click();expect(root).to_have_attribute('data-mode','pretreat')
             expect(root).to_have_attribute('data-ready','true')
             row = page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"]')

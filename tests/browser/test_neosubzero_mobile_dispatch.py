@@ -32,13 +32,12 @@ class MobileDispatchBrowserTest(unittest.TestCase):
         case.login(page)
         case.ready(page, "/neosubzero/operations?mode=outbound")
         row = page.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')
-        summary = row.locator(".ops-mobile-outbound > summary")
-        status = summary.locator(".ops-mobile-status")
-        badge = status.locator(".ops-mobile-pretreated")
-        untreated = page.locator(f'[data-ops-row][data-mission-id="{case.missions[1]}"] .ops-mobile-status')
-        expect(status).to_have_text("")
-        expect(untreated).to_have_text("")
-        height = summary.evaluate("e => e.offsetHeight")
+        summary = row.locator(".ops-mission > summary")
+        status = summary.locator(".ops-status")
+        badge = status.locator(".ops-pretreated")
+        untreated = page.locator(f'[data-ops-row][data-mission-id="{case.missions[1]}"] .ops-status')
+        expect(status).to_have_text("NO STATUS")
+        expect(untreated).to_have_text("NO STATUS")
 
         with case.app.app_context():
             operation = db.session.get(SortDateOperation, case.operation_id)
@@ -53,13 +52,14 @@ class MobileDispatchBrowserTest(unittest.TestCase):
         expect(row).to_have_attribute('data-status','pretreated')
         expect(row).to_have_css('background-color','rgb(40, 93, 168)')
         expect(badge).to_have_count(0)
-        self.assertEqual(summary.evaluate("e => e.offsetHeight"), height)
+        expect(row.locator('[data-ops-inline]')).to_be_hidden()
+        self.assertLessEqual(summary.evaluate('e => e.scrollWidth - e.clientWidth'),1)
         evidence = Path("instance/browser-evidence/subzero-mobile-outbound-status")
         evidence.mkdir(parents=True, exist_ok=True)
         for width in (375, 390, 430):
             page.set_viewport_size({"width": width, "height": 844})
             expect(status).to_have_text('PRETREATED')
-            expect(untreated).to_have_text("")
+            expect(untreated).to_have_text("NO STATUS")
             self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth - innerWidth"), 1)
             page.screenshot(path=str(evidence / f"{engine}-after-{width}.png"))
 
@@ -71,11 +71,12 @@ class MobileDispatchBrowserTest(unittest.TestCase):
             event.treatment_plan = "two_type_i"
             event_id = event.id
             db.session.commit()
-        expect(status.locator("span")).to_have_text("CONFIGURED", timeout=12000)
+        expect(status.locator("strong")).to_have_text("CONFIGURED", timeout=12000)
         expect(badge).to_have_count(1)
-        self.assertEqual(summary.evaluate("e => e.offsetHeight"), height)
+        expect(row.locator('[data-ops-inline]')).to_be_hidden()
+        self.assertLessEqual(summary.evaluate('e => e.scrollWidth - e.clientWidth'),1)
         summary.click()
-        form = row.locator(".ops-mobile-outbound [data-subzero-deice-form]")
+        form = row.locator(".ops-mission [data-subzero-deice-form]")
         pass1 = form.locator('[data-subzero-pass="1"]')
         pass2 = form.locator('[data-subzero-pass="2"]')
         expect(pass1).to_have_css("background-color", "rgba(0, 0, 0, 0)")
@@ -98,7 +99,7 @@ class MobileDispatchBrowserTest(unittest.TestCase):
                 for field, value in change.items():
                     setattr(event, field, value)
                 db.session.commit()
-            expect(status.locator("span")).to_have_text(label, timeout=12000)
+            expect(status.locator("strong")).to_have_text(label, timeout=12000)
             expect(badge).to_have_count(1)
 
     def test_status_and_fluid_colors_chromium(self):
@@ -209,7 +210,7 @@ class MobileDispatchBrowserTest(unittest.TestCase):
         mutate(outbound.get_by_role('button', name='INITIAL CONTACT', exact=True))
         treatment = outbound.locator('[data-subzero-deice-form]:visible')
         expect(treatment).to_be_visible()
-        expect(page.locator('[data-ops-detail]')).to_be_hidden()
+        expect(page.locator('[data-ops-detail]')).to_have_count(0)
         frost = outbound.get_by_role('button', name='FROST PRESENT', exact=True)
         expect(frost).to_be_visible()
         with case.app.app_context():
@@ -220,7 +221,7 @@ class MobileDispatchBrowserTest(unittest.TestCase):
         mutate(outbound.get_by_role('button', name='NERVOUS CAPTAIN'))
         expect(outbound.get_by_text('NERVOUS CAPTAIN · RECORDED')).to_be_visible()
         mutate(outbound.get_by_role('button', name='CONFIGURED', exact=True))
-        expect(outbound.locator('.ops-mobile-status')).to_contain_text('CONFIGURED')
+        expect(outbound.locator('.ops-status')).to_contain_text('CONFIGURED')
         treatment.locator('[name="treatment_plan"]').select_option('one_type_i')
         treatment.locator('[name="pass1_surface_area"]').select_option('wings_tail')
         treatment.locator('[data-subzero-deice-stamp="pass1_start"]').click()
@@ -264,9 +265,9 @@ class MobileDispatchBrowserTest(unittest.TestCase):
         expect(outbound.locator('[data-ops-inline-feedback]')).to_be_hidden()
         mutate(outbound.get_by_role('button', name='CLEAR', exact=True))
         expect(outbound.locator('[data-radio-script]')).to_be_visible()
-        page.once('dialog', lambda dialog: dialog.accept())
+        outbound.get_by_role('button',name='RADIO',exact=True).click()
         mutate(outbound.get_by_role('button', name='RADIO COMPLETE', exact=True))
-        expect(outbound.locator('.ops-mobile-status')).to_contain_text('RADIO COMPLETE')
+        expect(outbound.locator('.ops-status')).to_contain_text('RADIO COMPLETE')
         with case.app.app_context():
             event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=case.flow_id).one()
             self.assertEqual(event.pass_evidence['1']['reason'], 'Nervous Captain')

@@ -3,14 +3,12 @@
     const root = document.querySelector('[data-ops-workspace]');
     if (!root) return;
     const shared = window.NeoSubZeroDepartureForms;
-    const pane = root.querySelector('[data-ops-detail]');
     const feedback = root.querySelector('[data-ops-feedback]');
     const media = window.matchMedia('(max-width:900px)');
     const primaryRamps = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'];
     let selected = new URL(location.href).searchParams.get('mission');
     const isPretreat = root.dataset.mode === 'pretreat';
     const needsReload = message => /changed|conflict|stale|session|current sort|identity|network|timed out|could not be confirmed|expired|restored.*draft|another.*(?:inspection|coordinator|saved|user)/i.test(message);
-    const usesInline = () => isPretreat || media.matches;
     const accordion = row => row.querySelector('[data-ops-accordion]');
     const dirtyForm = 'form[data-dirty="true"]';
     let epoch = 0, busy = false, preferenceBusy = false;
@@ -100,16 +98,9 @@
             if (busy) break;
         }
     };
-    const syncFeedback = () => {
-        const inline = pane.querySelector('[data-ops-detail-feedback]');
-        if (inline) { inline.textContent = feedback.textContent; inline.hidden = feedback.hidden; inline.classList.toggle('is-error', feedback.classList.contains('is-error')); }
-        const reload = pane.querySelector('[data-ops-reload]');
-        if (reload) reload.hidden = !feedback.classList.contains('is-error') || !needsReload(feedback.textContent);
-    };
     const notify = (text, error = false) => {
         feedback.textContent = text; feedback.hidden = !text;
         feedback.classList.toggle('is-error', error);
-        syncFeedback();
     };
     const formAction = form => new URL(form.getAttribute('action'), location.origin).pathname;
     const formKey = form => [formAction(form), form.elements.pass_number?.value || '',
@@ -118,8 +109,7 @@
             form.querySelector('input[name="action"]')?.value || form.querySelector('button[name="action"]')?.value || form.elements.inspection_action?.value || ''].join(':');
     const draftKey = detail => ['neoapps.subzero.operations.draft', root.dataset.userId,
         root.dataset.operationId, root.dataset.mode, detail.dataset.missionId, detail.dataset.tail].join(':');
-    const detail = () => pane.querySelector('[data-ops-detail-content]');
-    const draftContents = () => usesInline() ? [...root.querySelectorAll('[data-ops-inline]')] : [detail()].filter(Boolean);
+    const draftContents = () => [...root.querySelectorAll('[data-ops-inline]')];
     const inlineFor = element => element.closest('[data-ops-inline]') ||
         (element.matches('[data-ops-planned]') ? element.closest('[data-ops-row]').querySelector('[data-ops-inline]') : null);
     const inlineMessage = (content, text, error = false) => {
@@ -132,10 +122,6 @@
         if (retry) retry.hidden = true;
     };
     const dirty = () => !!root.querySelector('form[data-dirty="true"]');
-    const draftMessage = text => {
-        const note = pane.querySelector('[data-ops-draft-status]');
-        if (note) { note.textContent = text; note.hidden = !text; }
-    };
     const saveDraft = () => {
         for (const content of draftContents()) {
             const forms = [...content.querySelectorAll('form[data-dirty="true"]')].map(form => ({
@@ -147,8 +133,7 @@
                 else sessionStorage.removeItem(draftKey(content));
             } catch (_) {
                 const message = 'Draft remains open. Browser storage is unavailable; do not reload until saved.';
-                if (usesInline()) inlineMessage(content, message, true);
-                else draftMessage(message);
+                inlineMessage(content, message, true);
             }
         }
     };
@@ -181,9 +166,8 @@
         }
     };
     const initialize = (restore = false, onlyFresh = false) => {
-        if (!usesInline()) pane.querySelectorAll('form').forEach(sync);
         for (const content of draftContents()) {
-            if (usesInline()) content.querySelectorAll('form').forEach(form => { sync(form); rememberAutosave(form); });
+            content.querySelectorAll('form').forEach(form => { sync(form); rememberAutosave(form); });
             if (!restore) continue;
             let drafts = [];
             try { drafts = JSON.parse(sessionStorage.getItem(draftKey(content)) || '[]');
@@ -233,10 +217,8 @@
             }
             if (restored) {
                 const message = 'RESTORED UNSAVED DRAFT · Original version retained. Resolve any server conflict before saving.';
-                if (usesInline()) {
-                    content.closest('details').open = true;
-                    inlineMessage(content, message, true);
-                } else draftMessage(message);
+                content.closest('[data-ops-accordion]').open = true;
+                inlineMessage(content, message, true);
             }
         }
     };
@@ -247,7 +229,7 @@
         rows.sort((a,b) => Number(a.dataset.order) - Number(b.dataset.order));
         rows.forEach(row => board.append(row));
         board.querySelectorAll('.ops-ramp-column').forEach(e => e.remove());
-        root.dataset.layout = usesInline() ? 'list' : (root.dataset.desktopLayout || 'list');
+        root.dataset.layout = (isPretreat || media.matches) ? 'list' : (root.dataset.desktopLayout || 'list');
         const visual = root.dataset.layout === 'visual';
         const override = root.dataset.rampOverride;
         const ramp = (!isPretreat && override) || (media.matches ? override || root.dataset.ramp : 'All');
@@ -286,26 +268,30 @@
     };
     const inlineRequestUrl = mission => {
         const url = currentUrl(mission);
-        if (!media.matches) return url;
-        url.searchParams.set('presentation','inline');
+        if (media.matches) url.searchParams.set('presentation','inline');
         if (!isPretreat) new Set(requestedDrafts().slice(0,20)).forEach(id => url.searchParams.append('draft',id));
         return url;
     };
     const reconcileInline = (board, incoming, active, savedForm) => {
         const nextRows = new Map([...incoming.querySelectorAll('[data-ops-row]')].map(row => [row.dataset.missionId, row]));
-        if (!media.matches) nextRows.forEach(row => { accordion(row).open = true; });
+        if (isPretreat && !media.matches) nextRows.forEach(row => { accordion(row).open = true; });
         for (const row of board.querySelectorAll('[data-ops-row]')) {
             const next = nextRows.get(row.dataset.missionId);
             const editor = accordion(row);
-            const preserve = (editor.contains(active) && active !== editor.querySelector('summary')) ||
+            const preserve = (editor.contains(active) && !editor.querySelector(':scope > summary').contains(active)) ||
                 editor.querySelector(dirtyForm) || (isPretreat && (editor.querySelector('[data-ops-new-participant]:not([hidden])') ||
                     [...pendingPretreat].some(form => editor.contains(form))));
-            if (next?.dataset.tail !== row.dataset.tail) {
+            if (next?.dataset.tail !== editor.querySelector('[data-ops-inline]').dataset.tail) {
                 if (preserve) {
                     editor.open = true;
-                    inlineMessage(row.querySelector('[data-ops-inline]'),
+                    const retained = row.querySelector('[data-ops-inline]');
+                    inlineMessage(retained,
                         'Aircraft identity or eligibility changed. Original-tail draft retained for review.', true);
-                    if (next) next.replaceWith(row);
+                    if (next) {
+                        const nextEditor = accordion(next);
+                        nextEditor.open = true;
+                        nextEditor.querySelector('[data-ops-inline]').replaceWith(retained);
+                    }
                     else incoming.append(row);
                 }
                 continue;
@@ -313,7 +299,9 @@
             const plan = isPretreat && row.querySelector('[data-ops-planned]');
             if (plan && pendingPretreat.has(plan)) next.querySelector('[data-ops-planned]')?.replaceWith(plan);
             const nextEditor = accordion(next);
-            nextEditor.open = !media.matches || (isPretreat ? editor.open : next.dataset.missionId === selected || !!preserve);
+            const radioFinished = !isPretreat && row.dataset.status === 'radio-pending' && next.dataset.status === 'gone';
+            nextEditor.open = !radioFinished && ((isPretreat && !media.matches) || editor.open);
+            if (radioFinished && selected === row.dataset.missionId) selected = null;
             const disclosureKey = section => section.dataset.opsDisclosure ||
                 section.querySelector(':scope > summary')?.textContent.trim();
             const opened = new Set([...editor.querySelectorAll('details[open]')].map(disclosureKey));
@@ -331,7 +319,14 @@
                     nextEditor.replaceWith(editor);
                 } else {
                     const freshForms = [...replacement.querySelectorAll('form')];
+                    const draftNotice = replacement.querySelector('[data-ops-draft-status]');
+                    if (current.querySelector(dirtyForm) && draftNotice) {
+                        draftNotice.hidden = false;
+                        draftNotice.textContent = 'LIVE DATA UPDATED · Unsaved entries and their original versions were kept. Conflicting saves require review.';
+                    }
                     for (const form of current.querySelectorAll('form')) {
+                        // Peer confirmation removes the action even if its button had focus.
+                        if (radioFinished && form.querySelector('button[value="radio_complete"]')) continue;
                         if (form.dataset.dirty !== 'true' && !pendingPretreat.has(form) &&
                             (!form.contains(active) || form === savedForm) &&
                             !(form.matches('[data-ops-new-participant]') && !form.hidden)) continue;
@@ -376,20 +371,20 @@
         if (next.dataset.operationId !== root.dataset.operationId && dirty()) {
             notify('The canonical sort changed. Draft retained for the original sort; reload current operations in another tab before continuing.', true); return;
         }
-        const scroll = window.scrollY, paneScroll = pane.scrollTop;
+        const scroll = window.scrollY;
         const grid = isPretreat && root.querySelector('.ops-pretreat-scroll');
         const gridScroll = grid ? grid.scrollLeft : 0;
         const currentBoard = root.querySelector('[data-ops-board]');
         const nextBoard = next.querySelector('[data-ops-board]');
-        const activeRowField = usesInline() && currentBoard.contains(document.activeElement) ? document.activeElement : null;
+        const activeRowField = currentBoard.contains(document.activeElement) ? document.activeElement : null;
         const caret = activeRowField && 'selectionStart' in activeRowField ? [activeRowField.selectionStart, activeRowField.selectionEnd] : null;
         const activeTop = activeRowField?.getBoundingClientRect().top;
         reconcilingPretreat = isPretreat;
-        if (usesInline() && next.dataset.operationId === root.dataset.operationId) reconcileInline(currentBoard, nextBoard, activeRowField, isPretreat ? saved : null);
+        if (next.dataset.operationId === root.dataset.operationId) reconcileInline(currentBoard, nextBoard, activeRowField, isPretreat ? saved : null);
         currentBoard.replaceWith(nextBoard);
         ['operationId','ramp','rampOverride'].forEach(key => { root.dataset[key] = next.dataset[key]; });
         root.dataset.desktopLayout = next.dataset.layout;
-        if (usesInline()) {
+        {
             revision = next.dataset.revision;
             tagOrder();
             applyLayout();
@@ -408,45 +403,9 @@
             reconcilingPretreat = false;
             const shift = focus?.isConnected ? focus.getBoundingClientRect().top - activeTop : 0;
             window.scrollTo({top:scroll + shift,behavior:'instant'});
+            history.replaceState(null,'',currentUrl(selected));
             return;
         }
-        const incoming = next.querySelector('[data-ops-detail-content]');
-        const current = detail();
-        // Optional evidence/details must not close on an idle live refresh,
-        // including Safari summary taps that do not move keyboard focus.
-        const expansionKey=element=>[element.closest('[data-participant-id]')?.dataset.participantId || '',element.querySelector(':scope > summary')?.textContent].join(':');
-        if (current && incoming && current.dataset.missionId === incoming.dataset.missionId && current.dataset.tail === incoming.dataset.tail) {
-            const opened=new Set([...current.querySelectorAll('details[open]')].map(expansionKey));
-            incoming.querySelectorAll('details').forEach(element=>{if(opened.has(expansionKey(element)))element.open=true;});
-        }
-        if (current && incoming && current.dataset.missionId === incoming.dataset.missionId && current.dataset.tail === incoming.dataset.tail && (dirty() || pane.contains(document.activeElement))) {
-            const freshForms = [...incoming.querySelectorAll('form')];
-            const active=document.activeElement;
-            const caret=active && 'selectionStart' in active ? [active.selectionStart,active.selectionEnd] : null;
-            current.querySelectorAll('form').forEach(form => {
-                if (form.dataset.dirty !== 'true' && (!form.contains(active) || formKey(form) === saved)) return;
-                const replacement = freshForms.find(e => formKey(e) === formKey(form));
-                if (replacement) replacement.replaceWith(form);
-                else {
-                    const review=document.createElement('section');review.className='ops-review';
-                    const note=document.createElement('p');note.textContent='This action changed on the server. Original draft retained for review; reload current values before retrying.';
-                    review.append(note,form);incoming.querySelector('[data-ops-detail-body]').append(review);
-                }
-            });
-            current.replaceWith(incoming);
-            if (active?.isConnected) {active.focus({preventScroll:true});if(caret)active.setSelectionRange(...caret);}
-            draftMessage('LIVE DATA UPDATED · Unsaved entries and their original versions were kept. Conflicting saves require review.');
-            initialize();saveDraft();
-        } else if (current && (dirty() || pane.contains(document.activeElement)) && incoming && current.dataset.missionId === incoming.dataset.missionId && current.dataset.tail !== incoming.dataset.tail) {
-            draftMessage('TAIL CHANGED · Original-tail draft preserved. Close these details and review the replacement aircraft.');
-            notify('Aircraft identity changed; original physical evidence has not been reassigned.', true);
-        } else {
-            saveDraft(); pane.replaceChildren(...next.querySelector('[data-ops-detail]').childNodes);
-            pane.hidden = !incoming; selected = incoming?.dataset.missionId || null; initialize(true);
-        }
-        revision = next.dataset.revision; tagOrder(); applyLayout(); syncFeedback();
-        pane.scrollTop = paneScroll; window.scrollTo({top:scroll,behavior:'instant'});
-        history.replaceState(null,'',currentUrl(selected));
     };
     const preferences = async changes => {
         if (preferenceBusy || busy) { notify('Wait for the current save to finish before changing the presentation.'); return false; }
@@ -513,6 +472,7 @@
         }
     });
     const openAccordion = async (card, open) => {
+        saveDraft();
         const mission = card.closest('[data-ops-row]').dataset.missionId;
         if (open) {
             root.querySelectorAll('[data-ops-accordion][open]').forEach(other => {
@@ -527,14 +487,25 @@
         }
         history.replaceState(null,'',currentUrl(selected));
         if (!open) ++epoch;
-        if (open && card.querySelector('.ops-inline-loading')) {
+        if (open && (!isPretreat || card.querySelector('.ops-inline-loading'))) {
             try { await fetchPage(mission); }
             catch (error) { inlineMessage(card.querySelector('[data-ops-inline]'),error.message,true); }
         }
     };
     root.addEventListener('click', async event => {
+        const radio = event.target.closest('[data-ops-radio]');
+        if (radio) {
+            event.preventDefault();
+            if (busy || preferenceBusy) return;
+            const card = radio.closest('[data-ops-accordion]');
+            const mission = card.closest('[data-ops-row]').dataset.missionId;
+            await openAccordion(card, true);
+            const section = root.querySelector(`[data-ops-row][data-mission-id="${mission}"] [data-ops-radio-section]`);
+            if (section) { section.scrollIntoView({block:'nearest'}); section.focus({preventScroll:true}); }
+            return;
+        }
         const control = event.target.closest('[data-ops-accordion] > summary, [data-ops-collapse-inline]');
-        if (control && media.matches) {
+        if (control && (!isPretreat || media.matches) && !event.target.closest('button:not([data-ops-collapse-inline]),input,select,textarea,a')) {
             event.preventDefault();
             if (busy || preferenceBusy) return;
             const card = control.closest('[data-ops-accordion]');
@@ -580,7 +551,7 @@
         }
         const inspection = event.target.closest('[data-open-frost-inspection]');
         if (inspection) {
-            const section = pane.querySelector('.neosubzero-frost-inspection');
+            const section = inlineFor(inspection)?.querySelector('.neosubzero-frost-inspection');
             if (section) {
                 section.open = true;
                 section.querySelector('select[name="frost_result"]')?.focus();
@@ -588,14 +559,15 @@
             }
             return;
         }
-        const open = event.target.closest('[data-ops-open]');
-        if (open) { event.preventDefault(); saveDraft(); const mission = open.closest('[data-ops-row]').dataset.missionId; try { pane.querySelector(':focus')?.blur(); selected = mission; await fetchPage(mission); } catch(error) { notify(error.message,true); } return; }
-        const close = event.target.closest('[data-ops-close]');
-        if (close) { saveDraft(); ++epoch; pane.hidden = true; selected = null; history.replaceState(null,'',currentUrl(null)); return; }
         const reloadInline = event.target.closest('[data-ops-reload-inline]');
         if (reloadInline) {
+            if (busy || preferenceBusy) return;
             const content = inlineFor(reloadInline);
             if (content.querySelector('form[data-dirty="true"]') && !window.confirm('Discard unsaved entries for this aircraft?')) return;
+            const controls = [...content.querySelectorAll('button,input:not([type="hidden"]),select,textarea')].filter(control => !control.disabled);
+            busy = true;
+            content.setAttribute('aria-busy','true');
+            controls.forEach(control => {control.disabled=true;});
             try {
                 content.querySelectorAll('form[data-dirty="true"]').forEach(form => {
                     pendingPretreat.delete(form);
@@ -603,18 +575,16 @@
                 });
                 inlineMessage(content, '');
                 saveDraft();
+                if (content.contains(document.activeElement)) document.activeElement.blur();
                 reloadInline.blur();
-                await fetchPage(selected || content.dataset.missionId);
+                await fetchPage(selected || content.dataset.missionId,null,true);
             } catch (error) { inlineMessage(content, error.message, true); }
-            return;
-        }
-        const reload = event.target.closest('[data-ops-reload]');
-        if (reload) {
-            if (pane.querySelector('form[data-dirty="true"]') && !window.confirm('Discard unsaved entries for this aircraft and reload current server values?')) return;
-            const current = detail();
-            if (current) { try { sessionStorage.removeItem(draftKey(current)); } catch (_) { /* Refresh still works in memory. */ } }
-            pane.replaceChildren();
-            try { await fetchPage(selected); notify('Current aircraft values loaded.'); } catch(error) { notify(error.message,true); }
+            finally {
+                busy = false;
+                controls.forEach(control => {control.disabled=false;});
+                content.removeAttribute('aria-busy');
+                drainPretreat();
+            }
             return;
         }
         const mode = event.target.closest('[data-ops-mode]');
@@ -648,18 +618,19 @@
                 if (isPretreat && correction) form.querySelector('[data-ops-disclosure="correction"]').open = true;
                 correction?.focus();
             }
-            const editor = inline || pane;
+            const editor = inline || form;
             editor.querySelectorAll('[data-subzero-spray-control]').forEach(e => {e.readOnly=e.dataset.sprayReady==='false';});
             editor.querySelectorAll('[data-subzero-spray-save]').forEach(e => {e.hidden=false;}); return;
         }
         const quickStamp = event.target.closest('[data-ops-pass-stamp]');
         if (quickStamp) {
+            event.preventDefault();
             if (busy || preferenceBusy) return;
-            const form = quickStamp.closest('form');
+            const form = quickStamp.form;
             const mission = form.elements.mission_id.value;
             if ([...root.querySelectorAll('[data-subzero-deice-form][data-dirty="true"]')]
                     .some(draft => draft.elements.mission_id.value === mission)) {
-                const line = inlineFor(form);
+                const line = inlineFor(form) || quickStamp.closest('[data-ops-row]').querySelector('[data-ops-inline]');
                 const message = 'Save treatment changes before recording a quick pass time. Your draft is kept.';
                 if (line) inlineMessage(line,message,true); else notify(message,true);
                 return;
@@ -684,7 +655,7 @@
             return;
         }
         const sentValues = autosave ? autosaveValues(form) : null;
-        const body = new FormData(form), content = inline || form.closest('[data-ops-detail-content]');
+        const body = new FormData(form), content = inline;
         if (event.submitter?.name) body.set(event.submitter.name,event.submitter.value);
         body.set('target',formAction(form)); body.set('mode',root.dataset.mode);
         body.set('operation_id',root.dataset.operationId); if (content) body.set('physical_tail',content.dataset.tail);
@@ -780,7 +751,7 @@
     root.querySelectorAll('[data-ops-accordion]').forEach(card => {
         card.open = (!media.matches && isPretreat) || card.hasAttribute('data-ops-initial-open');
     });
-    tagOrder(); applyLayout(); initialize(true); syncFeedback();
+    tagOrder(); applyLayout(); initialize(true);
     root.dataset.ready = 'true';
     media.addEventListener('change', () => {
         root.querySelectorAll('[data-ops-accordion]').forEach(card => {
@@ -790,7 +761,7 @@
         applyLayout();
         if (!isPretreat && selected && !busy) fetchPage().catch(error => notify(error.message,true));
     });
-    if (!isPretreat && media.matches && requestedDrafts().length) {
+    if (!isPretreat && requestedDrafts().length) {
         fetchPage().catch(error => notify(error.message,true));
     }
     window.addEventListener('beforeunload',()=>{ saveDraft(); stopLive(); });

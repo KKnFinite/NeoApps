@@ -1,0 +1,20 @@
+{% from 'neonodes/neosubzero/_operations_inline.html' import inline_feedback, collapse_button %}
+{% from 'neonodes/neosubzero/_operations_outbound_controls.html' import workspace, quick_actions with context %}
+<details class="ops-mission" data-ops-accordion{% if selected and row.mission_id == selected.mission_id %} open data-ops-initial-open{% endif %}>
+    <summary class="ops-mission-summary" aria-label="{{ row.flight }} {{ row.tail }}">
+        <span class="ops-mission-line">
+            <span class="ops-identity"><span>{{ row.flight }}</span><strong>{{ row.tail }}</strong></span>
+            <span class="ops-location"><span>PARKING <b>{{ row.parking }}</b> · {{ row.destination }}</span><span>ETD <b>{{ row.etd }}</b></span>{% if row.final_start %}<strong class="ops-pilot-start">PILOT START {{ row.final_start }}</strong>{% endif %}</span>
+            {% for pass in row.primary_passes %}<span class="ops-pass{{ ' is-unplanned' if not pass.type else '' }}" data-ops-primary-pass="{{ pass.number }}"><span>PASS {{ pass.number }}</span><strong{% if pass.type in ('Type I', 'Type IV') %} class="ops-pass-fluid {{ 'type-iv' if pass.type == 'Type IV' else 'type-i' }}"{% endif %}>{{ pass.type|upper if pass.type else '—' }}</strong><span>{{ pass.surface|upper if pass.surface else '—' }}</span></span>{% endfor %}
+            <span class="ops-status"><strong>{{ row.visual_label }}</strong>{% if row.pretreat_milestones_complete and row.visual_state != 'pretreated' %}<span class="ops-pretreated">PRETREATED</span>{% endif %}</span>
+            <span class="ops-chevron" aria-hidden="true"></span>
+        </span>
+        {{ quick_actions(row) }}
+    </summary>
+    <div class="ops-pretreat-inline ops-mobile-workspace ops-mission-workspace" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
+        {{ inline_feedback() }}
+        {% if row.mission_id in mobile_missions %}{{ workspace(row, inline=true) }}
+        {% else %}<p class="ops-inline-loading" role="status">Loading current aircraft…</p>{% endif %}
+        {{ collapse_button() }}
+    </div>
+</details>

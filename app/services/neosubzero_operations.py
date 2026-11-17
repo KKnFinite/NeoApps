@@ -129,7 +129,7 @@ def outbound_quick_actions(row):
         return (), None
     status = getattr(event, 'status', None)
     if row.get('radio_pending'):
-        return (('radio_complete', 'RADIO COMPLETE'),) if row.get('script') else (), None
+        return (('radio', 'RADIO'),), None
     if status == 'finished':
         return (('clear', 'CLEAR'),), None
     if status in ('negative', 'not_sprayed'):

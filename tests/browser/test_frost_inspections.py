@@ -29,7 +29,7 @@ class InspectionBrowserTest(OperationsBrowserTest):
                 # Actual failed request recovery; no timer-based success guess.
                 page.route('**/neosubzero/operations/mutate',lambda route:route.abort('failed'))
                 form.get_by_role('button',name='RECORD PHYSICAL INSPECTION',exact=True).click()
-                expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('Network error')
+                expect(page.locator('[data-ops-inline]:visible [data-ops-inline-feedback]')).to_contain_text('Network error')
                 expect(form.get_by_role('button')).to_be_enabled()
                 expect(form.locator('[name=inspection_notes]')).to_have_value('Observed actual surface; isolated fixture')
                 page.unroute('**/neosubzero/operations/mutate')
@@ -45,16 +45,16 @@ class InspectionBrowserTest(OperationsBrowserTest):
                         inspection_location='Delta actual aircraft',expected_inspection_id=str(last.id) if last else ''),actor_id=User.query.first().id)
                     db.session.commit()
                 notes=form.locator('[name=inspection_notes]');notes.focus()
-                expect(page.locator('[data-ops-draft-status]')).to_contain_text('LIVE DATA UPDATED',timeout=15000)
+                expect(page.locator('[data-ops-inline]:visible [data-ops-draft-status]')).to_contain_text('LIVE DATA UPDATED',timeout=15000)
                 expect(notes).to_be_focused();expect(notes).to_have_value('Observed actual surface; isolated fixture')
                 with page.expect_response(lambda r:r.url.endswith('/operations/mutate') and r.request.method=='POST') as pending:
                     form.get_by_role('button',name='RECORD PHYSICAL INSPECTION',exact=True).click()
                 self.assertEqual(pending.value.status,409)
-                expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('Another inspection was saved')
+                expect(page.locator('[data-ops-inline]:visible [data-ops-inline-feedback]')).to_contain_text('Another inspection was saved')
                 expect(notes).to_have_value('Observed actual surface; isolated fixture')
                 page.once('dialog',lambda dialog:dialog.accept())
-                page.locator('[data-ops-reload]').click()
-                expect(page.locator('[data-ops-detail-feedback]')).not_to_contain_text('Another inspection was saved')
+                page.locator('[data-ops-inline]:visible [data-ops-reload-inline]').click()
+                expect(page.locator('[data-ops-inline]:visible [data-ops-inline-feedback]')).not_to_contain_text('Another inspection was saved')
                 panel=page.locator('.ops-optional-inspection:visible').first
                 if not panel.evaluate('e=>e.open'):panel.locator(':scope > summary').click()
                 form=panel.locator('form').first
@@ -62,7 +62,7 @@ class InspectionBrowserTest(OperationsBrowserTest):
                 form.locator('[name=inspected_local]').fill('2026-10-22T12:00')
                 form.locator('[name=inspection_location]').fill('Delta direct inspection')
                 self.submit(page,form.get_by_role('button',name='RECORD PHYSICAL INSPECTION',exact=True))
-                expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('INSPECTION SAVED')
+                expect(page.locator('[data-ops-inline]:visible [data-ops-inline-feedback]')).to_contain_text('INSPECTION SAVED')
                 panel=page.locator('.ops-optional-inspection:visible').first
                 if not panel.evaluate('e=>e.open'):panel.locator(':scope > summary').click()
                 expect(panel).to_contain_text('OBSERVED FROST ABSENT')
@@ -70,7 +70,7 @@ class InspectionBrowserTest(OperationsBrowserTest):
                 form.locator('[name=inspected_local]').fill('2026-10-22T12:00');form.locator('[name=inspection_location]').fill('Delta actual aircraft')
                 form.locator('[name=correction_reason]').fill('Fixture second review')
                 self.submit(page,form.get_by_role('button',name='CORRECT PHYSICAL INSPECTION'))
-                expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('INSPECTION SAVED')
+                expect(page.locator('[data-ops-inline]:visible [data-ops-inline-feedback]')).to_contain_text('INSPECTION SAVED')
                 for width,height in ((1920,900),(1920,1080),(1366,768),(3840,2160),(768,1024),(430,900),(390,900),(375,900),(320,900)):
                     page.set_viewport_size(dict(width=width,height=height))
                     panel=page.locator('.ops-optional-inspection:visible').first

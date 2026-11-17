@@ -6,16 +6,31 @@
 </form>
 {%- endmacro %}
 
-{% macro quick_actions(row, card=false) %}
+{% macro quick_actions(row) %}
+<span class="ops-quick-actions ops-card-actions" data-ops-quick-actions>
+{% if row.radio_pending and not row.identity_conflict %}<button type="button" data-ops-radio>RADIO</button>{% endif %}
 {% if can_edit and not row.identity_conflict and row.mobile_open %}
-<div class="ops-quick-actions{{ ' ops-card-actions' if card else '' }}" data-ops-quick-actions>
     {% for key,label in row.quick_actions %}
-    {% if key not in ('reset','radio_complete') or user_can('neosubzero.coordinator.edit') %}
-        {{ action(row, key, label, 'Confirm that you actually read the final-pass script to the pilot.' if key == 'radio_complete' else 'Reset this unstarted departure request? Recorded spray evidence is protected.' if key == 'reset' else '') }}
+    {% if key != 'radio' and (key != 'reset' or user_can('neosubzero.coordinator.edit')) %}
+        <button type="submit" form="ops-{{ row.mission_id }}-{{ key }}" name="action" value="{{ key }}">{{ label }}</button>
+    {% endif %}
+    {% endfor %}
+    {% if row.quick_clock %}<button type="button" form="ops-{{ row.mission_id }}-clock" data-ops-pass-stamp="{{ row.quick_clock[0] }}">{{ row.quick_clock[1] }}</button>{% endif %}
+{% endif %}
+</span>
+{% endmacro %}
+
+{% macro quick_forms(row) %}
+{% if can_edit and not row.identity_conflict and row.mobile_open %}
+    {% for key,label in row.quick_actions %}
+    {% if key != 'radio' and (key != 'reset' or user_can('neosubzero.coordinator.edit')) %}
+    <form hidden id="ops-{{ row.mission_id }}-{{ key }}" method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if key == 'reset' %} data-subzero-confirm="Reset this unstarted departure request? Recorded spray evidence is protected."{% endif %}>
+        {{ mutation_identity(row, board, row.ramp) }}<input type="hidden" name="action" value="{{ key }}">
+    </form>
     {% endif %}
     {% endfor %}
     {% if row.quick_clock %}
-    <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-ops-quick-clock>
+    <form hidden id="ops-{{ row.mission_id }}-clock" method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-ops-quick-clock>
         {{ mutation_identity(row, board, row.ramp) }}<input type="hidden" name="action" value="save_treatment">
         <input type="hidden" name="treatment_plan" value="{{ row.plan }}">
         {% for number in (1,2) %}
@@ -23,15 +38,8 @@
         <input type="hidden" name="pass{{ number }}_start" value="{{ row.pass1_start or '' if number == 1 else row.pass2_start or '' }}">
         <input type="hidden" name="pass{{ number }}_end" value="{{ row.pass1_end or '' if number == 1 else row.pass2_end or '' }}">
         {% endfor %}
-        <button type="button" data-ops-pass-stamp="{{ row.quick_clock[0] }}">{{ row.quick_clock[1] }}</button>
     </form>
     {% endif %}
-</div>
-{% endif %}
-{% if row.radio_pending %}
-<div class="ops-readback{{ ' ops-card-readback' if card else '' }}" data-radio-pending>
-    {% if row.script %}<p data-radio-script>{{ row.script.text }}</p>{% else %}<p class="ops-review">Final-pass evidence needs review before RADIO COMPLETE.</p>{% endif %}
-</div>
 {% endif %}
 {% endmacro %}
 
@@ -42,7 +50,14 @@
 {% if row.identity_conflict %}
 <p class="ops-review">{{ row.ownership_review or 'Treatment belongs to a different physical tail. Review the recorded evidence.' }}</p>
 {% else %}
-{{ quick_actions(row) }}
+{% if row.radio_pending %}
+<section class="ops-readback" data-ops-radio-section tabindex="-1" aria-label="Pilot radio readback">
+    {% if row.script %}<p data-radio-script>{{ row.script.text }}</p>{% else %}<p class="ops-review">Final-pass evidence needs review before RADIO COMPLETE.</p>{% endif %}
+    {% if row.script and editable and user_can('neosubzero.coordinator.edit') %}
+    {{ action(row, 'radio_complete', 'RADIO COMPLETE') }}
+    {% endif %}
+</section>
+{% endif %}
 {% if row.event %}
 <section class="ops-outbound-treatment" aria-label="Treatment">
     {% if not row.has_actual_spray and event_status not in ('finished','cleared') %}

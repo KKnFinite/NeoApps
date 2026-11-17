@@ -63,7 +63,7 @@ def render_operations(forced_mode=None):
     if ramp_override not in OPERATIONS_RAMPS:
         ramp_override = ''
     mobile_missions = {selected['mission_id']} if selected else set()
-    if request.args.get('presentation') == 'inline':
+    if mode == 'outbound':
         mobile_missions.update(request.args.getlist('draft', type=int)[:20])
     session[legacy.LAST_PAGE_KEY] = 'neosubzero.operations'
     return render_template('neonodes/neosubzero/operations.html', gateway=gateway,

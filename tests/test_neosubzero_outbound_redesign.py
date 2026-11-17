@@ -109,9 +109,9 @@ class OutboundRedesignTest(unittest.TestCase):
         self.assertEqual(row['visual_state'],'radio-pending')
         self.assertFalse(row['terminal'])
         self.assertIn('2216',row['script']['text'])
-        self.assertEqual(row['quick_actions'],(('radio_complete','RADIO COMPLETE'),))
+        self.assertEqual(row['quick_actions'],(('radio','RADIO'),))
         self.mission.departure_status='departed';db.session.commit()
-        self.assertEqual(self.row()['quick_actions'],(('radio_complete','RADIO COMPLETE'),))
+        self.assertEqual(self.row()['quick_actions'],(('radio','RADIO'),))
         self.assertEqual(self.post('radio_complete',event).status_code,200)
         self.assertEqual(self.row()['visual_state'],'gone')
         self.assertEqual(self.row()['quick_actions'],())
@@ -136,3 +136,25 @@ class OutboundRedesignTest(unittest.TestCase):
         self.assertEqual(result.status_code,200,result.json)
         self.assertEqual(event.pass_evidence,original)
         self.assertEqual(Audit.query.filter_by(action='application_reason').order_by(Audit.id.desc()).first().reason,'Verified reason correction')
+
+    def test_inline_radio_has_no_direct_confirmation_on_summary_or_without_script(self):
+        from unittest.mock import patch
+        event=self.initiate()
+        fields=dict(treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:10',pass1_end='22:15')
+        self.assertEqual(self.post('save_treatment',event,**fields).status_code,200)
+        self.assertEqual(self.post('clear',event).status_code,200)
+        path=f'/neosubzero/operations?mode=outbound&mission={self.mission.id}'
+        page=self.f.client.get(path)
+        self.assertEqual(page.status_code,200)
+        self.assertNotIn(b'data-ops-detail',page.data)
+        self.assertIn(b'data-ops-radio>',page.data)
+        self.assertEqual(page.data.count(b'value="radio_complete"'),1)
+        context=operations_context(self.f.f.gateway,self.op,'outbound')
+        row=next(row for row in context['rows'] if row['mission_id']==self.mission.id)
+        row['script']=None
+        with patch('app.services.neosubzero_operations.operations_context',return_value=context):
+            missing=self.f.client.get(path)
+        self.assertIn(b'data-ops-radio>',missing.data)
+        self.assertIn(b'Final-pass evidence needs review',missing.data)
+        self.assertNotIn(b'value="radio_complete"',missing.data)
+        self.assertIsNone(event.radio_completed_at_utc)

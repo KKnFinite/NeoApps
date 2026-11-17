@@ -392,11 +392,55 @@
 .neosubzero-operations[data-mode="outbound"] .ops-optional-inspection .neosubzero-inspection-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
 .neosubzero-operations[data-mode="outbound"] .ops-optional-inspection label { display:grid; gap:3px; }
 @media (min-width:901px) {
-    .neosubzero-operations:has([data-ops-detail]:not([hidden])) :is(.ops-card-actions,.ops-card-readback) { display:none; }
+    .neosubzero-operations .ops-mission-summary { padding:7px 10px; }
 }
 @media (max-width:900px) {
-    .neosubzero-operations :is(.ops-card-actions,.ops-card-readback) { display:none; }
     .neosubzero-operations .ops-mobile-times .ops-pilot-start { font-size:.63rem; }
     .neosubzero-operations[data-mode="outbound"] .ops-mobile-workspace .neosubzero-deice-pass :is(label,legend) { color:inherit; }
     .neosubzero-operations[data-mode="outbound"] .ops-optional-inspection .neosubzero-inspection-form { grid-template-columns:minmax(0,1fr); }
+}
+
+/* One native mission disclosure, shared by OUTBOUND list, columns and phones. */
+.neosubzero-operations .ops-mission-summary { padding:7px 9px; list-style:none; cursor:pointer; }
+.neosubzero-operations .ops-mission-summary::-webkit-details-marker { display:none; }
+.neosubzero-operations .ops-mission-summary:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+.neosubzero-operations .ops-mission-line { display:grid; grid-template-columns:minmax(90px,1fr) minmax(115px,1.15fr) repeat(2,minmax(105px,1fr)) minmax(120px,1.2fr) 9px; align-items:center; gap:6px 10px; }
+.neosubzero-operations .ops-mission-line .ops-pass.is-unplanned { display:none; }
+.neosubzero-operations .ops-mission-line .ops-status { grid-column:5; }
+.neosubzero-operations .ops-mission-line .ops-chevron { display:block; width:7px; height:7px; border:solid currentColor; border-width:0 1.5px 1.5px 0; transform:rotate(45deg); }
+.neosubzero-operations .ops-mission-line .ops-chevron { grid-column:6; }
+.neosubzero-operations .ops-mission[open] > summary .ops-chevron { transform:rotate(225deg); }
+.neosubzero-operations .ops-mission .ops-card-actions { display:flex; padding:0; margin:5px 0 0; }
+.neosubzero-operations .ops-mission .ops-card-actions:empty { display:none; }
+.neosubzero-operations .ops-mission .ops-card-actions:not(:has(button)) { display:none; }
+.neosubzero-operations .ops-mission-workspace { display:grid; gap:6px; font-size:.76rem; }
+.neosubzero-operations .ops-mission:not([open]) > .ops-mission-workspace { display:none; }
+.neosubzero-operations .ops-mission-workspace :is(p,form,fieldset) { min-width:0; margin:0; }
+.neosubzero-operations .ops-mission-workspace :is(input,select,textarea) { max-width:100%; min-width:0; box-sizing:border-box; }
+.neosubzero-operations .ops-mission-workspace .ops-collapse { display:inline-block; justify-self:start; }
+.neosubzero-operations .ops-mission-workspace button { min-height:32px; padding:4px 7px; border:1px solid #62859b; border-radius:3px; background:#0b1a26; color:#edf6fb; font:650 .7rem/1.2 var(--font-sans); cursor:pointer; }
+.neosubzero-operations .ops-mission-workspace .neosubzero-spray-position-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.neosubzero-operations .ops-mission-workspace .ops-readback { margin:0; padding:8px; border:1px solid #394758; background:transparent; color:inherit; scroll-margin-block:100px; }
+.neosubzero-operations .ops-readback [data-radio-script] { margin:0 0 10px; font-size:.94rem; font-weight:650; line-height:1.5; overflow-wrap:anywhere; }
+.neosubzero-operations .ops-readback button { min-height:38px; }
+.neosubzero-operations[data-layout="visual"] .ops-mission-line { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.neosubzero-operations[data-layout="visual"] .ops-mission-line :is(.ops-identity,.ops-location,.ops-status) { grid-column:1/-1; }
+.neosubzero-operations[data-layout="visual"] .ops-mission-line .ops-chevron { display:none; }
+.neosubzero-operations[data-layout="visual"] .ops-mission-line .ops-identity strong { font-size:1.1rem; }
+.neosubzero-operations[data-layout="visual"] .ops-mission-workspace .neosubzero-spray-position-grid { grid-template-columns:minmax(0,1fr); }
+.neosubzero-operations[data-layout="visual"] .ops-mission-line .ops-pass { grid-template-columns:minmax(0,1fr); gap:2px; }
+.neosubzero-operations .ops-mission-line .ops-pass-fluid { white-space:nowrap; }
+.neosubzero-operations[data-layout="visual"] .ops-mission-workspace .neosubzero-deice-pass { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.neosubzero-operations[data-layout="visual"] .ops-mission-workspace .neosubzero-deice-pass label:first-of-type { grid-column:1 / -1; }
+@media (max-width:900px) {
+    .neosubzero-operations .ops-mission-line { grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) 9px; gap:4px 7px; }
+    .neosubzero-operations .ops-mission-line .ops-identity { grid-column:1; }
+    .neosubzero-operations .ops-mission-line .ops-location { grid-column:2; grid-row:1 / span 2; }
+    .neosubzero-operations .ops-mission-line .ops-status { grid-column:1; grid-row:2; }
+    .neosubzero-operations .ops-mission-line .ops-chevron { grid-column:3; grid-row:1 / span 2; }
+    .neosubzero-operations .ops-mission-line .ops-pass { grid-row:3; font-size:.6rem; gap:2px; }
+    .neosubzero-operations .ops-mission-line .ops-pass strong { font-size:.65rem; }
+    .neosubzero-operations .ops-mission-line .ops-identity strong { font-size:.9rem; }
+    .neosubzero-operations .ops-mission-line :is(.ops-identity span,.ops-status strong,.ops-location,.ops-location b,.ops-pilot-start) { font-size:.66rem; }
+    .neosubzero-operations .ops-mission-workspace .neosubzero-spray-position-grid { grid-template-columns:minmax(0,1fr); }
 }
