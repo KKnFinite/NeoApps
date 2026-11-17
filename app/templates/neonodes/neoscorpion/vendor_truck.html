@@ -29,7 +29,7 @@
 </div>
 {% if waiting_status or fingerprint is defined %}
 <div data-vendor-refresh
-     data-login-url="{{ url_for('scorpion_vendor.login') }}"
+     data-login-url="{{ url_for('auth.login') }}"
      data-workspace-url="{{ url_for('scorpion_vendor.my_truck') }}"
      {% if waiting_status %}
      data-waiting="true" data-revision='{{ {"status": waiting_status}|tojson }}'
