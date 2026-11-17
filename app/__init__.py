@@ -555,17 +555,17 @@ def register_request_guards(app):
             logout_user()
             clear_authenticated_session_security_state(session)
             flash("Your session has expired. Please sign in again.", "info")
-            return redirect(url_for("scorpion_vendor.login" if vendor else "auth.login"))
+            return redirect(url_for("auth.login"))
 
         if not user_requires_password_change(current_user):
             return None
 
-        auth_scope = "scorpion_vendor" if vendor else "auth"
-        allowed_endpoints = {f"{auth_scope}.change_password", f"{auth_scope}.logout", "auth.renew_csrf"}
+        allowed_endpoints = {"auth.change_password", "auth.logout", "auth.renew_csrf",
+                             "scorpion_vendor.change_password", "scorpion_vendor.logout"}
         if request.endpoint in allowed_endpoints:
             return None
 
-        return redirect(url_for(f"{auth_scope}.change_password"))
+        return redirect(url_for("auth.change_password"))
 
     @app.before_request
     def protect_unsafe_requests_with_csrf():
