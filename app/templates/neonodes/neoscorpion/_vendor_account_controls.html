@@ -18,6 +18,4 @@
 {% else %}
 <button class="action-button" name="action" value="enable">ENABLE ACCOUNT</button>
 {% endif %}
-{% if profile.enabled and profile.user.is_active and not registered %}
-<button class="action-button" name="action" value="resend">RESEND INVITATION</button>
-{% endif %}
+
