@@ -2,7 +2,7 @@
 import re
 import secrets
 from datetime import datetime
-from flask import g, request, redirect, url_for, abort
+from flask import g, request, abort
 from flask_login import current_user
 from sqlalchemy import func
 from app.extensions import db
@@ -10,6 +10,14 @@ from app.models import (User, UserToken, Gateway, NeoScorpionFuelTruck, NeoScorp
     NeoScorpionTruckDriver, NeoScorpionVendorAccount, NeoScorpionVendorNight,
     NeoScorpionVendorRequest, NeoScorpionVendorAudit)
 from app.services.neoscorpion_assets import lock_nightly_asset_scope_for_mutation, record_nightly_operational_change
+
+
+VENDOR_ENDPOINTS = {
+    'scorpion_vendor.login', 'scorpion_vendor.logout', 'scorpion_vendor.forgot_password',
+    'scorpion_vendor.reset_password', 'scorpion_vendor.change_password', 'scorpion_vendor.invitation',
+    'scorpion_vendor.account', 'scorpion_vendor.my_truck', 'scorpion_vendor.live',
+    'scorpion_vendor.revision', 'scorpion_vendor.driver_fuel_reading',
+}
 
 
 def audit(gateway, actor, action, *, operation=None, subject=None, truck_id=None, request_id=None, **facts):
@@ -72,19 +80,13 @@ def vendor_request_boundary():
     if not current_user.is_authenticated:
         return None
     account = vendor_account(current_user)
+    g.scorpion_vendor_account = account
     if not account:
         return None
-    g.scorpion_vendor_account = account
-    endpoint = request.endpoint or ''
-    if endpoint in {'auth.portal_dashboard', 'neonodes.index'} and request.method == 'GET':
-        return redirect(url_for('scorpion_vendor.account'))
-    allowed_auth = {'auth.login', 'auth.logout', 'auth.change_password', 'auth.forgot_password',
-        'auth.reset_password', 'auth.verify_email', 'auth.renew_csrf'}
-    if endpoint in allowed_auth or endpoint == 'healthz':
+    if request.endpoint in VENDOR_ENDPOINTS or request.endpoint in {
+        'scorpion_vendor.fuel_reading', 'auth.renew_csrf', 'healthz',
+    }:
         return None
-    if endpoint in {'scorpion_vendor.account','scorpion_vendor.my_truck','scorpion_vendor.live',
-            'scorpion_vendor.revision','scorpion_vendor.fuel_reading','scorpion_vendor.invitation'}:
-        return None  # Each operational handler independently checks live approval.
     abort(403)
 
 

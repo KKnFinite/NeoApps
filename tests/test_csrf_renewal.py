@@ -111,7 +111,10 @@ class CsrfRenewalTest(unittest.TestCase):
         db.session.add(account);db.session.commit();self.now+=3*3600
         self.assertEqual(self.renew().status_code,200)
         self.assertEqual(self.client.get('/motherbrain').status_code,403)
-        self.assertEqual(self.client.get('/neoscorpion/driver/my-truck').status_code,403)
+        workspace = self.client.get('/neoscorpion/driver/my-truck')
+        self.assertEqual(workspace.status_code, 200)
+        self.assertIn(b'NO ACTIVE SORT', workspace.data)
+        self.assertEqual(self.client.get('/neoscorpion/driver/live').status_code,403)
 
     def test_renewal_performs_no_database_writes(self):
         from sqlalchemy import event

@@ -4,6 +4,7 @@ from datetime import datetime
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, abort, jsonify, flash
 from flask_login import login_required, current_user
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from app.auth import routes as auth
 from app.extensions import db
 from app.models import (NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
     NeoScorpionVendorAudit, NeoScorpionTruckDriver, NeoScorpionSortTruck, NeoScorpionFuelTruck)
@@ -30,12 +31,56 @@ def private_response(response):
 
 def vendor_only(view):
     @wraps(view)
-    @login_required
     def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('scorpion_vendor.login'))
         account = vendors.vendor_account(current_user)
         if not account: abort(403)
         return view(account, *args, **kwargs)
     return wrapped
+
+
+@bp.route('/login', methods=['GET', 'POST'])
+def login():
+    return auth.login_response(vendor_driver=True)
+
+
+@bp.post('/logout')
+@vendor_only
+def logout(account):
+    return auth.logout_response(vendor_driver=True)
+
+
+@bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    return auth.forgot_password_response(vendor_driver=True)
+
+
+@bp.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    return auth.reset_password_response(token, vendor_driver=True)
+
+
+@bp.route('/change-password', methods=['GET', 'POST'])
+@vendor_only
+def change_password(account):
+    return auth.change_password_response(vendor_driver=True)
+
+
+def driver_access(account):
+    from app.services.neoscorpion import current_sort_operation
+    operation = current_sort_operation(account.gateway) if account.gateway.is_active else None
+    if not operation or operation.archived_at_utc:
+        return None, 'NO ACTIVE SORT'
+    night = db.session.get(NeoScorpionVendorNight, (operation.id, account.user_id))
+    status = night.status if night else 'pending'
+    message = {
+        'approved': None,
+        'denied': 'DISPATCHER APPROVAL DENIED',
+        'revoked': 'DISPATCHER APPROVAL REVOKED',
+        'pending': 'AWAITING DISPATCHER APPROVAL',
+    }[status]
+    return operation, message
 
 
 def operational(account):
@@ -56,7 +101,7 @@ def denied(error):
         return jsonify(ok=False,error=str(error)),403
     profile = vendors.vendor_account(current_user)
     if profile:
-        return render_account(profile, error=str(error)), 403
+        return render_template('neonodes/neoscorpion/vendor_truck.html', driver_error=str(error)), 403
     return str(error), 403
 
 
@@ -78,7 +123,7 @@ def invitation(token):
             vendors.accept_invitation(token,request.form.get('password',''),request.form.get('confirm_password',''))
             db.session.commit()
             flash('Registration complete. Sign in with your email and password.', 'success')
-            return redirect(url_for('auth.login'))
+            return redirect(url_for('scorpion_vendor.login'))
         vendors.invitation_record(token)
         valid = True
     except (ValueError, IntegrityError) as exc:
@@ -96,14 +141,7 @@ def invitation(token):
 @bp.get('/account')
 @vendor_only
 def account(account):
-    return render_account(account)
-
-
-def render_account(account, *, error=None):
-    from app.services.neoscorpion import current_sort_operation
-    operation = current_sort_operation(account.gateway)
-    night = db.session.get(NeoScorpionVendorNight,(operation.id,account.user_id)) if operation else None
-    return render_template('neonodes/neoscorpion/vendor_account.html', account=account, operation=operation, night=night, error=error)
+    return redirect(url_for('scorpion_vendor.my_truck'))
 
 
 def my_truck_context(account, operation):
@@ -143,7 +181,10 @@ def my_truck(account):
         except (ValueError,TypeError,IntegrityError) as exc:
             db.session.rollback(); flash(str(exc) if isinstance(exc,ValueError) else 'Request changed. Refresh.','error')
         return redirect(url_for('scorpion_vendor.my_truck'))
-    operation = operational(account)
+    operation, waiting_status = driver_access(account)
+    if waiting_status:
+        return render_template('neonodes/neoscorpion/vendor_truck.html', waiting_status=waiting_status)
+    vendors.require_approved(account, operation)
     fingerprint = vendor_fingerprint(account, operation)
     return render_template('neonodes/neoscorpion/vendor_truck.html', fingerprint=fingerprint,
         **my_truck_context(account, operation))
@@ -159,19 +200,19 @@ def require_connected_truck(account, operation):
         NeoScorpionTruckDriver.driver_user_id == account.user_id,
     ).first()
     if not connected:
-        raise PermissionError('An approved truck connection is required to view the live operation. Open My Truck to request a truck.')
+        raise PermissionError('An approved truck connection is required to view the live operation.')
 
 
 def require_same_operation(current, expected):
     if not current or current.id != expected.id:
-        raise PermissionError('The active sort changed or ended. Open My Account for your status.')
+        raise PermissionError('The active sort changed or ended. Return to Truck Driver for your status.')
 
 
 def vendor_fingerprint(account, operation):
     from app.services.neoscorpion import fuel_assignments_live_revision
     fingerprint = fuel_assignments_live_revision(account.gateway)
     if fingerprint['operation_id'] != operation.id:
-        raise PermissionError('The active sort changed or ended. Open My Account for your status.')
+        raise PermissionError('The active sort changed or ended. Return to Truck Driver for your status.')
     return fingerprint
 
 
@@ -190,6 +231,9 @@ def live(account):
 @bp.get('/revision')
 @vendor_only
 def revision(account):
+    if request.args.get('waiting') == '1':
+        _, status = driver_access(account)
+        return jsonify(status=status)
     operation = operational(account)
     if request.args.get('view') == 'live':
         require_connected_truck(account, operation)
@@ -199,15 +243,27 @@ def revision(account):
 @bp.post('/fuel-reading')
 @login_required
 def fuel_reading():
-    account=vendors.vendor_account(current_user)
-    gateway=account.gateway if account else get_current_gateway()
+    # An older vendor tab can still submit its existing form.
+    account = vendors.vendor_account(current_user)
+    if account:
+        return submit_fuel_reading(account.gateway, 'scorpion_vendor.my_truck')
+    return submit_fuel_reading(get_current_gateway(), 'neoscorpion.fueler')
+
+
+@bp.post('/my-truck/fuel-reading')
+@vendor_only
+def driver_fuel_reading(account):
+    return submit_fuel_reading(account.gateway, 'scorpion_vendor.my_truck')
+
+
+def submit_fuel_reading(gateway, destination):
     try:
         operation=vendors.current_operation(gateway,request.form.get('operation_id'))
         inventory.submit_verification(gateway,operation,current_user,request.form.get('truck_id'),request.form.get('gallons'))
         db.session.commit();flash('Fuel reading recorded. High discrepancies await Dispatch approval.','success')
     except (ValueError,TypeError,IntegrityError) as exc:
         db.session.rollback();flash(str(exc) if isinstance(exc,ValueError) else 'Reading changed. Refresh.','error')
-    return redirect(url_for('scorpion_vendor.my_truck' if account else 'neoscorpion.fueler'))
+    return redirect(url_for(destination))
 
 
 @bp.post('/inventory')

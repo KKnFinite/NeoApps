@@ -83,8 +83,8 @@ class MobileDrawerBrowserTest(unittest.TestCase):
         cls.external.stop()
         cls.temp.cleanup()
 
-    def login(self, page, username="drawer-admin"):
-        page.goto(self.origin + "/login")
+    def login(self, page, username="drawer-admin", *, path="/login"):
+        page.goto(self.origin + path)
         page.locator('input[name="email"]').fill(username + "@example.test")
         page.locator('input[name="password"]').fill("BrowserFixture123!")
         page.locator('button[type="submit"]').first.click()

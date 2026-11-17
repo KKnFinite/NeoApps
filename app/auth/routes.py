@@ -156,38 +156,51 @@ def renew_csrf():
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
+    return login_response()
+
+
+def render_auth_screen(screen, vendor_driver, **context):
+    if vendor_driver:
+        return render_template("neonodes/neoscorpion/vendor_auth.html", screen=screen, **context)
+    return render_template(f"auth/{screen}.html", **context)
+
+
+def login_response(*, vendor_driver=False):
+    destination = "scorpion_vendor.my_truck" if vendor_driver else "auth.portal_dashboard"
     if current_user.is_authenticated and request.method == "GET":
-        return redirect(url_for("auth.portal_dashboard"))
+        if not vendor_driver or current_user.scorpion_vendor:
+            return redirect(url_for(destination))
 
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         legacy_username = request.form.get("username", "").strip()
-        login_identifier = email or legacy_username
+        login_identifier = email if vendor_driver else email or legacy_username
         password = request.form.get("password", "")
         client_ip = client_ip_for_request(request)
 
         if login_is_limited(client_ip, login_identifier):
             flash("Invalid email or password.", "error")
-            return render_template("auth/login.html"), 401
+            return render_auth_screen("login", vendor_driver), 401
 
-        user = _find_user_by_login(login_identifier) if login_identifier else None
+        lookup = _find_user_by_email if vendor_driver else _find_user_by_login
+        user = lookup(login_identifier) if login_identifier else None
 
         credentials_valid = bool(
             user and user.check_password(password) and user.is_active
         )
-        if not credentials_valid or temporary_password_is_expired(user):
+        vendor = user.scorpion_vendor if credentials_valid else None
+        if not credentials_valid or temporary_password_is_expired(user) or bool(vendor) != vendor_driver:
             record_login_failure(client_ip, login_identifier)
             db.session.commit()
             flash("Invalid email or password.", "error")
-            return render_template("auth/login.html"), 401
+            return render_auth_screen("login", vendor_driver), 401
 
-        vendor = user.scorpion_vendor
         if vendor and not vendor.enabled:
             flash("Your NeoScorpion driver account is disabled. Contact Dispatch for help.", "error")
-            return render_template("auth/login.html"), 403
+            return render_auth_screen("login", vendor_driver), 403
         if vendor and not user.email_verified_at:
             flash("Register using your NeoScorpion invitation before signing in. Contact Dispatch for a new link.", "error")
-            return render_template("auth/login.html"), 403
+            return render_auth_screen("login", vendor_driver), 403
 
         clear_login_failures(client_ip, login_identifier)
         login_user(user)
@@ -199,7 +212,7 @@ def login():
         except SQLAlchemyError:
             db.session.rollback()
             flash("Login failed. Please try again.", "error")
-            return render_template("auth/login.html"), 500
+            return render_auth_screen("login", vendor_driver), 500
 
         if user_requires_password_change(user):
             establish_authenticated_session(
@@ -207,24 +220,26 @@ def login():
                 user,
                 forced_password_change=True,
             )
-            return redirect(url_for("auth.change_password"))
+            return redirect(url_for("scorpion_vendor.change_password" if vendor_driver else "auth.change_password"))
 
         establish_authenticated_session(session, user)
-        if vendor:
-            return redirect(url_for("scorpion_vendor.account"))
-        return redirect(url_for("auth.portal_dashboard"))
+        return redirect(url_for(destination))
 
-    return render_template("auth/login.html")
+    return render_auth_screen("login", vendor_driver)
 
 
 @bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
+    return logout_response()
+
+
+def logout_response(*, vendor_driver=False):
     logout_user()
     clear_authenticated_session_security_state(session)
     clear_csrf_session_state()
     flash("You have been logged out.", "info")
-    return redirect(url_for("auth.login"))
+    return redirect(url_for("scorpion_vendor.login" if vendor_driver else "auth.login"))
 
 
 @bp.route("/portal")
@@ -404,38 +419,65 @@ def access_pending():
 
 @bp.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
+    return forgot_password_response()
+
+
+def password_recovery_allowed(user, vendor_driver):
+    if not user:
+        return False
+    vendor = user.scorpion_vendor
+    if vendor_driver:
+        return bool(vendor and vendor.enabled and user.is_active and user.email_verified_at)
+    return not vendor
+
+
+def forgot_password_response(*, vendor_driver=False):
     if request.method == "POST":
         email = _normalize_email(request.form.get("email"))
         client_ip = client_ip_for_request(request)
 
-        if password_reset_is_limited(client_ip, email):
-            flash(GENERIC_RESET_RESPONSE, "info")
-            return render_template("auth/forgot_password.html", submitted=True)
-
-        user = _find_user_by_email(email) if email else None
-        record_password_reset_request(client_ip, email)
-
-        if user:
-            raw_token, _token_record = create_user_token(user, PASSWORD_RESET)
-        db.session.commit()
-        if user:
-            email_service.send_password_reset(user, raw_token)
+        if not password_reset_is_limited(client_ip, email):
+            user = _find_user_by_email(email) if email else None
+            eligible = password_recovery_allowed(user, vendor_driver)
+            record_password_reset_request(client_ip, email)
+            if eligible:
+                raw_token, _token_record = create_user_token(user, PASSWORD_RESET)
+            db.session.commit()
+            if eligible:
+                if vendor_driver:
+                    email_service.send_password_reset(user, raw_token, vendor_driver=True)
+                else:
+                    email_service.send_password_reset(user, raw_token)
 
         flash(GENERIC_RESET_RESPONSE, "info")
-        return render_template("auth/forgot_password.html", submitted=True)
+        return render_auth_screen("forgot_password", vendor_driver, submitted=True)
 
-    return render_template("auth/forgot_password.html", submitted=False)
+    return render_auth_screen("forgot_password", vendor_driver, submitted=False)
 
 
 @bp.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
-    if request.method == "POST":
-        try:
-            token_record = claim_password_reset_token(token)
-            if not token_record:
-                db.session.rollback()
-                return render_template("auth/reset_password.html", token=token, valid=False), 400
+    return reset_password_response(token)
 
+
+def reset_password_response(token, *, vendor_driver=False):
+    def render_reset(valid):
+        return render_auth_screen("reset_password", vendor_driver, token=token,
+                                  valid=valid, password_policy_guidance=PASSWORD_POLICY_GUIDANCE)
+
+    submitting = request.method == "POST"
+    try:
+        token_record = (claim_password_reset_token(token) if submitting
+                        else get_valid_token_record(token, PASSWORD_RESET))
+        if token_record and not vendor_driver and token_record.user.scorpion_vendor:
+            if submitting:
+                db.session.rollback()
+            return redirect(url_for("scorpion_vendor.reset_password", token=token))
+        if not token_record or not password_recovery_allowed(token_record.user, vendor_driver):
+            if submitting:
+                db.session.rollback()
+            return render_reset(False), 400
+        if submitting:
             set_user_password(
                 token_record.user,
                 request.form.get("password", ""),
@@ -446,39 +488,30 @@ def reset_password(token):
             token_record.user.temporary_password_expires_at = None
             revoke_unused_password_reset_tokens(token_record.user)
             db.session.commit()
-        except ValueError as error:
-            # A policy rejection must release the account lock and undo the
-            # claim, leaving this otherwise-valid link available for correction.
-            db.session.rollback()
-            flash(str(error), "error")
-            return render_template(
-                "auth/reset_password.html", token=token, valid=True,
-                password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
-            ), 400
-        except SQLAlchemyError:
-            db.session.rollback()
-            current_app.logger.warning("Password reset transaction could not be confirmed.")
-            flash("Password reset could not be confirmed. Try signing in or request a new reset link.", "error")
-            return render_template(
-                "auth/reset_password.html", token=token, valid=True,
-                password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
-            ), 500
+    except ValueError as error:
+        # A policy rejection undoes the claim so the password can be corrected.
+        db.session.rollback()
+        flash(str(error), "error")
+        return render_reset(True), 400
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.warning("Password reset transaction could not be confirmed.")
+        flash("Password reset could not be confirmed. Try signing in or request a new reset link.", "error")
+        return render_reset(True), 500
 
+    if submitting:
         flash("Password reset complete. You can log in now.", "info")
-        return redirect(url_for("auth.login"))
-
-    token_record = get_valid_token_record(token, PASSWORD_RESET)
-    if not token_record:
-        return render_template("auth/reset_password.html", token=token, valid=False), 400
-    return render_template(
-        "auth/reset_password.html", token=token, valid=True,
-        password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
-    )
+        return redirect(url_for("scorpion_vendor.login" if vendor_driver else "auth.login"))
+    return render_reset(True)
 
 
 @bp.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
+    return change_password_response()
+
+
+def change_password_response(*, vendor_driver=False):
     forced_change = user_requires_password_change(
         current_user
     ) and forced_password_change_session_is_fresh(session, current_user)
@@ -487,8 +520,8 @@ def change_password():
             request.form.get("current_password", "")
         ):
             flash("Current password is incorrect.", "error")
-            return render_template(
-                "auth/change_password.html",
+            return render_auth_screen(
+                "change_password", vendor_driver,
                 password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
                 require_current_password=True,
             ), 400
@@ -499,8 +532,8 @@ def change_password():
             set_user_password(current_user, password, confirm_password)
         except ValueError as error:
             flash(str(error), "error")
-            return render_template(
-                "auth/change_password.html",
+            return render_auth_screen(
+                "change_password", vendor_driver,
                 password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
                 require_current_password=not forced_change,
             ), 400
@@ -511,10 +544,10 @@ def change_password():
         db.session.commit()
         establish_authenticated_session(session, current_user)
         flash("Password changed.", "info")
-        return redirect(url_for("auth.portal_dashboard"))
+        return redirect(url_for("scorpion_vendor.my_truck" if vendor_driver else "auth.portal_dashboard"))
 
-    return render_template(
-        "auth/change_password.html",
+    return render_auth_screen(
+        "change_password", vendor_driver,
         password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
         require_current_password=not forced_change,
     )

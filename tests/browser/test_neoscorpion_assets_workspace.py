@@ -30,8 +30,9 @@ class AssetsBrowserTest(unittest.TestCase):
                 operation_id, truck_id = operation.id, truck.id
                 db.session.commit()
 
+            sort_open = True
             with patch('app.services.neoscorpion.current_existing_operational_sort_operations',
-                    side_effect=lambda gateway, now=None: [db.session.get(SortDateOperation, operation_id)]):
+                    side_effect=lambda gateway, now=None: [db.session.get(SortDateOperation, operation_id)] if sort_open else []):
                 engine = getattr(fixture.pw, os.environ.get('NEO_VENDOR_BROWSER', 'chromium'))
                 with closing(engine.launch()) as browser:
                     dispatch = browser.new_page(viewport={'width': 1440, 'height': 900})
@@ -80,16 +81,38 @@ class AssetsBrowserTest(unittest.TestCase):
                     driver.locator('[name="confirm_password"]').fill('BrowserFixture123!')
                     with driver.expect_navigation():
                         driver.get_by_role('button', name='REGISTER').click()
-                    fixture().login(driver, 'workflow-vendor')
-                    expect(driver).to_have_url(vendor_path + 'account')
-                    expect(driver.get_by_text('Tonight: AWAITING DISPATCHER APPROVAL')).to_be_visible()
-                    self.assertEqual(driver.request.get(vendor_path + 'my-truck').status, 403)
-                    for path in ('/neoscorpion/fuel-dispatch', '/neoscorpion/fueler', '/neostaffing/', '/admin/users'):
+                    expect(driver).to_have_url(vendor_path + 'login')
+                    expect(driver).to_have_title('NeoScorpion Vendor Driver Login')
+                    expect(driver.locator('nav')).to_have_count(0)
+                    self.assertEqual(driver.get_by_role('link').all_text_contents(), ['Forgot Password'])
+                    for width in (390, 1440):
+                        driver.set_viewport_size({'width': width, 'height': 844})
+                        self.assertFalse(driver.evaluate('document.documentElement.scrollWidth > innerWidth'))
+                        expect(driver.get_by_role('button', name='SIGN IN')).to_be_visible()
+                    driver.set_viewport_size({'width': 390, 'height': 844})
+
+                    def sign_in(password):
+                        driver.get_by_label('Email', exact=True).fill('workflow-vendor@example.test')
+                        driver.get_by_label('Password', exact=True).fill(password)
+                        driver.get_by_role('button', name='SIGN IN', exact=True).click()
+                        expect(driver).to_have_url(vendor_path + 'my-truck')
+                        expect(driver.get_by_role('heading', name='Truck Driver')).to_be_visible()
+
+                    sort_open = False
+                    sign_in('BrowserFixture123!')
+                    expect(driver.get_by_text('NO ACTIVE SORT')).to_be_visible()
+                    expect(driver.locator('[name="truck_id"], [data-vendor-live]')).to_have_count(0)
+                    sort_open = True
+                    driver.reload()
+                    expect(driver.get_by_text('AWAITING DISPATCHER APPROVAL')).to_be_visible()
+                    expect(driver.locator('[name="truck_id"], [data-vendor-live]')).to_have_count(0)
+                    for path in ('/login', '/portal', '/neoscorpion/fuel-dispatch', '/neoscorpion/fueler',
+                                 '/neostaffing/', '/admin/users'):
                         self.assertEqual(driver.request.get(origin + path).status, 403, path)
 
                     manage('APPROVE TONIGHT', account)
                     expect(account).to_contain_text('ENABLED · APPROVED')
-                    driver.goto(vendor_path + 'my-truck')
+                    expect(driver.get_by_text('REQUEST / CHANGE TRUCK', exact=True)).to_be_visible(timeout=22000)
                     self.assertEqual(driver.request.get(vendor_path + 'live').status, 403)
 
                     def claim():
@@ -107,7 +130,36 @@ class AssetsBrowserTest(unittest.TestCase):
                     manage('APPROVE CLAIM', claims)
                     expect(driver.get_by_role('heading', name='TRUCK WORKFLOW-1')).to_be_visible(timeout=22000)
                     expect(driver.get_by_role('button', name='DISCONNECT DRIVER')).to_be_visible()
+
+                    driver.get_by_role('button', name='SIGN OUT', exact=True).click()
+                    expect(driver).to_have_url(vendor_path + 'login')
+                    driver.get_by_role('link', name='Forgot Password').click()
+                    resets = []
+                    with patch('app.services.email_service.send_password_reset',
+                            side_effect=lambda user, token, **options: resets.append((token, options))):
+                        driver.get_by_label('Email').fill('workflow-vendor@example.test')
+                        driver.get_by_role('button', name='SEND RESET LINK').click()
+                        expect(driver.get_by_role('status')).to_contain_text('If an account exists')
+                    reset_token, options = resets[0]
+                    self.assertEqual(options, {'vendor_driver': True})
+                    driver.goto(vendor_path + 'reset-password/' + reset_token)
+                    new_password = 'BrowserReset123!'
+                    driver.get_by_label('New password').fill(new_password)
+                    driver.get_by_label('Confirm password').fill(new_password)
+                    driver.get_by_role('button', name='SAVE PASSWORD').click()
+                    expect(driver).to_have_url(vendor_path + 'login')
+                    sign_in(new_password)
+                    expect(driver.get_by_role('heading', name='TRUCK WORKFLOW-1')).to_be_visible()
+                    with fixture.app.app_context():
+                        db.session.get(User, account_id).auth_session_version += 1
+                        db.session.commit()
+                    driver.goto(vendor_path + 'my-truck')
+                    expect(driver).to_have_url(vendor_path + 'login')
+                    sign_in(new_password)
+
                     live = driver.context.new_page()
+                    self.assertEqual(driver.get_by_role('link', name='Live Operation').get_attribute('href'),
+                                     '/neoscorpion/driver/live')
                     live.goto(vendor_path + 'live')
                     expect(live.get_by_role('heading', name='LIVE OPERATION · READ ONLY')).to_be_visible()
 
@@ -124,12 +176,12 @@ class AssetsBrowserTest(unittest.TestCase):
                     manage('SET NAME / UNKNOWN', manual)
                     expect(nightly.locator('[data-assets-driver-name]')).to_contain_text('Manual Driver')
                     manage('REVOKE', account)
-                    self.assertEqual(driver.request.get(vendor_path + 'my-truck').status, 403)
-                    expect(driver.get_by_role('alert')).to_contain_text('Dispatcher approval', timeout=22000)
+                    self.assertEqual(driver.request.get(vendor_path + 'revision').status, 403)
+                    expect(driver.get_by_text('DISPATCHER APPROVAL REVOKED')).to_be_visible(timeout=22000)
                     manage('DISABLE ACCOUNT', account)
                     response = driver.request.get(vendor_path + 'account', max_redirects=0)
                     self.assertEqual(response.status, 302)
-                    self.assertTrue(response.headers['location'].endswith('/login'))
+                    self.assertEqual(response.headers['location'], '/neoscorpion/driver/login')
                     expect(nightly.locator('[data-assets-driver-name]')).to_contain_text('Manual Driver')
                     self.assertEqual(errors, [])
         finally:
@@ -223,7 +275,7 @@ class AssetsBrowserTest(unittest.TestCase):
                         expect(account).to_be_visible(timeout=12000);submit(account.locator('form'),'APPROVE TONIGHT')
                         expect(account).to_contain_text('APPROVED',timeout=12000)
                         driver=browser.new_context(viewport={'width':390,'height':844}).new_page()
-                        F().login(driver,f'assets-vendor-{index}')
+                        F().login(driver,f'assets-vendor-{index}',path='/neoscorpion/driver/login')
                         F().ready(driver,'/neoscorpion/driver/my-truck')
                         # Pending claims update independently of another truck's unsaved draft.
                         manual.locator('[name="name"]').fill('Protected draft');manual.locator('[name="name"]').focus()

@@ -1,6 +1,17 @@
-{% extends 'neonodes/neoscorpion/vendor_base.html' %}{% block content %}
-<h2>MY TRUCK</h2><div data-vendor-access><div data-vendor-live>
+{% extends 'neonodes/neoscorpion/vendor_base.html' %}
+{% block sign_out %}{% include 'neonodes/neoscorpion/_vendor_sign_out.html' %}{% endblock %}
+{% block content %}
+<h2>Truck Driver</h2>
+<div data-vendor-access>
+{% if driver_error %}
+<p role="alert">{{ driver_error }}</p>
+<a href="{{ url_for('scorpion_vendor.my_truck') }}">Back to Truck Driver</a>
+{% elif waiting_status %}
+<p role="status">{{ waiting_status }}</p>
+{% else %}
+<div data-vendor-live>
 <h3>{{ 'TRUCK ' ~ selected_driver_truck.truck_number if selected_driver_truck else 'NO APPROVED TRUCK' }}</h3>
+{% if selection %}<p><a href="{{ url_for('scorpion_vendor.live') }}">Live Operation</a></p>{% endif %}
 {% if selection %}<p>{{ selection.current_gallons if selection.current_gallons is not none else '—' }} GAL · {{ 'VERIFIED' if selection.inventory_verified else 'UNVERIFIED' }}</p>{% endif %}
 {% if latest_claim and latest_claim.status in ('pending', 'denied', 'expired') %}
 <p role="status">CLAIM · TRUCK {{ latest_claim.truck.truck_number }} · {{ 'PENDING APPROVAL' if latest_claim.status == 'pending' else latest_claim.status|upper }}</p>
@@ -11,6 +22,21 @@
 <details><summary>REQUEST / CHANGE TRUCK</summary><form method="post">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><label>Truck<select name="truck_id" required>{% for truck in available_trucks %}<option value="{{ truck.id }}">{{ truck.truck_number }}</option>{% endfor %}</select></label><label>Current gallons (only for a truck not yet configured)<input name="gallons" inputmode="numeric"></label><button>REQUEST DISPATCH APPROVAL</button></form></details>
 <div data-vendor-truck-controls="{{ selected_driver_truck.id if selection else '' }}:{{ 'verify' if verification_available else '' }}">
 {% if selection %}<form method="post">{{ csrf_field() }}<input type="hidden" name="action" value="disconnect"><input type="hidden" name="operation_id" value="{{ operation.id }}"><button>DISCONNECT DRIVER</button></form>
-{% if verification_available %}<details><summary>OPTIONAL FUEL VERIFICATION · SKIP</summary><p>Only between TRUCK OFF and the next ON. Skip by leaving this closed.</p><form method="post" action="{{ url_for('scorpion_vendor.fuel_reading') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="truck_id" value="{{ selected_driver_truck.id }}"><label>Actual current gallons<input name="gallons" inputmode="numeric" required></label><button>SUBMIT READING</button><button type="button" data-fuel-verification-skip>SKIP</button></form></details>{% endif %}{% endif %}
-</div></div>
-<div data-vendor-refresh data-revision='{{ fingerprint|tojson }}' data-revision-url="{{ url_for('scorpion_vendor.revision', operation_id=operation.id) }}"></div>{% endblock %}
+{% if verification_available %}<details><summary>OPTIONAL FUEL VERIFICATION · SKIP</summary><p>Only between TRUCK OFF and the next ON. Skip by leaving this closed.</p><form method="post" action="{{ url_for('scorpion_vendor.driver_fuel_reading') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="truck_id" value="{{ selected_driver_truck.id }}"><label>Actual current gallons<input name="gallons" inputmode="numeric" required></label><button>SUBMIT READING</button><button type="button" data-fuel-verification-skip>SKIP</button></form></details>{% endif %}{% endif %}
+</div>
+{% endif %}
+</div>
+{% if waiting_status or fingerprint is defined %}
+<div data-vendor-refresh
+     data-login-url="{{ url_for('scorpion_vendor.login') }}"
+     data-workspace-url="{{ url_for('scorpion_vendor.my_truck') }}"
+     {% if waiting_status %}
+     data-waiting="true" data-revision='{{ {"status": waiting_status}|tojson }}'
+     data-revision-url="{{ url_for('scorpion_vendor.revision', waiting=1) }}"
+     {% else %}
+     data-revision='{{ fingerprint|tojson }}'
+     data-revision-url="{{ url_for('scorpion_vendor.revision', operation_id=operation.id) }}"
+     {% endif %}></div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/neoscorpion_vendor.js', v='20261116-driver-login') }}" defer></script>{% endblock %}

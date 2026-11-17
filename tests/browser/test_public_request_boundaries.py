@@ -35,7 +35,8 @@ class PublicAssetsBrowserTest(unittest.TestCase):
                             context=browser.new_context(service_workers='block');page=context.new_page();errors=[]
                             page.on('pageerror',lambda e:errors.append(str(e)))
                             if identity!='anonymous':
-                                page.goto(F.origin+'/login');page.locator('[name=email]').fill('boundary-vendor@example.test' if identity=='vendor' else 'drawer-admin@example.test')
+                                login_path = '/neoscorpion/driver/login' if identity == 'vendor' else '/login'
+                                page.goto(F.origin+login_path);page.locator('[name=email]').fill('boundary-vendor@example.test' if identity=='vendor' else 'drawer-admin@example.test')
                                 page.locator('[name=password]').fill('VendorPassword123!' if identity=='vendor' else 'BrowserFixture123!')
                                 with page.expect_navigation(wait_until='domcontentloaded'):page.locator('button[type="submit"]').first.click()
                                 if identity=='vendor':

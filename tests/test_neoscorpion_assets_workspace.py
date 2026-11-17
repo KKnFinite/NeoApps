@@ -160,6 +160,6 @@ class AssetsWorkspaceTest(TestCase):
             html=self.client.get('/neoscorpion/fuel-dispatch').get_data(as_text=True)
         self.assertNotIn('SEND INVITATION',html);self.assertNotIn('APPROVE TONIGHT',html)
         self.client.post('/logout')
-        self.client.post('/login',data={'email':person.email,'password':'VendorPassword123!'})
+        self.client.post('/neoscorpion/driver/login',data={'email':person.email,'password':'VendorPassword123!'})
         self.assertEqual(self.client.get('/neoscorpion/fuel-dispatch').status_code,403)
         self.assertEqual(self.post('/neoscorpion/driver/manage',action='disable',user_id=person.id).status_code,403)

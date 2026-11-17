@@ -21,21 +21,31 @@
     try {
         const response = await fetch(root.dataset.revisionUrl, options);
         if (response.redirected || response.status === 401) {
-            showDenied('Operational access ended. Open My Account to sign in again.');
+            showDenied('Your session ended. Sign in again.');
+            window.location.replace(root.dataset.loginUrl);
             return;
         }
         if (response.status === 403) {
             const error = await response.json().catch(() => ({}));
-            showDenied(error.error || 'Operational access revoked. Open My Account for your status.');
+            showDenied(error.error || 'Operational access revoked.');
+            if (root.dataset.workspaceUrl) {
+                window.location.replace(root.dataset.workspaceUrl);
+            }
             return;
         }
         if (!response.ok) return;
         const next = JSON.stringify(await response.json());
         if (revision === next || document.activeElement?.closest('form')) return;
 
+        if (root.dataset.waiting === 'true') {
+            window.location.reload();
+            return;
+        }
         const page = await fetch(location.href, options);
         if (page.redirected || page.status === 403) {
-            showDenied('Operational access changed. Open My Account for your status.');
+            showDenied('Operational access changed. Return to Truck Driver for your status.');
+            if (page.redirected) window.location.replace(root.dataset.loginUrl);
+            else if (root.dataset.workspaceUrl) window.location.replace(root.dataset.workspaceUrl);
             return;
         }
         if (!page.ok) return;

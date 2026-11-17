@@ -62,19 +62,21 @@ def send_access_approved(user, gateway):
     )
 
 
-def send_password_reset(user, token):
-    reset_url = _absolute_url(f"/reset-password/{token}")
+def send_password_reset(user, token, *, vendor_driver=False):
+    path = url_for("scorpion_vendor.reset_password", token=token) if vendor_driver else f"/reset-password/{token}"
+    reset_url = _absolute_url(path)
+    account_name = "NeoScorpion driver" if vendor_driver else "NeoApps Portal"
     return _send_transactional_email(
         to_email=user.email,
         to_name=user.display_name,
-        subject="Reset your NeoApps Portal password",
+        subject=f"Reset your {account_name} password",
         html_content=(
-            "<p>A NeoApps Portal password reset was requested.</p>"
+            f"<p>A {account_name} password reset was requested.</p>"
             f'<p><a href="{reset_url}">Reset your password</a></p>'
             "<p>This reset link will expire and can only be used once.</p>"
         ),
         text_content=(
-            "A NeoApps Portal password reset was requested.\n\n"
+            f"A {account_name} password reset was requested.\n\n"
             f"Reset your password: {reset_url}\n\n"
             "This reset link will expire and can only be used once."
         ),
