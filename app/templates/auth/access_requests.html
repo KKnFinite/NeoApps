@@ -28,6 +28,7 @@
             <div class="access-request-actions">
                 {% if membership.user.email_verified_at %}
                 <form class="access-approval-form" method="post" action="{{ url_for('auth.approve_access_request', membership_id=membership.id) }}">
+                    {% include "auth/_account_type_approval.html" %}
                     <fieldset class="node-role-fieldset">
                         <legend>NEONODE ROLES</legend>
                         <div class="node-role-grid">
