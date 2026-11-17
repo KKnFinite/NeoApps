@@ -74,6 +74,15 @@
                                 <a href="{{ url_for('auth.user_detail', user_id=access.user.id) }}">VIEW DETAILS</a>
                                 {% if access.status == "pending" %}
                                 {% if access.user.email_verified_at %}
+                                {% if can_assign_driver %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}"
+                                      data-confirm-message="Approve restricted Truck Driver access instead of full NeoApps access?">
+                                    <input type="hidden" name="action" value="approve_driver">
+                                    <input type="hidden" name="return_app" value="{{ selected_app or '' }}">
+                                    <input type="hidden" name="return_status" value="{{ selected_status }}">
+                                    <button type="submit">APPROVE AS TRUCK DRIVER</button>
+                                </form>
+                                {% endif %}
                                 <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}">
                                     <input type="hidden" name="action" value="approve">
                                     <input type="hidden" name="return_app" value="{{ selected_app or '' }}">
