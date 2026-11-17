@@ -384,11 +384,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
     def test_account_registration_keeps_non_conflict_validation_specific(self):
         response = self.client.post(
             "/create-account",
-            data=self._account_form(employee_id=""),
+            data=self._account_form(supervisor_name=""),
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"Employee ID required.", response.data)
+        self.assertIn(b"Supervisor / manager name required.", response.data)
         self.assertNotIn(
             b"An account may already exist with the information provided.",
             response.data,
@@ -1827,8 +1827,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'class="portal-login-hero neo-auth-environment"', response.data)
-        self.assertIn(b'images/hero/neoapps_login_desktop.png', response.data)
-        self.assertIn(b'images/hero/neoapps_login_mobile.png', response.data)
+        self.assertIn(b'images/optimized/neoapps_login_desktop.webp', response.data)
+        self.assertIn(b'images/optimized/neoapps_login_mobile.webp', response.data)
         self.assertIn(b'width="1672"', response.data)
         self.assertNotIn(b'images/neoapps_logo_transparent.png', response.data)
         self.assertNotIn(b'class="topbar"', response.data)
