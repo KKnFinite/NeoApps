@@ -1,0 +1,33 @@
+name: Unified NeoApps Driver Accounts (temporary)
+on:
+  push:
+    branches:
+      - feature/unified-driver-account-flow-20261117
+jobs:
+  unified-driver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: python -m pip install -r requirements.txt
+      - name: Unified registration conversion and auth regressions
+        run: |
+          python -m unittest \
+            tests.test_auth_account_flows.AuthAccountFlowsTest.test_pending_standard_neo_registration_can_be_approved_as_truck_driver \
+            tests.test_auth_account_flows.AuthAccountFlowsTest.test_conversion_roundtrip_never_restores_old_staff_grants_implicitly \
+            tests.test_auth_account_flows.AuthAccountFlowsTest.test_driver_approval_requires_real_email_verification_and_cannot_convert_self \
+            tests.test_auth_account_flows.AuthAccountFlowsTest.test_regular_registration_accepts_vendor_without_employee_id
+      - name: Full NeoApps authentication regression
+        run: python -m unittest tests.test_auth_account_flows
+      - name: Vendor operations and boundaries
+        run: python -m unittest tests.test_neoscorpion_vendor_workflow
+      - name: Driver and authorization protections
+        run: python -m unittest tests.test_neoscorpion_truck_driver tests.test_access_control
+      - name: Syntax and browser scripts
+        run: python -m compileall -q app tests/test_auth_account_flows.py
