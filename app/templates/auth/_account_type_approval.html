@@ -1,0 +1,13 @@
+<fieldset class="node-role-fieldset">
+    <legend>ACCOUNT TYPE</legend>
+    <label class="node-role-control">
+        <span>Approve as</span>
+        <select name="account_type" aria-label="Account type">
+            <option value="full">Full NeoApps account (roles below)</option>
+            {% if can_assign_driver|default(false) %}
+            <option value="vendor">Restricted Truck Driver — truck screen only</option>
+            {% endif %}
+        </select>
+    </label>
+    <small class="muted">Truck Driver uses the same NeoApps email and password. No Portal or NeoNode access; Dispatch must approve each Sort separately.</small>
+</fieldset>
