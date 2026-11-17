@@ -135,6 +135,72 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertEqual(assignment.fueler_update_version, 2)
         self.assertIn("Inbound Fuel: 12.0 -> 13.0", assignment.fueler_update_message)
 
+    def test_legacy_precision_can_be_corrected_from_exact_stored_baseline(self):
+        operation, mission = self._operation_and_mission()
+        mission.planned_fuel_load = 38349
+        db.session.commit()
+
+        page = self.client.get("/neoscorpion/fuel-dispatch").get_data(as_text=True)
+        self.assertIn('data-saved-lbs="38349"', page)
+        self.assertIn('data-autosave-noncanonical="true"', page)
+
+        fixed = self._autosave(
+            mission, "required_fuel", "38.3",
+            expected="38.3", expected_lbs="38349",
+        )
+        self.assertEqual(fixed.status_code, 200)
+        self.assertTrue(fixed.get_json()["changed"])
+        self.assertEqual(fixed.get_json()["saved_lbs"], 38300)
+        db.session.refresh(mission)
+        self.assertEqual(mission.planned_fuel_load, 38300)
+
+        stale = self._autosave(
+            mission, "required_fuel", "38.4",
+            expected="38.3", expected_lbs="38349",
+        )
+        self.assertEqual(stale.status_code, 400)
+        self.assertIn("Live data changed", stale.get_json()["error"])
+        db.session.refresh(mission)
+        self.assertEqual(mission.planned_fuel_load, 38300)
+
+    def test_fuel_load_requires_exactly_one_decimal_and_cannot_mutate_on_reject(self):
+        _, mission = self._operation_and_mission()
+        for invalid in ("38", "38.34", "38.349", "-38.3", "38.3x"):
+            with self.subTest(value=invalid):
+                response = self._autosave(
+                    mission, "required_fuel", invalid,
+                    expected="50.5", expected_lbs="50500",
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("one decimal", response.get_json()["error"])
+                db.session.refresh(mission)
+                self.assertEqual(mission.planned_fuel_load, 50500)
+
+        good = self._autosave(
+            mission, "required_fuel", "38.3",
+            expected="50.5", expected_lbs="50500",
+        )
+        self.assertEqual(good.status_code, 200)
+        self.assertEqual(good.get_json()["saved_lbs"], 38300)
+
+    def test_inbound_autosave_uses_exact_stored_baseline_too(self):
+        operation, mission = self._operation_and_mission()
+        tail_state = NeoScorpionTailFuelState(
+            sort_date_operation_id=operation.id,
+            tail_number=mission.assigned_tail_number,
+            inbound_fuel_lbs=12034,
+        )
+        db.session.add(tail_state)
+        db.session.commit()
+        fixed = self._autosave(
+            mission, "inbound_fuel", "12.1",
+            expected="12.0", expected_lbs="12034",
+        )
+        self.assertEqual(fixed.status_code, 200)
+        self.assertEqual(fixed.get_json()["saved_lbs"], 12100)
+        db.session.refresh(tail_state)
+        self.assertEqual(tail_state.inbound_fuel_lbs, 12100)
+
     @patch("app.services.neoscorpion.current_sort_operation")
     def test_hot_without_etd_stays_dispatchable_and_routes_to_fueler(
         self,
@@ -759,15 +825,18 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         db.session.commit()
         return operation, mission
 
-    def _autosave(self, mission, field_name, value, *, expected):
+    def _autosave(self, mission, field_name, value, *, expected, expected_lbs=None):
+        data = {
+            "mission_id": str(mission.id),
+            "field_name": field_name,
+            "value": value,
+            "expected_value": expected,
+        }
+        if expected_lbs is not None:
+            data["expected_lbs"] = expected_lbs
         return self.client.post(
             "/neoscorpion/fuel-dispatch/autosave",
-            data={
-                "mission_id": str(mission.id),
-                "field_name": field_name,
-                "value": value,
-                "expected_value": expected,
-            },
+            data=data,
             headers={
                 "Accept": "application/json",
                 "X-Requested-With": "XMLHttpRequest",
