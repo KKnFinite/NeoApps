@@ -452,6 +452,7 @@ def fuel_dispatch_autosave():
             (request.form.get("field_name") or "").strip(),
             request.form.get("value"),
             expected_value=request.form.get("expected_value"),
+            expected_lbs=request.form.get("expected_lbs"),
         )
     except ValueError as exc:
         db.session.rollback()
@@ -464,6 +465,7 @@ def fuel_dispatch_autosave():
             "changed": result.changed,
             "field_name": result.field_name,
             "display_value": result.display_value,
+            "saved_lbs": result.saved_lbs,
             "neo_fuel": result.neo_fuel_presentation,
             "operation_id": result.operation_id,
             "revision": result.revision,
