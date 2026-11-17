@@ -3982,6 +3982,9 @@ def _mission_edit_conflict(mission, submitted_form):
         return None
     original_values = _mission_original_values_from_request()
     current_values = _mission_form_from_model(mission)
+    # Fuel Load is owned by NeoScorpion; stale mission forms cannot edit it.
+    original_values.pop("planned_fuel_load", None)
+    current_values.pop("planned_fuel_load", None)
     fields = changed_field_conflicts(
         original_values,
         current_values,
@@ -3998,8 +4001,7 @@ def _mission_edit_conflict(mission, submitted_form):
             "eta_datetime_utc": "ETA",
             "actual_block_in_datetime_utc": "Actual block in",
             "actual_block_out_datetime_utc": "Actual block out",
-            "planned_fuel_load": "Planned fuel load",
-            "fuel_status": "Fuel status",
+             "fuel_status": "Fuel status",
             "arrival_status": "Arrival status",
             "departure_status": "Departure status",
             "pure_pull_time_local": "Pure pull",
@@ -5679,10 +5681,7 @@ def _apply_mission_form(mission, operation, form):
     mission.actual_block_out_source = (
         "manual" if mission.actual_block_out_datetime_utc else "unknown"
     )
-    mission.planned_fuel_load = _parse_optional_int(
-        form["planned_fuel_load"],
-        "Planned fuel load",
-    )
+    # Do not overwrite Scorpion's authoritative fuel load on a mission edit.
     mission.fuel_status = _choice_or_none(form["fuel_status"], FUEL_STATUSES, "Fuel status")
 
     if mission_type == "arrival":
