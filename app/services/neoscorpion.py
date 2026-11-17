@@ -234,6 +234,16 @@ def display_thousands_to_lbs(value):
     return int(Decimal(text) * Decimal("1000"))
 
 
+def parse_authoritative_fuel_load(value):
+    """A dispatcher's Fuel Load is exactly one decimal in thousands of pounds."""
+    if value is None or str(value).strip() == "":
+        return None
+    text = str(value).strip()
+    if not re.fullmatch(r"\d+\.\d", text):
+        raise ValueError("Fuel Load must use one decimal in K-LBS (for example 38.3).")
+    return int(Decimal(text) * Decimal("1000"))
+
+
 def lbs_to_display_thousands(value):
     amount = _decimal_or_none(value)
     if amount is None:
@@ -1620,6 +1630,7 @@ class DispatchAutosaveResult:
     field_name: str
     display_value: str
     neo_fuel_presentation: dict | None = None
+    saved_lbs: int | None = None
 
 
 @dataclass(frozen=True)
@@ -1732,6 +1743,7 @@ def autosave_dispatch_field(
     value,
     *,
     expected_value=None,
+    expected_lbs=None,
     now_utc=None,
     user=None,
 ):
@@ -1761,8 +1773,21 @@ def autosave_dispatch_field(
     if field_name == "inbound_fuel" and assignment and int(assignment.current_cycle_number or 1) > 1:
         raise ValueError("Original Inbound Fuel is read-only during follow-up cycles.")
 
-    requested_lbs = display_thousands_to_lbs(value)
-    expected_lbs = display_thousands_to_lbs(expected_value)
+    requested_lbs = (
+        parse_authoritative_fuel_load(value)
+        if field_name == "required_fuel"
+        else display_thousands_to_lbs(value)
+    )
+    # The display is rounded to 0.1 K-LBS, but concurrency must compare the
+    # exact stored pounds. Older open tabs may still send expected_value.
+    if expected_lbs is None:
+        expected_stored_lbs = display_thousands_to_lbs(expected_value)
+    elif str(expected_lbs).strip() == "":
+        expected_stored_lbs = None
+    elif re.fullmatch(r"\d+", str(expected_lbs).strip()):
+        expected_stored_lbs = int(str(expected_lbs).strip())
+    else:
+        raise ValueError("Invalid Fuel Dispatch saved baseline; refresh the screen.")
     tail_fuel_state = None
     if field_name == "required_fuel":
         current_lbs = mission.planned_fuel_load
@@ -1780,7 +1805,7 @@ def autosave_dispatch_field(
         )
         current_lbs = tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None
 
-    if current_lbs != expected_lbs and current_lbs != requested_lbs:
+    if current_lbs != expected_stored_lbs and current_lbs != requested_lbs:
         raise ValueError(
             "Live data changed for this field. Refresh Fuel Dispatch and review the current value."
         )
@@ -1793,6 +1818,7 @@ def autosave_dispatch_field(
             field_name,
             format_display_thousands(current_lbs),
             dispatch_neo_fuel_presentation(mission, assignment) if field_name == "required_fuel" else None,
+            saved_lbs=current_lbs,
         )
 
     if field_name == "required_fuel":
@@ -1827,6 +1853,7 @@ def autosave_dispatch_field(
         field_name,
         format_display_thousands(requested_lbs),
         dispatch_neo_fuel_presentation(mission, assignment) if field_name == "required_fuel" else None,
+        saved_lbs=requested_lbs,
     )
 
 
@@ -1966,7 +1993,7 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
     now_utc = datetime.utcnow()
     change_messages = []
     if include_legacy_fields:
-        planned_fuel_load = display_thousands_to_lbs(form.get("required_fuel"))
+        planned_fuel_load = parse_authoritative_fuel_load(form.get("required_fuel"))
         if mission.planned_fuel_load != planned_fuel_load:
             change_messages.append(
                 _fuel_change_message(
@@ -3788,7 +3815,7 @@ def start_follow_up_fuel_cycle(
     cycle_type = str(cycle_type or "").strip().lower()
     if cycle_type not in {"uplift", "defuel"}:
         raise ValueError("Select UPLIFT or DEFUEL.")
-    required_fuel_lbs = display_thousands_to_lbs(required_fuel)
+    required_fuel_lbs = parse_authoritative_fuel_load(required_fuel)
     if required_fuel_lbs is None:
         raise ValueError("Enter a new Required Fuel target.")
     fueler_user_id = _int_or_none(fueler_user_id)
