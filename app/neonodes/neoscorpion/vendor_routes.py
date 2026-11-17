@@ -34,7 +34,7 @@ def vendor_only(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not current_user.is_authenticated:
-            return redirect(url_for('scorpion_vendor.login'))
+            return redirect(url_for('auth.login'))
         account = vendors.vendor_account(current_user)
         if not account: abort(403)
         return view(account, *args, **kwargs)
