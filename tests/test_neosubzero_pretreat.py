@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from app import create_app
 from app.extensions import db
 from app.models import Gateway, NeoSubZeroPretreatState, SortDateMission, SortDateOperation, SortDateParkingAssignment, SortDateTailState
-from app.neonodes.neosubzero.services import DEFAULT_PRETREAT_REASON, NeoSubZeroPretreatError, _parse_hhmm, mutate_pretreat, pretreat_context, pretreat_reason, pretreat_revision
+from app.neonodes.neosubzero.services import DEFAULT_PRETREAT_REASON, NeoSubZeroPretreatError, _parse_hhmm, mutate_pretreat, pretreat_context, pretreat_revision
 from app.services.permission_rules import DEFAULT_PERMISSION_RULES
 from flask import render_template
 from app.neonodes.neosubzero.services import SURFACE_LABELS
@@ -180,7 +180,7 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         self.assertIsNotNone(first.configured_at_utc)
         self.assertIsNotNone(second.configured_at_utc)
 
-    def test_pretreat_reason_defaults_overrides_and_remains_snapshotted(self):
+    def test_pretreat_reason_is_fixed_and_legacy_evidence_is_preserved(self):
         self.assertIn(
             "reason_for_application", NeoSubZeroPretreatState.__table__.columns
         )
@@ -195,15 +195,14 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
             self.operation, self.departure, "save_treatment", values, None
         )
         self.assertEqual(state.reason_for_application, DEFAULT_PRETREAT_REASON)
-        self.assertEqual(pretreat_reason(state), "Pretreat")
 
         values["reason_for_application"] = "  Freezing Fog  "
         mutate_pretreat(
             self.operation, self.departure, "save_treatment", values, state
         )
-        self.assertEqual(state.reason_for_application, "Freezing Fog")
+        self.assertEqual(state.reason_for_application, DEFAULT_PRETREAT_REASON)
 
-        # Unrelated working-context mutations cannot rewrite the treatment snapshot.
+        state.reason_for_application = 'Legacy reason'
         mutate_pretreat(
             self.operation,
             self.departure,
@@ -211,12 +210,12 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
             {"reason_for_application": "Snow", "active_precipitation": "Ice"},
             state,
         )
-        self.assertEqual(state.reason_for_application, "Freezing Fog")
+        self.assertEqual(state.reason_for_application, "Legacy reason")
         self.assertEqual(
             pretreat_context(self.gateway, self.operation)["rows"][0][
                 "reason_for_application"
             ],
-            "Freezing Fog",
+            DEFAULT_PRETREAT_REASON,
         )
 
     def test_routes_and_permission_defaults(self):

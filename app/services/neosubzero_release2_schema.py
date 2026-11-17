@@ -3,7 +3,7 @@ import re
 from sqlalchemy import inspect, text
 from app.extensions import db
 
-NULLABLE = ('departure_deice_event_id','gallons','surface_area','started_at_utc','ended_at_utc')
+NULLABLE = ('departure_deice_event_id','gallons','surface_area','started_at_utc','ended_at_utc','concentration_percent_snapshot')
 EVENTS = 'neosubzero_departure_deice_events'
 SPRAYS = 'neosubzero_spray_records'
 PARENT_CHECK='ck_neosubzero_spray_one_parent'

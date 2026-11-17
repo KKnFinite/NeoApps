@@ -3,9 +3,10 @@ from datetime import datetime
 from sqlalchemy import func
 from app.extensions import db
 from app.models import (NeoSubZeroSprayRecord, NeoSubZeroUccTruckAssignment,
-    NeoSubZeroUccAssignment, NeoSubZeroPretreatState, StaffingPerson, SortDateParkingAssignment)
+    NeoSubZeroUccAssignment, StaffingPerson, SortDateParkingAssignment)
 from app.services.neosubzero_evidence import (application_context, audit_change,
     evidence_values, normalized_tail, NeoSubZeroEvidenceError)
+from app.neonodes.neosubzero.services import DEFAULT_PRETREAT_REASON
 
 
 def participation_query(parent, kind='departure'):
@@ -58,7 +59,9 @@ def _new_participant(operation, mission, parent, kind, number, slot, truck, sett
         fluid_name_snapshot=settings.type_iv_fluid_name if types[number-1]=='Type IV' else settings.type_i_fluid_name,
         concentration_percent_snapshot=100 if types[number-1]=='Type IV' else settings.type_i_concentration_percent,
         surface_area=getattr(parent,f'pass{number}_surface_area'),participation_selected=True,crew_override=False)
-    _crew(record,*truck_team(operation,truck));db.session.add(record)
+    if kind == 'departure':
+        _crew(record, *truck_team(operation, truck))
+    db.session.add(record)
     return record
 
 
@@ -91,8 +94,8 @@ def _pass_evidence(operation, mission, parent, kind, number, settings):
         original_mission_id=getattr(parent,'sort_date_mission_id',None) or getattr(parent,'original_mission_id',None),
         kind=kind,pass_type='type_iv' if type_iv else 'type_i',operation_id=operation.id,sort_date=operation.sort_date.isoformat(),sort_name=operation.sort_name,
         ramp=ramp or None,parking=parking,fluid=settings.type_iv_fluid_name if type_iv else settings.type_i_fluid_name,
-        concentration=100 if type_iv else settings.type_i_concentration_percent,
-        reason=parent.reason_for_application or context['reason_for_application'] or ('Pretreat' if kind=='pretreat' else None),
+        concentration=100 if type_iv else (settings.type_i_concentration_percent if kind=='departure' else None),
+        reason=DEFAULT_PRETREAT_REASON if kind=='pretreat' else parent.reason_for_application or context['reason_for_application'] or None,
         active_precipitation=context['active_precipitation'] or None,ambient_temperature=context['ambient_temperature'] or None,
         dew_point=context['dew_point'] or None,notes=context['notes'] or None)
 
@@ -110,7 +113,7 @@ def _apply_official(record, evidence, parent, number):
 
 
 def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='departure', actor_id=None, previous=None, correction_reason=None):
-    """Freeze context at START and official crew at END in the caller's transaction."""
+    """Freeze pass context at START and departure crew at END."""
     db.session.flush()
     evidence=dict(parent.pass_evidence or {})
     for number,_type in enumerate(pass_types(parent,kind),1):
@@ -128,7 +131,11 @@ def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='dep
         old=evidence.get(str(number))
         # A pre-upgrade completed pass is not proof of its former staffing or
         # fluid. Require an explicit historical correction; never backfill now.
-        if not old and (previous or {}).get(f'pass{number}_ended_at_utc'):
+        legacy_ended = not old and (previous or {}).get(f'pass{number}_ended_at_utc')
+        if legacy_ended and kind != 'pretreat':
+            continue
+        if legacy_ended:
+            _correct_pretreat_times(operation, mission, parent, number, actor_id, correction_reason)
             continue
         captured=dict(old or _pass_evidence(operation,mission,parent,kind,number,settings))
         if not old:
@@ -141,7 +148,11 @@ def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='dep
         if kind != 'pretreat' or 'surface' not in captured:
             captured['surface'] = getattr(parent, f'pass{number}_surface_area')
         evidence[str(number)]=captured
-        if not end: continue  # Crew becomes official only at END.
+        if kind == 'pretreat':
+            if (previous or {}).get(f'pass{number}_ended_at_utc'):
+                _correct_pretreat_times(operation, mission, parent, number, actor_id, correction_reason)
+            continue
+        if not end: continue  # Departure crew becomes official only at END.
         records=ensure_planned_participants(operation,mission,parent,kind,number,settings)
         for record in records:
             if not record.participation_selected and not record.gallons: continue
@@ -156,6 +167,145 @@ def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='dep
                 audit_change(operation,'pass_end_snapshot' if not old else 'pass_evidence_correction',actor_id=actor_id,mission=mission,
                     event=parent if kind=='departure' else None,record=record,before=before,after=evidence_values(record))
     parent.pass_evidence=evidence or None
+
+
+def _correct_pretreat_times(operation, mission, parent, number, actor_id, reason):
+    records = participation_query(parent, 'pretreat').filter_by(pass_number=number).with_for_update().all()
+    for record in records:
+        if not confirmed_participant(record):
+            continue
+        before = evidence_values(record)
+        record.started_at_utc = getattr(parent, f'pass{number}_started_at_utc')
+        record.ended_at_utc = getattr(parent, f'pass{number}_ended_at_utc')
+        if before != evidence_values(record):
+            audit_change(operation, 'pass_evidence_correction', actor_id=actor_id, mission=mission,
+                         record=record, reason=reason, before=before, after=evidence_values(record))
+
+
+def confirmed_participant(record):
+    return bool(record.official_at_utc or record.gallons is not None or
+                (record.started_at_utc and record.ended_at_utc))
+
+
+class PretreatCorrectionRequired(NeoSubZeroEvidenceError):
+    pass
+
+
+def save_pretreat_participant(operation, mission, parent, values, settings, *, actor_id):
+    """Save one canonical PRETREAT row. A planned row requires explicit actual confirmation."""
+    from app.services.live_collaboration import version_conflict
+    from app.services.neosubzero_spray import spray_gallons_amount
+    from app.services.neosubzero_staffing import pretreat_crew_choices
+    from app.services.neosubzero_trucks import validate_registered_truck
+
+    number = int(values.get('pass_number') or 0)
+    if number not in (1, 2):
+        raise NeoSubZeroEvidenceError('Choose an applicable Pretreat pass.')
+    ended = bool(getattr(parent, f'pass{number}_ended_at_utc'))
+    records = participation_query(parent, 'pretreat').filter_by(pass_number=number).with_for_update().all()
+    record_id = int(values.get('record_id') or 0)
+    record = next((item for item in records if item.id == record_id), None)
+    if record_id and (record is None or not values.get('record_version') or
+                      version_conflict(record, values.get('record_version'))):
+        raise NeoSubZeroEvidenceError('Participation changed. Your draft is kept; reload current values.')
+    existing = [item for item in records if item.participation_selected or confirmed_participant(item)]
+    if record and (record not in existing or (record.excluded_at_utc and record.gallons is None)):
+        raise NeoSubZeroEvidenceError('This truck is excluded from the pass.')
+    raw_truck = str(values.get('truck_number') or '').strip()
+    truck = raw_truck if record and raw_truck == record.truck_number_snapshot else validate_registered_truck(
+        operation, raw_truck, allow_inactive=ended)
+    if not truck:
+        raise NeoSubZeroEvidenceError('Select a truck.')
+    if any(item is not record and item.truck_number_snapshot.casefold() == truck.casefold() for item in existing):
+        raise NeoSubZeroEvidenceError('This truck already participates in this pass.')
+
+    before = evidence_values(record)
+    old_gallons = record.gallons if record else None
+    gallons = spray_gallons_amount(values.get('gallons'), recorded=old_gallons) if 'gallons' in values else old_gallons
+    actual = bool(record and confirmed_participant(record))
+    confirm = values.get('confirm_actual') == 'yes'
+    if not ended and (gallons != old_gallons or confirm):
+        raise NeoSubZeroEvidenceError('Save PASS END before recording actual participation or gallons.')
+    if not actual and gallons is not None and not confirm:
+        raise NeoSubZeroEvidenceError('Select Record actual to save this planned truck with actual gallons.')
+
+    concentration = record.concentration_percent_snapshot if record else None
+    if number == 2 and not actual:
+        concentration = 100
+    if 'concentration_percent' in values:
+        raw = str(values.get('concentration_percent') or '').strip()
+        if number == 2 and raw != '100':
+            raise NeoSubZeroEvidenceError('Type IV concentration is fixed at 100%.')
+        if raw and (not raw.isascii() or not raw.isdecimal() or len(raw) > 3 or not 1 <= int(raw) <= 100):
+            raise NeoSubZeroEvidenceError('Enter a whole concentration percentage from 1 to 100.')
+        concentration = int(raw) if raw else None
+
+    changes = dict(truck_number_snapshot=truck, concentration_percent_snapshot=concentration, gallons=gallons)
+    crew_ids = []
+    crew_choices = None
+    for role in ('driver', 'flyer'):
+        id_field, name_field = f'{role}_person_id', f'{role}_name_snapshot'
+        old_id, old_name = getattr(record, id_field, None), getattr(record, name_field, None)
+        raw_id = values.get(id_field)
+        keep_recorded_name = raw_id == 'recorded' and old_id is None and old_name
+        person_id = old_id if raw_id is None or keep_recorded_name else int(raw_id or 0) or None
+        crew_ids.append(person_id)
+        if person_id != old_id:
+            if person_id and crew_choices is None:
+                crew_choices = {person.id: person for person in pretreat_crew_choices(operation)}
+            person = crew_choices.get(person_id) if person_id else None
+            if person_id and person is None:
+                raise NeoSubZeroEvidenceError(f'Select a registered deicer for {role.title()}.')
+            changes.update({id_field: person_id, name_field: person.full_name if person else None})
+        elif raw_id == '' and old_name and old_id is None:
+            changes[name_field] = None
+    if crew_ids[0] and crew_ids[0] == crew_ids[1] and {'driver_person_id', 'flyer_person_id'} & changes.keys():
+        raise NeoSubZeroEvidenceError('Driver and Flyer must be different people.')
+
+    reason = str(values.get('correction_reason') or '').strip()
+    edits = {key: value for key, value in changes.items() if getattr(record, key, None) != value}
+    correction = actual and any(getattr(record, key) is not None for key in edits)
+    if correction and not reason:
+        raise PretreatCorrectionRequired('Enter a reason for changing recorded actual participation.')
+    if record is None:
+        occupied = {item.position_number for item in existing}
+        slot = next((index for index in range(1, 5) if index not in occupied), None)
+        if slot is None:
+            raise NeoSubZeroEvidenceError('A pass supports at most four participating trucks.')
+        record = next((item for item in records if item.position_number == slot), None)
+        if record:
+            before = evidence_values(record)
+            _crew(record, None, None)
+            record.excluded_at_utc = None
+            record.participation_selected = True
+            record.started_at_utc = record.ended_at_utc = None
+        else:
+            record = _new_participant(operation, mission, parent, 'pretreat', number, slot, truck, settings)
+    elif not edits and not (confirm and not actual):
+        return record
+
+    if confirm and not actual:
+        captured = (parent.pass_evidence or {}).get(str(number))
+        if not captured:
+            # The operator is supplying participation, with no inference about legacy pass context.
+            captured = dict(tail=parent.tail_number, mission_id=parent.original_mission_id or mission.id,
+                            flight=parent.flight_number_snapshot)
+        _apply_official(record, {**captured, 'fluid': captured.get('fluid') or ''}, parent, number)
+        record.pass_type = 'type_iv' if number == 2 else 'type_i'
+        record.official_at_utc = datetime.utcnow()
+    for key, value in changes.items():
+        setattr(record, key, value)
+    if not actual:
+        record.reason_for_application = DEFAULT_PRETREAT_REASON
+    record.crew_override = True
+    record.recorded_by_user_id = actor_id
+    parent.updated_at = datetime.utcnow()
+    db.session.flush()
+    action = ('pretreat_participation_correction' if correction else
+              'pretreat_participation_actual' if confirmed_participant(record) else 'pretreat_participation_plan')
+    audit_change(operation, action, actor_id=actor_id, mission=mission, record=record,
+                 reason=reason, before=before, after=evidence_values(record))
+    return record
 
 
 def _historical_evidence(operation,mission,parent,kind,number,settings,values):
@@ -182,6 +332,10 @@ def _historical_evidence(operation,mission,parent,kind,number,settings,values):
 
 
 def change_participation(operation, mission, parent, kind, action, values, settings, *, actor_id):
+    if kind == 'pretreat':
+        if action != 'correct_participant':
+            raise NeoSubZeroEvidenceError('Use the Pretreat truck editor to record participation.')
+        return save_pretreat_participant(operation, mission, parent, values, settings, actor_id=actor_id)
     from app.services.live_collaboration import entity_version,version_conflict
     number=int(values.get('pass_number') or 0)
     if number not in range(1,len(pass_types(parent,kind))+1): raise NeoSubZeroEvidenceError('Choose an applicable pass.')

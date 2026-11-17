@@ -228,6 +228,12 @@ def current_subzero_staffing_pool(operation):
     return subzero_staffing_snapshot(operation)["staffing_pool"]
 
 
+def pretreat_crew_choices(operation):
+    """Use registered deicers, including those unavailable for current DUCC assignment."""
+    snapshot = subzero_staffing_snapshot(operation)
+    return tuple(member['person'] for group in ('permanent', 'callouts', 'candidates') for member in snapshot[group])
+
+
 def set_neosubzero_callout_membership(
     operation,
     person,

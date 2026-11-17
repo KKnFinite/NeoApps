@@ -18,7 +18,7 @@ from app.models import (
 from app.neonodes.neosubzero import bp
 from app.neonodes.neosubzero.services import (
     PRETREAT_REFRESH_KEY, SURFACE_LABELS, NeoSubZeroPretreatError,
-    current_neosubzero_operation, mutate_pretreat, pretreat_reason,
+    current_neosubzero_operation, has_departed_pretreat, mutate_pretreat,
     pretreat_refresh_status, pretreat_revision, subzero_refresh_status,
 )
 from app.services.live_screen_refresh import live_screen_refresh_status
@@ -819,6 +819,10 @@ def deice_log():
     passes=actual_passes(operation,activity=activity,tail=tail)
     can_correct=bool(operation and current_operation and operation.id==current_operation.id and
         (user_can('neosubzero.coordinator.edit') or user_can('neosubzero.outbound.edit')))
+    can_correct_pretreat = bool(operation and current_operation and operation.id == current_operation.id and
+                               (can_correct or user_can('neosubzero.pretreat.edit')))
+    from app.services.neosubzero_staffing import pretreat_crew_choices
+    from app.services.neosubzero_trucks import registered_trucks
     from app.services.neosubzero_evidence import evidence_values
     from app.models import NeoSubZeroAuditEntry
     return render_template(
@@ -832,6 +836,9 @@ def deice_log():
         groups=[group for group in neosubzero_deice_log(operation) if activity in ('all',group['kind']) and (not tail or tail.casefold() in group['tail'].casefold())],
         entity_version=entity_version,
         can_correct=can_correct,
+        can_correct_pretreat=can_correct_pretreat,
+        pretreat_crew=pretreat_crew_choices(operation) if can_correct_pretreat else (),
+        pretreat_trucks=registered_trucks(gateway) if can_correct_pretreat else (),
         staffing_pool=current_subzero_staffing_pool(operation) if operation else (),
         audits=NeoSubZeroAuditEntry.query.filter_by(sort_date_operation_id=operation.id).order_by(NeoSubZeroAuditEntry.recorded_at_utc.desc()).all() if operation else (),
     )
@@ -1122,6 +1129,7 @@ def pretreat_mutate():
         mission_type="departure",
     ).one_or_none()
     tail = str(getattr(mission, "assigned_tail_number", "") or "").strip().upper()
+    from app.services.neosubzero_participation import PretreatCorrectionRequired
     try:
         from app.neonodes.neosubzero.release2_routes import locked_operation, locked_mission, require_version
         operation = locked_operation(gateway)
@@ -1132,22 +1140,35 @@ def pretreat_mutate():
             tail_number=tail,
         ).with_for_update().one_or_none()
         require_version(state, request.form.get('expected_version'), 'Pretreat')
-        if str(mission.departure_status or "").strip().lower() in {"cancelled", "departed"}:
-            raise NeoSubZeroPretreatError("This departure is no longer open for Pretreat.")
         values = request.form.to_dict()
-        if values.get("action") == "save_treatment":
-            values["reason_for_application"] = pretreat_reason(state)
+        action = values.get('action')
+        status = str(mission.departure_status or '').strip().lower()
+        if status == 'cancelled' or (status == 'departed' and (not has_departed_pretreat(mission, state) or
+                                action not in {'save_participant', 'save_notes', 'save_treatment'})):
+            raise NeoSubZeroPretreatError('This departure is no longer open for Pretreat.')
         state = mutate_pretreat(
             operation,
             mission,
-            values.get("action"),
+            action,
             values,
             state=state,
             actor_id=current_user.id,
         )
+        participant = None
+        if action == 'save_participant':
+            state, participant = state
+        db.session.flush()
+        result = dict(ok=True, version=entity_version(state))
+        if participant is not None:
+            result.update(record_id=participant.id, record_version=entity_version(participant))
         db.session.commit()
         if request.endpoint == "neosubzero.operations_mutate":
-            return jsonify(ok=True, version=entity_version(state))
+            return jsonify(result)
+    except PretreatCorrectionRequired as exc:
+        db.session.rollback()
+        if request.endpoint == 'neosubzero.operations_mutate':
+            return jsonify(ok=False, error=str(exc), correction_required=True), 409
+        flash(str(exc), 'error')
     except (ValueError, IntegrityError) as exc:
         db.session.rollback()
         message = (

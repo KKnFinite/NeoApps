@@ -91,7 +91,7 @@ def _current_truck_assignment(gateway, number):
     ).order_by(SortDateOperation.sort_date, NeoSubZeroUccTruckAssignment.id).first()
 
 
-def validate_registered_truck(operation, number, *, existing=None):
+def validate_registered_truck(operation, number, *, existing=None, allow_inactive=False):
     if not number:
         return ''
     normalized = normalize_truck(number)
@@ -100,7 +100,9 @@ def validate_registered_truck(operation, number, *, existing=None):
     # must come from the current in-service fleet.
     row = NeoSubZeroTruck.query.filter_by(gateway_id=gateway_id, number=normalized).populate_existing().with_for_update().one_or_none()
     if normalized != str(existing or '').strip().upper() and (
-        not row or not row.active or row.archived_at_utc is not None
+        not row or (not row.active and not allow_inactive) or row.archived_at_utc is not None
     ):
+        if allow_inactive:
+            raise ValueError('Select a registered deice truck.')
         raise ValueError('Select an in-service registered deice truck in Truck Management.')
     return normalized

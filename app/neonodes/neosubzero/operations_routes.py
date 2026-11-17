@@ -53,7 +53,8 @@ def render_operations(forced_mode=None):
     can_edit = user_can('neosubzero.pretreat.edit') if mode == 'pretreat' else user_can('neosubzero.' + board + '.edit')
     context = operations_context(gateway, operation, mode)
     from app.services.neosubzero_ucc import ucc_staffing_version
-    from app.services.neosubzero_staffing import current_subzero_staffing_pool
+    from app.services.neosubzero_staffing import current_subzero_staffing_pool, pretreat_crew_choices
+    from app.services.neosubzero_trucks import registered_trucks
     selected = next((row for row in context['rows'] if row['mission_id'] == request.args.get('mission', type=int)), None)
     ramp_override = request.args.get('ramp', '').strip().title()
     if ramp_override not in OPERATIONS_RAMPS:
@@ -67,8 +68,10 @@ def render_operations(forced_mode=None):
         mobile_missions=mobile_missions, ramp_override=ramp_override,
         inline_presentation=request.args.get('presentation') == 'inline',
         can_manage_staff=user_can('neosubzero.ucc.view'), selected=selected,
-        staffing_version=ucc_staffing_version(operation) if operation else '',
-        staffing_pool=current_subzero_staffing_pool(operation) if operation else (),
+        staffing_version=ucc_staffing_version(operation) if operation and mode == 'outbound' else '',
+        staffing_pool=current_subzero_staffing_pool(operation) if operation and mode == 'outbound' else (),
+        pretreat_crew=pretreat_crew_choices(operation) if operation and mode == 'pretreat' and can_edit else (),
+        pretreat_trucks=registered_trucks(gateway) if operation and mode == 'pretreat' and can_edit else (),
         plan_labels=legacy.PLAN_LABELS, surface_labels=legacy.SURFACE_LABELS,
         gateway_timezone=legacy.gateway_timezone(gateway),
         revision=operations_revision(gateway, operation, preferences),
@@ -167,11 +170,11 @@ def operations_mutate():
     finally:
         if previous_messages:
             session['_flashes'] = previous_messages
+    if target == url_for('neosubzero.pretreat_mutate') and response.is_json:
+        return response
     if response.status_code >= 400:
         db.session.rollback()
         return jsonify(ok=False, error=response.get_data(as_text=True)[:300]), response.status_code
-    if target == url_for('neosubzero.pretreat_mutate') and response.is_json:
-        return response
     errors = [message for category, message in messages if category == 'error']
     if errors:
         return jsonify(ok=False, error=' '.join(errors)), 409

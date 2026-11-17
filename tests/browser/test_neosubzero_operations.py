@@ -5,7 +5,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from playwright.sync_api import expect
 from app.extensions import db
-from app.models import SortDateMission, SortDateOperation, SortDateParkingAssignment, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateTailState, NeoSubZeroUserPreference
+from app.models import (NeoSubZeroAuditEntry, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState,
+                        NeoSubZeroSprayRecord, NeoSubZeroUccTruckAssignment, NeoSubZeroUserPreference,
+                        SortDateMission, SortDateOperation, SortDateParkingAssignment, SortDateTailState)
 from tests.browser import test_neosubzero_ucc as fixtures
 
 
@@ -61,6 +63,7 @@ class OperationsBrowserTest(unittest.TestCase):
         with self.app.app_context():
             inbound=db.session.get(SortDateMission,self.inbound_id)
             inbound.arrival_status='scheduled'
+            NeoSubZeroSprayRecord.query.filter(NeoSubZeroSprayRecord.pretreat_state_id.is_not(None)).delete()
             NeoSubZeroUserPreference.query.delete();NeoSubZeroPretreatState.query.delete();SortDateTailState.query.delete()
             NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.flow_id).delete()
             for index,mid in enumerate(self.missions):
@@ -402,11 +405,9 @@ class OperationsBrowserTest(unittest.TestCase):
             page.locator('[data-ops-search-clear]').click()
             expect(search).to_have_value('')
             expect(row.locator('.ops-mobile-status')).to_contain_text('PRETREATED')
-            more = inline.get_by_label('More actions for N441UP')
-            more.click()
-            expect(inline.get_by_role('link',name='Treatment history · N441UP')).to_have_attribute(
-                'href','/neosubzero/deice-log?activity=pretreat&tail=N441UP'
-            )
+            inline.get_by_label('Trucks for N441UP').click()
+            expect(inline.get_by_role('link',name='Treatment history · N441UP')).to_have_count(0)
+            inline.get_by_text('Recorded treatment',exact=True).click()
             inline.get_by_role('button',name='Correct recorded treatment').click()
             expect(inline.get_by_role('button',name='UNLOCK CORRECTION')).to_be_visible()
             expect(treatment.locator('[name="pass2_end"]')).to_have_attribute('readonly','')
@@ -443,3 +444,113 @@ class OperationsBrowserTest(unittest.TestCase):
             self.assertFalse(errors,errors)
             context.close();browser.close()
         (evidence/'measurements.json').write_text(json.dumps(measurements,indent=2))
+
+    def test_pretreat_participant_autosave_and_full_width_notes(self):
+        for engine, width in (('chromium', 1440), ('webkit', 375)):
+            with self.subTest(engine=engine):
+                self.seed()
+                with self.app.app_context():
+                    audit_id_before = db.session.query(db.func.max(NeoSubZeroAuditEntry.id)).scalar() or 0
+                browser = getattr(self.pw, engine).launch()
+                self.addCleanup(browser.close)
+                page = browser.new_page(viewport={'width':width, 'height':900}, service_workers='block')
+                errors = []
+                page.on('pageerror', lambda error: errors.append(str(error)))
+                self.login(page)
+                self.ready(page, f'/neosubzero/pretreat?mission={self.flow_id}')
+                row = page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')
+                inline = row.locator('[data-ops-inline]')
+                feedback = inline.locator('[data-ops-inline-feedback]')
+                pass1, pass2 = (row.locator(f'[data-ops-participant-pass="{number}"]') for number in (1, 2))
+
+                def save(edit, status=200):
+                    with page.expect_response(lambda r: r.url.endswith('/operations/mutate')) as pending:
+                        edit()
+                    self.assertEqual(pending.value.status, status, pending.value.text())
+                    expect(row).not_to_have_attribute('aria-busy', 'true')
+                    if status == 200:
+                        expect(feedback).to_be_hidden()
+
+                def edit(field, value):
+                    def blur():
+                        field.fill(value)
+                        field.blur()
+                    return blur
+
+                def add(section, truck):
+                    section.get_by_role('button', name='+ ADD TRUCK').click()
+                    save(lambda: section.locator('[data-ops-new-participant]:visible select[name="truck_number"]').select_option(truck))
+                    return section.locator('.ops-pretreat-participant:visible').filter(
+                        has=page.locator(f'select[name="truck_number"] option[value="{truck}"][selected]'))
+
+                inline.get_by_label('Trucks for N777UP').click()
+                expect(pass1.get_by_role('heading')).to_have_text('PASS 1 — TYPE I')
+                expect(pass2.get_by_role('heading')).to_have_text('PASS 2 — TYPE IV')
+                first = add(pass1, '12')
+                expect(first.get_by_label('Gallons')).to_be_disabled()
+                save(lambda: first.get_by_label('Driver').select_option(str(self.people[0])))
+                save(edit(first.get_by_label('Concentration percent'), '43'))
+                second = add(pass1, 'UCC-831')
+                iv_first = add(pass2, '12')
+                expect(iv_first.get_by_label('Concentration percent')).to_have_value('100')
+                expect(iv_first.get_by_label('Concentration percent')).to_be_disabled()
+
+                for field, value in (('pass1_start', '21:00'), ('pass1_end', '21:03')):
+                    save(edit(row.locator(f'[name="{field}"]'), value))
+                with self.app.app_context():
+                    self.assertEqual(NeoSubZeroSprayRecord.query.filter(NeoSubZeroSprayRecord.official_at_utc.is_not(None)).count(), 0)
+                save(first.get_by_role('button', name='Record actual').click)
+                expect(first.get_by_label('Concentration percent')).to_have_value('43')
+                save(edit(first.get_by_label('Gallons'), '8.25'))
+                for field, value in (('pass2_start', '21:04'), ('pass2_end', '21:07')):
+                    save(edit(row.locator(f'[name="{field}"]'), value))
+                expect(row).to_have_attribute('data-status', 'fin')
+                expect(second.get_by_role('button', name='Record actual')).to_be_visible()
+                iv_second = add(pass2, 'UCC-831')
+                expect(iv_second.get_by_label('Driver')).to_have_value('')
+                save(edit(iv_second.get_by_label('Gallons'), '3.25'))
+                save(lambda: iv_second.get_by_label('Flyer').select_option(str(self.people[2])))
+
+                save(edit(first.get_by_label('Gallons'), '9.50'), status=409)
+                expect(first.get_by_label('Correction reason')).to_be_visible()
+                first.get_by_label('Correction reason').fill('Read calibrated meter')
+                save(first.get_by_role('button', name='Apply').click)
+                expect(first.get_by_label('Gallons')).to_have_value('9.5')
+                expect(first.get_by_label('Correction reason')).to_be_hidden()
+
+                notes_summary = inline.get_by_label('Notes for N777UP')
+                notes_summary.click()
+                notes = inline.locator('textarea[name="notes"]')
+                expect(notes).to_be_visible()
+                base = row if width > 900 else inline
+                self.assertGreater(notes.bounding_box()['width'] / base.bounding_box()['width'], .90)
+                save(edit(notes, 'Synthetic PRETREAT notes'))
+                notes_summary.click()
+                expect(notes).to_be_hidden()
+                self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'), 1)
+                expect(pass1.locator('.ops-pretreat-participant:visible')).to_have_count(2)
+                expect(pass2.locator('.ops-pretreat-participant:visible')).to_have_count(2)
+                self.assertFalse(errors, errors)
+
+                with self.app.app_context():
+                    state = NeoSubZeroPretreatState.query.filter_by(tail_number='N777UP').one()
+                    self.assertEqual(state.notes, 'Synthetic PRETREAT notes')
+                    record = NeoSubZeroSprayRecord.query.filter_by(pretreat_state_id=state.id, pass_number=1, truck_number_snapshot='12').one()
+                    self.assertEqual(record.reason_for_application, 'Pretreat')
+                    self.assertEqual(record.driver_person_id, self.people[0])
+                    audit = NeoSubZeroAuditEntry.query.filter_by(
+                        spray_record_id=record.id, action='pretreat_participation_correction'
+                    ).filter(NeoSubZeroAuditEntry.id > audit_id_before).one()
+                    self.assertEqual((audit.reason, audit.before_values['gallons'], audit.after_values['gallons']),
+                                     ('Read calibrated meter', '8.25', '9.50'))
+                    from app.services.neosubzero_reporting import actual_passes
+                    report = actual_passes(state.operation, activity='pretreat', tail='N777UP')
+                    self.assertEqual([[truck.truck_number_snapshot for truck in item['records']] for item in report], [['12'], ['UCC-831']])
+                    self.assertEqual(report[0]['concentration'], 43)
+                    self.assertEqual(report[1]['concentration'], 100)
+                    self.assertEqual(NeoSubZeroUccTruckAssignment.query.filter_by(sort_date_operation_id=self.operation_id).count(), 0)
+                response = page.goto(self.origin + '/neosubzero/deice-log?activity=pretreat&tail=N777UP')
+                self.assertEqual(response.status, 200)
+                expect(page.locator('[data-report-pass]')).to_have_count(2)
+                expect(page.locator('[data-report-pass]').first.locator('.sz-contribution')).to_contain_text('9.50 · 43%')
+                browser.close()

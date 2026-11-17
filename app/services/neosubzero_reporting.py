@@ -67,6 +67,10 @@ def actual_passes(operation, *, activity='all', tail=''):
                     records=items, missing_gallons=sum(r.gallons is None for r in items),
                     audits=[a for a in audits if a.spray_record_id in {r.id for r in items} or
                             (a.tail_number == physical_tail and a.event_id == (parent.id if kind == 'departure' else None))])
+                if kind == 'pretreat' and items:
+                    concentrations = {record.concentration_percent_snapshot for record in items}
+                    row['concentration'] = next(iter(concentrations)) if len(concentrations) == 1 else None
+                    row['concentration_varies'] = len(concentrations) > 1
                 row['weather_label']={'with_start':'Operator context captured with START',
                     'with_end':'Recorded with END; pass-start weather unverified',
                     'start_not_snapshotted':'START weather not captured'}.get(row['weather_provenance'],row['weather_provenance'])
@@ -86,15 +90,21 @@ def shown(value):
 
 def pass_text(row):
     op = row['operation']
+    concentration = 'BY TRUCK' if row.get('concentration_varies') else (
+        f"{row['concentration']}%" if row['concentration'] is not None else 'CONCENTRATION NOT RECORDED')
     lines = [f"{op.gateway_code} | {op.sort_date} | {op.sort_name.upper()} | {row['activity'].upper()}",
         f"{shown(row['flight'])} | {row['tail']} | PASS {row['pass_number']} | {shown(row['ramp'])} / {shown(row['location'])}",
-        f"{shown(row['type'])} | {shown(row['fluid'])} | {shown(row['concentration'])}% | {shown(row['surface'])}",
+        f"{shown(row['type'])} | {shown(row['fluid'])} | {concentration} | {shown(row['surface'])}",
         f"START {row['start']} | END {row['end']} | UTC {row['start_utc'].isoformat()}–{row['end_utc'].isoformat() if row['end_utc'] else 'NOT RECORDED'}",
         f"TEMP {shown(row['temperature'])} | DEW {shown(row['dew_point'])} | PRECIP {shown(row['precipitation'])}",
         f"REASON {shown(row['reason'])} | WEATHER EVIDENCE {row['weather_label']}"]
     if row['notes']: lines.append('NOTES '+row['notes'])
     for record in row['records']:
-        lines.append(f"TRUCK {record.truck_number_snapshot} | DRIVER {shown(record.driver_name_snapshot)} | FLYER {shown(record.flyer_name_snapshot)} | GALLONS {record.gallons if record.gallons is not None else 'NOT ENTERED'} | RECORD {record.id}")
+        concentration = ''
+        if row['activity'] == 'pretreat':
+            percent = record.concentration_percent_snapshot
+            concentration = f" | CONC. {f'{percent}%' if percent is not None else 'NOT RECORDED'}"
+        lines.append(f"TRUCK {record.truck_number_snapshot} | DRIVER {shown(record.driver_name_snapshot)} | FLYER {shown(record.flyer_name_snapshot)}{concentration} | GALLONS {record.gallons if record.gallons is not None else 'NOT ENTERED'} | RECORD {record.id}")
     if not row['records']:
         lines.append('PARTICIPATION NOT RECORDED — COORDINATOR REVIEW')
     lines.append(f"SOURCE {row['id']} | ORIGINAL MISSION {shown(row['original_mission_id'])}")

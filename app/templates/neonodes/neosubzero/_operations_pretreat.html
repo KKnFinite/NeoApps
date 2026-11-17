@@ -1,11 +1,59 @@
 {% from 'neonodes/neosubzero/_operations_inline.html' import mobile_summary, inline_feedback, collapse_button, pretreat_arrival %}
-{% from 'neonodes/neosubzero/_departure_deice.html' import spray_position_forms, team_controls with context %}
 {% macro identity(row) -%}
     {{ csrf_field() }}
     <input type="hidden" name="operation_id" value="{{ operation.id }}">
     <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
     <input type="hidden" name="physical_tail" value="{{ row.tail }}">
     <input type="hidden" name="expected_version" value="{{ row.version }}">
+{%- endmacro %}
+{% macro participant(row, treatment, position=none) -%}
+    {% set number = treatment.number %}
+    {% set ended = row['pass' ~ number ~ '_end'] %}
+    {% set record = position.record if position else none %}
+    {% set truck = record.truck_number_snapshot if record else '' %}
+    {% set editable = can_edit and not (record and record.excluded_at_utc) %}
+    {% set trucks = pretreat_trucks if ended else pretreat_trucks|selectattr('active')|list %}
+    <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" class="ops-pretreat-participant"
+        {% if editable %}data-ops-pretreat-autosave{% endif %}{% if not record %} data-ops-new-participant hidden{% endif %}>
+        {{ identity(row) }}
+        <input type="hidden" name="action" value="save_participant">
+        <input type="hidden" name="pass_number" value="{{ number }}">
+        <input type="hidden" name="record_id" value="{{ record.id if record else '' }}">
+        <input type="hidden" name="record_version" value="{{ position.version if position else '' }}">
+        <input type="hidden" name="confirm_actual" value="{{ 'yes' if ended and not record else '' }}">
+        <div class="ops-pretreat-participant-fields">
+            <select name="truck_number" aria-label="Truck" required{% if not editable %} disabled{% endif %}>
+                <option value="" disabled{% if not truck %} selected{% endif %}>Select truck</option>
+                {% for item in trucks %}<option value="{{ item.number }}"{% if item.number == truck %} selected{% endif %}>{{ item.number }}</option>{% endfor %}
+                {% if truck and truck not in trucks|map(attribute='number')|list %}<option value="{{ truck }}" selected>{{ truck }}</option>{% endif %}
+            </select>
+            {% for role in ('driver', 'flyer') %}
+                {% set person_id = record|attr(role ~ '_person_id') if record else none %}
+                {% set person_name = record|attr(role ~ '_name_snapshot') if record else none %}
+                <select name="{{ role }}_person_id" aria-label="{{ role|title }}"{% if not editable %} disabled{% endif %}>
+                    <option value="">—</option>
+                    {% if person_name and not person_id %}<option value="recorded" selected>{{ person_name }}</option>{% endif %}
+                    {% for person in pretreat_crew %}<option value="{{ person.id }}"{% if person.id == person_id %} selected{% endif %}>{{ person.full_name }}</option>{% endfor %}
+                    {% if person_id and person_id not in pretreat_crew|map(attribute='id')|list %}<option value="{{ person_id }}" selected>{{ person_name or 'Recorded employee' }}</option>{% endif %}
+                </select>
+            {% endfor %}
+            {% set concentration = record.concentration_percent_snapshot if record else none %}
+            <input name="concentration_percent" aria-label="Concentration percent" inputmode="numeric" maxlength="3"
+                value="{{ 100 if number == 2 else concentration if concentration is not none else '' }}"{% if number == 2 %} disabled{% elif not editable %} readonly{% endif %}>
+            {% if ended and position and not position.actual and editable %}
+                <button type="button" data-ops-record-actual title="Confirm the truck and crew that actually sprayed">Record actual</button>
+            {% else %}
+                <input name="gallons" aria-label="Gallons" inputmode="decimal" maxlength="10" value="{{ position.gallons if position else '' }}"
+                    {% if not ended or not editable %} disabled{% endif %}{% if not ended %} title="Available after PASS END"{% endif %}>
+            {% endif %}
+        </div>
+        {% if editable %}
+        <div class="ops-pretreat-participant-correction" data-ops-participant-correction hidden>
+            <input name="correction_reason" aria-label="Correction reason" placeholder="Correction reason" maxlength="500" disabled>
+            <button type="submit" data-ops-save-participant-correction>Apply</button>
+        </div>
+        {% endif %}
+    </form>
 {%- endmacro %}
 {% macro pass_fields(row, number, locked) -%}
     {% set prefix = 'pass' ~ number %}
@@ -34,7 +82,7 @@
         <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-location><strong>{{ row.parking or '—' }}</strong>{{ pretreat_arrival(row) }}</div>
         <div class="ops-pretreat-meta ops-desktop" data-ops-pretreat-route><strong>GT: {{ row.ground_time if row.ground_time != '-' else '—' }}</strong><span>{{ row.destination }} · ETD {{ row.etd }}</span></div>
         <div class="ops-pretreat-config">
-            {% if can_edit %}
+            {% if can_edit and not row.departed %}
             <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" data-ops-pretreat-config>
                 {{ identity(row) }}
                 <button name="action" value="toggle_configured" aria-pressed="{{ 'true' if row.configured else 'false' }}">CONFIGURED</button>
@@ -61,7 +109,7 @@
             <summary aria-label="Notes for {{ row.tail }}" title="Notes" class="{{ 'has-notes' if row.state and row.state.notes else '' }}">
                 <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" aria-hidden="true"><path d="M3 2.5h10v9H7l-4 2.5V2.5Z M5.5 5.5h5 M5.5 8h5"/></svg>
             </summary>
-            <div class="ops-pretreat-menu-panel">
+            <div class="ops-pretreat-menu-panel ops-pretreat-notes-panel">
             <form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" {% if can_edit %}data-ops-pretreat-autosave{% endif %}>
                 {{ identity(row) }}
                 <input type="hidden" name="action" value="save_notes">
@@ -69,15 +117,33 @@
             </form>
             </div>
         </details>
-        <details class="ops-pretreat-support" data-ops-disclosure="more">
-            <summary aria-label="More actions for {{ row.tail }}" title="More actions">⋯</summary>
-            <div class="ops-pretreat-menu-panel">
-            <a class="ops-staff-link" href="{{ url_for('neosubzero.deice_log', activity='pretreat', tail=row.tail) }}">Treatment history · {{ row.tail }}</a>
+        <details class="ops-pretreat-support" data-ops-disclosure="trucks">
+            <summary aria-label="Trucks for {{ row.tail }}" title="Trucks">Trucks</summary>
+            <div class="ops-pretreat-menu-panel ops-pretreat-participation">
+            {% for treatment in row.primary_passes %}
+            <section class="ops-pretreat-participants {{ 'type-iv' if treatment.number == 2 else 'type-i' }}" data-ops-participant-pass="{{ treatment.number }}">
+                <h3>PASS {{ treatment.number }} — {{ treatment.type|upper }}</h3>
+                {% if treatment.participants or (can_edit and row.tail != '-') %}
+                <div class="ops-pretreat-participant-fields ops-pretreat-participant-head" aria-hidden="true">
+                    <span>Truck</span><span>Driver</span><span>Flyer</span><span>Conc. %</span><span>Gallons</span>
+                </div>
+                {% endif %}
+                {% for position in treatment.participants %}{{ participant(row, treatment, position) }}{% endfor %}
+                {% if can_edit and row.tail != '-' and treatment.can_add_truck %}
+                    {{ participant(row, treatment) }}
+                    <button type="button" data-ops-add-participant>+ ADD TRUCK</button>
+                {% endif %}
+            </section>
+            {% endfor %}
+            {% if row.recorded_passes or (can_edit and row.pass1_start) %}
+            <details class="ops-pretreat-history" data-ops-disclosure="recorded-treatment">
+            <summary>Recorded treatment{% if row.recorded_passes %} · Review{% endif %}</summary>
             {% for number, recorded in row.recorded_passes.items() %}
                 <p class="ops-pretreat-review">Review recorded Pass {{ number }} · {{ recorded.plan or row.primary_passes[number - 1].type }} · {{ recorded.surface or 'Surface unavailable' }}{% if recorded.stored_surface %} · Stored surface {{ recorded.stored_surface }}{% endif %}{% if recorded.stored_plan_conflict %} · Stored plan differs{% endif %}</p>
             {% endfor %}
             {% if can_edit and (row.pass1_start or row.pass2_start or row.completed) %}<button type="button" data-ops-pretreat-correction>Correct recorded treatment</button>{% endif %}
-            {% if row.pass1_start or row.pass2_start %}{{ spray_position_forms(row, can_edit, board) }}{{ team_controls(row, board) }}{% endif %}
+            </details>
+            {% endif %}
             </div>
         </details>
         </div>
@@ -89,7 +155,7 @@
     </div>
 </details>
 
-    {% if can_edit %}
+    {% if can_edit and not row.departed %}
     <form class="ops-plan-toggle" method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" data-ops-autosave data-ops-planned>
         {{ identity(row) }}
         <input type="hidden" name="action" value="toggle_planned">

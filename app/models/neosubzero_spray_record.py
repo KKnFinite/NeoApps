@@ -67,7 +67,7 @@ class NeoSubZeroSprayRecord(db.Model):
     truck_number_snapshot = db.Column(db.String(32), nullable=False)
     pass_type = db.Column(db.String(16), nullable=False)
     fluid_name_snapshot = db.Column(db.String(80), nullable=False)
-    concentration_percent_snapshot = db.Column(db.Integer, nullable=False)
+    concentration_percent_snapshot = db.Column(db.Integer, nullable=True)
     surface_area = db.Column(db.String(32), nullable=True)
     started_at_utc = db.Column(db.DateTime, nullable=True)
     ended_at_utc = db.Column(db.DateTime, nullable=True)

@@ -1,8 +1,11 @@
 """Read-only presentation adapter; physical treatment state remains canonical."""
 from datetime import datetime, timedelta
-from app.models import SortDateMission, SortDateTailState
+from app.models import NeoSubZeroSprayRecord, SortDateMission, SortDateTailState
+from app.services.live_collaboration import entity_version
 from app.neonodes.neosubzero.services import PRETREAT_SURFACE, pretreat_context, SURFACE_LABELS
 from app.services.neosubzero_departure_deice import departure_deice_context, mobile_departure_evidence
+from app.services.neosubzero_participation import confirmed_participant
+from app.services.neosubzero_spray import _decimal_display
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.time_display import format_local_hhmm
 
@@ -93,7 +96,22 @@ def operations_context(gateway, operation, mode):
                 row['sort_time'] is None,row['sort_time'] or datetime.max,row['flight'],row['mission_id'])
     rows.sort(key=order)
     if mode=='pretreat':
-        from app.services.neosubzero_spray import decorate_departure_rows_with_spray
-        decorate_departure_rows_with_spray(operation,rows,kind='pretreat')
+        participants = {}
+        occupied = {}
+        records = NeoSubZeroSprayRecord.query.filter_by(sort_date_operation_id=operation.id).filter(
+            NeoSubZeroSprayRecord.pretreat_state_id.is_not(None)).order_by(NeoSubZeroSprayRecord.position_number).all()
+        for record in records:
+            actual = confirmed_participant(record)
+            key = (record.pretreat_state_id, record.pass_number)
+            if record.participation_selected or actual:
+                occupied[key] = occupied.get(key, 0) + 1
+            if record.gallons is not None or (not record.excluded_at_utc and (record.participation_selected or actual)):
+                participants.setdefault(key, []).append(dict(
+                    record=record, actual=actual, version=entity_version(record), gallons=_decimal_display(record.gallons)))
+        for row in rows:
+            for treatment in row['primary_passes']:
+                key = (getattr(row['state'], 'id', None), treatment['number'])
+                treatment['participants'] = participants.get(key, ())
+                treatment['can_add_truck'] = occupied.get(key, 0) < 4
     extras = ('Remote', 'Location Review') if any(row['ramp'] == 'Location Review' for row in rows) else ('Remote',)
     return {**context, 'rows': rows, 'ramps': (*PRIMARY_RAMPS, *extras)}

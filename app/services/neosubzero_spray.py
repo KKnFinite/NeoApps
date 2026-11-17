@@ -143,21 +143,33 @@ def set_neosubzero_spray_gallons(operation, mission, event, pass_number, positio
         raise NeoSubZeroSprayError('The coordinator must save this pass END and official participation before gallons entry.')
     if event is None or event.sort_date_operation_id!=operation.id or (record.departure_deice_event_id is not None and record.departure_deice_event_id!=event.id) or (record.pretreat_state_id is not None and record.pretreat_state_id!=event.id) or (record.tail_number_snapshot and record.tail_number_snapshot.strip().upper()!=event.tail_number.strip().upper()):
         raise NeoSubZeroSprayError('Spray record does not match this physical treatment.')
-    before=evidence_values(record)
-    raw=str(gallons or '').strip()
-    if not raw:
-        if record.gallons: raise NeoSubZeroSprayError('Blank gallons cannot erase applied fuel. Enter a corrected positive amount.')
-        return record
-    try: amount=Decimal(raw)
-    except InvalidOperation as exc: raise NeoSubZeroSprayError('Gallons must be a positive number.') from exc
-    if not amount.is_finite() or amount<=0 or amount.as_tuple().exponent < -2 or amount>=Decimal('1000000'):
-        raise NeoSubZeroSprayError('Gallons must be positive, below 1,000,000 and have no more than two decimal places.')
-    record.gallons=amount;record.recorded_by_user_id=user_id
     if record.excluded_at_utc: raise NeoSubZeroSprayError('This participant was excluded. A coordinator must resolve participation before entering gallons.')
+    amount = spray_gallons_amount(gallons, recorded=record.gallons)
+    if amount is None or (record.pretreat_state_id and amount == record.gallons):
+        return record
+    if record.pretreat_state_id and record.gallons is not None and not str(correction_reason or '').strip():
+        raise NeoSubZeroSprayError('Enter a correction reason to change recorded gallons.')
+    before=evidence_values(record)
+    record.gallons=amount;record.recorded_by_user_id=user_id
     audit_change(operation,'spray_gallons',actor_id=user_id,mission=mission,
         event=event if record.departure_deice_event_id else None,record=record,
         reason=correction_reason,before=before,after=evidence_values(record))
     return record
+
+
+def spray_gallons_amount(value, *, recorded):
+    raw = str(value or '').strip()
+    if not raw:
+        if recorded is not None:
+            raise NeoSubZeroSprayError('Enter a corrected positive amount to change recorded gallons.')
+        return None
+    try:
+        amount = Decimal(raw)
+    except InvalidOperation as exc:
+        raise NeoSubZeroSprayError('Gallons must be a positive number.') from exc
+    if not amount.is_finite() or amount <= 0 or amount.as_tuple().exponent < -2 or amount >= Decimal('1000000'):
+        raise NeoSubZeroSprayError('Gallons must be positive, below 1,000,000 and have no more than two decimal places.')
+    return amount
 
 
 def current_user_ucc_assignment(operation, user):

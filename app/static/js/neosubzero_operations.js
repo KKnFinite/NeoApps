@@ -44,7 +44,7 @@
     const pendingPretreat = new Set();
     let reconcilingPretreat = false;
     const autosaveValues = form => new URLSearchParams([...new FormData(form)].filter(([name]) =>
-        !['csrf_token', 'expected_version', 'correction_reason'].includes(name))).toString();
+        !['csrf_token', 'expected_version', 'record_id', 'record_version', 'correction_reason'].includes(name))).toString();
     const rememberAutosave = form => {
         if (form.matches(autosaveSelector) && form.dataset.savedValues === undefined) {
             form.dataset.savedValues = autosaveValues(form);
@@ -52,7 +52,8 @@
     };
     const queuePretreat = form => {
         const correction = form.elements.correction_reason;
-        if (form.dataset.opsCompleted === 'true' || correction?.value.trim()) return;
+        if (form.dataset.opsCompleted === 'true' || correction?.value.trim() ||
+            (form.matches('[data-ops-new-participant]') && !form.elements.truck_number.value)) return;
         pendingPretreat.add(form);
         setTimeout(drainPretreat,0);
     };
@@ -211,6 +212,14 @@
                     if (['checkbox', 'radio'].includes(field.type)) field.checked = saved.checked;
                 });
                 form.dataset.dirty = 'true'; sync(form);
+                if (form.matches('[data-ops-new-participant]')) {
+                    form.hidden = false;
+                    form.parentElement.querySelector('[data-ops-add-participant]').hidden = true;
+                }
+                if (form.matches('.ops-pretreat-participant') && form.elements.correction_reason?.value) {
+                    form.querySelector('[data-ops-participant-correction]').hidden = false;
+                    form.elements.correction_reason.disabled = false;
+                }
                 const disclosure = form.closest('[data-ops-disclosure]');
                 if (disclosure) disclosure.open = true;
                 if (draft.fields.some(field => field.name === 'notes' || field.name === 'correction_reason')) {
@@ -284,7 +293,8 @@
             const next = nextRows.get(row.dataset.missionId);
             const editor = accordion(row);
             const preserve = (editor.contains(active) && active !== editor.querySelector('summary')) ||
-                editor.querySelector(dirtyForm) || (isPretreat && [...pendingPretreat].some(form => editor.contains(form)));
+                editor.querySelector(dirtyForm) || (isPretreat && (editor.querySelector('[data-ops-new-participant]:not([hidden])') ||
+                    [...pendingPretreat].some(form => editor.contains(form))));
             if (next?.dataset.tail !== row.dataset.tail) {
                 if (preserve) {
                     editor.open = true;
@@ -317,9 +327,19 @@
                 } else {
                     const freshForms = [...replacement.querySelectorAll('form')];
                     for (const form of current.querySelectorAll('form')) {
-                        if (form.dataset.dirty !== 'true' && !pendingPretreat.has(form) && (!form.contains(active) || form === savedForm)) continue;
+                        if (form.dataset.dirty !== 'true' && !pendingPretreat.has(form) &&
+                            (!form.contains(active) || form === savedForm) &&
+                            !(form.matches('[data-ops-new-participant]') && !form.hidden)) continue;
                         const fresh = freshForms.find(candidate => formKey(candidate) === formKey(form));
-                        if (fresh) fresh.replaceWith(form);
+                        if (fresh) {
+                            if (form.matches('[data-ops-new-participant]') && !form.hidden) {
+                                fresh.parentElement.querySelector('[data-ops-add-participant]').hidden = true;
+                            }
+                            if (form === savedForm && fresh.elements.gallons && !form.elements.gallons) {
+                                form.querySelector('[data-ops-record-actual]')?.replaceWith(fresh.elements.gallons);
+                            }
+                            fresh.replaceWith(form);
+                        }
                         else {
                             const review = document.createElement('section');
                             review.className = 'ops-review';
@@ -507,6 +527,23 @@
             if (form) queuePretreat(form);
             return;
         }
+        const addParticipant = event.target.closest('[data-ops-add-participant]');
+        if (addParticipant) {
+            const form = addParticipant.previousElementSibling;
+            form.hidden = false;
+            addParticipant.hidden = true;
+            form.elements.truck_number.focus({preventScroll:true});
+            return;
+        }
+        const recordActual = event.target.closest('[data-ops-record-actual]');
+        if (recordActual) {
+            const form = recordActual.form;
+            form.elements.confirm_actual.value = 'yes';
+            form.dataset.dirty = 'true';
+            saveDraft();
+            queuePretreat(form);
+            return;
+        }
         const config = event.target.closest('[data-ops-pretreat-config] button');
         if (config && (busy || preferenceBusy)) {
             event.preventDefault();
@@ -517,7 +554,6 @@
         if (correct) {
             const inline = inlineFor(correct);
             const section = inline.querySelector('[data-ops-disclosure="correction"]');
-            correct.closest('details').open = false;
             section.open = true;
             section.querySelector('[data-subzero-edit]:not([hidden]), input[name="correction_reason"]:not([disabled])')?.focus();
             return;
@@ -619,7 +655,7 @@
         body.set('operation_id',root.dataset.operationId); if (content) body.set('physical_tail',content.dataset.tail);
         const toggle = form.querySelector('[data-ops-quick-toggle]');
         const planned = form.matches('[data-ops-planned]');
-        const quiet = isPretreat && (autosave || planned || form.matches('[data-ops-pretreat-config], [data-ops-inline-treatment]'));
+        const quiet = isPretreat && (form.matches(autosaveSelector) || planned || form.matches('[data-ops-pretreat-config]'));
         const toggleError = form.querySelector('[data-ops-toggle-error]');
         if (planned) body.set('planned',toggle.checked ? '1' : '0');
         const key = formKey(form), abort = new AbortController();
@@ -636,11 +672,14 @@
         if (quiet) inlineMessage(inline, '');
         else if (inline && !planned) inlineMessage(inline, 'SAVING…');
         else if (!planned) notify('SAVING…');
-        let saved = false;
+        let saved = false, correctionRequired = false;
         try {
             const response = await fetch(root.dataset.mutateUrl,{method:'POST',body,signal:abort.signal});
             let payload; try { payload=await response.json(); } catch (_) { throw new Error(`Save could not be confirmed (${response.status}). Your entries are kept. Check current state before retrying.`); }
-            if (!response.ok || !payload.ok) throw new Error(payload.error || 'Save rejected. Your entries are kept.');
+            if (!response.ok || !payload.ok) {
+                correctionRequired = payload.correction_required === true;
+                throw new Error(payload.error || 'Save rejected. Your entries are kept.');
+            }
             saved = true;
             delete form.dataset.autosaveRetry;
             if (isPretreat && typeof payload.version === 'string') {
@@ -648,6 +687,11 @@
                 for (const field of row.querySelectorAll('[name="expected_version"]')) {
                     if (field.value === previous && formAction(field.form) === endpoint) field.value = payload.version;
                 }
+            }
+            if (payload.record_id && form.matches('.ops-pretreat-participant')) {
+                form.elements.record_id.value = payload.record_id;
+                form.elements.record_version.value = payload.record_version;
+                form.removeAttribute('data-ops-new-participant');
             }
             if (autosave) {
                 form.dataset.savedValues = sentValues;
@@ -669,7 +713,7 @@
             const message = error.name === 'AbortError' ? 'Save timed out. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
                 : error instanceof TypeError ? 'Network error while saving. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
                 : error.message;
-            if (autosave && !saved) form.dataset.autosaveRetry = '';
+            if (autosave && !saved && !correctionRequired) form.dataset.autosaveRetry = '';
             if (toggle && !saved) toggle.checked = !toggle.checked;
             if (toggleError) {
                 toggleError.textContent = 'Save error';
@@ -679,7 +723,11 @@
                 else notify(message,true);
             } else if (inline) {
                 inlineMessage(inline, message, true);
-                if (autosave && !saved && !message.includes('changed')) {
+                if (correctionRequired) {
+                    form.querySelector('[data-ops-participant-correction]').hidden = false;
+                    form.elements.correction_reason.disabled = false;
+                    form.elements.correction_reason.focus({preventScroll:true});
+                } else if (autosave && !saved && !message.includes('changed')) {
                     inline.querySelector('[data-ops-pretreat-retry]').hidden = false;
                 } else if (autosave && !saved) form.dataset.autosaveConflict = 'true';
             }

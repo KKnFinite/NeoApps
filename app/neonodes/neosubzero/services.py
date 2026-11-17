@@ -45,11 +45,7 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
     if operation is None:
         return {"operation": None, "rows": []}
     missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all()
-    departures = [
-        m for m in missions
-        if m.mission_type == "departure"
-        and str(m.departure_status or "scheduled").strip().lower() not in {"cancelled", "departed"}
-    ]
+    states = {_tail(row.tail_number): row for row in NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id).all()}
     arrivals_by_tail = {}
     now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     for mission in missions:
@@ -67,16 +63,19 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
             previous[0] or datetime.max, not previous[1]
         ):
             arrivals_by_tail[tail] = (mission.eta_datetime_utc, confirmed)
+    departures = [m for m in missions if m.mission_type == 'departure']
     tail_keys = {_tail(m.assigned_tail_number) for m in departures if _tail(m.assigned_tail_number)}
-    states = {_tail(row.tail_number): row for row in NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id).all()}
     tail_states = {_tail(row.tail_number): row for row in SortDateTailState.query.filter_by(sort_date=operation.sort_date, gateway_code=operation.gateway_code, sort_name=operation.sort_name).all() if _tail(row.tail_number) in tail_keys}
     parking = {_tail(row.tail_number): row for row in SortDateParkingAssignment.query.filter_by(sort_date_operation_id=operation.id).all()}
     rows = []
     for mission in departures:
         tail = _tail(mission.assigned_tail_number)
+        state = states.get(tail)
+        status = str(mission.departure_status or '').strip().lower()
+        if status == 'cancelled' or (status == 'departed' and not has_departed_pretreat(mission, state)):
+            continue
         inbound_eta, inbound_arrived = arrivals_by_tail.get(tail, (None, False))
         outbound_std = mission.planned_datetime_utc
-        state = states.get(tail)
         tail_state = tail_states.get(tail)
         assignment = parking.get(tail)
         completed = pretreat_complete(state)
@@ -86,9 +85,10 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
             "tail_status": tail_operational_status_label(tail_operational_status(tail_state, assignment=assignment)) or "NORMAL",
             "outbound_std": format_local_hhmm(outbound_std, mission.timezone or None), "parking": assignment.position_code if assignment else "TBD",
             "ground_time": _ground_time(inbound_eta, outbound_std), "state": state, "planned": bool(state and state.pretreat_planned),
-            "reason_for_application": pretreat_reason(state),
+            "reason_for_application": DEFAULT_PRETREAT_REASON,
             "deice_status": str(getattr(tail_state, "deice_status", "unknown") or "unknown").replace("_", " ").upper(),
             "configured": format_local_hhmm(state.configured_at_utc, mission.timezone or None) if state else "", "completed": completed,
+            "departed": status == 'departed',
             "recorded_passes": _nonstandard_passes(state),
             "pass1_start": _display(state, "pass1_started_at_utc", mission), "pass1_end": _display(state, "pass1_ended_at_utc", mission),
             "pass2_start": _display(state, "pass2_started_at_utc", mission), "pass2_end": _display(state, "pass2_ended_at_utc", mission),
@@ -96,6 +96,10 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
         })
     rows.sort(key=lambda row: (row["sort_eta"], row["tail"], row["mission_id"]))
     return {"operation": operation, "rows": rows}
+
+
+def has_departed_pretreat(mission, state):
+    return bool(state and state.pass1_started_at_utc and state.original_mission_id in (None, mission.id))
 
 
 def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=None):
@@ -124,10 +128,8 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
     elif action == "save_treatment":
         if (before or {}).get('pass2_ended_at_utc') and not str(values.get('correction_reason') or '').strip():
             raise NeoSubZeroPretreatError('Enter a reason for correcting completed Pretreat evidence.')
-        if "reason_for_application" in values or not state.reason_for_application:
-            state.reason_for_application = _pretreat_reason_value(
-                values.get("reason_for_application")
-            )
+        if not (before or {}).get('pass1_started_at_utc') or not state.reason_for_application:
+            state.reason_for_application = DEFAULT_PRETREAT_REASON
         for number, plan in enumerate(PRETREAT_PLANS, 1):
             if (values.get(f"pass{number}_plan", plan) != plan or
                     values.get(f"pass{number}_surface_area", PRETREAT_SURFACE) != PRETREAT_SURFACE):
@@ -153,6 +155,15 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
         _validate_sequence(state)
         if state.pass1_started_at_utc and not (before or {}).get("pass1_started_at_utc") and not state.configured_at_utc:
             state.configured_at_utc = state.pass1_started_at_utc
+    elif action == 'save_participant':
+        from app.models import Gateway
+        from app.services.neosubzero_departure_deice import neosubzero_fluid_settings
+        from app.services.neosubzero_participation import save_pretreat_participant
+
+        gateway = db.session.get(Gateway, operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
+        db.session.flush()
+        return state, save_pretreat_participant(operation, mission, state, values,
+                                               neosubzero_fluid_settings(gateway), actor_id=actor_id)
     else:
         raise NeoSubZeroPretreatError("Choose a valid Pretreat action.")
     if before is not None and before == evidence_values(state):
@@ -169,22 +180,6 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
     audit_change(operation,'pretreat_'+action,actor_id=actor_id,mission=mission,tail=tail,
         reason=values.get('correction_reason'),before=before,after=evidence_values(state))
     return state
-
-
-def pretreat_reason(state):
-    return (
-        str(getattr(state, "reason_for_application", "") or "").strip()
-        or DEFAULT_PRETREAT_REASON
-    )
-
-
-def _pretreat_reason_value(value):
-    normalized = str(value or "").strip()
-    if len(normalized) > 120:
-        raise NeoSubZeroPretreatError(
-            "Reason for Application must be 120 characters or fewer."
-        )
-    return normalized or DEFAULT_PRETREAT_REASON
 
 
 def pretreat_revision(gateway, operation=_OPERATION_UNSET):

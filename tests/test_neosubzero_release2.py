@@ -237,11 +237,18 @@ class Release2Test(unittest.TestCase):
 
     def test_pretreat_tail_ownership_snapshots_and_independent_departure(self):
         from app.neonodes.neosubzero.services import mutate_pretreat,pretreat_context
+        from app.services.neosubzero_trucks import manage_truck
         f=self.f
         set_neosubzero_ucc_assignment(f.operation,'Alpha',1,'driver',f.permanent)
         db.session.add(NeoSubZeroUccTruckAssignment(sort_date_operation_id=f.operation.id,ramp='Alpha',position_number=1,truck_number='PT12'))
         values=dict(pass1_start='2100',pass1_end='2102',pass2_start='2103',pass2_end='2106')
         state=mutate_pretreat(f.operation,f.alpha,'save_treatment',values);db.session.commit()
+        self.assertEqual(participation_query(state,'pretreat').count(),0)
+        manage_truck(f.gateway, 'add_truck', {'truck_number': 'PT12'}, actor_id=None)
+        for number in (1, 2):
+            mutate_pretreat(f.operation, f.alpha, 'save_participant',
+                            dict(pass_number=number, truck_number='PT12', confirm_actual='yes'), state)
+        db.session.commit()
         self.assertEqual(participation_query(state,'pretreat').count(),2)
         self.assertTrue(all(r.departure_deice_event_id is None and r.gallons is None for r in participation_query(state,'pretreat')))
         old=f.alpha.assigned_tail_number;original_mid=f.alpha.id
@@ -269,6 +276,43 @@ class Release2Test(unittest.TestCase):
         row=next(r for r in departure_deice_context(f.gateway,f.operation)['rows'] if r['mission_id']==f.alpha.id)
         self.assertEqual(row['final_fluid']['name'],original[0]);self.assertEqual(row['script']['concentration'],original[1])
         self.assertEqual(record.active_precipitation,'Snow')
+
+    def test_pretreat_rows_require_registered_choices_and_current_versions(self):
+        from app.models import NeoSubZeroPretreatState
+        from app.services.neosubzero_trucks import manage_truck
+
+        f = self.f
+        client = self.client()
+        for truck in ('PT1', 'PT2', 'PT3', 'PT4', 'PT5'):
+            manage_truck(f.gateway, 'add_truck', {'truck_number':truck}, actor_id=None)
+        db.session.commit()
+
+        def save(truck, version='', **values):
+            return self.post(client, 'operations/mutate', mode='pretreat', board='pretreat',
+                             target='/neosubzero/pretreat/mutate', action='save_participant',
+                             truck_number=truck, expected_version=version,
+                             **{'pass_number':1, **values})
+
+        self.assertEqual(save('MISSING').status_code, 409)
+        self.assertEqual(save('PT1', driver_person_id=999999).status_code, 409)
+        self.assertEqual(save('PT1', gallons='1').status_code, 409)
+        self.assertEqual(save('PT1', pass_number=2, concentration_percent='60').status_code, 409)
+        self.assertEqual(NeoSubZeroPretreatState.query.count(), 0)
+        first = save('PT1')
+        self.assertEqual(first.status_code, 200, first.json)
+        self.assertEqual(save('PT2').status_code, 409)
+        version = first.json['version']
+        self.assertEqual(save('PT1', version).status_code, 409)
+        self.assertEqual(save('PT1', version, record_id=first.json['record_id'], record_version='stale').status_code, 409)
+        for truck in ('PT2', 'PT3', 'PT4'):
+            result = save(truck, version)
+            self.assertEqual(result.status_code, 200, result.json)
+            version = result.json['version']
+        self.assertIn('at most four', save('PT5', version).json['error'])
+        records = NeoSubZeroSprayRecord.query.order_by(NeoSubZeroSprayRecord.position_number).all()
+        self.assertEqual([record.truck_number_snapshot for record in records], ['PT1','PT2','PT3','PT4'])
+        self.assertTrue(all(record.gallons is None and record.official_at_utc is None and
+                            record.concentration_percent_snapshot is None for record in records))
 
     def test_ambiguous_legacy_active_events_require_review_not_merge(self):
         from app.services.neosubzero_operations import operations_context
