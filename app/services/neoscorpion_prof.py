@@ -246,18 +246,44 @@ def load_observation_jobs(gateway_id, *, operation_id=None, limit=2000, learning
     return [dict(event=e,**event_math(e,participation=participation[key(e)])) for e in events]
 
 
+def is_completed_fueling_job(job):
+    """Physical FUEL/UPLIFT with trusted ON -> OFF and positive transferred gallons.
+
+    This deliberately does NOT depend on PROF eligibility. Missing setup,
+    travel or availability evidence can disqualify a score without erasing work.
+    An immutable fueling event is created only when the physical transfer posts.
+    """
+    event = job["event"]
+    facts = job.get("facts") or getattr(event, "performance_snapshot", None) or {}
+    actual = job.get("actual_minutes")
+    exclusions = facts.get("exclusions") or ()
+    return bool(
+        event.event_type in {"fuel", "uplift"}
+        and (gallons := number(event.transfer_fuel_gallons)) is not None
+        and gallons > 0
+        and getattr(event, "fueler_user_id", None) is not None
+        and getattr(event, "fuel_truck_id", None) is not None
+        and actual is not None and actual > 0
+        and facts.get("on_source") in {"manual", "trusted automatic"}
+        and "Interrupted truck segment" not in exclusions
+    )
+
+
 def totals(jobs, resource, identifier=None):
-    expected, actual, count = Decimal(0), Decimal(0), 0
+    """Count real physical jobs separately from PROF-qualified performance."""
+    expected, actual, count, prof_count = Decimal(0), Decimal(0), 0, 0
     for job in jobs:
         event = job["event"]
         if identifier is not None and getattr(event, "fueler_user_id" if resource == "fueler" else "fuel_truck_id") != identifier:
             continue
+        if is_completed_fueling_job(job):
+            count += 1
         if job[resource+"_reasons"]:
             continue
         expected += job["expected_"+resource]
         actual += job.get(resource+'_actual_minutes',job['actual_minutes'])
-        count += 1
-    return dict(jobs=count, expected=expected, actual=actual,
+        prof_count += 1
+    return dict(jobs=count, prof_jobs=prof_count, expected=expected, actual=actual,
                 prof=int((100*expected/actual).quantize(Decimal(1), rounding=ROUND_HALF_UP)) if actual > 0 else None)
 
 
