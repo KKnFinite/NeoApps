@@ -21,7 +21,7 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         launcher = html.split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
         self.assertEqual(launcher.count('data-portal-app='), 2)
         self.assertNotIn('neobid', launcher.lower())
-        for asset in ('neoapps_portal_desktop.png', 'neoapps_login_mobile.png', 'neogateway-inapp-128.png', 'neogateway-inapp-256.png', 'neostaffing-inapp-128.png', 'neostaffing-inapp-256.png'):
+        for asset in ('neoapps_portal_desktop.webp', 'neoapps_login_mobile.webp', 'neogateway-inapp-128.png', 'neogateway-inapp-256.png', 'neostaffing-inapp-128.png', 'neostaffing-inapp-256.png'):
             self.assertIn(asset, launcher)
         self.assertNotIn('images/icons/icon_', launcher)
         self.assertLess(launcher.index('data-portal-app="neogateway"'), launcher.index('data-portal-app="neostaffing"'))
@@ -33,8 +33,9 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         rows = [{'app': app, 'access': {'status':'pending', 'is_active':True}} for app in PORTAL_APPS]
         with patch('app.auth.routes.portal_dashboard_rows_for_user', return_value=rows):
             html = self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
-        self.assertEqual(html.count('aria-disabled="true"'), 2)
-        self.assertEqual(html.count('PENDING REVIEW'), 2)
+        self.assertEqual(html.count('aria-disabled="true"'), 1)
+        self.assertEqual(html.count('PENDING REVIEW'), 1)
+        self.assertNotIn('data-portal-app="neostaffing"', html)
         self.assertNotIn('<button', html)
         self.assertNotIn('href=', html)
 
@@ -42,10 +43,10 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         for access in (None, {'status':'denied','is_active':True}, {'status':'approved','is_active':False}, {'status':'pending','is_active':False}):
             with self.subTest(access=access), patch('app.auth.routes.portal_dashboard_rows_for_user', return_value=[{'app': app, 'access':access} for app in PORTAL_APPS]):
                 html = self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
-                self.assertEqual(html.count('action="/portal/request-access"'), 2)
-                self.assertEqual(html.count('name="csrf_token"'), 2)
-                for code in ('neogateway','neostaffing'):
-                    self.assertIn(f'name="app_code" value="{code}"', html)
+                self.assertEqual(html.count('action="/portal/request-access"'), 1)
+                self.assertEqual(html.count('name="csrf_token"'), 1)
+                self.assertIn('name="app_code" value="neogateway"', html)
+                self.assertNotIn('data-portal-app="neostaffing"', html)
 
     def test_neobid_approved_access_renders_existing_placeholder(self):
         db.session.add(PortalAppAccess(user_id=self.admin.id, app_code="neobid",
@@ -102,6 +103,7 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         self.admin = self._user("filter_admin", verified=True)
         self.admin.role = "grandmaster"
         backfill_default_gateway_node_roles(self.admin, role="grandmaster")
+        db.session.add(PortalAppAccess(user_id=self.admin.id,app_code='neostaffing',status='approved',role='watcher',is_active=True))
         db.session.commit()
         self._login(self.admin.username)
 

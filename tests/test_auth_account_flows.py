@@ -122,7 +122,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(self._login_attempt('bad@example.com','TestPassword123!',remote_addr='198.51.100.22').status_code,401)
         login = self._login_attempt('correct@example.com','TestPassword123!',remote_addr='198.51.100.22')
         self.assertEqual(login.status_code,302)
-        self.assertEqual(login.location,'/portal')
+        self.assertEqual(login.location,'/rfd')
 
     def test_recovery_verified_email_change_revokes_tokens_and_resends_corrected_address(self):
         admin = self._admin('verify_recovery_admin','grandmaster')
@@ -416,7 +416,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         motherbrain = self.client.get("/motherbrain", follow_redirects=False)
 
         self.assertEqual(login.status_code, 302)
-        self.assertEqual(login.location, "/portal")
+        self.assertEqual(login.location, "/access-pending")
         self.assertEqual(motherbrain.status_code, 302)
         self.assertEqual(motherbrain.location, "/access-pending")
 
@@ -1232,7 +1232,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         updated = db.session.get(User, user.id)
         self.assertEqual(login_response.location, "/change-password")
         self.assertEqual(blocked_response.location, "/change-password")
-        self.assertEqual(changed_response.location, "/portal")
+        self.assertEqual(changed_response.location, "/rfd")
         self.assertFalse(updated.password_policy_update_required)
         self.assertFalse(updated.password_reset_required)
         self.assertTrue(updated.password_changed_at)
@@ -1272,7 +1272,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(blocked_response.location, "/change-password")
         self.assertEqual(bypass_response.status_code, 400)
         self.assertIn(b"Current password is incorrect", bypass_response.data)
-        self.assertEqual(changed_response.location, "/portal")
+        self.assertEqual(changed_response.location, "/rfd")
         self.assertTrue(db.session.get(User, user.id).check_password("violet river lantern"))
 
     def test_voluntary_password_change_invalidates_other_sessions_only(self):
@@ -1302,7 +1302,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self._restore_session(stale_session)
         stale_session_response = self.client.get("/portal", follow_redirects=False)
 
-        self.assertEqual(changed_response.location, "/portal")
+        self.assertEqual(changed_response.location, "/rfd")
         self.assertEqual(updated_user.auth_session_version, initial_version + 1)
         self.assertEqual(current_session_response.status_code, 200)
         self.assertEqual(stale_session_response.location, "/login")
@@ -1335,7 +1335,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         stale_session_response = self.client.get("/portal", follow_redirects=False)
 
         self.assertEqual(login_response.location, "/change-password")
-        self.assertEqual(changed_response.location, "/portal")
+        self.assertEqual(changed_response.location, "/rfd")
         self.assertEqual(updated_user.auth_session_version, initial_version + 1)
         self.assertEqual(current_session_response.status_code, 200)
         self.assertEqual(stale_session_response.location, "/login")
@@ -1563,11 +1563,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
             follow_redirects=False,
         )
 
-        self.assertEqual(change_response.location, "/portal")
+        self.assertEqual(change_response.location, "/access-pending")
         self.assertFalse(updated_target.password_reset_required)
         self.assertIsNone(updated_target.temporary_password_expires_at)
         self.assertEqual(old_password_response.status_code, 401)
-        self.assertEqual(new_password_response.location, "/portal")
+        self.assertEqual(new_password_response.location, "/access-pending")
 
     def test_second_emergency_reset_replaces_temporary_password_and_expiration(self):
         grandmaster = self._admin("second_temporary_admin", "grandmaster")
@@ -1639,7 +1639,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             follow_redirects=False,
         )
 
-        self.assertEqual(response.location, "/portal")
+        self.assertEqual(response.location, "/access-pending")
 
     def test_forced_change_marker_is_cleared_on_logout(self):
         user = self._user("forced_marker_logout", verified=True)
@@ -1707,7 +1707,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self.assertEqual(missing_current.status_code, 400)
         self.assertIn(b"Current password is incorrect", missing_current.data)
-        self.assertEqual(changed.location, "/portal")
+        self.assertEqual(changed.location, "/access-pending")
         self.assertTrue(db.session.get(User, user.id).check_password("violet river lantern"))
 
     def test_grandmaster_creation_uses_shared_password_policy(self):
@@ -1907,11 +1907,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
             follow_redirects=False,
         )
 
-        self.assertEqual(email_login.location, "/portal")
-        self.assertEqual(legacy_username_login.location, "/portal")
+        self.assertEqual(email_login.location, "/rfd")
+        self.assertEqual(legacy_username_login.location, "/rfd")
         self.assertEqual(employee_login.status_code, 401)
 
-    def test_portal_dashboard_shows_approved_pending_and_request_states(self):
+    def test_portal_dashboard_shows_gateway_but_hides_unapproved_staffing(self):
         user = self._user("portalstates", email="portalstates@example.com", verified=True)
         gateway = ensure_default_gateway_and_nodes()
         db.session.add(
@@ -1940,37 +1940,30 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         root = document(response)
         cards = root.one(cls='portal-launcher-apps')
-        self.assertEqual([c.attrs['data-portal-app'] for c in cards.findall(cls='portal-launch-card')], ['neogateway','neostaffing'])
+        self.assertEqual([c.attrs['data-portal-app'] for c in cards.findall(cls='portal-launch-card')], ['neogateway'])
         gateway_card = cards.one('a', **{'data-portal-app':'neogateway'})
         self.assertEqual(gateway_card.attrs['href'], '/rfd')
         self.assertEqual(gateway_card.one(cls='portal-launch-action').text, 'LAUNCH')
         self.assertFalse(gateway_card.findall('button'))
-        pending = cards.one('article', **{'data-portal-app':'neostaffing'})
-        self.assertEqual(pending.attrs['aria-disabled'], 'true')
-        self.assertEqual(pending.one(cls='portal-launch-action').text, 'PENDING REVIEW')
-        self.assertFalse(pending.findall('a'))
-        self.assertFalse(pending.findall('button'))
+        self.assertFalse(cards.findall(**{'data-portal-app':'neostaffing'}))
         self.assertNotIn('NeoBid', cards.text)
-        for key in ('gateway','staffing'):
+        for key in ('gateway',):
             self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'],
                 f'/static/images/icons/neo{key}/inapp/neo{key}-inapp-128.png?v='+
                 image_digest(
                     self.app.static_folder,f'images/icons/neo{key}/inapp/neo{key}-inapp-128.png'))
         self.assertNotIn('portal-header-word', html)
         self.assertIn('data-drawer-nodes', html)
-        # The third state now belongs to an existing launcher app, not retired NeoBid.
+        # Denial remains in access management, with no Staffing request affordance.
         access = PortalAppAccess.query.filter_by(user_id=user.id, app_code='neostaffing').one()
         access.status = 'denied'
         db.session.commit()
         request_page = document(self.client.get('/portal'))
-        request_form = request_page.one('form', 'portal-request-form')
-        self.assertEqual(request_form.attrs['method'], 'post')
-        self.assertEqual(request_form.attrs['action'], '/portal/request-access')
-        self.assertEqual(request_form.one('input', name='app_code').attrs['value'], 'neostaffing')
-        self.assertEqual(request_form.one('button').one(cls='portal-launch-action').text, 'REQUEST ACCESS')
-        self.assertFalse(request_form.one('button').findall('a'))
+        self.assertFalse(request_page.findall(**{'data-portal-app':'neostaffing'}))
+        self.assertFalse(request_page.findall('input', name='app_code', value='neostaffing'))
+        self.assertEqual(access.status,'denied')
 
-    def test_portal_mobile_hides_approved_role_status_without_hiding_other_app_states(self):
+    def test_portal_mobile_hides_unapproved_staffing_without_affecting_gateway(self):
         user, _membership = self._approved_user("mobileportalstatus", "mobileportalstatus@example.com")
         db.session.commit()
 
@@ -1979,7 +1972,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         cards = document(response).one(cls='portal-launcher-apps')
         self.assertEqual(cards.one('a', **{'data-portal-app':'neogateway'}).attrs['href'], '/rfd')
-        self.assertEqual(cards.one('button', **{'data-portal-app':'neostaffing'}).one(cls='portal-launch-action').text, 'REQUEST ACCESS')
+        self.assertFalse(cards.findall(**{'data-portal-app':'neostaffing'}))
         self.assertNotIn('Approved', cards.text)
         self.assertNotIn('Coming Soon', cards.text)
         self.assertNotIn('NeoBid', cards.text)
@@ -2030,10 +2023,10 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         cards = document(response).one(cls='portal-launcher-apps')
-        self.assertEqual(len(cards.findall(cls='portal-launch-card')), 2)
+        self.assertEqual(len(cards.findall(cls='portal-launch-card')), 1)
         self.assertEqual(cards.one('a').attrs['href'], '/rfd')
-        self.assertEqual(cards.one('article').one(cls='portal-launch-action').text, 'PENDING REVIEW')
-        for key in ('gateway', 'staffing'):
+        self.assertFalse(cards.findall(**{'data-portal-app':'neostaffing'}))
+        for key in ('gateway',):
             self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'],
                 f'/static/images/icons/neo{key}/inapp/neo{key}-inapp-128.png?v='+
                 image_digest(

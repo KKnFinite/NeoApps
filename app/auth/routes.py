@@ -24,6 +24,7 @@ from app.services.access_control import (
     request_default_gateway_access_for_user,
     seed_gateway_node_roles,
     user_has_app_access,
+    user_has_gateway_access,
 )
 from app.services.permission_rules import (
     ensure_default_permission_rules,
@@ -159,9 +160,7 @@ def login():
 
 
     if current_user.is_authenticated and request.method == "GET":
-        destination = ("scorpion_vendor.my_truck" if current_user.scorpion_vendor
-                       else "auth.portal_dashboard")
-        return redirect(url_for(destination))
+        return redirect(url_for(_authenticated_landing_endpoint(current_user)))
 
     if request.method == "POST":
         email = request.form.get("email", "").strip()
@@ -219,9 +218,32 @@ def login():
             return redirect(url_for("auth.change_password"))
 
         establish_authenticated_session(session, user)
-        return redirect(url_for("scorpion_vendor.my_truck" if vendor else "auth.portal_dashboard"))
+        return redirect(url_for(_authenticated_landing_endpoint(user)))
 
     return render_template("auth/login.html")
+
+
+def _authenticated_landing_endpoint(user):
+    """Choose only an accessible canonical landing page, never a supplied URL."""
+    if user.scorpion_vendor:
+        return "scorpion_vendor.my_truck"
+    permissions = {
+        "neogateway": "neogateway.landing.view",
+        "neostaffing": "neostaffing.board.view",
+    }
+    available = []
+    for app in portal_app_definitions():
+        permission = permissions.get(app['code'])
+        if app.get('coming_soon') or not permission or not user_has_app_access(user, app['code']):
+            continue
+        if not user_can(permission, user=user):
+            continue
+        if app['code'] == 'neogateway' and not user_has_gateway_access(user, get_current_gateway().code):
+            continue
+        available.append(app['endpoint'])
+    if len(available) == 1:
+        return available[0]
+    return 'auth.portal_dashboard' if available else 'auth.access_pending'
 
 
 @bp.route("/logout", methods=["POST"])
@@ -525,7 +547,7 @@ def change_password():
         db.session.commit()
         establish_authenticated_session(session, current_user)
         flash("Password changed.", "info")
-        return redirect(url_for("scorpion_vendor.my_truck" if current_user.scorpion_vendor else "auth.portal_dashboard"))
+        return redirect(url_for(_authenticated_landing_endpoint(current_user)))
 
     return render_template(
         "auth/change_password.html",

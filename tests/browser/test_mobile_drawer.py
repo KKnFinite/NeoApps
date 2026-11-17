@@ -533,18 +533,15 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 access.status='denied'
                 db.session.commit()
             self.ready(page,'/portal')
-            request=page.locator('button[data-portal-app="neostaffing"]')
-            self.assertEqual(request.locator('a,button,input').count(),0)
-            tokens=page.locator('.portal-request-form input[name="csrf_token"]').evaluate_all('es=>es.map(e=>e.value)')
-            self.assertTrue(tokens and all(token==tokens[0] and token for token in tokens))
+            expect(page.locator('[data-portal-app="neostaffing"]')).to_have_count(0)
+            token=page.locator('meta[name="csrf-token"]').get_attribute('content')
+            self.assertTrue(token)
             denied=context.request.post(self.origin+'/portal/request-access',form={'app_code':'neostaffing'})
             self.assertEqual(denied.status,400)
-            with page.expect_response(lambda r:r.url.endswith('/portal/request-access') and r.request.method=='POST') as posted:
-                request.click(position={'x':5,'y':5})
-            # Playwright's integration-blocking route can follow the local redirect.
-            self.assertIn(posted.value.status,(200,302))
+            posted=context.request.post(self.origin+'/portal/request-access',form={'app_code':'neostaffing'},headers={'X-CSRFToken':token})
+            self.assertIn(posted.status,(200,302))
             # N01: a normal request cannot undo an administrator's denial.
-            expect(page.locator('button[data-portal-app="neostaffing"]')).to_be_visible()
+            expect(page.locator('[data-portal-app="neostaffing"]')).to_have_count(0)
             self.assertEqual(context.request.get(self.origin+'/neostaffing',max_redirects=0).status,302)
             with self.app.app_context():
                 access=PortalAppAccess.query.filter_by(user_id=user_id,app_code='neostaffing').one()
@@ -553,12 +550,15 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 # while remaining unauthorized until explicit administrator approval.
                 access.status='approved';access.is_active=False;db.session.commit()
             self.ready(page,'/portal')
-            with page.expect_response(lambda r:r.url.endswith('/portal/request-access') and r.request.method=='POST'):
-                page.locator('button[data-portal-app="neostaffing"]').click(position={'x':5,'y':5})
-            pending=page.locator('article[data-portal-app="neostaffing"]')
-            expect(pending).to_have_attribute('aria-disabled','true')
-            self.assertEqual(pending.locator('a,button,input').count(),0)
-            expect(pending).to_contain_text('PENDING REVIEW')
+            expect(page.locator('[data-portal-app="neostaffing"]')).to_have_count(0)
+            token=page.locator('meta[name="csrf-token"]').get_attribute('content')
+            posted=context.request.post(self.origin+'/portal/request-access',form={'app_code':'neostaffing'},headers={'X-CSRFToken':token})
+            self.assertIn(posted.status,(200,302))
+            for width in (390,1440):
+                page.set_viewport_size({'width':width,'height':900})
+                self.ready(page,'/portal')
+                expect(page.locator('[data-portal-app="neostaffing"]')).to_have_count(0)
+                expect(page.locator('[data-portal-app="neogateway"]')).to_be_visible()
             with self.app.app_context():
                 access=PortalAppAccess.query.filter_by(user_id=user_id,app_code='neostaffing').one()
                 self.assertEqual(access.status,'pending')

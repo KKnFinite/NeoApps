@@ -26,6 +26,7 @@
         {% set access = row.access %}
         {% set status = access.status if access else 'none' %}
         {% set key = 'gateway' if code == 'neogateway' else 'staffing' %}
+        {% if code != 'neostaffing' or (status == 'approved' and access.is_active and user_can('neostaffing.board.view')) %}
         {% if status == 'approved' and access.is_active %}
         <a class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" href="{{ url_for(app.endpoint) }}">
             {{ card_content(key, 'LAUNCH') }}
@@ -42,6 +43,7 @@
                 {{ card_content(key, 'REQUEST ACCESS') }}
             </button>
         </form>
+        {% endif %}
         {% endif %}
         {% endfor %}
         {% endfor %}

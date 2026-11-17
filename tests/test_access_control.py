@@ -119,7 +119,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/access-pending")
 
-    def test_approved_rfd_login_redirects_to_portal(self):
+    def test_approved_rfd_only_login_redirects_to_gateway(self):
         user, _membership = self._approved_user("approved_hub_user")
         db.session.commit()
         client = self.app.test_client()
@@ -131,9 +131,9 @@ class AccessControlTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/portal")
+        self.assertEqual(response.location, "/rfd")
 
-    def test_blocked_users_land_on_portal_and_cannot_access_rfd_or_sektor_launcher(self):
+    def test_blocked_users_land_on_access_pending_and_cannot_access_rfd_or_sektor_launcher(self):
         gateway = ensure_default_gateway_and_nodes()
         pending = self._user("pending_hub_user")
         denied = self._user("denied_hub_user")
@@ -168,7 +168,7 @@ class AccessControlTest(unittest.TestCase):
                 data={"username": user.username, "password": "TestPassword123!"},
                 follow_redirects=False,
             )
-            self.assertEqual(login.location, "/portal")
+            self.assertEqual(login.location, "/access-pending")
 
             for path in ("/rfd", "/rfd/sektor"):
                 with self.subTest(username=user.username, path=path):
