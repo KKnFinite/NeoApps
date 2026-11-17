@@ -109,15 +109,29 @@ def invite(gateway, actor, email, name):
     return user, token
 
 
-def accept_invitation(raw_token, password, confirmation):
-    from app.services.user_tokens import hash_user_token, EMAIL_VERIFICATION, mark_token_used
-    from app.services.password_policy import set_user_password
-    token = UserToken.query.filter_by(token_hash=hash_user_token(raw_token), token_type=EMAIL_VERIFICATION).with_for_update().populate_existing().first()
+def invitation_record(raw_token, *, lock=False):
+    from app.services.user_tokens import hash_user_token, EMAIL_VERIFICATION
+    tokens = UserToken.query.filter_by(token_hash=hash_user_token(raw_token), token_type=EMAIL_VERIFICATION)
+    if lock:
+        # Match resend and disable: lock the vendor profile before touching its token.
+        user_id = tokens.with_entities(UserToken.user_id).scalar()
+        account = NeoScorpionVendorAccount.query.filter_by(user_id=user_id).with_for_update().populate_existing().first()
+    else:
+        account = None
+    token = tokens.populate_existing().first()
     if not token or token.is_used or token.is_expired():
-        raise ValueError('Invitation expired or already used.')
-    account = db.session.get(NeoScorpionVendorAccount, token.user_id)
-    if not account or not account.enabled or account.user.email_verified_at:
-        raise ValueError('Invitation unavailable.')
+        raise ValueError('This invitation is invalid, expired, or already used. Ask Dispatch for a new invitation if you still need to register.')
+    if not lock:
+        account = db.session.get(NeoScorpionVendorAccount, token.user_id)
+    if not account or not account.enabled or not account.user.is_active or account.user.email_verified_at:
+        raise ValueError('This invitation is unavailable. Contact Dispatch for help.')
+    return token, account
+
+
+def accept_invitation(raw_token, password, confirmation):
+    from app.services.user_tokens import mark_token_used
+    from app.services.password_policy import set_user_password
+    token, account = invitation_record(raw_token, lock=True)
     if password != confirmation:
         raise ValueError('Passwords do not match.')
     set_user_password(account.user, password)
@@ -131,7 +145,7 @@ def accept_invitation(raw_token, password, confirmation):
 def renew_invitation(gateway, actor, user_id):
     dispatcher(gateway,actor)
     account=NeoScorpionVendorAccount.query.filter_by(user_id=int(user_id),gateway_id=gateway.id).with_for_update().populate_existing().one_or_none()
-    if not account or not account.enabled or account.user.email_verified_at:
+    if not account or not account.enabled or not account.user.is_active or account.user.email_verified_at:
         raise ValueError('Only enabled, unregistered vendor invitations can be renewed.')
     from app.services.user_tokens import revoke_unused_email_verification_tokens,create_user_token,EMAIL_VERIFICATION
     revoke_unused_email_verification_tokens(account.user)

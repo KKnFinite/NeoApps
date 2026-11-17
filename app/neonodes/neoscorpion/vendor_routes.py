@@ -1,13 +1,12 @@
 """Separate vendor surface; normal Dispatch remains employee-only."""
 from functools import wraps
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, abort, jsonify, flash
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, abort, jsonify, flash
 from flask_login import login_required, current_user
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from app.extensions import db
 from app.models import (NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
-    NeoScorpionVendorAudit, NeoScorpionTruckDriver, NeoScorpionSortTruck, NeoScorpionFuelTruck,
-    NeoScorpionSettings)
+    NeoScorpionVendorAudit, NeoScorpionTruckDriver, NeoScorpionSortTruck, NeoScorpionFuelTruck)
 from app.services import neoscorpion_vendors as vendors
 from app.services import neoscorpion_inventory as inventory
 from app.services.access_control import get_current_gateway
@@ -40,8 +39,11 @@ def vendor_only(view):
 
 
 def operational(account):
+    if not account.enabled:
+        raise PermissionError('Your NeoScorpion driver account is disabled. Contact Dispatch for help.')
+    expected_id = (request.form if request.method == 'POST' else request.args).get('operation_id')
     try:
-        operation = vendors.current_operation(account.gateway, request.form.get('operation_id') if request.method == 'POST' else None)
+        operation = vendors.current_operation(account.gateway, expected_id)
     except ValueError as exc:
         raise PermissionError(str(exc)) from exc
     vendors.require_approved(account, operation)
@@ -50,46 +52,71 @@ def operational(account):
 
 @bp.errorhandler(PermissionError)
 def denied(error):
-    if request.form.get('dispatch_assets_workspace') == '1':
+    if request.endpoint == 'scorpion_vendor.revision' or request.form.get('dispatch_assets_workspace') == '1':
         return jsonify(ok=False,error=str(error)),403
+    profile = vendors.vendor_account(current_user)
+    if profile:
+        return render_account(profile, error=str(error)), 403
     return str(error), 403
 
 
-def workspace_result(gateway):
+def workspace_result(gateway, *, message=None):
     """Read the existing revision after commit; never create a parallel state."""
     from app.services.neoscorpion import fuel_assignments_live_revision
-    return jsonify(ok=True,changed=True,**fuel_assignments_live_revision(gateway))
+    payload = dict(ok=True, changed=True, **fuel_assignments_live_revision(gateway))
+    if message:
+        payload['message'] = message
+    return jsonify(payload)
 
 
 @bp.route('/invitation/<token>', methods=['GET','POST'])
 def invitation(token):
     error = None
-    if request.method == 'POST':
-        try:
+    valid = False
+    try:
+        if request.method == 'POST':
             vendors.accept_invitation(token,request.form.get('password',''),request.form.get('confirm_password',''))
             db.session.commit()
+            flash('Registration complete. Sign in with your email and password.', 'success')
             return redirect(url_for('auth.login'))
-        except (ValueError, IntegrityError) as exc:
-            db.session.rollback(); error = str(exc) if isinstance(exc,ValueError) else 'Invitation already used.'
-    return render_template('neonodes/neoscorpion/vendor_invitation.html', error=error), 400 if error else 200
+        vendors.invitation_record(token)
+        valid = True
+    except (ValueError, IntegrityError) as exc:
+        db.session.rollback()
+        error = str(exc) if isinstance(exc, ValueError) else 'Registration changed. Try opening the link again.'
+        if request.method == 'POST':
+            try:
+                vendors.invitation_record(token)
+                valid = True
+            except ValueError as unavailable:
+                error = str(unavailable)
+    return render_template('neonodes/neoscorpion/vendor_invitation.html', error=error, valid=valid), 400 if error else 200
 
 
 @bp.get('/account')
 @vendor_only
 def account(account):
+    return render_account(account)
+
+
+def render_account(account, *, error=None):
     from app.services.neoscorpion import current_sort_operation
     operation = current_sort_operation(account.gateway)
     night = db.session.get(NeoScorpionVendorNight,(operation.id,account.user_id)) if operation else None
-    return render_template('neonodes/neoscorpion/vendor_account.html', account=account, operation=operation, night=night)
+    return render_template('neonodes/neoscorpion/vendor_account.html', account=account, operation=operation, night=night, error=error)
 
 
-def my_truck_context(account):
+def my_truck_context(account, operation):
     from app.services.neoscorpion_drivers import driver_context
-    operation = operational(account)
     context = driver_context(account.gateway,current_user)
+    require_same_operation(context['operation'], operation)
+    claims = NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,
+        user_id=account.user_id, kind='claim')
     context.update(account=account, operation=operation,
         available_trucks=NeoScorpionFuelTruck.query.filter_by(gateway_id=account.gateway_id,is_active=True,is_out_of_service=False).order_by(NeoScorpionFuelTruck.truck_number).all(),
-        driver_requests=NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,user_id=account.user_id,status='pending').all())
+        latest_claim=claims.order_by(NeoScorpionVendorRequest.id.desc()).first(),
+        pending_readings=NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,
+            user_id=account.user_id, kind='fuel', status='pending').all())
     selected = context['selected_driver_truck']
     context['selection'] = NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id,fuel_truck_id=selected.id).first() if selected else None
     context['verification_available']=bool(selected and inventory.verification_available(operation,selected.id))
@@ -104,7 +131,10 @@ def my_truck(account):
             operation = operational(account)
             if request.form.get('action') == 'disconnect':
                 operation,state=lock_nightly_asset_scope_for_mutation(operation)
+                vendors.current_operation(account.gateway, operation.id)
+                vendors.require_approved(account, operation)
                 vendors.disconnect(account.gateway,operation,current_user,user_id=current_user.id)
+                vendors.expire_user_requests(account.gateway, operation, current_user, account.user_id, 'driver_disconnected')
                 vendors.audit(account.gateway,current_user,'driver_disconnected',operation=operation,subject=current_user)
                 record_nightly_operational_change(state,operation.id)
             else:
@@ -113,25 +143,57 @@ def my_truck(account):
         except (ValueError,TypeError,IntegrityError) as exc:
             db.session.rollback(); flash(str(exc) if isinstance(exc,ValueError) else 'Request changed. Refresh.','error')
         return redirect(url_for('scorpion_vendor.my_truck'))
-    return render_template('neonodes/neoscorpion/vendor_truck.html',**my_truck_context(account))
+    operation = operational(account)
+    fingerprint = vendor_fingerprint(account, operation)
+    return render_template('neonodes/neoscorpion/vendor_truck.html', fingerprint=fingerprint,
+        **my_truck_context(account, operation))
+
+
+def require_connected_truck(account, operation):
+    connected = db.session.query(NeoScorpionTruckDriver.fuel_truck_id).join(
+        NeoScorpionSortTruck,
+        (NeoScorpionSortTruck.sort_date_operation_id == NeoScorpionTruckDriver.sort_date_operation_id)
+        & (NeoScorpionSortTruck.fuel_truck_id == NeoScorpionTruckDriver.fuel_truck_id),
+    ).filter(
+        NeoScorpionTruckDriver.sort_date_operation_id == operation.id,
+        NeoScorpionTruckDriver.driver_user_id == account.user_id,
+    ).first()
+    if not connected:
+        raise PermissionError('An approved truck connection is required to view the live operation. Open My Truck to request a truck.')
+
+
+def require_same_operation(current, expected):
+    if not current or current.id != expected.id:
+        raise PermissionError('The active sort changed or ended. Open My Account for your status.')
+
+
+def vendor_fingerprint(account, operation):
+    from app.services.neoscorpion import fuel_assignments_live_revision
+    fingerprint = fuel_assignments_live_revision(account.gateway)
+    if fingerprint['operation_id'] != operation.id:
+        raise PermissionError('The active sort changed or ended. Open My Account for your status.')
+    return fingerprint
 
 
 @bp.get('/live')
 @vendor_only
 def live(account):
-    operational(account)
+    operation = operational(account)
+    fingerprint = vendor_fingerprint(account, operation)
+    require_connected_truck(account, operation)
     from app.neonodes.neoscorpion.routes import _dispatch_presentation_context
-    return render_template('neonodes/neoscorpion/vendor_live.html',account=account,
-        **_dispatch_presentation_context(account.gateway))
+    context = _dispatch_presentation_context(account.gateway)
+    require_same_operation(context['operation'], operation)
+    return render_template('neonodes/neoscorpion/vendor_live.html', account=account, fingerprint=fingerprint, **context)
 
 
 @bp.get('/revision')
 @vendor_only
 def revision(account):
-    operational(account)
-    from app.services.neoscorpion import fuel_assignments_live_revision
-    response=jsonify(fuel_assignments_live_revision(account.gateway));response.headers['Cache-Control']='no-store'
-    return response
+    operation = operational(account)
+    if request.args.get('view') == 'live':
+        require_connected_truck(account, operation)
+    return jsonify(vendor_fingerprint(account, operation))
 
 
 @bp.post('/fuel-reading')
@@ -173,6 +235,32 @@ def manage_inventory():
     return redirect(url_for('neoscorpion.fuel_dispatch'))
 
 
+def send_invitation(gateway, actor, action):
+    from app.services.email_service import send_vendor_invitation
+
+    if action == 'invite':
+        user, token = vendors.invite(gateway, actor, request.form.get('email'), request.form.get('name'))
+    else:
+        user, token = vendors.renew_invitation(gateway, actor, request.form.get('user_id'))
+
+    delivery = send_vendor_invitation(user, token)
+    if not delivery['sent']:
+        reason = delivery.get('reason')
+        if reason == 'missing_config':
+            failure = 'Brevo mail configuration is incomplete.'
+        elif reason == 'provider_rejected':
+            failure = 'Brevo rejected the invitation email. Check Brevo transactional email settings.'
+        else:
+            failure = 'Brevo acceptance could not be confirmed.'
+        state = ('No account was created. Retry Send Invitation.' if action == 'invite'
+                 else 'The prior invitation is unchanged. Retry Resend Invitation.')
+        raise ValueError(f'{failure} {state}')
+
+    vendors.audit(gateway, actor, 'invitation_accepted_by_brevo', subject=user,
+        message_id=delivery.get('message_id'), invitation_action=action)
+    return 'Brevo accepted the invitation email. Inbox delivery is pending verification.'
+
+
 @bp.route('/manage',methods=['GET','POST'])
 @login_required
 def manage():
@@ -180,17 +268,13 @@ def manage():
     from app.services.neoscorpion import current_sort_operation
     operation=current_sort_operation(gateway)
     if request.method=='POST':
+        action = request.form.get('action')
+        message = None
         try:
-            action=request.form.get('action')
             if action not in {'invite','resend','disable','enable'}:
                 operation=vendors.current_operation(gateway,request.form.get('operation_id'))
             if action in {'invite','resend'}:
-                from app.services.email_service import send_vendor_invitation
-                user,token=(vendors.invite(gateway,current_user,request.form.get('email'),request.form.get('name')) if action=='invite'
-                    else vendors.renew_invitation(gateway,current_user,request.form.get('user_id')))
-                delivery=send_vendor_invitation(user,token)
-                if not delivery['sent']:
-                    raise ValueError('Invitation email could not be sent. Account was not created; check mail delivery.')
+                message = send_invitation(gateway, current_user, action)
             elif action in {'approved','denied','revoked'}:
                 vendors.set_participation(gateway,operation,current_user,request.form.get('user_id'),action,request.form.get('version'))
             elif action in {'claim_approve','claim_deny'}:
@@ -200,7 +284,14 @@ def manage():
                 state=None
                 if operation:
                     operation,state=lock_nightly_asset_scope_for_mutation(operation)
-                profile=NeoScorpionVendorAccount.query.filter_by(user_id=int(request.form['user_id']),gateway_id=gateway.id).with_for_update().one()
+                profile = NeoScorpionVendorAccount.query.filter_by(
+                    user_id=int(request.form.get('user_id')), gateway_id=gateway.id,
+                ).with_for_update().populate_existing().one_or_none()
+                if not profile:
+                    raise ValueError('Select a driver account at this gateway.')
+                if action == 'disable' and profile.enabled:
+                    from app.services.auth_session_security import rotate_user_session_version
+                    rotate_user_session_version(profile.user)
                 profile.enabled=action=='enable'
                 if not profile.enabled and operation:
                     vendors.disconnect(gateway,operation,current_user,user_id=profile.user_id)
@@ -222,7 +313,11 @@ def manage():
             elif action=='manual':
                 operation,state=lock_nightly_asset_scope_for_mutation(operation)
                 vendors.current_operation(gateway,operation.id)
-                truck=NeoScorpionFuelTruck.query.filter_by(id=int(request.form['truck_id']),gateway_id=gateway.id).one()
+                truck = NeoScorpionFuelTruck.query.filter_by(
+                    id=int(request.form.get('truck_id')), gateway_id=gateway.id,
+                ).one_or_none()
+                if not truck:
+                    raise ValueError('Select a truck at this gateway.')
                 name=request.form.get('name','').strip()
                 if len(name)>120:raise ValueError('Driver name must be at most 120 characters.')
                 existing=NeoScorpionTruckDriver.query.filter_by(sort_date_operation_id=operation.id,fuel_truck_id=truck.id).first()
@@ -238,18 +333,37 @@ def manage():
                 vendors.audit(gateway,current_user,'manual_driver',operation=operation,truck_id=truck.id,name=name)
                 record_nightly_operational_change(state,operation.id)
             else:raise ValueError('Unsupported driver action.')
-            if operation and action in {'invite','resend'}:
-                operation,state=lock_nightly_asset_scope_for_mutation(operation)
-                record_nightly_operational_change(state,operation.id)
-            db.session.commit()
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                if not message:
+                    raise
+                current_app.logger.warning('Vendor invitation was accepted by Brevo but its save could not be confirmed.')
+                raise ValueError('Brevo accepted the email, but the registration link could not be confirmed. Refresh the account list before retrying.') from None
         except (ValueError,TypeError,IntegrityError) as exc:
             db.session.rollback()
             message=str(exc) if isinstance(exc,ValueError) else 'Driver state changed. Refresh.'
             if request.form.get('dispatch_assets_workspace')=='1':
                 return jsonify(ok=False,error=message),400
             flash(message,'error')
+            return redirect(url_for('scorpion_vendor.manage'))
+        if message:
+            # Release account and token locks before taking the nightly lock.
+            # Account management remains committed even if this refresh fails.
+            try:
+                operation = current_sort_operation(gateway)
+                if operation:
+                    operation, state = lock_nightly_asset_scope_for_mutation(operation)
+                    record_nightly_operational_change(state, operation.id)
+                    db.session.commit()
+            except (ValueError, SQLAlchemyError):
+                db.session.rollback()
+                current_app.logger.warning('Could not publish the vendor invitation refresh.')
+                message += ' Refresh Nightly Trucks to update the account list.'
         if request.form.get('dispatch_assets_workspace')=='1':
-            return workspace_result(gateway)
+            return workspace_result(gateway, message=message)
+        if message:
+            flash(message, 'success')
         return redirect(url_for('scorpion_vendor.manage'))
     return render_template('neonodes/neoscorpion/vendor_manage.html',gateway=gateway,operation=operation,
         **driver_management_context(gateway,operation))

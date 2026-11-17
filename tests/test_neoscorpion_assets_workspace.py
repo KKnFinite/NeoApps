@@ -1,9 +1,15 @@
 """Integrated asset/driver presentation reuses existing permission and mutation contracts."""
+from datetime import datetime, timedelta
 from html.parser import HTMLParser
+from io import BytesIO
+import json
 from unittest import TestCase
 from unittest.mock import patch
+from urllib.error import HTTPError
+from urllib.parse import urlparse
 from app.extensions import db
-from app.models import NeoScorpionFuelTruck,NeoScorpionSortTruck,NeoScorpionTruckDriver,NeoScorpionVendorAccount
+from app.models import (NeoScorpionFuelTruck, NeoScorpionSortTruck, NeoScorpionTruckDriver,
+    NeoScorpionVendorAccount, NeoScorpionVendorAudit, UserToken)
 from app.services import neoscorpion_vendors as vendors
 from tests import test_neoscorpion_vendor_workflow as base
 
@@ -92,6 +98,60 @@ class AssetsWorkspaceTest(TestCase):
             response=self.post('/neoscorpion/driver/manage',action='invite',email='success@example.test',name='Invited Driver')
         self.assertEqual(response.status_code,200,response.get_data(as_text=True));self.assertTrue(response.json['ok'])
         self.assertGreater(response.json['revision'],0)
+
+    def test_brevo_rejection_expiry_and_resend_through_nightly_trucks(self):
+        self.login(self.dispatcher)
+        path = '/neoscorpion/driver/manage'
+        mail_settings = dict(SEND_EMAIL_IN_TESTS=True, BREVO_API_KEY='fixture-key',
+            MAIL_FROM_EMAIL='sender@example.test', MAIL_FROM_NAME='NeoApps', APP_BASE_URL='https://neoapps.example')
+        links = []
+
+        def brevo(request, timeout):
+            payload = json.loads(request.data)
+            self.assertEqual(request.full_url, 'https://api.brevo.com/v3/smtp/email')
+            self.assertEqual(timeout, 10)
+            self.assertEqual(payload['to'][0]['email'], 'resend@example.test')
+            self.assertEqual(payload['tags'], ['neoscorpion-vendor-invitation'])
+            url = urlparse(payload['textContent'].split()[4])
+            self.assertEqual(url.netloc, 'neoapps.example')
+            links.append(url.path)
+            return BytesIO(b'{"messageId":"fixture-accepted"}')
+
+        with patch.dict(self.fixture.app.config, mail_settings):
+            with patch('app.services.email_service.urlopen', side_effect=brevo):
+                response = self.post(path, action='invite', name='Disposable Driver', email='resend@example.test')
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertIn('Brevo accepted', response.json['message'])
+            user_id = NeoScorpionVendorAccount.query.one().user_id
+            audit = NeoScorpionVendorAudit.query.filter_by(action='invitation_accepted_by_brevo').one()
+            self.assertEqual(audit.facts['message_id'], 'fixture-accepted')
+
+            error = HTTPError('https://api.brevo.com/v3/smtp/email', 400, 'fixture', {}, BytesIO())
+            with patch('app.services.email_service.urlopen', side_effect=error):
+                response = self.post(path, action='resend', user_id=user_id)
+            self.assertEqual(response.status_code, 400)
+            self.assertIn('Brevo rejected', response.json['error'])
+            self.assertIn('prior invitation is unchanged', response.json['error'])
+            self.assertEqual(self.client.get(links[0]).status_code, 200)
+
+            with patch('app.services.email_service.urlopen', return_value=BytesIO(b'{}')):
+                response = self.post(path, action='resend', user_id=user_id)
+            self.assertEqual(response.status_code, 400)
+            self.assertIn('acceptance could not be confirmed', response.json['error'])
+            self.assertEqual(UserToken.query.filter_by(user_id=user_id).count(), 1)
+
+            original = UserToken.query.filter_by(user_id=user_id).one()
+            original.expires_at = datetime.utcnow() - timedelta(seconds=1)
+            db.session.commit()
+            response = self.client.get(links[0])
+            self.assertEqual(response.status_code, 400)
+            self.assertIn(b'expired', response.data)
+            self.assertNotIn(b'name="password"', response.data)
+            with patch('app.services.email_service.urlopen', side_effect=brevo):
+                response = self.post(path, action='resend', user_id=user_id)
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(self.client.get(links[1]).status_code, 200)
+            self.assertEqual(self.client.get(links[0]).status_code, 400)
 
     def test_vendor_and_readonly_users_cannot_gain_administration(self):
         self.prepare();person,account,_=self.vendor()

@@ -4,7 +4,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from flask import current_app
+from flask import current_app, url_for
 from app.services.bounded_http import ExternalResponseError, read_body
 
 
@@ -14,11 +14,12 @@ MAX_EMAIL_RECEIPT_BYTES = 64 * 1024
 
 
 def send_vendor_invitation(user, token):
-    link = _absolute_url(f'/neoscorpion/driver/invitation/{token}')
+    link = _absolute_url(url_for('scorpion_vendor.invitation', token=token))
     return _send_transactional_email(to_email=user.email, to_name=user.display_name,
         subject='NeoScorpion vendor driver invitation',
         html_content=f'<p>Your individual vendor invitation expires in 24 hours.</p><p><a href="{escape(link)}">Register</a></p><p>Dispatcher approval is required for each sort.</p>',
-        text_content=f'Register within 24 hours: {link}\nDispatcher approval is required for each sort.')
+        text_content=f'Register within 24 hours: {link}\nDispatcher approval is required for each sort.',
+        tag='neoscorpion-vendor-invitation')
 
 
 def send_email_verification(user, token):
@@ -87,6 +88,7 @@ def _send_transactional_email(
     subject,
     html_content,
     text_content,
+    tag=None,
 ):
     api_key = current_app.config.get("BREVO_API_KEY")
     from_name = current_app.config.get("MAIL_FROM_NAME")
@@ -109,6 +111,8 @@ def _send_transactional_email(
         "htmlContent": html_content,
         "textContent": text_content,
     }
+    if tag:
+        payload["tags"] = [tag]
     request = Request(
         _validated_brevo_email_url(),
         data=json.dumps(payload).encode("utf-8"),
@@ -124,17 +128,23 @@ def _send_transactional_email(
         with urlopen(request, timeout=10) as response:  # nosec B310
             # Brevo returns a small message receipt, never the email contents.
             response_body = read_body(response, maximum=MAX_EMAIL_RECEIPT_BYTES).decode("utf-8")
-            if not isinstance(json.loads(response_body), dict):
+            receipt = json.loads(response_body)
+            if not isinstance(receipt, dict):
                 raise ExternalResponseError('Invalid email provider receipt.')
-    except (HTTPError, URLError, OSError, ValueError, RecursionError) as error:
-        if isinstance(error, HTTPError):
-            error.close()
+            message_id = receipt.get("messageId")
+            if tag and (not isinstance(message_id, str) or not message_id.strip()):
+                raise ExternalResponseError('Missing email provider message ID.')
+    except HTTPError as error:
+        error.close()
+        current_app.logger.warning("Brevo email request returned HTTP %s.", error.code)
+        return {"sent": False, "reason": "provider_rejected" if 400 <= error.code < 500 else "send_failed"}
+    except (URLError, OSError, ValueError, RecursionError) as error:
         # A lost/invalid receipt is unverified; do not retry this POST here or
         # log provider bodies, tokens, addresses, or credential-bearing errors.
         current_app.logger.warning("Brevo email delivery receipt unavailable (%s).", type(error).__name__)
         return {"sent": False, "reason": "send_failed"}
 
-    return {"sent": True, "response": response_body}
+    return {"sent": True, "response": response_body, "message_id": message_id}
 
 
 def _validated_brevo_email_url():

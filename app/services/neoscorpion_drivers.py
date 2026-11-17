@@ -44,8 +44,10 @@ def change_driver(gateway, operation, actor, truck_id, driver_id, *, dispatcher=
     truck = NeoScorpionFuelTruck.query.join(NeoScorpionSortTruck,
         NeoScorpionSortTruck.fuel_truck_id==NeoScorpionFuelTruck.id).filter(
         NeoScorpionSortTruck.sort_date_operation_id==operation.id,
-        NeoScorpionFuelTruck.gateway_id==gateway.id, NeoScorpionFuelTruck.id==truck_id,
-        NeoScorpionFuelTruck.is_active.is_(True)).first()
+        NeoScorpionFuelTruck.gateway_id==gateway.id, NeoScorpionFuelTruck.id==truck_id)
+    if driver_id:
+        truck = truck.filter(NeoScorpionFuelTruck.is_active.is_(True))
+    truck = truck.first()
     if not truck:
         raise ValueError("Choose a truck from this sort's nightly roster.")
     if driver_id:

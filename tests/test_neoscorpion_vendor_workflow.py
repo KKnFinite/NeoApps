@@ -62,6 +62,47 @@ class VendorWorkflowTest(TestCase):
         self.assertEqual(self.client.get('/neoscorpion/driver/my-truck').status_code,403)
         self.assertEqual(self.client.get('/neoscorpion/driver/live').status_code,403)
 
+    def test_approved_truck_unlocks_missions_and_inactive_truck_can_be_disconnected(self):
+        self.prepare()
+        user, account, _ = self.vendor()
+        self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+        driver_url = '/neoscorpion/driver'
+        tail = self.mission.assigned_tail_number.encode()
+        self.assertNotIn(tail, self.client.get(f'{driver_url}/my-truck').data)
+        self.assertEqual(self.client.get(f'{driver_url}/live').status_code, 403)
+        claim = vendors.request_claim(account, self.operation, self.truck.id)
+        vendors.decide_claim(self.gateway, self.operation, self.dispatcher, claim.id, True, 0)
+        db.session.commit()
+        self.assertIn(tail, self.client.get(f'{driver_url}/my-truck').data)
+        self.assertIn(tail, self.client.get(f'{driver_url}/live').data)
+
+        self.truck.is_active = False
+        db.session.commit()
+        response = self.client.post(f'{driver_url}/my-truck', data={
+            'action': 'disconnect', 'operation_id': self.operation.id,
+        }, follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'NO APPROVED TRUCK', response.data)
+        self.assertNotIn(tail, response.data)
+        self.assertEqual(self.client.get(f'{driver_url}/live').status_code, 403)
+
+    def test_invitation_cannot_complete_via_portal_verification_and_disable_blocks_login(self):
+        user, token = vendors.invite(self.gateway, self.dispatcher, 'isolated@example.test', 'Isolated Driver')
+        db.session.commit()
+        response = self.client.get(f'/verify-email/{token}')
+        self.assertEqual(response.location, f'/neoscorpion/driver/invitation/{token}')
+        self.assertIsNone(user.email_verified_at)
+
+        password = 'VendorPassword123!'
+        response = self.client.post(response.location, data={'password': password, 'confirm_password': password})
+        self.assertEqual(response.location, '/login')
+        self.login(self.dispatcher)
+        self.client.post('/neoscorpion/driver/manage', data={'action': 'disable', 'user_id': user.id})
+        self.client.post('/logout')
+        response = self.client.post('/login', data={'email': user.email, 'password': password})
+        self.assertEqual(response.status_code, 403)
+        self.assertIn(b'account is disabled', response.data)
+
     def test_every_non_allowlisted_endpoint_is_default_denied(self):
         from flask import request
         from app import PUBLIC_ASSET_ENDPOINTS,_is_public_asset_request

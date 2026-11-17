@@ -181,6 +181,14 @@ def login():
             flash("Invalid email or password.", "error")
             return render_template("auth/login.html"), 401
 
+        vendor = user.scorpion_vendor
+        if vendor and not vendor.enabled:
+            flash("Your NeoScorpion driver account is disabled. Contact Dispatch for help.", "error")
+            return render_template("auth/login.html"), 403
+        if vendor and not user.email_verified_at:
+            flash("Register using your NeoScorpion invitation before signing in. Contact Dispatch for a new link.", "error")
+            return render_template("auth/login.html"), 403
+
         clear_login_failures(client_ip, login_identifier)
         login_user(user)
         clear_csrf_session_state()
@@ -202,6 +210,8 @@ def login():
             return redirect(url_for("auth.change_password"))
 
         establish_authenticated_session(session, user)
+        if vendor:
+            return redirect(url_for("scorpion_vendor.account"))
         return redirect(url_for("auth.portal_dashboard"))
 
     return render_template("auth/login.html")
@@ -351,6 +361,8 @@ def verify_email(token):
     token_record = get_token_record(token, EMAIL_VERIFICATION)
     if not token_record:
         return render_template("auth/verify_email.html", verified=False), 400
+    if token_record.user.scorpion_vendor:
+        return redirect(url_for("scorpion_vendor.invitation", token=token))
     if token_record.user.email_verified_at and (
         token_record.is_used or token_record.is_expired()
     ):

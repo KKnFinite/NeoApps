@@ -1873,7 +1873,7 @@
                 protectedControls().filter(control => control.form === form)
                     .forEach(control => initialControlValues.set(control, controlValue(control)));
             }
-            setStatus(status, payload.changed ? "Saved" : "No change");
+            setStatus(status, payload.message || (payload.changed ? "Saved" : "No change"));
             // The existing panel refresh preserves row/details/scroll and defers
             // while another field or the shared Fueler Data modal is in use.
             pendingFuelDataRefresh = true;
