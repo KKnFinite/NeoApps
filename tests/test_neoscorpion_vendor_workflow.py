@@ -134,6 +134,21 @@ class VendorWorkflowTest(TestCase):
         self.assertEqual(self.client.get(revision_url).status_code, 403)
         self.assertNotIn(b'ALL SORT MISSIONS', self.client.get(f'{DRIVER}/my-truck').data)
 
+    def test_conversion_rejects_a_selected_nightly_fueler(self):
+        self.prepare()
+        from app.services.neoscorpion_account_types import convert_account
+        from app.models import NeoScorpionSortFueler
+        if self.fueler.email_verified_at is None:
+            self.fueler.email_verified_at = datetime.utcnow()
+            db.session.commit()
+        self.assertTrue(NeoScorpionSortFueler.query.filter_by(
+            sort_date_operation_id=self.operation.id, user_id=self.fueler.id,
+        ).first())
+        with self.assertRaisesRegex(ValueError, "Nightly Fuelers"):
+            convert_account(self.gateway, self.dispatcher, self.fueler, "vendor")
+        db.session.rollback()
+        self.assertIsNone(db.session.get(NeoScorpionVendorAccount, self.fueler.id))
+
     def test_active_driver_conversion_revokes_live_access_without_erasing_history(self):
         self.prepare()
         driver, account = self.connect()
