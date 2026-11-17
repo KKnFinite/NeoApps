@@ -80,8 +80,9 @@
             {{ military_datetime_input("actual_block_out_datetime_utc", form.actual_block_out_datetime_utc) }}
         </label>
         <label>
-            <span>PLANNED FUEL LOAD</span>
-            <input type="number" name="planned_fuel_load" value="{{ form.planned_fuel_load }}" min="0" step="1">
+            <span>FUEL LOAD (NEOSCORPION)</span>
+            <output>{{ (mission.planned_fuel_load|string ~ ' lbs') if mission and mission.planned_fuel_load is not none else 'Not entered' }}</output>
+            <small>Read-only here. Enter or correct Fuel Load in NeoScorpion Fuel Dispatch (K-lbs, one decimal).</small>
         </label>
         <label>
             <span>FUEL STATUS</span>
