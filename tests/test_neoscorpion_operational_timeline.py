@@ -417,7 +417,8 @@ class OperationalTimelineTest(unittest.TestCase):
         jobs=load_jobs(self.gateway.id,operation_id=self.operation.id)
         self.assertEqual(len(jobs),2)
         self.assertTrue(all(job['truck_reasons'] for job in jobs))
-        self.assertEqual(totals(jobs,"truck")["jobs"],0)
+        self.assertEqual(totals(jobs,"truck")["jobs"],2)
+        self.assertEqual(totals(jobs,"truck")["prof_jobs"],0)
 
     def test_original_segment_end_early_preserves_replacement_and_posts_once(self):
         self.prepare(); self.save(self.start+timedelta(minutes=1),**self.final_data())
@@ -543,7 +544,8 @@ class OperationalTimelineTest(unittest.TestCase):
         self.assertTrue(self.selection.inventory_verified)
         jobs=load_jobs(self.gateway.id,operation_id=self.operation.id)
         self.assertEqual(len(jobs),3)
-        self.assertEqual(totals(jobs,"truck")["jobs"],0)
+        self.assertEqual(totals(jobs,"truck")["jobs"],3)
+        self.assertEqual(totals(jobs,"truck")["prof_jobs"],0)
         self.assertTrue(all(job['truck_reasons'] for job in jobs))
         self.assertEqual({j["event"].fuel_work_state_id for j in load_observation_jobs(self.gateway.id,operation_id=self.operation.id)},
                          {original_id,b_work.id,new_a.id})
