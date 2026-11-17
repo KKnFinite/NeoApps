@@ -1631,7 +1631,13 @@
         }
         const submittedValue = input.value.trim();
         const savedValue = input.dataset.savedValue || "";
-        if (submittedValue === savedValue) {
+        // Re-entering the same displayed 38.3 is an intentional correction
+        // when an older writer stored hidden precision such as 38,349 lbs.
+        const correctingLegacyPrecision = (
+            input.dataset.autosaveNoncanonical === "true"
+            && input.dataset.autosaveEdited === "true"
+        );
+        if (submittedValue === savedValue && !correctingLegacyPrecision) {
             input.dataset.autosaveFailed = "false";
             syncDirtyState();
             return true;
@@ -1645,6 +1651,7 @@
         body.set("field_name", input.dataset.autosaveField || "");
         body.set("value", submittedValue);
         body.set("expected_value", savedValue);
+        body.set("expected_lbs", input.dataset.savedLbs || "");
         try {
             const response = await fetch(autosaveUrl, {
                 method: "POST",
@@ -1661,9 +1668,13 @@
                 throw new Error(payload.error || "Save failed.");
             }
             input.dataset.savedValue = payload.display_value || "";
+            input.dataset.savedLbs = payload.saved_lbs === null || payload.saved_lbs === undefined
+                ? "" : String(payload.saved_lbs);
+            input.dataset.autosaveNoncanonical = "false";
             input.dataset.autosaveFailed = "false";
             if (input.value.trim() === submittedValue) {
                 input.value = payload.display_value || "";
+                input.dataset.autosaveEdited = "false";
             }
             adoptFingerprint(payload);
             updateNeoFuel(missionId, payload.neo_fuel);
@@ -2020,6 +2031,9 @@
     });
 
     root.addEventListener("input", (event) => {
+        if (event.target.matches?.("[data-dispatch-autosave]")) {
+            event.target.dataset.autosaveEdited = "true";
+        }
         if (isEditableControl(event.target) && !event.target.matches("[data-dispatch-autosave], [data-dispatch-check]")) {
             syncDirtyState();
         }
