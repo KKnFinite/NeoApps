@@ -589,6 +589,7 @@ def portal_management():
         selected_status=selected_status,
         can_list_all_users=user_can(USER_MANAGEMENT_VIEW_PERMISSION),
         can_edit_portal_management=user_can(PORTAL_MANAGEMENT_EDIT_PERMISSION),
+        can_assign_driver=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
     )
 
 
@@ -605,8 +606,6 @@ def update_portal_app_access(access_id):
 
     try:
         if action == "approve_driver":
-            if access.app_code != "neogateway":
-                raise ValueError("Truck Driver approval applies to NeoGateway applications.")
             _change_driver_account_type(get_current_gateway(), access.user, "vendor")
             flash("Restricted Truck Driver account approved.", "info")
         elif access.user.scorpion_vendor and action in {"approve", "approve_without_verification"}:
@@ -695,6 +694,7 @@ def pending_users():
         "auth/pending_users.html",
         gateway=gateway,
         memberships=memberships,
+        can_assign_driver=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
         approval_node_rows=_approval_node_role_rows(),
         role_choices=ROLE_CHOICES,
     )
@@ -960,6 +960,7 @@ def access_requests():
         approval_node_rows=_approval_node_role_rows(),
         role_choices=ROLE_CHOICES,
         can_edit_access_requests=user_can(ACCESS_REQUESTS_EDIT_PERMISSION),
+        can_assign_driver=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
     )
 
 
@@ -1426,7 +1427,6 @@ def _apply_user_edit_form(user, form):
     required_values = {
         "First name": first_name,
         "Last name": last_name,
-        "Employee ID": employee_id,
         "Email": email,
     }
     missing = [label for label, value in required_values.items() if not value]
