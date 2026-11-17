@@ -140,6 +140,49 @@ class ResourceProfMathTest(unittest.TestCase):
         self.assertEqual(totals(jobs,'fueler')['prof'],160)
         self.assertEqual(event_math(v3),old)
 
+    def test_completed_physical_jobs_count_when_prof_evidence_is_missing(self):
+        qualified = self.event(id=11, fuel_work_state_id=111)
+        unqualified = self.event(id=12, fuel_work_state_id=112, event_type='uplift')
+        unqualified.performance_snapshot = {
+            **unqualified.performance_snapshot,
+            'exclusions': ['Truck availability provenance incomplete'],
+        }
+        jobs = [dict(event=e, **event_math(e)) for e in (qualified, unqualified)]
+        fueler = totals(jobs, 'fueler', 2)
+        truck = totals(jobs, 'truck', 1)
+        self.assertEqual(fueler['jobs'], 2)
+        self.assertEqual(truck['jobs'], 2)
+        self.assertEqual(fueler['prof_jobs'], 1)
+        self.assertEqual(truck['prof_jobs'], 1)
+        self.assertEqual(fueler['prof'], event_math(qualified)['fueler_prof'])
+        self.assertEqual(totals(jobs, 'fueler', 999)['jobs'], 0)
+        self.assertEqual(totals(jobs, 'truck', 999)['jobs'], 0)
+
+    def test_non_fuel_or_invalid_physical_segments_never_count_as_jobs(self):
+        cases = (
+            dict(id=21, event_type='defuel'),
+            dict(id=22, event_type='fob'),
+            dict(id=23, transfer_fuel_gallons=0),
+            dict(id=24, started_at_utc=None),
+            dict(id=25, started_at_utc=at(45), ended_at_utc=at(40)),
+            dict(id=26, fueler_user_id=None),
+            dict(id=27, fuel_truck_id=None),
+        )
+        events = [self.event(**case) for case in cases]
+        interrupted = self.event(id=28)
+        interrupted.performance_snapshot = {
+            **interrupted.performance_snapshot,
+            'exclusions': ['Interrupted truck segment'],
+        }
+        untrusted = self.event(id=29)
+        untrusted.performance_snapshot = {
+            **untrusted.performance_snapshot, 'on_source': 'unknown',
+        }
+        events.extend((interrupted, untrusted))
+        jobs = [dict(event=e, **event_math(e)) for e in events]
+        self.assertEqual(totals(jobs, 'fueler')['jobs'], 0)
+        self.assertEqual(totals(jobs, 'truck')['jobs'], 0)
+
     def test_midnight_timezone_and_fractional_seconds(self):
         e=self.event(started_at_utc=datetime(2026,10,14,19,30,tzinfo=timezone(timedelta(hours=-5))),
             ended_at_utc=at(40)+timedelta(seconds=30))
