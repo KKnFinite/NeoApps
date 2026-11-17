@@ -141,7 +141,7 @@ class ResourceProfMathTest(unittest.TestCase):
         self.assertEqual(event_math(v3),old)
 
     def test_completed_physical_jobs_count_when_prof_evidence_is_missing(self):
-        qualified = self.event(id=11, fuel_work_state_id=111)
+        qualified = self.event(id=11)
         unqualified = self.event(id=12, fuel_work_state_id=112, event_type='uplift')
         unqualified.performance_snapshot = {
             **unqualified.performance_snapshot,
