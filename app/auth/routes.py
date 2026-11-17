@@ -166,10 +166,10 @@ def render_auth_screen(screen, vendor_driver, **context):
 
 
 def login_response(*, vendor_driver=False):
-    destination = "scorpion_vendor.my_truck" if vendor_driver else "auth.portal_dashboard"
     if current_user.is_authenticated and request.method == "GET":
-        if not vendor_driver or current_user.scorpion_vendor:
-            return redirect(url_for(destination))
+        destination = ("scorpion_vendor.my_truck" if current_user.scorpion_vendor
+                       else "auth.portal_dashboard")
+        return redirect(url_for(destination))
 
     if request.method == "POST":
         email = request.form.get("email", "").strip()
@@ -189,7 +189,7 @@ def login_response(*, vendor_driver=False):
             user and user.check_password(password) and user.is_active
         )
         vendor = user.scorpion_vendor if credentials_valid else None
-        if not credentials_valid or temporary_password_is_expired(user) or bool(vendor) != vendor_driver:
+        if not credentials_valid or temporary_password_is_expired(user):
             record_login_failure(client_ip, login_identifier)
             db.session.commit()
             flash("Invalid email or password.", "error")
@@ -199,7 +199,7 @@ def login_response(*, vendor_driver=False):
             flash("Your NeoScorpion driver account is disabled. Contact Dispatch for help.", "error")
             return render_auth_screen("login", vendor_driver), 403
         if vendor and not user.email_verified_at:
-            flash("Register using your NeoScorpion invitation before signing in. Contact Dispatch for a new link.", "error")
+            flash("Verify your NeoApps email before signing in.", "error")
             return render_auth_screen("login", vendor_driver), 403
 
         clear_login_failures(client_ip, login_identifier)
@@ -220,10 +220,10 @@ def login_response(*, vendor_driver=False):
                 user,
                 forced_password_change=True,
             )
-            return redirect(url_for("scorpion_vendor.change_password" if vendor_driver else "auth.change_password"))
+            return redirect(url_for("auth.change_password"))
 
         establish_authenticated_session(session, user)
-        return redirect(url_for(destination))
+        return redirect(url_for("scorpion_vendor.my_truck" if vendor else "auth.portal_dashboard"))
 
     return render_auth_screen("login", vendor_driver)
 
@@ -376,8 +376,6 @@ def verify_email(token):
     token_record = get_token_record(token, EMAIL_VERIFICATION)
     if not token_record:
         return render_template("auth/verify_email.html", verified=False), 400
-    if token_record.user.scorpion_vendor:
-        return redirect(url_for("scorpion_vendor.invitation", token=token))
     if token_record.user.email_verified_at and (
         token_record.is_used or token_record.is_expired()
     ):
@@ -428,7 +426,7 @@ def password_recovery_allowed(user, vendor_driver):
     vendor = user.scorpion_vendor
     if vendor_driver:
         return bool(vendor and vendor.enabled and user.is_active and user.email_verified_at)
-    return not vendor
+    return bool(user.is_active and (not vendor or vendor.enabled))
 
 
 def forgot_password_response(*, vendor_driver=False):
@@ -469,10 +467,6 @@ def reset_password_response(token, *, vendor_driver=False):
     try:
         token_record = (claim_password_reset_token(token) if submitting
                         else get_valid_token_record(token, PASSWORD_RESET))
-        if token_record and not vendor_driver and token_record.user.scorpion_vendor:
-            if submitting:
-                db.session.rollback()
-            return redirect(url_for("scorpion_vendor.reset_password", token=token))
         if not token_record or not password_recovery_allowed(token_record.user, vendor_driver):
             if submitting:
                 db.session.rollback()
@@ -544,7 +538,7 @@ def change_password_response(*, vendor_driver=False):
         db.session.commit()
         establish_authenticated_session(session, current_user)
         flash("Password changed.", "info")
-        return redirect(url_for("scorpion_vendor.my_truck" if vendor_driver else "auth.portal_dashboard"))
+        return redirect(url_for("scorpion_vendor.my_truck" if current_user.scorpion_vendor else "auth.portal_dashboard"))
 
     return render_auth_screen(
         "change_password", vendor_driver,
@@ -610,7 +604,14 @@ def update_portal_app_access(access_id):
     notes = request.form.get("notes", "").strip() or None
 
     try:
-        if action in {"approve", "approve_without_verification"}:
+        if action == "approve_driver":
+            if access.app_code != "neogateway":
+                raise ValueError("Truck Driver approval applies to NeoGateway applications.")
+            _change_driver_account_type(get_current_gateway(), access.user, "vendor")
+            flash("Restricted Truck Driver account approved.", "info")
+        elif access.user.scorpion_vendor and action in {"approve", "approve_without_verification"}:
+            raise ValueError("Truck Driver accounts cannot receive full NeoApps app permissions.")
+        elif action in {"approve", "approve_without_verification"}:
             _approve_portal_app_access(
                 access, role, notes,
                 bypass_email_verification=(action == "approve_without_verification"),
@@ -802,11 +803,35 @@ def resend_user_verification_email(user_id):
     return redirect(url_for("auth.user_detail", user_id=target_user.id))
 
 
+@bp.post("/admin/users/<int:user_id>/account-type")
+@bp.post("/portal/manage/users/<int:user_id>/account-type")
+@portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
+def change_user_account_type(user_id):
+    target_user = User.query.get_or_404(user_id)
+    account_type = (request.form.get("account_type") or "").strip()
+    try:
+        changed = _change_driver_account_type(get_current_gateway(), target_user, account_type)
+        db.session.commit()
+        flash(("Account converted. " + (
+            "Truck Driver access is restricted and each Sort still requires dispatcher approval."
+            if account_type == "vendor" else
+            "Full NeoApps access is now pending normal app and node role approval."
+        )) if changed else "Account is already that type.", "info")
+    except (ValueError, SQLAlchemyError) as error:
+        db.session.rollback()
+        flash(str(error) if isinstance(error, ValueError) else
+              "Account type could not be updated. Please retry.", "error")
+    return redirect(url_for("auth.user_detail", user_id=target_user.id))
+
+
 @bp.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
 @bp.route("/portal/manage/users/<int:user_id>/edit", methods=["GET", "POST"])
 @portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
 def edit_user(user_id):
     target_user = User.query.get_or_404(user_id)
+    if target_user.scorpion_vendor:
+        flash("Convert to FULL NEO ACCOUNT before editing staff roles or identity.", "error")
+        return redirect(url_for("auth.user_detail", user_id=target_user.id))
     gateway = get_current_gateway()
     membership = _current_gateway_membership_for_user(target_user, gateway)
     form = _user_edit_form_from_request(target_user)
@@ -887,7 +912,7 @@ def update_user_gateway_membership(user_id):
     try:
         if action == "approve":
             node_role_values = _approval_node_role_values_from_form()
-            _approve_membership(
+            _approve_account_request(
                 membership,
                 request.form.get("approval_notes", "").strip() or None,
                 seed_role=(
@@ -945,7 +970,7 @@ def approve_access_request(membership_id):
     membership = _membership_or_404(membership_id)
     try:
         node_role_values = _approval_node_role_values_from_form()
-        _approve_membership(
+        _approve_account_request(
             membership,
             request.form.get("approval_notes", "").strip() or None,
             seed_role=(
@@ -1204,6 +1229,8 @@ def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
 def _approve_portal_app_access(
     access, role, notes, is_active=True, bypass_email_verification=False
 ):
+    if access and access.user.scorpion_vendor:
+        raise ValueError("Convert this Truck Driver to FULL NEO ACCOUNT before granting app access.")
     if not access:
         raise ValueError("App access request was not found.")
     if role not in ROLE_CHOICES:
@@ -1279,7 +1306,6 @@ def _build_user_from_account_form(form):
     required_values = {
         "First name": first_name,
         "Last name": last_name,
-        "Employee ID": employee_id,
         "Supervisor / manager name": form["supervisor_name"].strip(),
         "Email": email,
         "Work area": form["work_area"].strip(),
@@ -1341,11 +1367,9 @@ def _raise_for_duplicate_identity(
         if not user_id or existing.id != user_id:
             raise_conflict("That email cannot be used.")
 
-    if User.query.filter(func.lower(User.employee_id) == employee_id.lower()).first():
-        existing = User.query.filter(
-            func.lower(User.employee_id) == employee_id.lower()
-        ).first()
-        if not user_id or existing.id != user_id:
+    if employee_id:
+        existing = User.query.filter(func.lower(User.employee_id) == employee_id.lower()).first()
+        if existing and (not user_id or existing.id != user_id):
             raise_conflict("That employee ID is already in use.")
 
 
@@ -2041,6 +2065,35 @@ def _restore_approved_membership_operational_state(membership):
     if app_access.role not in ROLE_CHOICES:
         app_access.role = "watcher"
     seed_gateway_node_roles(membership, app_access.role, overwrite_existing=False)
+
+
+def _change_driver_account_type(gateway, target_user, account_type):
+    if not user_can(USER_MANAGEMENT_EDIT_PERMISSION):
+        raise ValueError("User Management edit authority is required for account conversion.")
+    if target_user.id == current_user.id:
+        raise ValueError("You cannot convert your own account.")
+    if account_type == "vendor":
+        _guard_last_grandmaster_gateway_change(target_user)
+    from app.services.neoscorpion_account_types import convert_account
+    return convert_account(gateway, current_user, target_user, account_type)
+
+
+def _approve_account_request(membership, notes, seed_role="watcher",
+                             node_role_values=None, bypass_email_verification=False):
+    """One approval point for full NeoApps or restricted Truck Driver."""
+    account_type = (request.form.get("account_type") or "full").strip()
+    if account_type == "vendor":
+        if bypass_email_verification:
+            raise ValueError("Truck drivers must verify their NeoApps email before approval.")
+        _change_driver_account_type(membership.gateway, membership.user, "vendor")
+        return
+    if account_type != "full":
+        raise ValueError("Select a valid account type.")
+    if membership.user.scorpion_vendor:
+        raise ValueError("Convert this Truck Driver to FULL NEO ACCOUNT in User Management first.")
+    _approve_membership(membership, notes, seed_role=seed_role,
+                        node_role_values=node_role_values,
+                        bypass_email_verification=bypass_email_verification)
 
 
 def _approve_membership(
