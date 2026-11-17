@@ -32,10 +32,57 @@ class VendorPostgresTest(unittest.TestCase):
     baseline=submissions.SubmissionTest.baseline
     submit=submissions.SubmissionTest.submit
 
+    def test_http_account_conversion_keeps_sort_before_administrator_lock_order(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from flask import g, has_request_context, request
+        from sqlalchemy import event
+        from tests.test_account_security_phase1 import PASSWORD, fixture_user
+        administrator = fixture_user('conversion-route-admin', platform='grandmaster')
+        target = fixture_user('conversion-route-target')
+        db.session.commit()
+        actor_id, target_id, operation_id = administrator.id, target.id, self.operation.id
+        client = self.fixture.app.test_client()
+        g.pop('_login_user', None)
+        self.assertEqual(client.post('/login', data={'username':administrator.username, 'password':PASSWORD}).status_code, 302)
+        engine = db.engine
+        waiting = Event()
+
+        def before(_c, _cu, statement, *_args):
+            if (has_request_context() and request.endpoint == 'auth.change_user_account_type'
+                    and 'FROM sort_date_operations' in statement and 'FOR UPDATE' in statement):
+                waiting.set()
+
+        def current_operation(_gateway):
+            return db.session.get(SortDateOperation, operation_id)
+
+        event.listen(engine, 'before_cursor_execute', before)
+        try:
+            db.session.execute(text("SET LOCAL lock_timeout='1500ms'"))
+            SortDateOperation.query.filter_by(id=operation_id).with_for_update().one()
+            with patch.object(service, 'current_sort_operation', side_effect=current_operation):
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(client.post, f'/admin/users/{target_id}/account-type', data={'account_type':'vendor'})
+                    try:
+                        self.assertTrue(waiting.wait(5))
+                        # A real nightly nickname/asset operation takes this
+                        # User lock after the Sort. Prelocking the admin in the
+                        # HTTP decorator would deadlock this transaction.
+                        User.query.filter_by(id=actor_id).with_for_update().one()
+                        db.session.commit()
+                    finally:
+                        db.session.rollback()
+                    self.assertEqual(future.result(timeout=15).status_code, 302)
+        finally:
+            event.remove(engine, 'before_cursor_execute', before)
+        self.assertIsNotNone(db.session.get(NeoScorpionVendorAccount, target_id))
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
+
     def test_staff_approval_and_driver_conversion_serialize(self):
         from app.auth.routes import _approve_account_request
         from app.services.neoscorpion_account_types import convert_account
         user = self.fueler
+        self.dispatcher.role = 'grandmaster'
         user.email_verified_at = datetime.utcnow()
         db.session.commit()
         # This test is about identity and grant locks, outside the active-fueler

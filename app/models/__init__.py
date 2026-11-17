@@ -158,6 +158,7 @@ from app.models.sort_timeline_settings import (
     SortTimelineUsageCounter,
 )
 from app.models.user import User
+from app.models.account_security_event import AccountSecurityEvent
 from app.models.user_token import UserToken
 
 __all__ = [
@@ -165,6 +166,7 @@ __all__ = [
     "NeoScorpionVendorAccount", "NeoScorpionVendorNight", "NeoScorpionVendorRequest",
     "NeoScorpionVendorAudit", "NeoScorpionInventoryReading", "NeoScorpionTopOffEvent",
     "User",
+    "AccountSecurityEvent",
     "AuthRateLimitState",
     "UserToken",
     "FlightApiReviewItem",

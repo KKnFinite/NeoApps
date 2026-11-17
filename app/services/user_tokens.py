@@ -17,6 +17,10 @@ def create_user_token(user, token_type, expires_in_hours=None):
     if token_type not in {EMAIL_VERIFICATION, PASSWORD_RESET}:
         raise ValueError("Unsupported token type.")
 
+    # Issuance and both types of token consumption use the same account-first
+    # lock as an administrative email correction. A stale old-address lookup
+    # must not issue a replacement link after that correction commits.
+    lock_token_identity(user)
     if token_type == PASSWORD_RESET:
         revoke_unused_password_reset_tokens(user)
 
@@ -71,9 +75,15 @@ def claim_password_reset_token(raw_token):
     neither a prior form GET nor an identity-map snapshot authorizes a reset.
     The caller must commit password + revocations together, or roll back all.
     """
+    return claim_user_token(raw_token, PASSWORD_RESET)
+
+
+def claim_user_token(raw_token, token_type):
+    if token_type not in {EMAIL_VERIFICATION, PASSWORD_RESET}:
+        raise ValueError("Unsupported token type.")
     token_hash = hash_user_token(raw_token)
     user_id = db.session.query(UserToken.user_id).filter_by(
-        token_hash=token_hash, token_type=PASSWORD_RESET,
+        token_hash=token_hash, token_type=token_type,
     ).scalar()
     if user_id is None:
         return None
@@ -81,7 +91,7 @@ def claim_password_reset_token(raw_token):
     if user is None:
         return None
     token_record = UserToken.query.filter_by(
-        token_hash=token_hash, token_type=PASSWORD_RESET, user_id=user.id,
+        token_hash=token_hash, token_type=token_type, user_id=user.id,
     ).populate_existing().first()
     now = datetime.utcnow()  # Evaluate after the account lock, not request start.
     if token_record is None or token_record.is_used or token_record.is_expired(now):
@@ -117,12 +127,23 @@ def revoke_unused_password_reset_tokens(user):
 
 def revoke_unused_email_verification_tokens(user):
     """Invalidate unused verification links before issuing a replacement."""
+    db.session.query(User.id).filter(User.id == user.id).with_for_update().one()
     UserToken.query.filter(
         UserToken.user_id == user.id,
         UserToken.token_type == EMAIL_VERIFICATION,
         UserToken.used_at.is_(None),
     ).update({UserToken.used_at: datetime.utcnow()}, synchronize_session=False)
     db.session.flush()
+
+
+def lock_token_identity(user):
+    expected_email = user.email
+    fresh = User.query.filter_by(id=user.id).with_for_update().populate_existing().one()
+    if fresh.email != expected_email:
+        raise ValueError("Account identity changed. Request a new link.")
+    if not fresh.is_active or (fresh.scorpion_vendor and not fresh.scorpion_vendor.enabled):
+        raise ValueError("Account is unavailable.")
+    return fresh
 
 
 def _expiration_hours(token_type, explicit_hours=None):

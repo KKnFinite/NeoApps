@@ -1844,6 +1844,11 @@ def user_can(permission_key, user=None):
     cache_key = (user.id, normalized_key)
 
     def resolve():
+        from app.services.account_security import platform_security_permission, platform_grandmaster
+        # Database policy cannot delegate platform security to a lower role,
+        # even if a legacy or forged policy row has a permissive threshold.
+        if platform_security_permission(normalized_key) and not platform_grandmaster(user):
+            return False
         role = _role_for_permission_key(normalized_key, user)
         if role is None:
             return False

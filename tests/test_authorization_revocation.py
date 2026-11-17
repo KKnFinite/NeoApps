@@ -197,8 +197,12 @@ class AuthorizationRevocationTest(unittest.TestCase):
         access.request_app_access_for_user(self.user,'neogateway');db.session.commit()
         from app.auth.routes import _approve_portal_app_access
         from flask_login import login_user
+        administrator = User(username='revocation-platform-admin', role='grandmaster',
+                             email='revocation-admin@example.test', email_verified_at=datetime(2026, 1, 1))
+        set_user_password(administrator, 'TestPassword123!')
+        db.session.add(administrator); db.session.commit()
         with self.app.test_request_context('/_admin'):
-            login_user(self.user)
+            login_user(administrator)
             with patch('app.auth.routes.email_service.send_access_approved',return_value={'sent':False}):
                 _approve_portal_app_access(self.grant(),'master','Explicit reinstatement')
             db.session.commit()
@@ -230,9 +234,13 @@ class AuthorizationRevocationTest(unittest.TestCase):
         from app.auth.routes import _node_role_rows,_apply_node_role_form,_apply_gateway_membership_edit_form
         role=GatewayNodeRole.query.join(NeoNode).filter(NeoNode.code=='rain',GatewayNodeRole.gateway_membership_id==self.membership.id).one()
         role.role='watcher';role.is_active=False;self.grant().is_active=False;db.session.commit()
+        administrator = User(username='disabled-form-platform-admin', role='grandmaster',
+                             email='disabled-form-admin@example.test', email_verified_at=datetime(2026, 1, 1))
+        set_user_password(administrator, 'TestPassword123!')
+        db.session.add(administrator); db.session.commit()
         with self.app.test_request_context('/_admin',method='POST',data={f'node_{role.node_id}':'disabled',
                 'membership_status':'approved','membership_is_active':'1'}):
-            login_user(self.user)
+            login_user(administrator)
             row=next(row for row in _node_role_rows(self.user,self.membership) if row['node'].code=='rain')
             self.assertEqual(row['effective_role'],'disabled')
             _apply_gateway_membership_edit_form(self.user,self.gateway,self.membership)
@@ -240,13 +248,16 @@ class AuthorizationRevocationTest(unittest.TestCase):
         self.assertFalse(role.is_active);self.assertFalse(self.grant().is_active)
 
     def test_admin_role_edit_deliberately_restores_revoked_node(self):
-        self.user.role='grandmaster';db.session.commit()
         from flask_login import login_user
         from app.auth.routes import _apply_node_role_form
+        administrator = User(username='restore-node-platform-admin', role='grandmaster',
+                             email='restore-node-admin@example.test', email_verified_at=datetime(2026, 1, 1))
+        set_user_password(administrator, 'TestPassword123!')
+        db.session.add(administrator); db.session.commit()
         role=GatewayNodeRole.query.join(NeoNode).filter(NeoNode.code=='rain',GatewayNodeRole.gateway_membership_id==self.membership.id).one()
         role.role='watcher';role.is_active=False;db.session.commit()
         with self.app.test_request_context('/_admin',method='POST',data={f'node_{role.node_id}':'watcher'}):
-            login_user(self.user)
+            login_user(administrator)
             _apply_node_role_form(self.user,self.membership);db.session.commit()
         self.assertTrue(role.is_active);self.assertEqual(role.role,'watcher')
 
@@ -263,7 +274,13 @@ class AuthorizationRevocationTest(unittest.TestCase):
 
     def test_authenticated_admin_forms_show_disabled_and_require_deliberate_selection(self):
         from tests.html_contracts import document
-        self.user.role='grandmaster';db.session.commit()
+        administrator = User(username='forms-platform-admin', role='grandmaster',
+                             email='forms-admin@example.test', email_verified_at=datetime(2026, 1, 1))
+        set_user_password(administrator, 'TestPassword123!')
+        db.session.add(administrator); db.session.commit()
+        self.client.post('/logout'); g.pop('_login_user', None)
+        self.assertEqual(self.client.post('/login',data={'username':administrator.username,
+            'password':'TestPassword123!'}).status_code,302)
         role=GatewayNodeRole.query.join(NeoNode).filter(NeoNode.code=='rain',GatewayNodeRole.gateway_membership_id==self.membership.id).one()
         role.role='watcher';role.is_active=False;db.session.commit();g.pop('_login_user',None)
         for suffix in ('/edit','/roles',''):

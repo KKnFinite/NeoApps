@@ -76,34 +76,33 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     backfill_retained_attendance(current_gateway_local_datetime(gateway).date())
 
     user, created_user = _find_or_create_bootstrap_user(username, email)
-    user.username = username
-    user.email = email
-    user.first_name = user.first_name or username
-    user.last_name = user.last_name or ""
-    user.full_name = user.full_name or username
-    user.employee_id = user.employee_id or "BOOTSTRAP"
-    user.supervisor_name = user.supervisor_name or "System Bootstrap"
-    user.work_area = user.work_area or "NeoGateway"
-    user.access_reason = user.access_reason or "Initial NeoGateway Grandmaster bootstrap."
     if created_user:
+        user.username = username
+        user.email = email
+        user.first_name = username
+        user.last_name = ""
+        user.full_name = username
+        user.employee_id = "BOOTSTRAP"
+        user.supervisor_name = "System Bootstrap"
+        user.work_area = "NeoGateway"
+        user.access_reason = "Initial NeoGateway Grandmaster bootstrap."
         user.role = "grandmaster"
         user.is_active = True
-    user.email_verified_at = user.email_verified_at or datetime.utcnow()
-    user.password_reset_required = False
-    user.temporary_password_expires_at = None
-    user.password_changed_at = user.password_changed_at or datetime.utcnow()
-    user.mfa_required = False
-    user.mfa_enabled = False
-    user.mfa_secret = None
-    user.mfa_verified_at = None
-
-    password_applied = created_user or not user.password_hash
-    if password_applied:
+        user.email_verified_at = datetime.utcnow()
+        user.password_reset_required = False
+        user.mfa_required = False
+        user.mfa_enabled = False
         set_user_password(user, password)
 
+    password_applied = created_user
     db.session.flush()
 
-    membership = backfill_default_gateway_node_roles(user, role="grandmaster")
+    # Provision grants only for a newly initialized identity. Missing or
+    # revoked grants on an existing account are not a startup recovery signal.
+    membership = (backfill_default_gateway_node_roles(user, role="grandmaster")
+                  if created_user else GatewayMembership.query.filter_by(
+                      user_id=user.id, gateway_id=gateway.id,
+                  ).first())
 
     db.session.commit()
     app.logger.info("NeoStaffing Door Final repair: corrected=%s", shift_door_finals_corrected)
@@ -118,14 +117,14 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
             if prior_subzero_minimums.get(key) != role
         },
         "email": user.email,
-        "gateway_code": membership.gateway.code,
+        "gateway_code": gateway.code,
         "created_user": created_user,
         "password_applied": password_applied,
         "used_fallback_password": used_fallback,
         "node_count": NeoNode.query.filter_by(is_active=True).count(),
         "membership_count": GatewayMembership.query.filter_by(user_id=user.id).count(),
         "grandmaster_role_count": GatewayNodeRole.query.filter_by(
-            gateway_membership_id=membership.id,
+            gateway_membership_id=membership.id if membership else None,
             role="grandmaster",
             is_active=True,
         ).count(),

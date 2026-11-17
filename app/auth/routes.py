@@ -1,9 +1,10 @@
 from datetime import datetime
 from functools import wraps
+from types import SimpleNamespace
 
-from flask import Response, current_app, flash, redirect, render_template, request, session, url_for
+from flask import Response, abort, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.auth import bp
@@ -15,11 +16,13 @@ from app.services.access_control import (
     ensure_user_app_access,
     ensure_user_gateway_membership,
     get_current_gateway,
+    get_user_app_access,
     get_user_node_role,
     portal_install_rows_for_user,
     portal_app_definition,
     portal_app_definitions,
     portal_dashboard_rows_for_user,
+    prime_user_node_roles_for_request,
     request_app_access_for_user,
     request_default_gateway_access_for_user,
     seed_gateway_node_roles,
@@ -38,6 +41,12 @@ from app.services.auth_session_security import (
     forced_password_change_session_is_fresh,
     temporary_password_expiration,
     temporary_password_is_expired,
+    rotate_user_session_version,
+)
+from app.services.account_security import (
+    guard_app_role_change, guard_node_change, lock_administration, may_manage_permission,
+    node_authority, platform_grandmaster, protected_policy_threshold,
+    record_security_change,
 )
 from app.services.auth_rate_limits import (
     clear_login_failures,
@@ -60,6 +69,7 @@ from app.services.user_tokens import (
     PASSWORD_RESET,
     create_user_token,
     claim_password_reset_token,
+    claim_user_token,
     get_token_record,
     get_valid_token_record,
     mark_token_used,
@@ -133,6 +143,14 @@ def portal_permission_required(permission_key, message="Access denied."):
         @login_required
         def wrapped_view(*args, **kwargs):
             if user_can(permission_key):
+                if request.method == "POST" and not _sort_scoped_account_conversion_requested():
+                    try:
+                        actor = lock_administration()
+                        if not user_can(permission_key, user=actor):
+                            raise ValueError("Administrative authority changed.")
+                    except ValueError:
+                        db.session.rollback()
+                        abort(403)
                 return view_func(*args, **kwargs)
 
             flash(message, "error")
@@ -143,11 +161,45 @@ def portal_permission_required(permission_key, message="Access denied."):
     return decorator
 
 
+def _sort_scoped_account_conversion_requested():
+    # Conversion already locks active Sorts before account/grant rows. Do not
+    # invert that order by locking the administrator in the route decorator.
+    action = request.form.get("action", "").strip().lower()
+    account_type = request.form.get("account_type", "").strip().lower()
+    return (request.endpoint == "auth.change_user_account_type"
+            or request.endpoint == "auth.update_portal_app_access" and action == "approve_driver"
+            or request.endpoint == "auth.update_user_gateway_membership" and action == "approve" and account_type == "vendor"
+            or request.endpoint == "auth.approve_access_request" and account_type == "vendor")
+
+
 def portal_grandmaster_required(view_func):
     return portal_permission_required(
         PORTAL_MANAGEMENT_VIEW_PERMISSION,
         "Portal Management requires Grandmaster access.",
     )(view_func)
+
+
+def node_role_management_required(view_func):
+    @wraps(view_func)
+    @login_required
+    def wrapped(*args, **kwargs):
+        def permitted():
+            return platform_grandmaster(current_user) or any(
+                node_authority(current_user, node) >= ROLE_LEVELS["master"]
+                for node in NeoNode.query.filter_by(is_active=True).all()
+            )
+        if not permitted():
+            abort(403)
+        if request.method == "POST":
+            try:
+                lock_administration()
+                if not permitted():
+                    raise ValueError("Role administration authority changed.")
+            except ValueError:
+                db.session.rollback()
+                abort(403)
+        return view_func(*args, **kwargs)
+    return wrapped
 
 
 @bp.get("/csrf-token")
@@ -390,29 +442,20 @@ def create_account():
 
 @bp.route("/verify-email/<token>")
 def verify_email(token):
-    token_record = get_token_record(token, EMAIL_VERIFICATION)
+    token_record = claim_user_token(token, EMAIL_VERIFICATION)
     if not token_record:
+        # Preserve the friendly already-verified response, using fresh state
+        # after the account lock; a corrected address is unverified and fails.
+        token_record = get_token_record(token, EMAIL_VERIFICATION)
+        if (token_record and token_record.user.is_active and token_record.user.email_verified_at
+                and (not token_record.user.scorpion_vendor or token_record.user.scorpion_vendor.enabled)):
+            return render_template("auth/verify_email.html", already_verified=True, verified=True,
+                                   driver_recovery=bool(token_record.user.scorpion_vendor))
         return render_template("auth/verify_email.html", verified=False), 400
     user = token_record.user
     vendor = user.scorpion_vendor
-    if vendor and (not vendor.enabled or not user.is_active):
-        return render_template("auth/verify_email.html", verified=False), 400
-    if token_record.user.email_verified_at and (
-        token_record.is_used or token_record.is_expired()
-    ):
-        return render_template(
-            "auth/verify_email.html",
-            already_verified=True,
-            verified=True,
-            driver_recovery=bool(vendor),
-        )
-    if token_record.is_used:
-        return render_template("auth/verify_email.html", verified=False), 400
-    if token_record.is_expired():
-        return render_template("auth/verify_email.html", verified=False), 400
-
-    token_record = get_valid_token_record(token, EMAIL_VERIFICATION)
-    if not token_record:
+    if not user.is_active or (vendor and not vendor.enabled):
+        db.session.rollback()
         return render_template("auth/verify_email.html", verified=False), 400
 
     token_record.user.email_verified_at = token_record.user.email_verified_at or datetime.utcnow()
@@ -452,7 +495,12 @@ def forgot_password():
             record_password_reset_request(client_ip, email)
             if eligible:
                 kind = EMAIL_VERIFICATION if needs_verification else PASSWORD_RESET
-                raw_token, _token_record = create_user_token(user, kind)
+                try:
+                    raw_token, _token_record = create_user_token(user, kind)
+                except ValueError:
+                    # An email correction/revocation won the account lock.
+                    # Keep the recovery response generic and its rate limit.
+                    eligible = needs_verification = False
             db.session.commit()
             if needs_verification:
                 email_service.send_email_verification(user, raw_token)
@@ -716,17 +764,18 @@ def pending_users():
 @login_required
 def permission_rules():
     ensure_default_permission_rules()
-    view_permission = (
-        PERMISSION_RULES_EDIT_PERMISSION
-        if request.method == "POST"
-        else PERMISSION_RULES_VIEW_PERMISSION
-    )
-    if not user_can(view_permission):
+    def scoped_rules():
+        return [rule for rule in PermissionRule.query.order_by(PermissionRule.permission_key.asc()).all()
+                if may_manage_permission(current_user, rule.permission_key)]
+
+    rules = scoped_rules()
+    if not rules:
         flash("Node Permissions access denied.", "error")
         return redirect(url_for("auth.portal_dashboard"))
 
     if request.method == "POST":
         try:
+            lock_administration()
             _apply_permission_rule_form()
             db.session.commit()
             flash("Permission rules updated.", "info")
@@ -735,10 +784,11 @@ def permission_rules():
             db.session.rollback()
             flash(str(error), "error")
 
-    rules = PermissionRule.query.order_by(PermissionRule.permission_key.asc()).all()
+    rules = scoped_rules()
     return render_template(
         "auth/permission_rules.html",
         grouped_rules=grouped_permission_rules(rules),
+        protected_policy_threshold=protected_policy_threshold,
         role_choices=ROLE_CHOICES,
         rules=rules,
     )
@@ -789,7 +839,7 @@ def resend_user_verification_email(user_id):
         revoke_unused_email_verification_tokens(target_user)
         raw_token, _token_record = create_user_token(target_user, EMAIL_VERIFICATION)
         db.session.commit()
-    except SQLAlchemyError:
+    except (SQLAlchemyError, ValueError):
         db.session.rollback()
         current_app.logger.warning(
             "Verification resend token creation failed for user id=%s.",
@@ -879,7 +929,7 @@ def edit_user(user_id):
 
 @bp.route("/admin/users/<int:user_id>/roles", methods=["GET", "POST"])
 @bp.route("/portal/manage/users/<int:user_id>/roles", methods=["GET", "POST"])
-@portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
+@node_role_management_required
 def user_roles(user_id):
     target_user = User.query.get_or_404(user_id)
     if target_user.scorpion_vendor:
@@ -910,7 +960,8 @@ def user_roles(user_id):
         "auth/user_roles.html",
         gateway=gateway,
         membership=membership,
-        node_rows=_node_role_rows(target_user, membership),
+        node_rows=[row for row in _node_role_rows(target_user, membership)
+                   if node_authority(current_user, row["node"]) >= ROLE_LEVELS["master"]],
         target_user=target_user,
     )
 
@@ -1050,6 +1101,7 @@ def emergency_reset_user_password(user_id):
     target_user = User.query.get_or_404(user_id)
 
     if request.method == "POST":
+        target_user = User.query.filter_by(id=user_id).with_for_update().populate_existing().one()
         reason = request.form.get("reason", "").strip()
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
@@ -1076,6 +1128,9 @@ def emergency_reset_user_password(user_id):
         target_user.last_password_reset_by_user_id = current_user.id
         target_user.last_password_reset_at = datetime.utcnow()
         target_user.last_password_reset_reason = reason
+        revoke_unused_password_reset_tokens(target_user)
+        revoke_unused_email_verification_tokens(target_user)
+        record_security_change("emergency_password_reset", target_user, reason=reason)
         clear_login_identifier_failures(target_user.email, target_user.username)
         db.session.commit()
         flash("Temporary password set. User must change it on next login.", "info")
@@ -1237,6 +1292,7 @@ def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
         role = str(role_value or "watcher").strip().lower()
         if role not in ROLE_CHOICES:
             raise ValueError("Unsupported app role selected.")
+        guard_app_role_change(target_user, access, role, granting=(status == "approved" and is_active))
 
         if status == "none":
             if access:
@@ -1270,6 +1326,7 @@ def _approve_portal_app_access(
         raise ValueError("App access request was not found.")
     if role not in ROLE_CHOICES:
         raise ValueError("Unsupported app role selected.")
+    guard_app_role_change(access.user, access, role)
     if not access.user.email_verified_at and not bypass_email_verification:
         raise ValueError("Email not verified yet.")
     notes = _approval_notes_with_verification_bypass(notes, bypass_email_verification)
@@ -1476,6 +1533,10 @@ def _apply_user_edit_form(user, form):
             user.username = email
         user.email_verified_at = None
         revoke_unused_email_verification_tokens(user)
+        revoke_unused_password_reset_tokens(user)
+        rotate_user_session_version(user)
+        record_security_change("email_changed", user, previous_email=old_email, new_email=email,
+                               verification_required=True)
         clear_login_identifier_failures(old_email, email, old_username, user.username)
 
     user.first_name = first_name
@@ -1809,10 +1870,11 @@ def _node_role_rows(user, membership):
     nodes = NeoNode.query.filter_by(is_active=True).order_by(
         NeoNode.sort_order.asc(), NeoNode.name.asc(),
     ).all()
+    prime_user_node_roles_for_request(user, get_current_gateway().code, [node.code for node in nodes])
     seed_role = _neogateway_seed_role_for_membership(user, membership)
     existing_roles = {}
     if membership:
-        if _membership_is_approved_active(membership):
+        if _membership_is_approved_active(membership) and platform_grandmaster(current_user):
             seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
         existing_roles = {
             role.node_id: role for role in GatewayNodeRole.query.filter_by(
@@ -1831,7 +1893,7 @@ def _node_role_rows(user, membership):
                     "Seeded from NeoGateway approval" if seed_role != "watcher" else "Watcher fallback"
                 )
             ),
-            "role_choices": _role_choices_for_node(override, effective_role=effective_role),
+            "role_choices": _role_choices_for_node(override, effective_role=effective_role, node=node),
         })
     return rows
 
@@ -1841,7 +1903,7 @@ def _approval_node_role_rows():
         {
             "node": node,
             "effective_role": "watcher",
-            "role_choices": _role_choices_for_node(None, effective_role="watcher"),
+            "role_choices": _role_choices_for_node(None, effective_role="watcher", node=node),
         }
         for node in NeoNode.query.filter_by(is_active=True).order_by(
             NeoNode.sort_order.asc(),
@@ -1854,7 +1916,7 @@ def _neogateway_seed_role_for_membership(user, membership):
     if not _membership_is_approved_active(membership):
         return "watcher"
 
-    access = ensure_user_app_access(user, "neogateway")
+    access = get_user_app_access(user, "neogateway")
     if access and access.status == "approved" and access.is_active and access.role in ROLE_CHOICES:
         return access.role
 
@@ -1870,12 +1932,14 @@ def _apply_node_role_form(target_user, membership):
     # A role edit must work for every canonical approved membership, including
     # one approved by the explicit email-verification override.  Seed any
     # missing active NeoNodes before applying independent changes.
-    seed_gateway_node_roles(
-        membership,
-        _neogateway_seed_role_for_membership(target_user, membership),
-        overwrite_existing=False,
-    )
+    if platform_grandmaster(current_user):
+        seed_gateway_node_roles(
+            membership,
+            _neogateway_seed_role_for_membership(target_user, membership),
+            overwrite_existing=False,
+        )
     nodes = NeoNode.query.filter_by(is_active=True).all()
+    prime_user_node_roles_for_request(target_user, get_current_gateway().code, [node.code for node in nodes])
     existing_roles = {
         role.node_id: role
         for role in GatewayNodeRole.query.filter_by(
@@ -1889,20 +1953,24 @@ def _apply_node_role_form(target_user, membership):
             continue
 
         selected_role = request.form.get(field_name, "").strip().lower()
+        existing_role = existing_roles.get(node.id)
+        effective_existing = existing_role or SimpleNamespace(
+            role=_neogateway_seed_role_for_membership(target_user, membership), is_active=True,
+        )
+        guard_node_change(current_user, target_user, node, effective_existing, selected_role)
         if selected_role == "disabled":
-            existing_role = existing_roles.get(node.id)
             if existing_role and existing_role.is_active:
-                if not _current_user_can_assign_role(existing_role.role):
-                    raise ValueError("You cannot disable a role equal to or higher than your own role.")
                 if _would_remove_last_grandmaster(node, selected_role, existing_role):
                     raise ValueError("Cannot remove the last active Grandmaster MotherBrain access.")
                 existing_role.is_active = False
+                record_security_change("node_role_changed", target_user, node=node.code,
+                                       previous_role=existing_role.role, new_role="disabled")
             continue
         if selected_role not in ROLE_CHOICES:
             raise ValueError("Unsupported node role selected.")
 
         existing_role = existing_roles.get(node.id)
-        _guard_role_assignment_allowed(selected_role, existing_role)
+        _guard_role_assignment_allowed(selected_role, existing_role, node=node)
 
         if _would_remove_last_grandmaster(node, selected_role, existing_role):
             raise ValueError(
@@ -1910,6 +1978,8 @@ def _apply_node_role_form(target_user, membership):
             )
 
         if not existing_role:
+            record_security_change("node_role_changed", target_user, node=node.code,
+                                   previous_role=None, new_role=selected_role)
             db.session.add(
                 GatewayNodeRole(
                     gateway_membership_id=membership.id,
@@ -1920,6 +1990,9 @@ def _apply_node_role_form(target_user, membership):
             )
             continue
 
+        if existing_role.role != selected_role or not existing_role.is_active:
+            record_security_change("node_role_changed", target_user, node=node.code,
+                                   previous_role=existing_role.role, new_role=selected_role)
         existing_role.role = selected_role
         existing_role.is_active = True
 
@@ -1939,7 +2012,7 @@ def _approval_node_role_values_from_form():
             continue
         if selected_role not in ROLE_CHOICES:
             raise ValueError("Unsupported node role selected.")
-        _guard_role_assignment_allowed(selected_role, None)
+        _guard_role_assignment_allowed(selected_role, None, node=node)
         values[node.id] = selected_role
     return values
 
@@ -1965,21 +2038,29 @@ def _apply_permission_rule_form():
             continue
         if not permission_is_configurable(rule.permission_key):
             raise ValueError("Unsupported permission rule selected.")
+        if not may_manage_permission(current_user, rule.permission_key):
+            raise ValueError("You cannot modify permissions outside your administrative scope.")
 
         minimum_role = request.form.get(f"minimum_role_{rule.id}", "").strip().lower()
         description = request.form.get(f"description_{rule.id}", "").strip()
         if minimum_role not in ROLE_CHOICES:
             raise ValueError("Unsupported minimum role selected.")
+        if protected_policy_threshold(rule.permission_key) and minimum_role != "grandmaster":
+            raise ValueError("Security administration requires Grandmaster authority.")
 
+        if rule.minimum_role != minimum_role or rule.description != description:
+            record_security_change("permission_rule_changed", current_user,
+                                   permission=rule.permission_key, previous_role=rule.minimum_role,
+                                   new_role=minimum_role)
         rule.minimum_role = minimum_role
         rule.description = description
 
 
-def _role_choices_for_node(existing_role, effective_role=None):
+def _role_choices_for_node(existing_role, effective_role=None, node=None):
     choices = [
         role
         for role in ROLE_CHOICES
-        if _current_user_can_assign_role(role)
+        if _current_user_can_assign_role(role, node=node)
     ]
     existing_effective_role = effective_role or (existing_role.role if existing_role else "watcher")
     if existing_effective_role not in choices:
@@ -1988,33 +2069,24 @@ def _role_choices_for_node(existing_role, effective_role=None):
     return sorted(set(choices), key=lambda role: ROLE_LEVELS.get(role, 0))
 
 
-def _guard_role_assignment_allowed(selected_role, existing_role):
+def _guard_role_assignment_allowed(selected_role, existing_role, node=None):
     existing_effective_role = existing_role.role if existing_role else "watcher"
     if selected_role == existing_effective_role and (not existing_role or existing_role.is_active):
         return
 
-    if not _current_user_can_assign_role(selected_role):
+    if (existing_role and not _current_user_can_assign_role(existing_role.role, node=node)
+            or not _current_user_can_assign_role(selected_role, node=node)):
         raise ValueError("You cannot assign a role equal to or higher than your own role.")
 
 
-def _current_user_can_assign_role(role):
-    if role not in ROLE_LEVELS or not user_can(USER_MANAGEMENT_EDIT_PERMISSION):
+def _current_user_can_assign_role(role, node=None):
+    if role not in ROLE_LEVELS:
         return False
-
-    # User-management authority is a NeoApps system permission, whose
-    # canonical role is the account role.  A user's current MotherBrain node
-    # role may be lower (or temporarily unavailable) without reducing the
-    # authority already granted by that centralized permission.
-    system_role = getattr(current_user, "role", None)
-    system_level = ROLE_LEVELS.get(system_role, 0)
-    node_role = get_user_node_role(
-        current_user,
-        get_current_gateway().code,
-        "motherbrain",
-    )
-    authority_level = max(system_level, ROLE_LEVELS.get(node_role, 0))
-    requested_level = ROLE_LEVELS[role]
-    return requested_level <= authority_level if authority_level == ROLE_LEVELS["grandmaster"] else requested_level < authority_level
+    if node is not None:
+        return platform_grandmaster(current_user) or (node_authority(current_user, node) >= ROLE_LEVELS["master"]
+                and ROLE_LEVELS[role] < node_authority(current_user, node))
+    return (user_can(USER_MANAGEMENT_EDIT_PERMISSION)
+            and ROLE_LEVELS[role] < ROLE_LEVELS.get(current_user.role, 0))
 
 
 def _would_remove_last_grandmaster(node, selected_role, existing_role):
@@ -2065,6 +2137,8 @@ def _active_motherbrain_grandmaster_count():
     return (
         GatewayNodeRole.query.join(GatewayMembership)
         .join(User, GatewayMembership.user_id == User.id)
+        .outerjoin(PortalAppAccess, and_(PortalAppAccess.user_id == User.id,
+                                        PortalAppAccess.app_code == "neogateway"))
         .filter(
             GatewayMembership.gateway_id == gateway.id,
             GatewayMembership.status == "approved",
@@ -2073,6 +2147,9 @@ def _active_motherbrain_grandmaster_count():
             GatewayNodeRole.role == "grandmaster",
             GatewayNodeRole.is_active.is_(True),
             User.is_active.is_(True),
+            or_(PortalAppAccess.id.is_(None), and_(
+                PortalAppAccess.status == "approved", PortalAppAccess.is_active.is_(True))),
+            ~User.scorpion_vendor.has(),
         )
         .count()
     )
@@ -2110,9 +2187,18 @@ def _change_driver_account_type(gateway, target_user, account_type):
         raise ValueError("User Management edit authority is required for account conversion.")
     if target_user.id == current_user.id:
         raise ValueError("You cannot convert your own account.")
+    if target_user.role == "grandmaster":
+        raise ValueError("A protected platform Grandmaster cannot be converted through ordinary account controls.")
+    def authorize(locked_target):
+        lock_administration()
+        if not user_can(USER_MANAGEMENT_EDIT_PERMISSION):
+            raise ValueError("User Management authority changed.")
+        if locked_target.role == "grandmaster":
+            raise ValueError("A protected platform Grandmaster cannot be converted through ordinary account controls.")
     from app.services.neoscorpion_account_types import convert_account
     return convert_account(gateway, current_user, target_user, account_type,
-                           can_change_role=_current_user_can_assign_role)
+                           can_change_role=lambda role: platform_grandmaster(current_user) and role in ROLE_CHOICES,
+                           authorize=authorize)
 
 
 def _lock_staff_account(user):
@@ -2154,6 +2240,8 @@ def _approve_membership(
         raise ValueError("Truck Driver accounts cannot receive full NeoApps access.")
     if seed_role not in ROLE_CHOICES:
         raise ValueError("Unsupported node role selected.")
+    prior_app = PortalAppAccess.query.filter_by(user_id=membership.user_id, app_code="neogateway").first()
+    guard_app_role_change(membership.user, prior_app, seed_role)
     if not membership.user.email_verified_at and not bypass_email_verification:
         raise ValueError("Email not verified yet.")
     notes = _approval_notes_with_verification_bypass(notes, bypass_email_verification)
@@ -2192,9 +2280,8 @@ def _approve_membership(
                 node_role = node_roles.get(node_id)
                 if not node_role:
                     continue
+                guard_node_change(current_user, membership.user, node_role.node, node_role, selected_role)
                 if selected_role == "disabled":
-                    if node_role.is_active and not _current_user_can_assign_role(node_role.role):
-                        raise ValueError("You cannot disable a role equal to or higher than your own role.")
                     if _would_remove_last_grandmaster(node_role.node, selected_role, node_role):
                         raise ValueError("Cannot remove the last active Grandmaster MotherBrain access.")
                     node_role.is_active = False

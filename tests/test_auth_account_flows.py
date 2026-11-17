@@ -135,7 +135,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         db.session.expire_all()
         self.assertIsNone(target.email_verified_at)
         self.assertIsNotNone(token.used_at)
-        self.assertIsNone(reset.used_at)
+        self.assertIsNotNone(reset.used_at)
         self.assertIsNone(get_valid_token_record(raw,EMAIL_VERIFICATION))
         with patch('app.auth.routes.email_service.send_email_verification',return_value={'sent':True}) as send:
             response = self.client.post(f'/portal/manage/users/{target.id}/resend-verification')
@@ -729,14 +729,12 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIsNone(db.session.get(User, target.id).email_verified_at)
 
     def test_role_assignment_cannot_reach_an_actor_authority_level(self):
-        PermissionRule.query.filter_by(
-            permission_key="neoapps.user_management.edit",
-        ).one().minimum_role = "master"
         administrator = self._admin("bounded_role_admin", "master")
         target, membership = self._approved_user(
             "bounded_role_target",
             "bounded-role@example.com",
         )
+        backfill_default_gateway_node_roles(target, role="watcher")
         db.session.commit()
         self._login(administrator.username)
         motherbrain = NeoNode.query.filter_by(code="motherbrain").one()

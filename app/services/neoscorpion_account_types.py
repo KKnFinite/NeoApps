@@ -4,7 +4,7 @@ This changes access, never user identity or historical work. All transitions
 must occur in an administrator-authorized database transaction.
 """
 from datetime import datetime
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 
 from app.extensions import db
 from app.models import (
@@ -35,16 +35,21 @@ def _guard_last_grandmaster(user):
         raise ValueError("Cannot convert the last active NeoApps Grandmaster.")
     active = GatewayNodeRole.query.join(GatewayMembership).join(NeoNode).join(
         User, User.id == GatewayMembership.user_id,
+    ).outerjoin(PortalAppAccess, and_(PortalAppAccess.user_id == User.id,
+                               PortalAppAccess.app_code == "neogateway"),
     ).filter(NeoNode.code == "motherbrain", NeoNode.is_active.is_(True),
         GatewayNodeRole.role == "grandmaster", GatewayNodeRole.is_active.is_(True),
-        GatewayMembership.status == "approved", GatewayMembership.is_active.is_(True), User.is_active.is_(True))
+        GatewayMembership.status == "approved", GatewayMembership.is_active.is_(True), User.is_active.is_(True),
+        or_(PortalAppAccess.id.is_(None), and_(
+            PortalAppAccess.status == "approved", PortalAppAccess.is_active.is_(True))),
+        ~NeoScorpionVendorAccount.query.filter(NeoScorpionVendorAccount.user_id == User.id).exists())
     gateway_ids = active.filter(GatewayMembership.user_id == user.id).with_entities(GatewayMembership.gateway_id)
     if active.filter(GatewayMembership.gateway_id.in_(gateway_ids)).with_entities(GatewayMembership.gateway_id).group_by(
             GatewayMembership.gateway_id).having(func.count() <= 1).first():
         raise ValueError("Cannot remove the last active Grandmaster gateway access.")
 
 
-def convert_account(gateway, actor, user, account_type, *, can_change_role=None):
+def convert_account(gateway, actor, user, account_type, *, can_change_role=None, authorize=None):
     """Classify an existing identity; never issue a second login or email identity.
 
     * vendor: approve the identity for restricted driver use, revoke all app/
@@ -71,6 +76,8 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None)
     operation, state = next(((op, rev) for op, rev in locked if op.gateway_id == gateway.id), (None, None))
 
     user = lock_account_grants(user)
+    if authorize is not None:
+        authorize(user)
     if active.keys() != active_operations().keys():
         raise ValueError("The active Sort changed. Refresh the account and try again.")
     if not user.is_active:

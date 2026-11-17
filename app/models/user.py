@@ -127,7 +127,7 @@ class User(UserMixin, db.Model):
             return False
 
         if self.role == "grandmaster":
-            return target_level <= ROLE_LEVELS["grandmaster"]
+            return target_level < ROLE_LEVELS["grandmaster"]
 
         return target_level < ROLE_LEVELS["master"]
 

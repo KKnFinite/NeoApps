@@ -399,10 +399,10 @@ class DatabaseBootstrapTest(unittest.TestCase):
 
         updated = User.query.filter_by(username="Kessler").first()
         self.assertEqual(User.query.count(), 1)
-        self.assertEqual(updated.email, "bootstrap@example.com")
+        self.assertEqual(updated.email, "old@example.com")
         self.assertEqual(updated.role, "watcher")
         self.assertFalse(updated.is_active)
-        self.assertTrue(updated.email_verified_at)
+        self.assertIsNone(updated.email_verified_at)
         self.assertTrue(updated.check_password("OldPassword123!"))
         self.assertFalse(updated.check_password("NewHarborSignal123!"))
         self.assertFalse(user_can_access_node(updated, "RFD", "motherbrain", "grandmaster"))
