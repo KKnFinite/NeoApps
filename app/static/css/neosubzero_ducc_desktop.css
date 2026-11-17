@@ -674,14 +674,14 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
 }
 .ucc-tv-plane-icon.facing-right { transform:rotate(90deg); }
 .ucc-tv-plane-icon.facing-left { transform:rotate(-90deg); }
-.ucc-tv-plane:is(.state-planned,.state-pretreat-planned,.state-deice-planned) { --tv-plane-color:var(--subzero-planned); }
-.ucc-tv-plane:is(.state-configured,.state-pretreat-configured,.state-pretreat-in-progress) { --tv-plane-color:var(--subzero-configured); }
-.ucc-tv-plane.state-deicing { --tv-plane-color:var(--subzero-deicing); }
-.ucc-tv-plane:is(.state-fin,.state-finished,.state-pretreated) { --tv-plane-color:var(--subzero-fin); }
-.ucc-tv-plane.state-review { --tv-plane-color:var(--subzero-planned-border); }
-.ucc-tv-plane.state-radio-pending { --tv-plane-color:var(--subzero-radio-pending); }
-.ucc-tv-plane.state-negative { --tv-plane-color:var(--subzero-negative); }
-.ucc-tv-plane:is(.state-gone,.state-cleared) { --tv-plane-color:var(--subzero-gone); }
+:is(.ucc-tv-plane,.ucc-tv-compact):is(.state-planned,.state-pretreat-planned,.state-deice-planned) { --tv-plane-color:var(--subzero-planned); }
+:is(.ucc-tv-plane,.ucc-tv-compact):is(.state-configured,.state-pretreat-configured,.state-pretreat-in-progress) { --tv-plane-color:var(--subzero-configured); }
+:is(.ucc-tv-plane,.ucc-tv-compact).state-deicing { --tv-plane-color:var(--subzero-deicing); }
+:is(.ucc-tv-plane,.ucc-tv-compact):is(.state-fin,.state-finished,.state-pretreated) { --tv-plane-color:var(--subzero-fin); }
+:is(.ucc-tv-plane,.ucc-tv-compact).state-review { --tv-plane-color:var(--subzero-planned-border); }
+:is(.ucc-tv-plane,.ucc-tv-compact).state-radio-pending { --tv-plane-color:var(--subzero-radio-pending); }
+:is(.ucc-tv-plane,.ucc-tv-compact).state-negative { --tv-plane-color:var(--subzero-negative); }
+:is(.ucc-tv-plane,.ucc-tv-compact):is(.state-gone,.state-cleared) { --tv-plane-color:var(--subzero-gone); }
 
 .blueprint-neosubzero :is(.ucc-plane,.ucc-tv-plane) > .ucc-plane-pretreat {
     color:#b9d9ef; font-size:.64em; font-weight:750; line-height:1.08; text-align:center;
@@ -726,4 +726,74 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-mobile-projection :is(.ucc-mobile-remote-stands,.ucc-mobile-remote-crews) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }
     .ucc-mobile-projection .ucc-mobile-remote-crews:empty { display:none; }
     .ucc-mobile-projection .ucc-mobile-remote-crews .ucc-tv-crew { grid-row:auto; text-align:left; }
+}
+
+@media (min-width:901px) {
+    .ucc-tv-wallboard .ucc-tv-header { position:relative; }
+    .ucc-tv-view-selector {
+        position:absolute; inset-inline-start:50%; transform:translateX(-50%);
+        display:flex; gap:2px; white-space:nowrap; font-size:.74em; contain:paint;
+    }
+    .ucc-tv-view-selector button {
+        background:transparent; border:1px solid var(--tv-edge); border-radius:.4em;
+        padding:.22em .65em; color:var(--tv-muted); font:inherit; cursor:pointer; appearance:none;
+    }
+    .ucc-tv-view-selector button[aria-pressed="true"] { border-color:var(--tv-accent); color:var(--tv-accent); font-weight:750; }
+    .ucc-tv-view-selector button:focus-visible { outline:1px solid var(--tv-accent); outline-offset:-2px; }
+    .ucc-tv-wallboard[data-ucc-tv-view="ramp"] .ucc-tv-crew-only { display:none; }
+    .ucc-tv-lower { display:contents; }
+
+    /* The original five columns, four quadrants and twelve stand cells share the TV renderer. */
+    .ucc-tv-wallboard[data-ucc-tv-view="crew"] { --ucc-crew-row:7.3em; }
+    .ucc-tv-wallboard[data-ucc-tv-view="crew"] .ucc-tv-ramps { overflow-y:auto; }
+    .ucc-tv-wallboard[data-ucc-tv-view="crew"] .ucc-tv-ramp { grid-template-rows:auto minmax(min-content,1.1fr) minmax(min-content,1fr); }
+    @supports (grid-template-rows:subgrid) {
+        .ucc-tv-wallboard[data-ucc-tv-view="crew"] .ucc-tv-ramps { grid-template-rows:auto minmax(min-content,1.1fr) minmax(min-content,1fr); }
+        .ucc-tv-wallboard[data-ucc-tv-view="crew"] .ucc-tv-ramp { grid-template-rows:subgrid; }
+    }
+    [data-ucc-tv-view="crew"] .ucc-tv-staging { grid-template-columns:minmax(0,1fr) minmax(0,30%) minmax(0,1fr); }
+    [data-ucc-tv-view="crew"] .ucc-tv-crew-column { grid-template-rows:repeat(2,minmax(var(--ucc-crew-row),auto)); }
+    @supports (grid-template-rows:subgrid) {
+        [data-ucc-tv-view="crew"] .ucc-tv-staging { grid-template-rows:repeat(2,minmax(var(--ucc-crew-row),auto)); }
+        [data-ucc-tv-view="crew"] .ucc-tv-staging .ucc-tv-crew-column { grid-template-rows:subgrid; }
+    }
+    [data-ucc-tv-view="crew"] .ucc-tv-crew-column .ucc-tv-crew { font-size:1.13em; align-content:center; }
+    [data-ucc-tv-view="crew"] .ucc-tv-crew-column :is([data-ucc-tv-crew-field="driver"],[data-ucc-tv-crew-field="flyer"]) { font-size:.96em; }
+    [data-ucc-tv-view="crew"] .ucc-tv-crew-column .ucc-tv-crew > :is(strong,span) {
+        overflow:visible; white-space:normal; overflow-wrap:anywhere;
+    }
+    [data-ucc-tv-view="crew"] .ucc-tv-crew [data-ucc-tv-crew-field="truck"] { font-size:1.16em; }
+    .ucc-tv-crew-position, .ucc-tv-pad-status { font-size:.74em; font-weight:750; }
+    [data-ucc-tv-view="crew"] .ucc-tv-pad .ucc-tv-plane { font-size:1.16em; gap:.23em; }
+    [data-ucc-tv-view="crew"] .ucc-tv-pad .ucc-tv-plane-icon {
+        width:min(4em,100%); height:4em;
+    }
+    [data-ucc-tv-view="crew"] .ucc-tv-pad .ucc-tv-plane-route { white-space:normal; overflow-wrap:anywhere; }
+    [data-ucc-tv-view="crew"] .ucc-tv-pad-idle { font-size:1.27em; }
+    [data-ucc-tv-view="crew"] .ucc-tv-stands { grid-template-rows:repeat(4,minmax(min-content,1fr)); row-gap:.15em; }
+    [data-ucc-tv-view="crew"] .ucc-tv-stands > .ucc-tv-stand { padding-top:0; }
+    [data-ucc-tv-view="crew"] .ucc-tv-stands .ucc-tv-plane { display:none; }
+    [data-ucc-tv-view="crew"] .ucc-tv-compact {
+        display:flex; flex-wrap:wrap; justify-content:center; align-content:center; align-items:baseline; column-gap:.24em;
+        box-sizing:border-box; min-height:2.4em;
+        padding:.16em .14em; border-radius:.26em; text-align:center;
+        background:var(--tv-plane-color,var(--tv-plane-surface,#0e2133));
+        color:var(--tv-compact-ink,inherit); font-size:.74em; line-height:1.13;
+    }
+    .ucc-tv-compact:is(.state-planned,.state-pretreat-planned,.state-deice-planned,.state-configured,
+        .state-pretreat-configured,.state-pretreat-in-progress,.state-deicing,.state-fin,.state-finished,
+        .state-pretreated,.state-radio-pending,.state-negative,.state-gone,.state-cleared) { --tv-compact-ink:#fff; }
+    .ucc-tv-compact.state-review,
+    [data-ucc-tv-theme="dark"] .ucc-tv-compact:is(.state-planned,.state-pretreat-planned,.state-deice-planned,
+        .state-configured,.state-pretreat-configured,.state-pretreat-in-progress,.state-deicing,.state-radio-pending) {
+        --tv-compact-ink:#000;
+    }
+    .ucc-tv-compact > * { overflow-wrap:anywhere; }
+    [data-ucc-tv-view="crew"] .ucc-tv-lower { display:grid; grid-template-rows:minmax(min-content,1fr) auto; }
+    .ucc-tv-warnings { color:var(--tv-accent); font-size:.72em; overflow-wrap:anywhere; }
+    .ucc-tv-warnings .ucc-queue-exception { margin:.3em 0 0; }
+}
+@media (901px <= width <= 1450px) {
+    .ucc-tv-wallboard[data-ucc-tv-view="crew"] { --ucc-crew-row:6.5em; }
+    [data-ucc-tv-view="crew"] .ucc-tv-crew-column .ucc-tv-crew { font-size:1em; }
 }

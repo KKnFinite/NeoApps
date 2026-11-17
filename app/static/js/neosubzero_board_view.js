@@ -14,12 +14,13 @@
     let tvSource = root;
     const refreshStatus = root.querySelector("[data-ucc-tv-refresh-status]");
     const themeKey = "neoapps.neosubzero.ucc.tv-theme";
-    let tvTheme = "dark";
-    try {
-        if (window.localStorage.getItem(themeKey) === "light") tvTheme = "light";
-    } catch (_error) {
-        // Keep the current page's preference if browser storage is blocked.
+    const viewKey = "neoapps.neosubzero.ucc.tv-view";
+    function localPreference(key, alternate, fallback) {
+        try { return window.localStorage.getItem(key) === alternate ? alternate : fallback; }
+        catch (_error) { return fallback; }
     }
+    let tvTheme = localPreference(themeKey, "light", "dark");
+    let tvView = localPreference(viewKey, "crew", "ramp");
 
     const content = (parent, selector) => parent?.querySelector(selector)?.textContent.trim() || "";
     function element(tag, className, ...children) {
@@ -31,10 +32,12 @@
     const label = (value) => element("span", "ucc-tv-position", value);
     const heading = (value) => element("h2", "", value);
 
-    function aircraft(source, inThroat = false) {
+    const aircraftState = source => Array.from(source.classList).find(value => value.startsWith("state-")) || "";
+
+    function aircraft(source, inThroat = false, tvPad = false) {
         const iconSource = source.querySelector(".ucc-plane-icon");
         const direction = ["right", "left"].find(value => iconSource?.classList.contains(`facing-${value}`)) || "up";
-        const state = Array.from(source.classList).find(value => value.startsWith("state-")) || "";
+        const state = aircraftState(source);
         const icon = element("span", `ucc-tv-plane-icon facing-${direction}`);
         icon.setAttribute("aria-hidden", "true");
         const route = [content(source, ".ucc-plane-flight"), source.dataset.uccTvDestination].filter(Boolean).join(" · ");
@@ -45,19 +48,35 @@
             icon,
             element("span", "ucc-tv-plane-route", route || "—"),
             !inThroat && etd !== undefined ? element("span", "ucc-tv-plane-etd", `ETD ${etd || "—"}`) : null,
-            pretreat?.cloneNode(true));
+            pretreat?.cloneNode(true),
+            tvPad ? element("span", "ucc-tv-plane-etd ucc-tv-crew-only", `ETD ${crewEtd(source) || "—"}`) : null,
+            tvPad ? element("span", "ucc-tv-pad-status ucc-tv-crew-only", source.dataset.uccTvStatus) : null);
         card.setAttribute("aria-label", source.getAttribute("aria-label") || "");
         card.dataset.uccProjectedAircraft = source.dataset.uccAircraft;
         return card;
     }
 
-    function aircraftAt(source, position, inThroat = false) {
-        return element("div", "ucc-tv-stand",
-            position ? label(position) : null,
-            ...Array.from(source?.querySelectorAll(".ucc-plane") || [], plane => aircraft(plane, inThroat)));
+    const crewEtd = source => source.dataset.uccTvEtd ?? source.dataset.uccTvCrewEtd;
+
+    function compactAircraft(source) {
+        const card = element("div", `ucc-tv-compact ucc-tv-crew-only ${aircraftState(source)}`,
+            element("strong", "", content(source, "strong")),
+            element("span", "", source.dataset.uccTvDestination || "—"),
+            element("time", "", crewEtd(source) || "—"));
+        card.setAttribute("aria-label", source.getAttribute("aria-label") || "");
+        card.setAttribute("role", "group");
+        card.dataset.uccProjectedAircraft = source.dataset.uccAircraft;
+        return card;
     }
 
-    function crew(ramp, position) {
+    function aircraftAt(source, position, inThroat = false, tv = false) {
+        const planes = Array.from(source?.querySelectorAll(".ucc-plane") || []);
+        return element("div", "ucc-tv-stand",
+            position ? label(position) : null,
+            ...planes.flatMap(plane => tv ? [aircraft(plane, inThroat), compactAircraft(plane)] : [aircraft(plane, inThroat)]));
+    }
+
+    function crew(ramp, position, showPosition = false) {
         const summary = ramp?.querySelector(`.ucc-team.position-${position} .ucc-team-readonly`);
         const assigned = Array.from(summary?.querySelectorAll("[data-ucc-tv-crew-field]") || []);
         if (!assigned.length) return null;
@@ -82,15 +101,18 @@
             return line;
         }));
         team.dataset.uccTvPosition = position;
+        if (showPosition && !assigned.some(field => field.dataset.uccTvCrewField === "truck")) {
+            team.prepend(element("strong", "ucc-tv-crew-only ucc-tv-crew-position", `Position ${position}`));
+        }
         return team;
     }
 
-    function rampView(name, source) {
+    function rampView(name, source, tv = false) {
         const pad = source?.querySelector("[data-ucc-deice-pad]");
         const padAircraft = pad?.querySelector(".ucc-plane");
         const padReview = content(pad, "[data-ucc-pad-review]");
         const padView = element("div", "ucc-tv-pad", padAircraft
-            ? aircraft(padAircraft, true)
+            ? aircraft(padAircraft, true, tv)
             : element("div", "ucc-tv-pad-idle", label(padReview || "DEICE PAD"),
                 padReview ? null : element("span", "ucc-tv-plane-icon")));
         const stands = element("div", "ucc-tv-stands");
@@ -100,15 +122,24 @@
                 ? content(queue, ":scope > b") : "";
             const parking = (column) => {
                 const stand = source?.querySelector(`.ucc-grid-row-${row}.ucc-grid-column-${column}[data-ucc-parking]`);
-                return aircraftAt(stand, stand?.dataset.uccParking);
+                return aircraftAt(stand, stand?.dataset.uccParking, false, tv);
             };
-            stands.append(parking(1), aircraftAt(queue, queueLabel, true), parking(3));
+            stands.append(parking(1), aircraftAt(queue, queueLabel, true, tv), parking(3));
         }
+        const warnings = tv ? rampWarnings(source) : [];
         return element("section", "ucc-tv-ramp", heading(name),
             element("div", "ucc-tv-staging",
-                element("div", "ucc-tv-crew-column", crew(source, 1), crew(source, 2)),
-                padView, element("div", "ucc-tv-crew-column", crew(source, 4), crew(source, 3))),
-            stands);
+                element("div", "ucc-tv-crew-column", crew(source, 1, tv), crew(source, 2, tv)),
+                padView, element("div", "ucc-tv-crew-column", crew(source, 4, tv), crew(source, 3, tv))),
+            warnings.length ? element("div", "ucc-tv-lower", stands,
+                element("div", "ucc-tv-warnings ucc-tv-crew-only", ...warnings)) : stands);
+    }
+
+    function rampWarnings(source) {
+        const warnings = [...(source?.querySelectorAll('.ucc-queue-exception') || [])]
+            .map(warning => warning.cloneNode(true));
+        for (const warning of warnings) warning.querySelectorAll('.ucc-plane').forEach(plane => plane.replaceWith(aircraft(plane)));
+        return warnings;
     }
 
     function renderMobileRamp() {
@@ -128,9 +159,7 @@
                 element('div', 'ucc-mobile-remote-crews', ...assignments),
                 element('div', 'ucc-mobile-remote-stands', ...stands));
         } else projection = rampView(name, source);
-        const warnings = [...(source?.querySelectorAll('.ucc-queue-exception') || [])]
-            .map(warning => warning.cloneNode(true));
-        for (const warning of warnings) warning.querySelectorAll('.ucc-plane').forEach(plane => plane.replaceWith(aircraft(plane)));
+        const warnings = rampWarnings(source);
         for (const plane of projection.querySelectorAll('[data-ucc-projected-aircraft]')) {
             plane.tabIndex = 0;
             plane.setAttribute('role', 'button');
@@ -213,10 +242,30 @@
             element("span", "ucc-tv-theme-dark", "Dark"));
         theme.type = "button";
         theme.setAttribute("aria-label", "Light appearance");
+        const selector = element("div", "ucc-tv-view-selector");
+        selector.setAttribute("role", "group");
+        selector.setAttribute("aria-label", "DUCC TV view");
+        for (const view of ["ramp", "crew"]) {
+            const button = element("button", "", `${view.toUpperCase()} VIEW`);
+            button.type = "button";
+            button.dataset.uccTvSelectView = view;
+            button.addEventListener("click", () => {
+                tvView = view;
+                applyView();
+                try { window.localStorage.setItem(viewKey, tvView); } catch (_error) { /* page preference remains */ }
+            });
+            selector.append(button);
+        }
+        const applyView = () => {
+            next.dataset.uccTvView = tvView;
+            for (const button of selector.children) {
+                button.setAttribute("aria-pressed", String(button.dataset.uccTvSelectView === tvView));
+            }
+        };
         const next = element("section", "ucc-tv-wallboard",
-            element("header", "ucc-tv-header", refreshStatus, element("h1", "", "RFD DUCC · TV MODE"), theme, exit),
+            element("header", "ucc-tv-header", refreshStatus, element("h1", "", "RFD DUCC · TV MODE"), theme, exit, selector),
             weatherView(), element("div", "ucc-tv-ramps",
-                ...["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map(name => rampView(name, find(name)))),
+                ...["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map(name => rampView(name, find(name), true))),
             footer);
         const applyTheme = () => {
             next.dataset.uccTvTheme = tvTheme;
@@ -228,11 +277,17 @@
             try { window.localStorage.setItem(themeKey, tvTheme); } catch (_error) { /* page preference remains */ }
         });
         applyTheme();
-        const restoreThemeFocus = wallboard?.querySelector(".ucc-tv-theme") === document.activeElement;
+        applyView();
+        const focus = document.activeElement;
+        const scrollTop = wallboard?.querySelector(".ucc-tv-ramps").scrollTop || 0;
+        const nextFocus = wallboard?.contains(focus) && (focus.matches(".ucc-tv-theme") ? theme
+            : focus.matches(".ucc-tv-exit") ? exit
+            : Array.from(selector.children).find(button => button.dataset.uccTvSelectView === focus.dataset.uccTvSelectView));
         if (wallboard) wallboard.replaceWith(next);
         else root.after(next);
         wallboard = next;
-        if (restoreThemeFocus) theme.focus({preventScroll:true});
+        if (scrollTop) next.querySelector(".ucc-tv-ramps").scrollTop = scrollTop;
+        if (nextFocus) nextFocus.focus({preventScroll:true});
     }
 
     function alignRamps() {

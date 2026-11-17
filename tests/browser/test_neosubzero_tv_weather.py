@@ -183,7 +183,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             expect(page.locator('[data-subzero-ucc]')).to_be_hidden()
             expect(board.locator('.ucc-tv-ramp > h2')).to_have_text(['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'])
             expect(board.locator('.ucc-tv-hours article')).to_have_count(12)
-            expect(board.locator('.ucc-tv-header > :visible')).to_have_text(['RFD DUCC · TV MODE', 'Light / Dark', 'Exit TV Mode'])
+            expect(board.locator('.ucc-tv-header > :visible:not(.ucc-tv-view-selector)')).to_have_text(['RFD DUCC · TV MODE', 'Light / Dark', 'Exit TV Mode'])
             expect(board.locator('.ucc-tv-remote .ucc-tv-plane-icon')).to_have_class('ucc-tv-plane-icon facing-up')
             expect(board.locator('.ucc-tv-early [data-ucc-attendance="unavailable"]')).to_have_text('D · C. De la Cruz')
             expect(board.locator('.ucc-tv-pad .state-deicing .ucc-tv-plane-icon')).to_have_class('ucc-tv-plane-icon facing-up')
