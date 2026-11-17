@@ -14,6 +14,8 @@ from app.models import (
     AuthRateLimitState,
     GatewayMembership,
     GatewayNodeRole,
+    NeoScorpionVendorAccount,
+    NeoScorpionVendorAudit,
     NeoNode,
     PermissionRule,
     PortalAppAccess,
@@ -2187,6 +2189,122 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(app_access.role, "master")
         self.assertEqual(len(seeded_roles), len(DEFAULT_NEONODES))
         self.assertEqual({role.role for role in seeded_roles}, {"master"})
+
+    def test_pending_standard_neo_registration_can_be_approved_as_truck_driver(self):
+        admin = self._admin("vendor_approval_admin", "grandmaster")
+        driver, membership = self._pending_user("pending_vendor", "pending-vendor@example.com", True)
+        db.session.add(PortalAppAccess(
+            user_id=driver.id, app_code="neogateway", status="pending",
+            role="watcher", is_active=True,
+        ))
+        db.session.commit()
+        self._login(admin.username)
+        page = self.client.get("/portal/manage/access-requests")
+        self.assertIn(b'value="vendor"', page.data)
+        approved = self.client.post(
+            f"/portal/manage/access-requests/{membership.id}/approve",
+            data={"account_type": "vendor"},
+        )
+        self.assertEqual(approved.status_code, 302)
+        db.session.expire_all()
+        profile = db.session.get(NeoScorpionVendorAccount, driver.id)
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.gateway_id, membership.gateway_id)
+        self.assertEqual(membership.status, "approved")
+        self.assertEqual(driver.role, "watcher")
+        grant = PortalAppAccess.query.filter_by(user_id=driver.id, app_code="neogateway").one()
+        self.assertEqual((grant.status, grant.is_active), ("denied", False))
+        self.assertTrue(NeoScorpionVendorAudit.query.filter_by(
+            subject_user_id=driver.id, action="account_converted_vendor").first())
+
+        self.client.post("/logout")
+        g.pop("_login_user", None)
+        logged = self._login(driver.email)
+        self.assertEqual(logged.status_code, 302)
+        self.assertEqual(logged.location, "/neoscorpion/driver/my-truck")
+        self.assertEqual(self.client.get("/neoscorpion/driver/my-truck").status_code, 200)
+        for path in ("/portal", "/motherbrain", "/portal/manage"):
+            self.assertEqual(self.client.get(path).status_code, 403)
+        self.assertEqual(self.client.get("/neoscorpion/driver/login").location, "/login")
+
+    def test_conversion_roundtrip_never_restores_old_staff_grants_implicitly(self):
+        admin = self._admin("conversion_admin", "grandmaster")
+        person, membership = self._approved_user("former_staff", "former-staff@example.com")
+        grant = PortalAppAccess(
+            user_id=person.id, app_code="neogateway", status="approved",
+            role="operator", is_active=True,
+        )
+        db.session.add(grant)
+        db.session.flush()
+        from app.services.access_control import seed_gateway_node_roles
+        seed_gateway_node_roles(membership, role="operator")
+        db.session.commit()
+        same_id = person.id
+        self._login(admin.username)
+
+        converted = self.client.post(
+            f"/portal/manage/users/{same_id}/account-type",
+            data={"account_type": "vendor"},
+        )
+        self.assertEqual(converted.status_code, 302)
+        db.session.expire_all()
+        self.assertIsNotNone(db.session.get(NeoScorpionVendorAccount, same_id))
+        self.assertFalse(grant.is_active)
+        self.assertTrue(all(not role.is_active for role in GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id).all()))
+
+        restored = self.client.post(
+            f"/portal/manage/users/{same_id}/account-type",
+            data={"account_type": "full"},
+        )
+        self.assertEqual(restored.status_code, 302)
+        db.session.expire_all()
+        self.assertEqual(person.id, same_id)
+        self.assertIsNone(db.session.get(NeoScorpionVendorAccount, same_id))
+        self.assertEqual(membership.status, "pending")
+        self.assertEqual((grant.status, grant.is_active), ("pending", True))
+        self.assertFalse(any(role.is_active for role in GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id).all()))
+
+        self.assertEqual(self.client.post(
+            f"/portal/manage/access-requests/{membership.id}/approve",
+            data={"account_type": "full", "role": "watcher"},
+        ).status_code, 302)
+        self.assertEqual(membership.status, "approved")
+        self.assertIsNone(db.session.get(NeoScorpionVendorAccount, same_id))
+        self.assertTrue(NeoScorpionVendorAudit.query.filter_by(
+            subject_user_id=same_id, action="account_converted_full").first())
+
+    def test_driver_approval_requires_real_email_verification_and_cannot_convert_self(self):
+        admin = self._admin("protect_admin", "grandmaster")
+        driver, membership = self._pending_user("unverified_driver", "unverified-driver@example.com", False)
+        db.session.commit()
+        self._login(admin.username)
+        denied = self.client.post(
+            f"/portal/manage/access-requests/{membership.id}/approve",
+            data={"account_type": "vendor", "bypass_email_verification": "1"},
+        )
+        self.assertEqual(denied.status_code, 302)
+        self.assertIsNone(db.session.get(NeoScorpionVendorAccount, driver.id))
+        self.assertEqual(membership.status, "pending")
+        self.assertEqual(self.client.post(
+            f"/portal/manage/users/{admin.id}/account-type",
+            data={"account_type": "vendor"},
+        ).status_code, 302)
+        self.assertIsNone(db.session.get(NeoScorpionVendorAccount, admin.id))
+
+    def test_regular_registration_accepts_vendor_without_employee_id(self):
+        data = self._account_form(
+            email="contractor@example.com", employee_id="",
+            work_area="Contractor Truck Driver", access_reason="Fuel truck driving",
+        )
+        data["app_codes"] = "neogateway"
+        with patch("app.auth.routes.email_service.send_email_verification", return_value={"sent": True}):
+            registered = self.client.post("/create-account", data=data)
+        self.assertEqual(registered.status_code, 200)
+        user = User.query.filter_by(email="contractor@example.com").one()
+        self.assertIsNone(user.employee_id if user.employee_id is None else user.employee_id or None)
+        self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).one().status, "pending")
 
     def _account_form(self, **overrides):
         values = {
