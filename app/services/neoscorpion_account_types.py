@@ -10,7 +10,7 @@ from app.models import (
     User, GatewayMembership, GatewayNodeRole, PortalAppAccess,
     NeoScorpionVendorAccount, NeoScorpionVendorNight,
 )
-from app.services.access_control import ensure_user_gateway_membership
+from app.services.access_control import ensure_user_gateway_membership, ensure_user_app_access
 from app.services.auth_session_security import rotate_user_session_version
 from app.services import neoscorpion_vendors as vendors
 
@@ -54,6 +54,10 @@ def convert_account(gateway, actor, user, account_type):
 
     now = datetime.utcnow()
     apps = PortalAppAccess.query.filter_by(user_id=user.id).with_for_update().all()
+    if not any(grant.app_code == "neogateway" for grant in apps):
+        # Otherwise a legacy approved gateway membership could silently
+        # auto-seed an approved NeoGateway grant on a later access check.
+        apps.append(ensure_user_app_access(user, "neogateway"))
     nodes = GatewayNodeRole.query.filter_by(
         gateway_membership_id=membership.id
     ).with_for_update().all()
