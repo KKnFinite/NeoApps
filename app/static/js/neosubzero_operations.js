@@ -9,6 +9,7 @@
     const primaryRamps = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'];
     let selected = new URL(location.href).searchParams.get('mission');
     const isPretreat = root.dataset.mode === 'pretreat';
+    const needsReload = message => /changed|conflict|stale|session|current sort|identity|network|timed out|could not be confirmed|expired|restored.*draft|another.*(?:inspection|coordinator|saved|user)/i.test(message);
     const usesInline = () => isPretreat || media.matches;
     const accordion = row => row.querySelector('[data-ops-accordion]');
     const dirtyForm = 'form[data-dirty="true"]';
@@ -102,6 +103,8 @@
     const syncFeedback = () => {
         const inline = pane.querySelector('[data-ops-detail-feedback]');
         if (inline) { inline.textContent = feedback.textContent; inline.hidden = feedback.hidden; inline.classList.toggle('is-error', feedback.classList.contains('is-error')); }
+        const reload = pane.querySelector('[data-ops-reload]');
+        if (reload) reload.hidden = !feedback.classList.contains('is-error') || !needsReload(feedback.textContent);
     };
     const notify = (text, error = false) => {
         feedback.textContent = text; feedback.hidden = !text;
@@ -111,7 +114,8 @@
     const formAction = form => new URL(form.getAttribute('action'), location.origin).pathname;
     const formKey = form => [formAction(form), form.elements.pass_number?.value || '',
         form.elements.position_number?.value || '', form.elements.record_id?.value || '',
-        form.querySelector('input[name="action"]')?.value || form.querySelector('button[name="action"]')?.value || form.elements.inspection_action?.value || ''].join(':');
+        form.matches('[data-ops-quick-clock]') ? 'quick-clock' :
+            form.querySelector('input[name="action"]')?.value || form.querySelector('button[name="action"]')?.value || form.elements.inspection_action?.value || ''].join(':');
     const draftKey = detail => ['neoapps.subzero.operations.draft', root.dataset.userId,
         root.dataset.operationId, root.dataset.mode, detail.dataset.missionId, detail.dataset.tail].join(':');
     const detail = () => pane.querySelector('[data-ops-detail-content]');
@@ -123,7 +127,7 @@
         line.textContent = text;
         line.hidden = !text;
         line.classList.toggle('is-error', error);
-        content.querySelector('[data-ops-reload-inline]').hidden = !error;
+        content.querySelector('[data-ops-reload-inline]').hidden = !error || (!isPretreat && !needsReload(text));
         const retry = content.querySelector('[data-ops-pretreat-retry]');
         if (retry) retry.hidden = true;
     };
@@ -478,6 +482,16 @@
     root.addEventListener('change', async event => {
         if (reconcilingPretreat) return;
         const form = event.target.closest('form');
+        if (form?.matches('[data-ops-reason-form]')) {
+            form.dataset.dirty = 'true'; saveDraft();
+            if (busy || preferenceBusy) {
+                const line = inlineFor(form);
+                const message = 'Another save is in progress. Your reason draft is kept; select it again after that save.';
+                if (line) inlineMessage(line,message,true); else notify(message,true);
+                return;
+            }
+            form.requestSubmit(); return;
+        }
         if (form?.matches('[data-ops-autosave]')) {
             if (isPretreat && form.matches('[data-ops-planned]')) {
                 queuePretreat(form);
@@ -577,7 +591,7 @@
         const open = event.target.closest('[data-ops-open]');
         if (open) { event.preventDefault(); saveDraft(); const mission = open.closest('[data-ops-row]').dataset.missionId; try { pane.querySelector(':focus')?.blur(); selected = mission; await fetchPage(mission); } catch(error) { notify(error.message,true); } return; }
         const close = event.target.closest('[data-ops-close]');
-        if (close) { saveDraft(); pane.hidden = true; selected = null; history.replaceState(null,'',currentUrl(null)); return; }
+        if (close) { saveDraft(); ++epoch; pane.hidden = true; selected = null; history.replaceState(null,'',currentUrl(null)); return; }
         const reloadInline = event.target.closest('[data-ops-reload-inline]');
         if (reloadInline) {
             const content = inlineFor(reloadInline);
@@ -638,6 +652,21 @@
             editor.querySelectorAll('[data-subzero-spray-control]').forEach(e => {e.readOnly=e.dataset.sprayReady==='false';});
             editor.querySelectorAll('[data-subzero-spray-save]').forEach(e => {e.hidden=false;}); return;
         }
+        const quickStamp = event.target.closest('[data-ops-pass-stamp]');
+        if (quickStamp) {
+            if (busy || preferenceBusy) return;
+            const form = quickStamp.closest('form');
+            const mission = form.elements.mission_id.value;
+            if ([...root.querySelectorAll('[data-subzero-deice-form][data-dirty="true"]')]
+                    .some(draft => draft.elements.mission_id.value === mission)) {
+                const line = inlineFor(form);
+                const message = 'Save treatment changes before recording a quick pass time. Your draft is kept.';
+                if (line) inlineMessage(line,message,true); else notify(message,true);
+                return;
+            }
+            form.elements[quickStamp.dataset.opsPassStamp].value = window.NeoAppsClockTime.normalize(shared.operationalHHMM());
+            form.requestSubmit(); return;
+        }
         const stamp = event.target.closest('[data-subzero-deice-stamp]');
         if (stamp) {
             const input = stamp.closest('form').elements[stamp.dataset.subzeroDeiceStamp];
@@ -661,21 +690,22 @@
         body.set('operation_id',root.dataset.operationId); if (content) body.set('physical_tail',content.dataset.tail);
         const toggle = form.querySelector('[data-ops-quick-toggle]');
         const planned = form.matches('[data-ops-planned]');
-        const quiet = isPretreat && (form.matches(autosaveSelector) || planned || form.matches('[data-ops-pretreat-config]'));
+        const reasonSave = form.matches('[data-ops-reason-form]');
+        const quiet = reasonSave || (isPretreat && (form.matches(autosaveSelector) || planned || form.matches('[data-ops-pretreat-config]')));
         const toggleError = form.querySelector('[data-ops-toggle-error]');
         if (planned) body.set('planned',toggle.checked ? '1' : '0');
         const key = formKey(form), abort = new AbortController();
         const timeout = setTimeout(()=>abort.abort(),25000);
         busy = true; ++epoch;
         const row = inline?.closest('[data-ops-row]');
-        if (quiet) row.setAttribute('aria-busy', 'true');
+        if (quiet && row) row.setAttribute('aria-busy', 'true');
         const controls = [...(row || content || form)
             .querySelectorAll('button,input:not([type="hidden"]),select,textarea')]
             .filter(control => !control.disabled);
         if (!autosave) controls.forEach(control => { control.disabled = true; });
         const unlock = () => { if (!autosave) controls.forEach(control => { control.disabled = false; }); };
         if (toggleError) toggleError.hidden = true;
-        if (quiet) inlineMessage(inline, '');
+        if (quiet) { if (inline) inlineMessage(inline, ''); else notify(''); }
         else if (inline && !planned) inlineMessage(inline, 'SAVING…');
         else if (!planned) notify('SAVING…');
         let saved = false, correctionRequired = false;
@@ -712,9 +742,10 @@
                 if (!autosave && form.contains(document.activeElement)) document.activeElement.blur();
                 if (!planned && !quiet) inlineMessage(inline, payload.message);
             }
-            else notify(payload.message);
-            unlock();
+            else notify(quiet ? '' : payload.message);
+            if (!reasonSave) unlock();
             await fetchPage(selected,isPretreat ? form : key,true);
+            if (reasonSave) unlock();
         } catch(error) {
             const message = error.name === 'AbortError' ? 'Save timed out. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
                 : error instanceof TypeError ? 'Network error while saving. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
@@ -740,8 +771,8 @@
             else notify(message,true);
         }
         finally {
-            clearTimeout(timeout); busy=false; if (!saved) unlock();
-            if (quiet) row.removeAttribute('aria-busy');
+            clearTimeout(timeout); busy=false; if (!saved || reasonSave) unlock();
+            if (quiet && row) row.removeAttribute('aria-busy');
             drainPretreat();
         }
     });

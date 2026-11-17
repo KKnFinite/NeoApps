@@ -351,3 +351,52 @@
     .neosubzero-operations .ops-pretreat-more .ops-pretreat-notes-panel { padding-inline:0; border-inline:0; }
     .neosubzero-operations .ops-pretreat-participation { grid-template-columns:minmax(0,1fr); padding-inline:0; border-inline:0; }
 }
+
+/* OUTBOUND-only controls. DUCC, Crew View and the PRETREAT grid are unchanged. */
+.neosubzero-operations[data-mode="outbound"] .ops-aircraft.state-pretreated { background:var(--subzero-fin,#285DA8); color:var(--subzero-status-light,#fff); border-color:var(--subzero-fin-border,#648ac0); }
+.neosubzero-operations .ops-pilot-start { font-size:.75rem; font-weight:800; white-space:nowrap; }
+.neosubzero-operations .ops-quick-actions,
+.neosubzero-operations .ops-quick-observations { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin:4px 0 7px; }
+.neosubzero-operations :is(.ops-quick-actions,.ops-quick-observations) form { margin:0; }
+.neosubzero-operations :is(.ops-quick-actions,.ops-quick-observations) button {
+    min-height:32px; padding:4px 7px; border:1px solid #62859b; border-radius:3px;
+    background:#0b1a26; color:#edf6fb; font:700 .68rem/1.2 var(--font-sans); cursor:pointer;
+}
+.neosubzero-operations .ops-card-actions { padding:0 10px 5px; margin:0; }
+.neosubzero-operations .ops-card-readback { padding:0 10px 7px; color:inherit; background:transparent; border:0; }
+.neosubzero-operations .ops-card-readback p { margin:0; font-size:.78rem; line-height:1.4; }
+.neosubzero-operations[data-mode="outbound"] :is(.ops-detail,.ops-mobile-workspace) :is(p,section,details) { margin-block:6px; }
+.neosubzero-operations[data-mode="outbound"] :is(.ops-detail,.ops-mobile-workspace) :is(summary,label) { font-size:.75rem; }
+.neosubzero-operations[data-mode="outbound"] .ops-detail-head > div { display:grid; gap:4px; min-width:0; }
+.neosubzero-operations[data-mode="outbound"] .ops-detail-head > div > span { font-size:.75rem; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-form { grid-template-columns:minmax(0,1fr); gap:7px; margin:5px 0; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-form > label > select { max-width:340px; min-height:36px; font-size:13px; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-form > button[type="submit"] { justify-self:start; width:auto; min-width:90px; padding-inline:12px; }
+.neosubzero-operations[data-mode="outbound"] :is(.ops-detail,.ops-mobile-workspace) .neosubzero-deice-pass,
+.neosubzero-operations[data-mode="outbound"] .ops-mobile-workspace [data-subzero-pass]:not([hidden]) {
+    grid-template-columns:minmax(0,1.35fr) repeat(2,minmax(0,1fr)); gap:4px;
+    border:0; border-top:1px solid #355064; padding:6px 0 2px; background:transparent;
+}
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-pass[hidden] { display:none; }
+.neosubzero-operations[data-mode="outbound"] .ops-mobile-workspace [data-subzero-pass] label:first-of-type { grid-column:auto; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-pass legend { padding:0 5px 0 0; font-size:12px; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-pass label { font-size:11px; gap:3px; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-pass label span { display:grid; grid-template-columns:minmax(0,1fr) 32px; gap:2px; min-width:0; width:100%; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-pass :is(input,select,button) { width:100%; min-width:0; min-height:36px; height:36px; margin:0; padding:4px; font-size:12px; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-pass button { padding:2px; font-size:10px; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-deice-pass label span:has(button[hidden]) { grid-template-columns:minmax(0,1fr); }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-spray-reason form { display:flex; flex-wrap:wrap; align-items:end; gap:5px; margin:0; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-spray-reason label { display:grid; gap:3px; flex:1 1 160px; }
+.neosubzero-operations[data-mode="outbound"] .neosubzero-spray-reason select { min-height:36px; padding:4px 6px; font-size:13px; max-width:100%; }
+.neosubzero-operations[data-mode="outbound"] .ops-inline-notes textarea { width:100%; min-height:50px; max-height:140px; }
+.neosubzero-operations[data-mode="outbound"] .ops-optional-inspection .neosubzero-inspection-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.neosubzero-operations[data-mode="outbound"] .ops-optional-inspection label { display:grid; gap:3px; }
+@media (min-width:901px) {
+    .neosubzero-operations:has([data-ops-detail]:not([hidden])) :is(.ops-card-actions,.ops-card-readback) { display:none; }
+}
+@media (max-width:900px) {
+    .neosubzero-operations :is(.ops-card-actions,.ops-card-readback) { display:none; }
+    .neosubzero-operations .ops-mobile-times .ops-pilot-start { font-size:.63rem; }
+    .neosubzero-operations[data-mode="outbound"] .ops-mobile-workspace .neosubzero-deice-pass :is(label,legend) { color:inherit; }
+    .neosubzero-operations[data-mode="outbound"] .ops-optional-inspection .neosubzero-inspection-form { grid-template-columns:minmax(0,1fr); }
+}

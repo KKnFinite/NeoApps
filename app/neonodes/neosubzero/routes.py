@@ -721,9 +721,12 @@ def spray_reason_mutate():
                 "Departure deice changed while you were editing. Review current values."
             )
         before = evidence_values(event)
-        set_departure_deice_reason(event, request.form.get("reason_for_application"))
-        audit_change(operation, 'application_reason', actor_id=current_user.id, mission=mission,
-                     event=event, before=before, after=evidence_values(event))
+        reason = request.form.get('correction_reason')
+        set_departure_deice_reason(event, request.form.get("reason_for_application"), correction_reason=reason)
+        after = evidence_values(event)
+        if before != after:
+            audit_change(operation, 'application_reason', actor_id=current_user.id, mission=mission,
+                         event=event, reason=reason, before=before, after=after)
         db.session.commit()
         flash("REASON FOR APPLICATION SAVED.", "success")
     except (ValueError, IntegrityError) as exc:
@@ -1033,6 +1036,8 @@ def _save_deice_qualification(access):
 @bp.route("/departure-deice/mutate", methods=["POST"])
 @gateway_node_required("subzero")
 def departure_deice_mutate():
+    if request.form.get('action') == 'reset' and not user_can('neosubzero.coordinator.edit'):
+        return 'Access denied.', 403
     if request.form.get('action') == 'undo_clear' and not user_can('neosubzero.coordinator.edit'):
         return 'Access denied.', 403
     if request.form.get('action') == 'radio_complete' and not user_can('neosubzero.coordinator.edit'):

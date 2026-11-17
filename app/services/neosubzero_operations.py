@@ -80,10 +80,15 @@ def operations_context(gateway, operation, mode):
             row['mission_departure_status'] = mission.departure_status
             row['mobile_evidence'] = evidence.get(getattr(event, 'id', None), {})
             row['mobile_open'] = (not row['identity_conflict'] and row['tail'] != '-' and
-                                  mission.departure_status not in {'cancelled', 'departed'} and not row['terminal'])
+                                  mission.departure_status != 'cancelled' and
+                                  (mission.departure_status != 'departed' or row.get('radio_pending')) and not row['terminal'])
             types = row['pass_types'] if not row['identity_conflict'] else ()
             surfaces = [row['pass1_surface'], row['pass2_surface']]
             row['visual_state'], row['visual_label'] = departure_presentation(row,tail_states.get(row['tail']))
+            if row['visual_state'] == 'untreated':
+                row['visual_state'], row['visual_label'] = (
+                    ('pretreated', 'PRETREATED') if row.get('pretreat_milestones_complete') else ('untreated', 'NO STATUS'))
+            row['quick_actions'], row['quick_clock'] = outbound_quick_actions(row)
         for number in (1, 2):
             row['primary_passes'].append({'number': number, 'type': types[number-1] if len(types) >= number else None,
                 'surface': SURFACE_LABELS.get(surfaces[number-1]) if len(types) >= number else None})
@@ -115,3 +120,38 @@ def operations_context(gateway, operation, mode):
                 treatment['can_add_truck'] = occupied.get(key, 0) < 4
     extras = ('Remote', 'Location Review') if any(row['ramp'] == 'Location Review' for row in rows) else ('Remote',)
     return {**context, 'rows': rows, 'ramps': (*PRIMARY_RAMPS, *extras)}
+
+
+def outbound_quick_actions(row):
+    """Presentation eligibility; canonical mutations still enforce all guards."""
+    event = row.get('event')
+    if not row.get('mobile_open') or row.get('identity_conflict'):
+        return (), None
+    status = getattr(event, 'status', None)
+    if row.get('radio_pending'):
+        return (('radio_complete', 'RADIO COMPLETE'),) if row.get('script') else (), None
+    if status == 'finished':
+        return (('clear', 'CLEAR'),), None
+    if status in ('negative', 'not_sprayed'):
+        return (('move_to_planned', 'INITIAL CONTACT'), ('clear', 'CLEAR')), None
+    if event is None:
+        return (('initial_contact', 'INITIAL CONTACT'), ('set_negative', 'NEGATIVE DEICE')), None
+    if not row.get('has_actual_spray'):
+        actions = [('toggle_configured', 'CLEAR CONFIGURED' if row.get('configured') else 'CONFIGURED'),
+                   ('reset', 'RESET'), ('set_negative', 'NEGATIVE DEICE')]
+        if row.get('configured'):
+            actions.append(('clear', 'CLEAR'))
+    else:
+        actions = []
+    clock = None
+    for number, _fluid in enumerate(row.get('pass_types', ()), 1):
+        if not row.get(f'pass{number}_surface'):
+            break
+        if not row.get(f'pass{number}_start'):
+            if row.get('configured') or row.get('has_actual_spray'):
+                clock = (f'pass{number}_start', f'START PASS {number}')
+            break
+        if not row.get(f'pass{number}_end'):
+            clock = (f'pass{number}_end', f'END PASS {number}')
+            break
+    return tuple(actions), clock

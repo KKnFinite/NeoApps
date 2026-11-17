@@ -41,6 +41,8 @@ class NeoSubZeroDepartureDeiceEvent(db.Model):
     radio_completed_at_utc = db.Column(db.DateTime, nullable=True)
     radio_completed_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     pass_evidence = db.Column(db.JSON, nullable=True)
+    # Retire accidental initiation without deleting its event or audit history.
+    reset_at_utc = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(24), nullable=False, default="deice_planned")
     configured_at_utc = db.Column(db.DateTime, nullable=True)
     # Optional coordinator ordering, on the canonical event (not another queue).

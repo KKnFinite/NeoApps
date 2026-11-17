@@ -17,6 +17,7 @@ def normalized_tail(value):
 
 def select_tail_event(events):
     from app.services.neosubzero_radio import radio_pending
+    events = [event for event in events if not getattr(event, 'reset_at_utc', None)]
     active=[event for event in events if event.status != 'cleared' or radio_pending(event)]
     if len(active)>1:
         return None,'Multiple active departure records belong to this tail. Explicit coordinator reconciliation is required.'

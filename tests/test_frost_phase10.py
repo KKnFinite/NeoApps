@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 from app.extensions import db
+from app.neonodes.neosubzero import services as _subzero_services
 from app.models import (NeoSubZeroAuditEntry, NeoSubZeroArchiveDelivery, NeoSubZeroSprayRecord,
     SortDateMission, SortDateOperation, SortDateParkingAssignment)
 from app.services import frost_inspections as inspection, frost_vault as vault, neosubzero_weather as weather
@@ -51,6 +52,19 @@ class InspectionTest(unittest.TestCase):
             with self.assertRaises(ValueError):self.save(**changes)
             db.session.rollback()
         self.assertEqual(NeoSubZeroAuditEntry.query.filter_by(action=inspection.ACTION).count(),0)
+
+    def test_explicit_physical_action_records_observation_without_claiming_parking_verification(self):
+        values=dict(self.values,inspection_intent='physical_observation',verify_parking='yes')
+        values.pop('inspection_confirmed')
+        entry=inspection.record(self.f.operation,self.f.alpha,values,actor_id=self.actor.id)
+        db.session.commit()
+        observed=entry.after_values['inspection']
+        self.assertEqual(observed['tail'],self.f.alpha.assigned_tail_number)
+        self.assertEqual(observed['observer_user_id'],self.actor.id)
+        self.assertEqual(observed['location'],values['inspection_location'])
+        self.assertIsNone(observed['parking'])
+        self.assertFalse(observed['treatment_reason_target_eligible'])
+        self.assertEqual(NeoSubZeroSprayRecord.query.count(),0)
 
     def test_idempotent_retry_and_conflicting_nonce_and_stale_form(self):
         first=self.save();self.assertEqual(first.id,self.save().id)

@@ -126,8 +126,10 @@ def set_neosubzero_fluid_settings(
 
 def departure_deice_context(gateway, operation, *, now_utc=None):
     settings = neosubzero_fluid_settings(gateway)
+    from app.services.neosubzero_spray import departure_reason_options
+    reason_options = departure_reason_options()
     if operation is None:
-        return {"operation": None, "rows": [], "fluid_settings": settings}
+        return {"operation": None, "rows": [], "fluid_settings": settings, "reason_options": reason_options}
 
     missions = (
         SortDateMission.query.filter_by(
@@ -238,7 +240,7 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
     from app.services.neosubzero_operations import departure_presentation
     for row in rows:
         row['visual_state'], row['visual_label'] = departure_presentation(row, tail_states.get(row['tail']))
-    return {"operation": operation, "rows": rows, "fluid_settings": settings, "detached_radio": detached_radio,
+    return {"operation": operation, "rows": rows, "fluid_settings": settings, "reason_options": reason_options, "detached_radio": detached_radio,
             "detached_spraying": detached_spraying, "spray_starts": spray_starts}
 
 
@@ -316,6 +318,8 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
         event = departure_event_for_tail(operation,mission,lock=True)
     if event and _tail(event.tail_number) != _tail(mission.assigned_tail_number):
         raise NeoSubZeroDepartureDeiceError('Treatment belongs to another physical tail. Reload current aircraft.')
+    if event and event.reset_at_utc:
+        raise NeoSubZeroDepartureDeiceError('This initiation was already reset. Reload current aircraft.')
     before=evidence_values(event)
     action = str(action or "").strip().lower()
     if action in MOBILE_OBSERVATIONS or action == 'save_notes':
@@ -329,7 +333,17 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
         departure_deice_event_id=event.id,
     ).filter(or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),
                  NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).first())
-    if action in {"initial_contact", "move_to_planned"}:
+    if action == 'reset':
+        if not actor_id or not event or event.status not in {'deice_planned', 'configured'}:
+            raise NeoSubZeroDepartureDeiceError('Only unstarted INITIAL CONTACT or CONFIGURED work can be reset.')
+        protected = NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id).filter(
+            or_(NeoSubZeroSprayRecord.gallons.is_not(None), NeoSubZeroSprayRecord.official_at_utc.is_not(None)))
+        if has_actual or event.pass_evidence or protected.first():
+            raise NeoSubZeroDepartureDeiceError('Actual spray, participation or gallon evidence cannot be reset. Use audited corrections.')
+        event.reset_at_utc = datetime.utcnow()
+        event.configured_at_utc = None
+        event.ucc_queue_order = None
+    elif action in {"initial_contact", "move_to_planned"}:
         if event and event.status == 'cleared': event=None
         if event and has_actual:
             raise NeoSubZeroDepartureDeiceError('Actual treatment cannot be reset. Use the audited correction controls.')
@@ -773,7 +787,7 @@ def _sync_tail_deice_status(operation, mission, event):
             tail_number=tail,
         )
         db.session.add(row)
-    row.deice_status = {
+    row.deice_status = 'unknown' if event.reset_at_utc else {
         "deice_planned": "required",
         "configured": "configured",
         "finished": "configured",
@@ -781,7 +795,7 @@ def _sync_tail_deice_status(operation, mission, event):
         "negative": "negative",
         "not_sprayed": "unknown",
     }[event.status]
-    row.deice_completed_at_utc = (
+    row.deice_completed_at_utc = None if event.reset_at_utc else (
         event.pass2_ended_at_utc or event.pass1_ended_at_utc
         if event.status == "cleared"
         else None
@@ -912,6 +926,7 @@ def _validate_ramp_configuration_available(operation, mission, event):
         )
         .filter(
             NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == operation.id,
+            NeoSubZeroDepartureDeiceEvent.reset_at_utc.is_(None),
             or_(NeoSubZeroDepartureDeiceEvent.status.in_(("configured", "finished")),
                 NeoSubZeroDepartureDeiceEvent.pass1_started_at_utc.is_not(None)),
             or_(NeoSubZeroDepartureDeiceEvent.status != 'cleared',

@@ -2,7 +2,7 @@
 
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -34,11 +34,40 @@ def departure_deice_reason(event):
     return str(event.reason_for_application or "").strip() or DEFAULT_DEPARTURE_REASON
 
 
-def set_departure_deice_reason(event, reason):
+def departure_reason_options():
+    """Use the Cryotech catalog, plus the existing explicit captain observation."""
+    from app.services.neosubzero_frost_history import CRYOTECH_REASON_DESCRIPTIONS
+    from app.services.neosubzero_departure_deice import NERVOUS_CAPTAIN_REASON
+    return tuple((description, code + ' · ' + description)
+                 for code, descriptions in CRYOTECH_REASON_DESCRIPTIONS.items() if code != 'P'
+                 for description in descriptions) + ((NERVOUS_CAPTAIN_REASON, NERVOUS_CAPTAIN_REASON),)
+
+
+def set_departure_deice_reason(event, reason, *, correction_reason=None):
     """Stage one departure event's explicit reason without committing."""
     if event is None:
         raise NeoSubZeroSprayError("Choose a current departure-deice event.")
+    if event.reset_at_utc:
+        raise NeoSubZeroSprayError('This initiation was reset. Reload current aircraft.')
     normalized = _short_text(reason, "Reason for Application", 120)
+    if normalized:
+        options = departure_reason_options()
+        lookup = {value.casefold(): value for value, _label in options}
+        for value, label in options:
+            lookup.setdefault(label.split(' · ')[0].casefold(), value)
+        if normalized.casefold() not in lookup:
+            raise NeoSubZeroSprayError('Choose a recognized Reason for Application.')
+        normalized = lookup[normalized.casefold()]
+    if (event.reason_for_application or '') == normalized:
+        return event
+    recorded = NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id).filter(or_(
+        NeoSubZeroSprayRecord.gallons.is_not(None), NeoSubZeroSprayRecord.official_at_utc.is_not(None),
+        NeoSubZeroSprayRecord.started_at_utc.is_not(None), NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).first()
+    if (recorded or event.status in {'finished','cleared'} or event.pass_evidence or any(
+            getattr(event, f'pass{number}_{milestone}_at_utc')
+            for number in (1,2) for milestone in ('started','ended'))):
+        if not str(correction_reason or '').strip():
+            raise NeoSubZeroSprayError('Enter a correction reason for recorded treatment evidence.')
     event.reason_for_application = normalized or None
     return event
 

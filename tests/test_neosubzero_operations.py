@@ -74,7 +74,7 @@ class OperationsTest(unittest.TestCase):
         self.f._login(self.client, actor)
         self.assertEqual(self.post(board='outbound', action='initial_contact').status_code, 200)
         event = NeoSubZeroDepartureDeiceEvent.query.one()
-        for action in ('undo_clear', 'radio_complete'):
+        for action in ('undo_clear', 'radio_complete', 'reset'):
             for board in ('outbound', 'coordinator'):
                 response = self.post(board=board, action=action, expected_version=entity_version(event))
                 self.assertEqual(response.status_code, 403)
@@ -221,9 +221,9 @@ class OperationsTest(unittest.TestCase):
         state=NeoSubZeroPretreatState(sort_date_operation_id=self.f.operation.id,tail_number=self.f.alpha.assigned_tail_number,pretreat_planned=True);db.session.add(state);db.session.commit()
         self.assertNotIn(b'class="ops-pretreated"',self.client.get('/neosubzero/operations').data)
         tail=SortDateTailState(sort_date=self.f.operation.sort_date,gateway_code='RFD',sort_name='night',tail_number=self.f.alpha.assigned_tail_number,pretreat_status=True);db.session.add(tail);db.session.commit()
-        self.assertIn(b'class="ops-pretreated"',self.client.get('/neosubzero/operations').data)
+        self.assertNotIn(b'class="ops-pretreated"',self.client.get('/neosubzero/operations').data)
         row=next(r for r in operations_context(self.f.gateway,self.f.operation,'outbound')['rows'] if r['mission_id']==self.f.alpha.id)
-        self.assertEqual(row['visual_label'],'UNTREATED')
+        self.assertEqual(row['visual_label'],'NO STATUS')
         tail.deice_status='configured';db.session.commit()
         row=next(r for r in operations_context(self.f.gateway,self.f.operation,'outbound')['rows'] if r['mission_id']==self.f.alpha.id)
         self.assertEqual(row['visual_label'],'CONFIGURED')
@@ -240,7 +240,8 @@ class OperationsTest(unittest.TestCase):
         row = next(row for row in operations_context(self.f.gateway, self.f.operation, 'outbound')['rows']
                    if row['mission_id'] == mission.id)
         self.assertTrue(row['pretreat_milestones_complete'])
-        self.assertEqual(row['visual_state'], 'untreated')
+        self.assertEqual(row['visual_state'], 'pretreated')
+        self.assertEqual(row['visual_label'], 'PRETREATED')
 
     def test_existing_handler_fin_clear_and_duplicate_submission(self):
         result=self.post(action='initial_contact');self.assertEqual(result.status_code,200,result.json)

@@ -34,6 +34,7 @@ NEOSUBZERO_OPTIONAL_COLUMNS = {
         "operations_sort_id": "INTEGER",
     },
     NeoSubZeroDepartureDeiceEvent.__tablename__: {
+        "reset_at_utc": "TIMESTAMP",
         "reason_for_application": "VARCHAR(120)",
         "ucc_queue_order": "INTEGER",
         "ucc_queue_history": "TEXT",

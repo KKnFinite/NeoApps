@@ -1,0 +1,97 @@
+{% from 'neonodes/neosubzero/_departure_deice.html' import mutation_identity, treatment_form, spray_reason, spray_position_forms, inspection_form with context %}
+
+{% macro action(row, key, label, confirm='') -%}
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if confirm %} data-subzero-confirm="{{ confirm }}"{% endif %}>
+    {{ mutation_identity(row, board, row.ramp) }}<button name="action" value="{{ key }}">{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{% macro quick_actions(row, card=false) %}
+{% if can_edit and not row.identity_conflict and row.mobile_open %}
+<div class="ops-quick-actions{{ ' ops-card-actions' if card else '' }}" data-ops-quick-actions>
+    {% for key,label in row.quick_actions %}
+    {% if key not in ('reset','radio_complete') or user_can('neosubzero.coordinator.edit') %}
+        {{ action(row, key, label, 'Confirm that you actually read the final-pass script to the pilot.' if key == 'radio_complete' else 'Reset this unstarted departure request? Recorded spray evidence is protected.' if key == 'reset' else '') }}
+    {% endif %}
+    {% endfor %}
+    {% if row.quick_clock %}
+    <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-ops-quick-clock>
+        {{ mutation_identity(row, board, row.ramp) }}<input type="hidden" name="action" value="save_treatment">
+        <input type="hidden" name="treatment_plan" value="{{ row.plan }}">
+        {% for number in (1,2) %}
+        <input type="hidden" name="pass{{ number }}_surface_area" value="{{ row.pass1_surface or '' if number == 1 else row.pass2_surface or '' }}">
+        <input type="hidden" name="pass{{ number }}_start" value="{{ row.pass1_start or '' if number == 1 else row.pass2_start or '' }}">
+        <input type="hidden" name="pass{{ number }}_end" value="{{ row.pass1_end or '' if number == 1 else row.pass2_end or '' }}">
+        {% endfor %}
+        <button type="button" data-ops-pass-stamp="{{ row.quick_clock[0] }}">{{ row.quick_clock[1] }}</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+{% if row.radio_pending %}
+<div class="ops-readback{{ ' ops-card-readback' if card else '' }}" data-radio-pending>
+    {% if row.script %}<p data-radio-script>{{ row.script.text }}</p>{% else %}<p class="ops-review">Final-pass evidence needs review before RADIO COMPLETE.</p>{% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro workspace(row, inline=false) %}
+{% set editable = can_edit and row.mobile_open and not row.identity_conflict %}
+{% set corrections = can_edit and row.mission_departure_status != 'cancelled' and not row.identity_conflict %}
+{% set event_status = row.event.status if row.event else '' %}
+{% if row.identity_conflict %}
+<p class="ops-review">{{ row.ownership_review or 'Treatment belongs to a different physical tail. Review the recorded evidence.' }}</p>
+{% else %}
+{{ quick_actions(row) }}
+{% if row.event %}
+<section class="ops-outbound-treatment" aria-label="Treatment">
+    {% if not row.has_actual_spray and event_status not in ('finished','cleared') %}
+        {{ spray_reason(row, editable, board, row.ramp, show_observation=false) }}
+    {% else %}<p class="ops-reason-recorded">Reason for Application · <strong>{{ row.reason_for_application }}</strong></p>{% endif %}
+    {% if event_status not in ('negative','not_sprayed','finished','cleared') %}
+        {{ treatment_form(row, editable, board, row.ramp, compact=true) }}
+    {% endif %}
+</section>
+{% set frost = row.mobile_evidence.get('frost_observation') %}
+{% if frost %}<p class="ops-observation-recorded">{{ 'FROST PRESENT · RECORDED' if frost == 'present' else 'NERVOUS CAPTAIN · RECORDED' }}</p>
+{% elif editable and not row.has_actual_spray and event_status not in ('finished','cleared','negative','not_sprayed') %}
+<div class="ops-quick-observations">
+    {{ action(row, 'frost_present', 'FROST PRESENT', 'Record your direct observation that frost is present on this physical aircraft?') }}
+    {{ action(row, 'nervous_captain', 'NERVOUS CAPTAIN', 'Confirm that you observed no frost and the captain requested treatment.') }}
+</div>
+{% endif %}
+<details class="ops-inline-notes" data-ops-disclosure="notes">
+    <summary>NOTES</summary>
+    <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+        {{ mutation_identity(row, board, row.ramp) }}<input type="hidden" name="action" value="save_notes">
+        <textarea name="notes" aria-label="Departure notes" maxlength="2000"{% if not corrections %} readonly{% endif %}>{{ row.mobile_evidence.get('notes','') }}</textarea>
+        {% if corrections %}<button type="submit">SAVE NOTES</button>{% endif %}
+    </form>
+</details>
+<details class="ops-inline-evidence" data-ops-disclosure="evidence">
+    <summary>PARTICIPATION / AUDITED CORRECTIONS</summary>
+    {% if row.radio_pending and corrections and user_can('neosubzero.coordinator.edit') %}
+    <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-confirm="Undo CLEAR and preserve the recorded spray?">
+        {{ mutation_identity(row, board, row.ramp) }}
+        <label>Correction reason<input name="correction_reason" maxlength="500" required></label>
+        <button name="action" value="undo_clear">UNDO CLEAR</button>
+    </form>
+    {% endif %}
+    {% if event_status in ('finished','cleared') %}{{ treatment_form(row, corrections, board, row.ramp, compact=true, correction=true) }}{% endif %}
+    {% if row.has_actual_spray or event_status in ('finished','cleared') %}{{ spray_reason(row, corrections, board, row.ramp, show_observation=false) }}{% endif %}
+    {{ spray_position_forms(row, corrections, board, row.ramp) }}
+    <a href="{{ url_for('neosubzero.deice_log') }}">DEICE LOG</a>
+</details>
+{% endif %}
+{% if corrections and row.frost_inspection %}
+<details class="ops-optional-inspection" data-ops-disclosure="inspection">
+    <summary>PHYSICAL INSPECTION · OPTIONAL</summary>
+    {{ inspection_form(row, board) }}
+    {% if row.frost_inspection.last %}
+        <p>{{ row.frost_inspection.last.physical_label }} · {{ row.frost_inspection.last_time }}</p>
+        {{ inspection_form(row, board, true) }}
+    {% endif %}
+</details>
+{% endif %}
+{% endif %}
+{% endmacro %}

@@ -53,7 +53,8 @@ def record(operation, mission, values, *, actor_id):
     try: nonce = str(UUID(str(values.get('inspection_request_id', ''))))
     except ValueError: raise NeoSubZeroEvidenceError('Inspection request expired. Reload current values; your draft is kept.')
     result = values.get('frost_result')
-    if result not in ('present', 'absent', 'uncertain') or values.get('inspection_confirmed') != 'yes':
+    explicit_action = values.get('inspection_intent') == 'physical_observation'
+    if result not in ('present', 'absent', 'uncertain') or not (explicit_action or values.get('inspection_confirmed') == 'yes'):
         raise NeoSubZeroEvidenceError('Choose the actual inspection result and confirm that you inspected this physical tail. Predictions are not inspections.')
     text = str(values.get('inspected_local') or '')
     instant, quality = frost_analysis.local_instant(text[:10], text[11:]) if len(text) == 16 and text[10] == 'T' else (None, 'invalid_clock')
@@ -69,7 +70,7 @@ def record(operation, mission, values, *, actor_id):
     if not location or len(location) > 120 or len(notes) > 500 or len(reason) > 500:
         raise NeoSubZeroEvidenceError('Enter the actual inspection location (120 characters); notes/correction reason may use 500 characters.')
     request_body = dict(tail=tail, result=result, instant=instant, location=location, notes=notes,
-        verify_parking=values.get('verify_parking') == 'yes', correction=values.get('inspection_action') == 'correct',
+        verify_parking=not explicit_action and values.get('verify_parking') == 'yes', correction=values.get('inspection_action') == 'correct',
         expected=str(values.get('expected_inspection_id') or ''), reason=reason)
     digest = frost_vault.digest(frost_vault.canonical(request_body))
     entries = audits(operation, tail)

@@ -16,19 +16,19 @@ class InspectionBrowserTest(OperationsBrowserTest):
                 page=browser.new_page(viewport={'width':1920,'height':900},service_workers='block')
                 errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
                 self.login(page);self.ready(page,f'/neosubzero/operations?mode=outbound&mission={self.flow_id}')
-                panel=page.locator('.neosubzero-frost-inspection').first
-                page.get_by_role('button',name='OPTIONAL FROST INSPECTION',exact=True).click()
+                panel=page.locator('.ops-optional-inspection:visible').first
+                panel.locator(':scope > summary').click()
                 form=panel.locator('form').first
-                expect(form.locator('[name=frost_result]')).to_be_focused()
+                expect(form.locator('[name=frost_result]')).to_be_visible()
+                self.assertEqual(form.locator('[name=inspection_confirmed],[name=verify_parking]').count(),0)
                 self.assertEqual(form.locator('[name=frost_result]').input_value(),'')
                 form.locator('[name=frost_result]').select_option('absent')
                 form.locator('[name=inspected_local]').fill('2026-10-22T12:00')
                 form.locator('[name=inspection_location]').fill('Delta direct inspection')
                 form.locator('[name=inspection_notes]').fill('Observed actual surface; isolated fixture')
-                form.locator('[name=inspection_confirmed]').check()
                 # Actual failed request recovery; no timer-based success guess.
                 page.route('**/neosubzero/operations/mutate',lambda route:route.abort('failed'))
-                form.get_by_role('button',name='RECORD INSPECTION',exact=True).click()
+                form.get_by_role('button',name='RECORD PHYSICAL INSPECTION',exact=True).click()
                 expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('Network error')
                 expect(form.get_by_role('button')).to_be_enabled()
                 expect(form.locator('[name=inspection_notes]')).to_have_value('Observed actual surface; isolated fixture')
@@ -48,37 +48,32 @@ class InspectionBrowserTest(OperationsBrowserTest):
                 expect(page.locator('[data-ops-draft-status]')).to_contain_text('LIVE DATA UPDATED',timeout=15000)
                 expect(notes).to_be_focused();expect(notes).to_have_value('Observed actual surface; isolated fixture')
                 with page.expect_response(lambda r:r.url.endswith('/operations/mutate') and r.request.method=='POST') as pending:
-                    form.get_by_role('button',name='RECORD INSPECTION',exact=True).click()
+                    form.get_by_role('button',name='RECORD PHYSICAL INSPECTION',exact=True).click()
                 self.assertEqual(pending.value.status,409)
                 expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('Another inspection was saved')
                 expect(notes).to_have_value('Observed actual surface; isolated fixture')
                 page.once('dialog',lambda dialog:dialog.accept())
                 page.locator('[data-ops-reload]').click()
                 expect(page.locator('[data-ops-detail-feedback]')).not_to_contain_text('Another inspection was saved')
-                panel=page.locator('.neosubzero-frost-inspection').first
+                panel=page.locator('.ops-optional-inspection:visible').first
                 if not panel.evaluate('e=>e.open'):panel.locator(':scope > summary').click()
                 form=panel.locator('form').first
                 form.locator('[name=frost_result]').select_option('absent')
                 form.locator('[name=inspected_local]').fill('2026-10-22T12:00')
                 form.locator('[name=inspection_location]').fill('Delta direct inspection')
-                form.locator('[name=inspection_confirmed]').check()
-                self.submit(page,form.get_by_role('button',name='RECORD INSPECTION',exact=True))
+                self.submit(page,form.get_by_role('button',name='RECORD PHYSICAL INSPECTION',exact=True))
                 expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('INSPECTION SAVED')
-                panel=page.locator('.neosubzero-frost-inspection').first
+                panel=page.locator('.ops-optional-inspection:visible').first
                 if not panel.evaluate('e=>e.open'):panel.locator(':scope > summary').click()
                 expect(panel).to_contain_text('OBSERVED FROST ABSENT')
-                correction=panel.locator('details').first
-                correction.locator('summary').click()
-                form=correction.locator('form');form.locator('[name=frost_result]').select_option('uncertain')
+                form=panel.locator('form').nth(1);form.locator('[name=frost_result]').select_option('uncertain')
                 form.locator('[name=inspected_local]').fill('2026-10-22T12:00');form.locator('[name=inspection_location]').fill('Delta actual aircraft')
-                form.locator('[name=correction_reason]').fill('Fixture second review');form.locator('[name=inspection_confirmed]').check()
-                self.submit(page,form.get_by_role('button',name='SAVE INSPECTION CORRECTION'))
+                form.locator('[name=correction_reason]').fill('Fixture second review')
+                self.submit(page,form.get_by_role('button',name='CORRECT PHYSICAL INSPECTION'))
                 expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('INSPECTION SAVED')
                 for width,height in ((1920,900),(1920,1080),(1366,768),(3840,2160),(768,1024),(430,900),(390,900),(375,900),(320,900)):
                     page.set_viewport_size(dict(width=width,height=height))
-                    page.get_by_role('button',name='OPTIONAL FROST INSPECTION',exact=True).click()
-                    expect(page.locator('[name=frost_result]').first).to_be_focused()
-                    panel=page.locator('.neosubzero-frost-inspection').first
+                    panel=page.locator('.ops-optional-inspection:visible').first
                     if not panel.evaluate('e=>e.open'):panel.locator(':scope > summary').click()
                     field=panel.locator('[name=inspection_location]').first
                     field.focus();field.scroll_into_view_if_needed()

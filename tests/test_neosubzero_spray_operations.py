@@ -208,7 +208,7 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
             },
         )
         db.session.flush()
-        set_departure_deice_reason(self.event, "Changed later")
+        set_departure_deice_reason(self.event, "Snow", correction_reason='Verified later reason; retain the original snapshot')
         record = self._set_gallons(
             2,
             1,
@@ -237,7 +237,7 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
         self.assertEqual(default_record.reason_for_application, "Frost")
         self.assertEqual(default_record.active_precipitation, "Ice")
 
-        set_departure_deice_reason(self.event, "  Freezing Fog  ")
+        set_departure_deice_reason(self.event, "  Freezing Fog  ", correction_reason='Verified event reason; retain the original pass snapshot')
         db.session.commit()
         db.session.refresh(self.event)
         self.assertEqual(self.event.reason_for_application, "Freezing Fog")
@@ -253,7 +253,7 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
         self.assertEqual(explicit_record.reason_for_application, "Freezing Fog")
         self.assertEqual(default_record.reason_for_application, "Frost")
 
-        set_departure_deice_reason(self.event, "")
+        set_departure_deice_reason(self.event, "", correction_reason='Restore the departure default with prior snapshots retained')
         self.assertIsNone(self.event.reason_for_application)
         self.assertEqual(departure_deice_reason(self.event), "Frost")
 
@@ -286,6 +286,7 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
                     "operation_id": self.operation.id,
                     "physical_tail": self.mission.assigned_tail_number,
                     "reason_for_application": "Ice Crystals",
+                    "correction_reason": "Verified event reason correction; shared weather remains unchanged",
                 },
             )
         self.assertEqual(response.status_code, 302)

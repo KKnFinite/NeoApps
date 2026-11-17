@@ -332,6 +332,8 @@ def _historical_evidence(operation,mission,parent,kind,number,settings,values):
 
 
 def change_participation(operation, mission, parent, kind, action, values, settings, *, actor_id):
+    if kind == 'departure' and getattr(parent, 'reset_at_utc', None):
+        raise NeoSubZeroEvidenceError('This initiation was reset. Reload current aircraft before changing participation.')
     if kind == 'pretreat':
         if action != 'correct_participant':
             raise NeoSubZeroEvidenceError('Use the Pretreat truck editor to record participation.')
