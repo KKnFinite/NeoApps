@@ -869,6 +869,9 @@ def edit_user(user_id):
 @portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
 def user_roles(user_id):
     target_user = User.query.get_or_404(user_id)
+    if target_user.scorpion_vendor:
+        flash("Convert this Truck Driver to FULL NEO ACCOUNT before granting NeoNode roles.", "error")
+        return redirect(url_for("auth.user_detail", user_id=target_user.id))
     gateway = get_current_gateway()
     membership = _current_gateway_membership_for_user(target_user, gateway)
 
@@ -1828,6 +1831,8 @@ def _neogateway_seed_role_for_membership(user, membership):
 
 
 def _apply_node_role_form(target_user, membership):
+    if target_user.scorpion_vendor:
+        raise ValueError("Truck Driver accounts cannot receive NeoNode roles.")
     if not _membership_is_approved_active(membership):
         raise ValueError("User must have approved RFD gateway access before assigning node roles.")
 
