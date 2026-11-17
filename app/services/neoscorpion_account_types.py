@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models import (
     User, GatewayMembership, GatewayNodeRole, PortalAppAccess,
     NeoScorpionVendorAccount, NeoScorpionVendorNight,
+    NeoScorpionSortFueler, NeoScorpionFuelAssignment,
 )
 from app.services.access_control import ensure_user_gateway_membership, ensure_user_app_access
 from app.services.auth_session_security import rotate_user_session_version
@@ -35,7 +36,7 @@ def convert_account(gateway, actor, user, account_type):
     # Match the nightly driver mutation lock order (Sort first, then
     # vendor/identity rows) so conversion cannot deadlock against a live claim.
     operation, state = None, None
-    if account_type == "full":
+    if account_type in {"vendor", "full"}:
         from app.services.neoscorpion import current_sort_operation
         from app.services.neoscorpion_assets import (
             lock_nightly_asset_scope_for_mutation,
@@ -64,6 +65,20 @@ def convert_account(gateway, actor, user, account_type):
         return False
     if account_type == "full" and profile is None:
         return False
+
+    if account_type == "vendor" and operation is not None and not operation.archived_at_utc:
+        if NeoScorpionSortFueler.query.filter_by(
+            sort_date_operation_id=operation.id, user_id=user.id,
+        ).first():
+            raise ValueError(
+                "Remove this user from Nightly Fuelers before converting to Truck Driver."
+            )
+        if NeoScorpionFuelAssignment.query.filter_by(
+            sort_date_operation_id=operation.id, assigned_fueler_user_id=user.id,
+        ).filter(NeoScorpionFuelAssignment.review_status != "complete").first():
+            raise ValueError(
+                "Complete or reassign unfinished fueling work before converting to Truck Driver."
+            )
 
     now = datetime.utcnow()
     apps = PortalAppAccess.query.filter_by(user_id=user.id).with_for_update().all()
