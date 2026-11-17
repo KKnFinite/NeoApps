@@ -1651,7 +1651,9 @@
         body.set("field_name", input.dataset.autosaveField || "");
         body.set("value", submittedValue);
         body.set("expected_value", savedValue);
-        body.set("expected_lbs", input.dataset.savedLbs || "");
+        if (Object.prototype.hasOwnProperty.call(input.dataset, "savedLbs")) {
+            body.set("expected_lbs", input.dataset.savedLbs);
+        }
         try {
             const response = await fetch(autosaveUrl, {
                 method: "POST",
