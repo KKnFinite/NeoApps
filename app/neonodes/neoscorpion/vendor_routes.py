@@ -43,29 +43,37 @@ def vendor_only(view):
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
-    return auth.login_response(vendor_driver=True)
+    if request.method == "GET":
+        return redirect(url_for("auth.login"))
+    return auth.login_response()
 
 
 @bp.post('/logout')
 @vendor_only
 def logout(account):
-    return auth.logout_response(vendor_driver=True)
+    return auth.logout_response()
 
 
 @bp.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    return auth.forgot_password_response(vendor_driver=True)
+    if request.method == "GET":
+        return redirect(url_for("auth.forgot_password"))
+    return auth.forgot_password_response()
 
 
 @bp.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-    return auth.reset_password_response(token, vendor_driver=True)
+    if request.method == "GET":
+        return redirect(url_for("auth.reset_password", token=token))
+    return auth.reset_password_response(token)
 
 
 @bp.route('/change-password', methods=['GET', 'POST'])
 @vendor_only
 def change_password(account):
-    return auth.change_password_response(vendor_driver=True)
+    if request.method == "GET":
+        return redirect(url_for("auth.change_password"))
+    return auth.change_password_response()
 
 
 def driver_access(account):
@@ -352,7 +360,7 @@ def manage():
             if action not in {'invite','resend','disable','enable'}:
                 operation=vendors.current_operation(gateway,request.form.get('operation_id'))
             if action in {'invite','resend'}:
-                message = send_invitation(gateway, current_user, action)
+                raise ValueError('Driver invitations are retired. Use NeoApps Create Account and User Management.')
             elif action in {'approved','denied','revoked'}:
                 vendors.set_participation(gateway,operation,current_user,request.form.get('user_id'),action,request.form.get('version'))
             elif action in {'claim_approve','claim_deny'}:
