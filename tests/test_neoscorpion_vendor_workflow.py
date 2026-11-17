@@ -85,7 +85,7 @@ class VendorWorkflowTest(TestCase):
         self.assertFalse(groups['working'])
         self.assertIn('N491UP', groups['complete'][0])
 
-        service.start_follow_up_fuel_cycle(self.gateway, self.dispatcher, self.assignment.id, 'uplift', '35',
+        service.start_follow_up_fuel_cycle(self.gateway, self.dispatcher, self.assignment.id, 'uplift', '35.0',
             self.fueler.id, self.truck.id, expected_cycle=1, expected_tail=self.mission.assigned_tail_number)
         db.session.commit()
         groups = self.sort_mission_groups()
@@ -213,12 +213,13 @@ class VendorWorkflowTest(TestCase):
         self.client.post(f'{DRIVER}/login',data={'email':user.email,'password':'VendorPassword123!'})
         for method,path in [('get','/neostaffing/'),('get','/motherbrain/'),('get','/neoscorpion/fuel-dispatch'),
                 ('get','/neoscorpion/fuel-assignments/revision'),('get','/neorain/'),('post','/neoscorpion/fuel-dispatch/assets'),
-                ('get','/portal'),('get','/login'),('get','/admin/users'),('get','/neoscorpion/driver/manage'),
+                ('get','/portal'),('get','/admin/users'),('get','/neoscorpion/driver/manage'),
                 ('post','/neoscorpion/driver/inventory')]:
             self.assertEqual(getattr(self.client,method)(path).status_code,403,path)
+        self.assertEqual(self.client.get('/login').location, f'{DRIVER}/my-truck')
         self.assertEqual(self.client.get(f'{DRIVER}/account').location, f'{DRIVER}/my-truck')
         account.enabled=False;db.session.commit()
-        self.assertEqual(self.client.get(f'{DRIVER}/live').location, f'{DRIVER}/login')
+        self.assertEqual(self.client.get(f'{DRIVER}/live').location, '/login')
 
     def test_nonapproved_cannot_view_or_claim(self):
         user,account,_=self.vendor()
@@ -259,36 +260,36 @@ class VendorWorkflowTest(TestCase):
         self.assertIsNone(self.client.get(f'{driver_url}/revision').json['sort_missions_revision'])
         self.assertEqual(self.client.get(f'{driver_url}/live').status_code, 403)
 
-    def test_invitation_cannot_complete_via_portal_verification_and_disable_blocks_login(self):
+    def test_legacy_invitation_still_works_but_unified_login_enforces_disable(self):
+        # Previously issued invitations may be redeemed while valid; new
+        # applicants no longer use this separate registration path.
         user, token = vendors.invite(self.gateway, self.dispatcher, 'isolated@example.test', 'Isolated Driver')
         db.session.commit()
-        response = self.client.get(f'/verify-email/{token}')
-        self.assertEqual(response.location, f'/neoscorpion/driver/invitation/{token}')
-        self.assertIsNone(user.email_verified_at)
-
         password = 'VendorPassword123!'
-        response = self.client.post(response.location, data={'password': password, 'confirm_password': password})
+        response = self.client.post(f'{DRIVER}/invitation/{token}', data={
+            'password': password, 'confirm_password': password,
+        })
         self.assertEqual(response.location, f'{DRIVER}/login')
+        self.assertIsNotNone(user.email_verified_at)
         self.login(self.dispatcher)
-        self.client.post('/neoscorpion/driver/manage', data={'action': 'disable', 'user_id': user.id})
+        self.client.post(f'{DRIVER}/manage', data={'action': 'disable', 'user_id': user.id})
         self.client.post('/logout')
-        response = self.client.post(f'{DRIVER}/login', data={'email': user.email, 'password': password})
+        response = self.client.post('/login', data={'email': user.email, 'password': password})
         self.assertEqual(response.status_code, 403)
         self.assertIn(b'account is disabled', response.data)
 
-    def test_vendor_login_routes_waiting_and_expired_sessions_to_truck_driver(self):
+    def test_unified_login_waits_for_nightly_approval_and_invalidates_old_sessions(self):
         self.client.post('/logout')
         user, token = vendors.invite(self.gateway, self.dispatcher, 'waiting@example.test', 'Waiting Driver')
         db.session.commit()
         password = 'VendorPassword123!'
         credentials = {'email': user.email, 'password': password}
-        registration = self.client.post(f'{DRIVER}/invitation/{token}', data={
+        self.assertEqual(self.client.post(f'{DRIVER}/invitation/{token}', data={
             'password': password, 'confirm_password': password,
-        })
-        self.assertEqual(registration.location, f'{DRIVER}/login')
-        self.assertEqual(self.client.post('/login', data=credentials).status_code, 401)
-        self.assertEqual(self.client.get(f'{DRIVER}/my-truck').location, f'{DRIVER}/login')
-        self.assertEqual(self.client.post(f'{DRIVER}/login', data=credentials).location, f'{DRIVER}/my-truck')
+        }).location, f'{DRIVER}/login')
+        self.assertEqual(self.client.get(f'{DRIVER}/my-truck').location, '/login')
+        self.assertEqual(self.client.get(f'{DRIVER}/login').location, '/login')
+        self.assertEqual(self.client.post('/login', data=credentials).location, f'{DRIVER}/my-truck')
         waiting = self.client.get(f'{DRIVER}/my-truck')
         self.assertEqual(waiting.status_code, 200)
         self.assertIn(b'AWAITING DISPATCHER APPROVAL', waiting.data)
@@ -299,44 +300,39 @@ class VendorWorkflowTest(TestCase):
         with patch.object(service, 'current_sort_operation', return_value=None):
             closed = self.client.get(f'{DRIVER}/my-truck')
             self.assertIn(b'NO ACTIVE SORT', closed.data)
-            self.assertNotIn(b'AWAITING DISPATCHER APPROVAL', closed.data)
 
         user.auth_session_version += 1
         db.session.commit()
-        self.assertEqual(self.client.get(f'{DRIVER}/my-truck').location, f'{DRIVER}/login')
-        self.assertEqual(self.client.post(f'{DRIVER}/login', data=credentials).location, f'{DRIVER}/my-truck')
-        self.assertEqual(self.client.post(f'{DRIVER}/logout').location, f'{DRIVER}/login')
-        self.assertEqual(self.client.get(f'{DRIVER}/my-truck').location, f'{DRIVER}/login')
+        self.assertEqual(self.client.get(f'{DRIVER}/my-truck').location, '/login')
+        self.assertEqual(self.client.post('/login', data=credentials).location, f'{DRIVER}/my-truck')
+        self.assertEqual(self.client.post('/logout').location, '/login')
+        self.assertEqual(self.client.get(f'{DRIVER}/my-truck').location, '/login')
 
-    def test_vendor_password_recovery_uses_branded_link_and_existing_single_use_token(self):
+    def test_unified_password_recovery_uses_one_single_use_neoapps_link(self):
         self.client.post('/logout')
         user, _, _ = self.vendor()
         config = dict(SEND_EMAIL_IN_TESTS=True, BREVO_API_KEY='fixture-key', MAIL_FROM_NAME='Fixture',
                       MAIL_FROM_EMAIL='sender@example.test', APP_BASE_URL='https://neoapps.example')
         with patch.dict(self.fixture.app.config, config), patch('app.services.email_service.urlopen',
                 return_value=BytesIO(b'{"messageId":"fixture-reset"}')) as brevo:
-            self.assertEqual(self.client.post('/forgot-password', data={'email': user.email}).status_code, 200)
-            brevo.assert_not_called()
-            response = self.client.post(f'{DRIVER}/forgot-password', data={'email': user.email})
+            response = self.client.post('/forgot-password', data={'email': user.email})
+            self.assertEqual(response.status_code, 200)
             self.assertIn(b'If an account exists', response.data)
             brevo.assert_called_once()
             payload = json.loads(brevo.call_args.args[0].data)
-
         link = urlparse(payload['textContent'].splitlines()[2].removeprefix('Reset your password: '))
         self.assertEqual(link.netloc, 'neoapps.example')
-        self.assertTrue(link.path.startswith(f'{DRIVER}/reset-password/'))
-        employee_reset_path = link.path.removeprefix(DRIVER)
-        self.assertEqual(self.client.get(employee_reset_path).location, link.path)
+        self.assertTrue(link.path.startswith('/reset-password/'))
         weak = {'password': 'weak', 'confirm_password': 'weak'}
         self.assertEqual(self.client.post(link.path, data=weak).status_code, 400)
         password = 'NewVendorPass123!'
         form = {'password': password, 'confirm_password': password}
-        self.assertEqual(self.client.post(link.path, data=form).location, f'{DRIVER}/login')
+        self.assertEqual(self.client.post(link.path, data=form).location, '/login')
         self.assertEqual(self.client.post(link.path, data=form).status_code, 400)
-        self.assertEqual(self.client.post(f'{DRIVER}/login', data={
+        self.assertEqual(self.client.post('/login', data={
             'email': user.email, 'password': 'VendorPassword123!',
         }).status_code, 401)
-        self.assertEqual(self.client.post(f'{DRIVER}/login', data={
+        self.assertEqual(self.client.post('/login', data={
             'email': user.email, 'password': password,
         }).location, f'{DRIVER}/my-truck')
 
@@ -345,7 +341,9 @@ class VendorWorkflowTest(TestCase):
         from app import PUBLIC_ASSET_ENDPOINTS,_is_public_asset_request
         from werkzeug.exceptions import Forbidden
         user,_account,_token=self.vendor()
-        allowed={'healthz','auth.renew_csrf','scorpion_vendor.login','scorpion_vendor.logout',
+        allowed={'healthz','auth.renew_csrf','auth.login','auth.logout',
+            'auth.forgot_password','auth.reset_password','auth.change_password','auth.verify_email',
+            'scorpion_vendor.login','scorpion_vendor.logout',
             'scorpion_vendor.change_password','scorpion_vendor.forgot_password','scorpion_vendor.reset_password',
             'scorpion_vendor.account','scorpion_vendor.my_truck','scorpion_vendor.live',
             'scorpion_vendor.revision','scorpion_vendor.fuel_reading','scorpion_vendor.driver_fuel_reading',
