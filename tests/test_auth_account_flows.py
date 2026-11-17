@@ -2293,6 +2293,48 @@ class AuthAccountFlowsTest(unittest.TestCase):
         ).status_code, 302)
         self.assertIsNone(db.session.get(NeoScorpionVendorAccount, admin.id))
 
+    def test_restricted_driver_cannot_receive_node_roles_through_direct_user_route(self):
+        admin = self._admin("node_guard_admin", "grandmaster")
+        driver, membership = self._pending_user("driver_node_guard", "guard-driver@example.com", True)
+        db.session.commit()
+        self._login(admin.username)
+        self.assertEqual(self.client.post(
+            f"/portal/manage/access-requests/{membership.id}/approve",
+            data={"account_type": "vendor"},
+        ).status_code, 302)
+        node = NeoNode.query.filter_by(code="motherbrain").first()
+        self.assertEqual(self.client.post(
+            f"/portal/manage/users/{driver.id}/roles",
+            data={f"node_{node.id}": "grandmaster"},
+        ).status_code, 302)
+        self.assertFalse(user_can_access_node(driver, "RFD", "motherbrain"))
+        self.assertFalse(any(role.is_active for role in GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+        ).all()))
+        self.assertEqual(self.client.post(
+            f"/portal/manage/users/{driver.id}/gateway-membership",
+            data={"action": "approve", "account_type": "full"},
+        ).status_code, 302)
+        self.assertIsNotNone(db.session.get(NeoScorpionVendorAccount, driver.id))
+        self.assertFalse(user_can_access_node(driver, "RFD", "motherbrain"))
+
+    def test_vendor_conversion_revokes_legacy_gateway_access_when_app_grant_missing(self):
+        admin = self._admin("legacy_guard_admin", "grandmaster")
+        person, membership = self._approved_user("legacy_vendor", "legacy-vendor@example.com")
+        db.session.commit()
+        self.assertIsNone(PortalAppAccess.query.filter_by(
+            user_id=person.id, app_code="neogateway").first())
+        self._login(admin.username)
+        response = self.client.post(
+            f"/portal/manage/users/{person.id}/account-type",
+            data={"account_type": "vendor"},
+        )
+        self.assertEqual(response.status_code, 302)
+        grant = PortalAppAccess.query.filter_by(
+            user_id=person.id, app_code="neogateway").one()
+        self.assertEqual((grant.status, grant.is_active), ("denied", False))
+        self.assertFalse(user_can_access_node(person, "RFD", "motherbrain"))
+
     def test_regular_registration_accepts_vendor_without_employee_id(self):
         data = self._account_form(
             email="contractor@example.com", employee_id="",
