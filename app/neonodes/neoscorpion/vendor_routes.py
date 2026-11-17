@@ -106,12 +106,19 @@ def denied(error):
     return str(error), 403
 
 
-def workspace_result(gateway, *, message=None):
+def workspace_result(gateway, *, message=None, account_id=None):
     """Read the existing revision after commit; never create a parallel state."""
     from app.services.neoscorpion import fuel_assignments_live_revision
     payload = dict(ok=True, changed=True, **fuel_assignments_live_revision(gateway))
     if message:
         payload['message'] = message
+    if account_id is not None:
+        profile = NeoScorpionVendorAccount.query.filter_by(user_id=account_id, gateway_id=gateway.id).first()
+        if profile:
+            operation_id = payload['operation_id']
+            night = db.session.get(NeoScorpionVendorNight, (operation_id, profile.user_id)) if operation_id else None
+            payload['account_html'] = render_template('neonodes/neoscorpion/_asset_driver_account.html',
+                profile=profile, night=night, operation_id=operation_id)
     return jsonify(payload)
 
 
@@ -432,7 +439,9 @@ def manage():
                 current_app.logger.warning('Could not publish the vendor invitation refresh.')
                 message += ' Refresh Nightly Trucks to update the account list.'
         if request.form.get('dispatch_assets_workspace')=='1':
-            return workspace_result(gateway, message=message)
+            account_id = (int(request.form['user_id'])
+                          if action in {'approved', 'denied', 'revoked', 'enable', 'disable'} else None)
+            return workspace_result(gateway, message=message, account_id=account_id)
         if message:
             flash(message, 'success')
         return redirect(url_for('scorpion_vendor.manage'))

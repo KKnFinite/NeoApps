@@ -1,0 +1,23 @@
+{{ csrf_field() }}
+<input type="hidden" name="operation_id" value="{{ operation_id if operation_id is not none else '' }}">
+<input type="hidden" name="user_id" value="{{ profile.user_id }}">
+<input type="hidden" name="version" value="{{ night.version if night else 0 }}">
+{% set registered = profile.user.email_verified_at %}
+{% if operation_id and profile.enabled and profile.user.is_active and registered %}
+    {% if night and night.status == 'approved' %}
+    <button class="action-button" name="action" value="revoked">REVOKE</button>
+    {% else %}
+    <button class="action-button" name="action" value="approved">APPROVE TONIGHT</button>
+    {% if not night or night.status == 'pending' %}
+    <button class="action-button" name="action" value="denied">DENY</button>
+    {% endif %}
+    {% endif %}
+{% endif %}
+{% if profile.enabled %}
+<button class="action-button" name="action" value="disable">DISABLE ACCOUNT</button>
+{% else %}
+<button class="action-button" name="action" value="enable">ENABLE ACCOUNT</button>
+{% endif %}
+{% if profile.enabled and profile.user.is_active and not registered %}
+<button class="action-button" name="action" value="resend">RESEND INVITATION</button>
+{% endif %}

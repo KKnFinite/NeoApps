@@ -1,0 +1,10 @@
+<div class="scorpion-asset-account" data-assets-unit="account-{{ profile.user_id }}">
+    <span>
+        <strong>{{ profile.user.display_name }}</strong>
+        <small data-vendor-account-state>{{ 'ENABLED' if profile.enabled else 'DISABLED' }} · {{ night.status|upper if night else 'NOT APPROVED' }} · {{ 'EMAIL VERIFIED' if profile.user.email_verified_at else 'REGISTRATION PENDING' }}</small>
+    </span>
+    <form method="post" action="{{ url_for('scorpion_vendor.manage') }}">
+        {% include 'neonodes/neoscorpion/_vendor_account_controls.html' %}
+        <small data-vendor-account-feedback data-lifecycle-status role="status"></small>
+    </form>
+</div>

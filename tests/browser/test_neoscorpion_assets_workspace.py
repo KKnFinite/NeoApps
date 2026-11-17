@@ -7,13 +7,116 @@ from unittest.mock import patch
 from playwright.sync_api import expect
 from app.extensions import db
 from app.models import (User,SortDateOperation,NeoScorpionFuelTruck,NeoScorpionSortTruck,NeoScorpionVendorAccount,
-    NeoScorpionTruckDriver,NeoScorpionSortAssetState)
+    NeoScorpionTruckDriver,NeoScorpionSortAssetState,NeoScorpionVendorNight)
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services import neoscorpion_vendors as vendors
 from tests.browser import test_mobile_drawer as fixtures
 
 
 class AssetsBrowserTest(unittest.TestCase):
+    def test_vendor_account_controls_follow_saved_state(self):
+        fixture = fixtures.MobileDrawerBrowserTest
+        fixture.setUpClass()
+        fixture.app.config['LIVE_SCREEN_REFRESH_INTERVAL_MS'] = 1000
+        try:
+            with fixture.app.app_context():
+                gateway = ensure_default_gateway_and_nodes()
+                actor = User.query.filter_by(username='drawer-admin').one()
+                operation = SortDateOperation(generated_by_user_id=actor.id, gateway_id=gateway.id,
+                    gateway_code=gateway.code, sort_date=date.today(), sort_name='night', window_minutes=60)
+                db.session.add(operation)
+                db.session.flush()
+                operation_id = operation.id
+                account_ids = {}
+                for name in ('Registered', 'Pending', 'Invited'):
+                    user, token = vendors.invite(gateway, actor, f'{name.lower()}-controls@example.test', name)
+                    if name != 'Invited':
+                        vendors.accept_invitation(token, 'BrowserFixture123!', 'BrowserFixture123!')
+                    account_ids[name] = user.id
+                db.session.add(NeoScorpionVendorNight(sort_date_operation_id=operation_id,
+                    user_id=account_ids['Pending'], changed_by_user_id=actor.id, status='pending'))
+                db.session.commit()
+
+            with patch('app.services.neoscorpion.current_existing_operational_sort_operations',
+                       side_effect=lambda gateway, now=None: [db.session.get(SortDateOperation, operation_id)]):
+                with closing(fixture.pw.chromium.launch()) as browser:
+                    dispatch = browser.new_page(viewport={'width': 1440, 'height': 900})
+                    errors = []
+                    dispatch.on('pageerror', lambda error: errors.append(str(error)))
+                    fixture().login(dispatch)
+                    dispatch.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1','seen')")
+                    fixture().ready(dispatch, '/neoscorpion/fuel-dispatch?assets=open')
+                    accounts = dispatch.locator('#nightly-trucks [data-assets-disclosure=accounts]')
+                    accounts.locator(':scope > summary').click()
+                    registered, pending, invited = [accounts.locator(f'[data-assets-unit="account-{user_id}"]')
+                        for user_id in account_ids.values()]
+
+                    def check(row, status, buttons, feedback=None):
+                        expect(row.locator('[data-vendor-account-state]')).to_have_text(status)
+                        expect(row.get_by_role('button')).to_have_text(buttons)
+                        if feedback:
+                            expect(row.get_by_role('status')).to_have_text(feedback)
+
+                    def act(row, name, status=200, *, stale=False):
+                        button = row.get_by_role('button', name=name, exact=True)
+                        with dispatch.expect_response(lambda response: response.request.method == 'POST'
+                                and response.url.endswith('/driver/manage')) as result:
+                            if stale:
+                                button.evaluate('''button => {
+                                    const version = button.form.elements.version;
+                                    const original = version.value;
+                                    version.value = '0';
+                                    button.click();
+                                    version.value = original;
+                                }''')
+                            else:
+                                button.click()
+                        self.assertEqual(result.value.status, status, result.value.json().get('error'))
+
+                    approve = 'APPROVE TONIGHT'
+                    disable = 'DISABLE ACCOUNT'
+                    enable = 'ENABLE ACCOUNT'
+                    resend = 'RESEND INVITATION'
+                    check(registered, 'ENABLED · NOT APPROVED · EMAIL VERIFIED', [approve, 'DENY', disable])
+                    check(pending, 'ENABLED · PENDING · EMAIL VERIFIED', [approve, 'DENY', disable])
+                    check(invited, 'ENABLED · NOT APPROVED · REGISTRATION PENDING', [disable, resend])
+                    self.assertTrue(registered.evaluate('''row => {
+                        const bounds = Array.from(row.querySelectorAll('button'), button => button.getBoundingClientRect());
+                        return bounds.every(box => box.top === bounds[0].top && box.height <= 32);
+                    }'''))
+
+                    draft = accounts.locator('[data-assets-unit=invitation] [name=name]')
+                    draft.fill('Keep this unsaved invite')
+                    act(registered, 'DENY')
+                    check(registered, 'ENABLED · DENIED · EMAIL VERIFIED', [approve, disable], 'Nightly approval denied.')
+                    act(registered, approve)
+                    check(registered, 'ENABLED · APPROVED · EMAIL VERIFIED', ['REVOKE', disable], 'Approved for tonight.')
+                    expect(draft).to_have_value('Keep this unsaved invite')
+
+                    act(registered, 'REVOKE', status=400, stale=True)
+                    expect(registered.get_by_role('status')).to_contain_text('Approval changed. Refresh first.')
+                    expect(registered.locator('[data-vendor-account-state]')).to_contain_text('APPROVED')
+                    act(registered, 'REVOKE')
+                    check(registered, 'ENABLED · REVOKED · EMAIL VERIFIED', [approve, disable], 'Nightly approval revoked.')
+
+                    act(registered, disable)
+                    check(registered, 'DISABLED · REVOKED · EMAIL VERIFIED', [enable], 'Account disabled.')
+                    draft.fill('')
+                    act(registered, enable)
+                    check(registered, 'ENABLED · REVOKED · EMAIL VERIFIED', [approve, disable], 'Account enabled.')
+                    act(invited, disable)
+                    check(invited, 'DISABLED · NOT APPROVED · REGISTRATION PENDING', [enable], 'Account disabled.')
+                    act(invited, enable)
+                    with patch('app.services.email_service.send_vendor_invitation',
+                               return_value={'sent': True, 'message_id': 'fixture-resend'}) as send:
+                        act(invited, resend)
+                        send.assert_called_once()
+                    check(invited, 'ENABLED · NOT APPROVED · REGISTRATION PENDING', [disable, resend],
+                        'Brevo accepted the invitation email. Inbox delivery is pending verification.')
+                    self.assertEqual(errors, [])
+        finally:
+            fixture.tearDownClass()
+
     def test_vendor_registration_and_access_managed_from_nightly_trucks(self):
         fixture = fixtures.MobileDrawerBrowserTest
         fixture.setUpClass()

@@ -143,6 +143,38 @@ class VendorWorkflowTest(TestCase):
             vendors.accept_invitation(token,'AnotherPassword123!','AnotherPassword123!')
         db.session.rollback()
 
+    def test_account_workspace_returns_current_controls_and_sort_scope(self):
+        user, _, _ = self.vendor()
+        self.login(self.dispatcher)
+        manage_url = f'{DRIVER}/manage'
+        operation_id = self.operation.id
+
+        def update(action, version, state, actions):
+            response = self.client.post(manage_url, data={
+                'action': action, 'version': version, 'operation_id': operation_id,
+                'user_id': user.id, 'dispatch_assets_workspace': '1',
+            })
+            self.assertEqual(response.status_code, 200, response.data)
+            html = response.json['account_html']
+            self.assertIn(state, html)
+            self.assertEqual(re.findall(r'name="action" value="(\w+)"', html), actions)
+            return response.json
+
+        update('revoked', 1, 'ENABLED · REVOKED · EMAIL VERIFIED', ['approved', 'disable'])
+        update('approved', 2, 'ENABLED · APPROVED · EMAIL VERIFIED', ['revoked', 'disable'])
+        update('disable', 3, 'DISABLED · REVOKED · EMAIL VERIFIED', ['enable'])
+
+        with patch.object(service, 'current_sort_operation', return_value=None):
+            page = self.client.get(manage_url).get_data(as_text=True)
+            self.assertIn('DISABLED · NOT APPROVED · EMAIL VERIFIED', page)
+            self.assertEqual(re.findall(r'<button[^>]+name="action" value="(\w+)"', page), ['enable'])
+            payload = update('enable', 4, 'ENABLED · NOT APPROVED · EMAIL VERIFIED', ['disable'])
+            self.assertIsNone(payload['operation_id'])
+
+        page = self.client.get(manage_url).get_data(as_text=True)
+        self.assertIn('ENABLED · REVOKED · EMAIL VERIFIED', page)
+        self.assertEqual(re.findall(r'<button[^>]+name="action" value="(\w+)"', page), ['approved', 'disable'])
+
     def test_default_deny_all_other_routes_and_apis(self):
         user,account,_=self.vendor()
         self.client.post(f'{DRIVER}/login',data={'email':user.email,'password':'VendorPassword123!'})

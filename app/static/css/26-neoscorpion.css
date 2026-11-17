@@ -1565,7 +1565,9 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 [data-assets-workspace] .scorpion-asset-claim, [data-assets-workspace] .scorpion-asset-account { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 5px 0; border-bottom: 1px solid #34373d; }
 [data-assets-workspace] .scorpion-asset-account > span { flex: 1 1 190px; }
 [data-assets-workspace] .scorpion-asset-account > span small { display: block; }
-[data-assets-workspace] .scorpion-asset-account > form { flex: 2 1 430px; }
+[data-assets-workspace] .scorpion-asset-account > form { flex: 2 1 310px; }
+[data-assets-workspace] [data-vendor-account-feedback] { flex: 1 0 100%; }
+[data-assets-workspace] [data-vendor-account-feedback]:empty { position: absolute; }
 [data-assets-workspace] .scorpion-assets-audit { max-height: 220px; overflow: auto; overflow-wrap: anywhere; }
 [data-assets-workspace] .scorpion-assets-audit p { margin: 4px 0; font-size: 11px; }
 [data-assets-workspace] [data-lifecycle-status][data-state=error] { color: #ff8983; }

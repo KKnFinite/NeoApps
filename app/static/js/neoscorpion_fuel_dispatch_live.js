@@ -814,6 +814,21 @@
         element.dataset.state = state;
     };
 
+    const accountRowSelector = '.scorpion-asset-account';
+    const accountFeedbackSelector = '[data-vendor-account-feedback]';
+    const accountConfirmations = {
+        approved: 'Approved for tonight.',
+        denied: 'Nightly approval denied.',
+        revoked: 'Nightly approval revoked.',
+        enable: 'Account enabled.',
+        disable: 'Account disabled.',
+    };
+
+    const copyAccountFeedback = (current, fresh) => {
+        const status = current?.querySelector(accountFeedbackSelector);
+        if (status?.textContent) setStatus(fresh.querySelector(accountFeedbackSelector), status.textContent, status.dataset.state);
+    };
+
     const adoptFingerprint = (payload) => {
         const nextOperation = String(payload.operation_id ?? "none");
         if (!observeLiveState(nextOperation, Number(payload.revision || 0), String(payload.tail_revision || ""))) return;
@@ -1251,6 +1266,7 @@
                         item.querySelectorAll('[data-assets-disclosure][open]').forEach(open=>{
                             Array.from(copy.querySelectorAll('[data-assets-disclosure]')).filter(n=>n.dataset.assetsDisclosure===open.dataset.assetsDisclosure).forEach(n=>n.open=true);
                         });
+                        if (item.matches(accountRowSelector)) copyAccountFeedback(item, copy);
                         if(item.outerHTML!==copy.outerHTML)item.replaceWith(copy);
                     }
                 } else if (fresh) {
@@ -1467,6 +1483,14 @@
                 throw new Error("Fuel Dispatch refresh returned invalid content.");
             }
             const commitParts = dispatchDelta?.prepare(nextPanel, currentPanel);
+            const currentAssets = currentPanel.querySelector('[data-assets-workspace]');
+            const freshAssets = nextPanel.querySelector('[data-assets-workspace]');
+            if (currentAssets && freshAssets && currentAssets.dataset.assetsOperationId === freshAssets.dataset.assetsOperationId) {
+                const accounts = new Map(Array.from(currentAssets.querySelectorAll(accountRowSelector),
+                    row => [row.dataset.assetsUnit, row]));
+                freshAssets.querySelectorAll(accountRowSelector).forEach(row =>
+                    copyAccountFeedback(accounts.get(row.dataset.assetsUnit), row));
+            }
             dispatchDelta?.applyRanks(nextPanel, payload.mission_manifest);
             const savedFocus = dispatchDelta?.saveFocus(currentPanel);
             // A dispatcher may scroll while the panel request is in flight.
@@ -1827,6 +1851,7 @@
         const pendingControls = [];
         let status = form.querySelector("[data-lifecycle-status]");
         const assetsWorkspace=form.closest('[data-assets-workspace]');
+        const accountRow = form.closest(accountRowSelector);
         if(assetsWorkspace && !status) {
             status=document.createElement('small');
             status.setAttribute('data-lifecycle-status','');
@@ -1873,7 +1898,19 @@
                 protectedControls().filter(control => control.form === form)
                     .forEach(control => initialControlValues.set(control, controlValue(control)));
             }
-            setStatus(status, payload.message || (payload.changed ? "Saved" : "No change"));
+            const accountConfirmation = accountRow && accountConfirmations[body.get('action')];
+            setStatus(status, payload.message || accountConfirmation || (payload.changed ? "Saved" : "No change"));
+            if (accountRow && payload.account_html && String(payload.operation_id ?? '') === assetsWorkspace.dataset.assetsOperationId) {
+                const template = document.createElement('template');
+                template.innerHTML = payload.account_html.trim();
+                const nextAccount = template.content.firstElementChild;
+                if (nextAccount?.dataset.assetsUnit === accountRow.dataset.assetsUnit) {
+                    nextAccount.querySelector(accountFeedbackSelector).replaceWith(status);
+                    accountRow.replaceWith(nextAccount);
+                    // Reject refresh responses started before the row was saved.
+                    stateGeneration += 1;
+                }
+            }
             // The existing panel refresh preserves row/details/scroll and defers
             // while another field or the shared Fueler Data modal is in use.
             pendingFuelDataRefresh = true;
