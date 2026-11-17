@@ -41,6 +41,19 @@
     </dl>
 
     <section class="panel-subsection">
+        <h2>NEOAPPS ACCOUNT TYPE</h2>
+        <p><strong>{{ "RESTRICTED TRUCK DRIVER" if target_user.scorpion_vendor else "FULL NEOAPPS" }}</strong></p>
+        {% if can_edit_user and target_user.id != current_user.id %}
+        <p class="muted">{{ "Full NeoApps conversion requires renewed role approval; historical driver work is preserved." if target_user.scorpion_vendor else "Truck Driver conversion revokes general app/node access and requires separate Dispatcher approval for each Sort." }}</p>
+        <form class="operation-form" method="post" action="{{ url_for('auth.change_user_account_type', user_id=target_user.id) }}"
+              data-confirm-message="Change this person's account type and revoke their current access?">
+            <input type="hidden" name="account_type" value="{{ 'full' if target_user.scorpion_vendor else 'vendor' }}">
+            <button class="action-button" type="submit">{{ 'CONVERT TO FULL NEO ACCOUNT' if target_user.scorpion_vendor else 'CONVERT TO TRUCK DRIVER' }}</button>
+        </form>
+        {% endif %}
+    </section>
+
+    <section class="panel-subsection">
         <h2>ACCESS REASON</h2>
         <p class="muted">{{ target_user.access_reason or "" }}</p>
     </section>
@@ -100,6 +113,7 @@
                 {% if target_user.email_verified_at %}
                 <form class="operation-form access-approval-form user-detail-access-approval" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=target_user.id) }}">
                     <input type="hidden" name="action" value="approve">
+                    {% with can_assign_driver=can_edit_user %}{% include "auth/_account_type_approval.html" %}{% endwith %}
                     <fieldset class="node-role-fieldset">
                         <legend>NEONODE ROLES</legend>
                         <div class="node-role-grid">
