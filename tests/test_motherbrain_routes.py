@@ -3914,6 +3914,53 @@ class MotherBrainRoutesTest(unittest.TestCase):
             1,
         )
 
+    def test_motherbrain_mission_form_cannot_overwrite_scorpion_fuel_load(self):
+        operation = self._operation()
+        db.session.add(operation)
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="FUEL383",
+            origin="RFD",
+            destination="SDF",
+        )
+        mission.planned_fuel_load = 38300
+        db.session.add(mission)
+        db.session.commit()
+
+        edit_page = self.client.get(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit"
+        )
+        self.assertEqual(edit_page.status_code, 200)
+        self.assertNotIn(b'name="planned_fuel_load"', edit_page.data)
+        self.assertIn(b"FUEL LOAD (NEOSCORPION)", edit_page.data)
+
+        edited = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
+            data=self._mission_form_data(
+                flight_number="FUEL383",
+                planned_fuel_load="38349",
+            ),
+            follow_redirects=False,
+        )
+        self.assertEqual(edited.status_code, 302)
+        db.session.refresh(mission)
+        self.assertEqual(mission.planned_fuel_load, 38300)
+
+        created = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/new",
+            data=self._mission_form_data(
+                flight_number="FUELNEW",
+                planned_fuel_load="38349",
+            ),
+            follow_redirects=False,
+        )
+        self.assertEqual(created.status_code, 302)
+        new_mission = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id, flight_number="FUELNEW"
+        ).one()
+        self.assertIsNone(new_mission.planned_fuel_load)
+
     def test_edit_departure_mission_into_arrival_clears_pull_times(self):
         operation = self._operation()
         db.session.add(operation)
