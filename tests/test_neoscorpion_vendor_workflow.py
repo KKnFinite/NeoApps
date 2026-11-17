@@ -134,6 +134,39 @@ class VendorWorkflowTest(TestCase):
         self.assertEqual(self.client.get(revision_url).status_code, 403)
         self.assertNotIn(b'ALL SORT MISSIONS', self.client.get(f'{DRIVER}/my-truck').data)
 
+    def test_active_driver_conversion_revokes_live_access_without_erasing_history(self):
+        self.prepare()
+        driver, account = self.connect()
+        from app.services.neoscorpion_account_types import convert_account
+        from app.models import GatewayMembership
+        driver_id = driver.id
+        link = NeoScorpionTruckDriver.query.filter_by(
+            sort_date_operation_id=self.operation.id, driver_user_id=driver_id,
+        ).one()
+        self.assertEqual(link.fuel_truck_id, self.truck.id)
+
+        changed = convert_account(self.gateway, self.dispatcher, driver, "full")
+        self.assertTrue(changed)
+        db.session.commit()
+        self.assertEqual(driver.id, driver_id)
+        self.assertIsNone(db.session.get(NeoScorpionVendorAccount, driver_id))
+        db.session.refresh(link)
+        self.assertIsNone(link.driver_user_id)
+        night = db.session.get(NeoScorpionVendorNight, (self.operation.id, driver_id))
+        self.assertEqual(night.status, "revoked")
+        membership = GatewayMembership.query.filter_by(
+            gateway_id=self.gateway.id, user_id=driver_id,
+        ).one()
+        self.assertEqual(membership.status, "pending")
+        self.assertTrue(NeoScorpionVendorAudit.query.filter_by(
+            subject_user_id=driver_id, action="account_converted_full").first())
+
+        self.assertTrue(convert_account(self.gateway, self.dispatcher, driver, "vendor"))
+        db.session.commit()
+        self.assertIsNotNone(db.session.get(NeoScorpionVendorAccount, driver_id))
+        self.assertEqual(night.status, "revoked")
+        self.assertEqual(User.query.filter_by(id=driver_id).count(), 1)
+
     def test_invitation_single_use_and_no_staffing_identity(self):
         user,account,token=self.vendor()
         self.assertIsNone(user.employee_id)
