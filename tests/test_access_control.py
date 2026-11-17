@@ -230,13 +230,13 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn("neo-brand__node node-word", switcher)
         self.assertIn('href="/neosektor"', switcher)
         self.assertIn(
-            'src="/static/images/logos/newlogo_sektor_small.png"',
+            'src="/static/images/optimized/newlogo_sektor_small.webp',
             switcher,
         )
         self.assertIn("Sektor", switcher)
         self.assertIn('href="/neoscorpion"', switcher)
         self.assertIn(
-            'src="/static/images/logos/newlogo_scorpion.png"',
+            'src="/static/images/optimized/newlogo_scorpion_menu.png',
             switcher,
         )
         self.assertIn("Scorpion", switcher)
@@ -274,7 +274,7 @@ class AccessControlTest(unittest.TestCase):
 
         self.assertIn('href="/motherbrain"', switcher)
         self.assertIn(
-            'src="/static/images/logos/newlogo_motherbrain_small.png"',
+            'src="/static/images/optimized/newlogo_motherbrain_small.webp',
             switcher,
         )
         self.assertIn('class="character-switcher-label neo-menu-text"', switcher)
@@ -303,7 +303,7 @@ class AccessControlTest(unittest.TestCase):
                 self.assertNotIn(f'href="{path}"', switcher)
                 if path == "/neosektor":
                     self.assertIn(
-                        'src="/static/images/logos/newlogo_ermac_small.png"',
+                        'src="/static/images/optimized/newlogo_ermac_small.webp',
                         switcher,
                     )
 
@@ -330,7 +330,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"MANAGE SORT", response.data)
         self.assertIn(b"data-motherbrain-dashboard", response.data)
-        self.assertIn(b'src="/static/images/logos/newlogo_motherbrain_small.png"', response.data)
+        self.assertIn(b'src="/static/images/optimized/newlogo_motherbrain_small.webp', response.data)
         self.assertNotIn(b"motherbrain-dashboard-brand neo-brand-title", response.data)
         self.assertNotIn(b"motherbrain-current-sort-overview", response.data)
         self.assertNotIn(b"motherbrain_logo1.png", response.data)
