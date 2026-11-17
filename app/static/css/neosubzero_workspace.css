@@ -15,32 +15,32 @@
 .blueprint-neosubzero :is(.neosubzero-deice-pass,.neosubzero-pass,.neosubzero-spray-pass,.neosubzero-deicer-pass,.sz-pass-line,.sz-pass-facts,.sz-gallons):is(.type-i,.type-iv) {
     background:var(--subzero-pass-bg); border-color:var(--subzero-pass-edge);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-planned,.state-deice-planned,.state-pretreat-planned) {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-planned,.state-deice-planned,.state-pretreat-planned) {
     --aircraft-fill:var(--subzero-planned); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-planned-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-configured {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-configured {
     /* Black reaches 4.68:1 on the approved emerald; white is below 4.5:1. */
     --aircraft-fill:var(--subzero-configured); --aircraft-ink:#000; --aircraft-edge:var(--subzero-configured-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-deicing {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-deicing {
     --aircraft-fill:var(--subzero-deicing); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-deicing-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-fin,.state-finished) {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-fin,.state-finished) {
     --aircraft-fill:var(--subzero-fin); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-fin-border);
 }
 .blueprint-neosubzero .ucc-plane:is(.state-pretreat-configured,.state-pretreat-in-progress) { --aircraft-fill:var(--subzero-configured); }
 .blueprint-neosubzero .ucc-plane.state-pretreated { --aircraft-fill:var(--subzero-fin); }
 .blueprint-neosubzero .ucc-plane.state-review { --aircraft-fill:var(--subzero-planned-border); }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-radio-pending {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-radio-pending {
     --aircraft-fill:var(--subzero-radio-pending); --aircraft-ink:var(--subzero-status-dark); --aircraft-edge:var(--subzero-radio-pending-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status).state-negative {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane).state-negative {
     --aircraft-fill:var(--subzero-negative); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-negative-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-gone,.state-cleared) {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-gone,.state-cleared) {
     --aircraft-fill:var(--subzero-gone); --aircraft-ink:var(--subzero-status-light); --aircraft-edge:var(--subzero-gone-border);
 }
-.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane,.coordinator-aircraft,.coordinator-status):is(.state-planned,.state-deice-planned,.state-pretreat-planned,.state-configured,.state-deicing,.state-fin,.state-finished,.state-radio-pending,.state-negative,.state-gone,.state-cleared) {
+.blueprint-neosubzero :is(.ops-aircraft,.ucc-plane):is(.state-planned,.state-deice-planned,.state-pretreat-planned,.state-configured,.state-deicing,.state-fin,.state-finished,.state-radio-pending,.state-negative,.state-gone,.state-cleared) {
     background:var(--aircraft-fill); color:var(--aircraft-ink); border-color:var(--aircraft-edge);
 }
 .neosubzero-ucc .ucc-plane:is(.state-deice-planned,.state-pretreat-planned,.state-configured,.state-deicing,.state-finished,.state-radio-pending,.state-negative,.state-gone,.state-cleared) > :is(span,small) { color:inherit; }
@@ -54,43 +54,6 @@
 .neosubzero-ucc .ucc-plane .ucc-plane-icon.facing-left { transform:rotate(-90deg); }
 .neosubzero-ucc .ucc-plane:is(:hover,[aria-pressed="true"]) { box-shadow:inset 0 0 0 1px currentColor; }
 .neosubzero-ucc .ucc-plane:focus-visible { outline:2px solid #fff; outline-offset:2px; }
-
-/* Coordinator cards and selected-aircraft indicators share the approved palette.
-   Forms retain their normal dark surface and all existing controls. */
-.neosubzero-coordinator .coordinator-aircraft :is(strong,span,em) { color:inherit; }
-.neosubzero-coordinator .coordinator-aircraft.selected,
-.neosubzero-coordinator .coordinator-aircraft:focus-visible { outline:2px solid #fff; outline-offset:1px; }
-.neosubzero-coordinator .coordinator-status { display:inline-block; padding:5px 9px; margin-bottom:8px; border:1px solid; border-radius:3px; font-size:.75rem; }
-.neosubzero-coordinator :is(.coordinator-aircraft,.coordinator-status).state-review { background:#342517; color:#ffd188; border-color:#b68b4e; }
-
-/* Coordinator pass controls share one compact row at every viewport width.
-   Keep the existing fields, NOW actions and treatment dependencies intact. */
-.neosubzero-coordinator .neosubzero-deice-form {
-    grid-template-columns:minmax(0,1fr); align-items:start; gap:8px; margin-top:6px;
-}
-.neosubzero-coordinator .neosubzero-deice-form > label { font-size:12px; gap:3px; }
-.neosubzero-coordinator .neosubzero-deice-form > label > select {
-    width:100%; max-width:340px; min-height:36px; padding:5px 7px; font-size:13px;
-}
-.neosubzero-coordinator .neosubzero-deice-pass {
-    grid-template-columns:minmax(0,1.35fr) repeat(2,minmax(0,1fr));
-    gap:4px; margin:0; padding:6px 0 2px; border:0; border-top:1px solid #355064;
-    background:transparent; border-radius:0;
-}
-.neosubzero-coordinator .neosubzero-deice-pass[hidden] { display:none; }
-.neosubzero-coordinator .neosubzero-deice-pass legend {
-    padding:0 5px 0 0; color:#c9dfec; font-size:12px; line-height:1.3; font-weight:700;
-}
-.neosubzero-coordinator .neosubzero-deice-pass label { gap:3px; font-size:11px; line-height:1.3; }
-.neosubzero-coordinator .neosubzero-deice-pass label span {
-    display:grid; grid-template-columns:minmax(0,1fr) 32px; gap:2px; width:100%; min-width:0;
-}
-.neosubzero-coordinator .neosubzero-deice-pass :is(input,select,button) {
-    width:100%; min-width:0; min-height:36px; height:36px; margin:0;
-    padding:4px; font-size:12px; line-height:1.3;
-}
-.neosubzero-coordinator .neosubzero-deice-pass button { padding:2px; font-size:10px; }
-.neosubzero-coordinator .neosubzero-deice-pass label span:has(button[hidden]) { grid-template-columns:minmax(0,1fr); }
 
 /* Navigation grouping only; collapsed links keep their accessible names. */
 .blueprint-neosubzero .subzero-nav-section {
@@ -142,8 +105,7 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
 }
 
 /* Grid items may shrink with the workspace; wide tables scroll locally. */
-.blueprint-neosubzero .neosubzero-shell :is(section,article,form,fieldset,details,label),
-.blueprint-neosubzero .neosubzero-coordinator-layout > * { min-width:0; }
+.blueprint-neosubzero .neosubzero-shell :is(section,article,form,fieldset,details,label) { min-width:0; }
 .blueprint-neosubzero .neosubzero-desktop { max-width:100%; overflow-x:auto; }
 .blueprint-neosubzero .neosubzero-head { flex-wrap:wrap; gap:6px; }
 .blueprint-neosubzero .neosubzero-head h1 { overflow-wrap:anywhere; }
@@ -155,7 +117,6 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
 .blueprint-neosubzero .neosubzero-staffing-search input { width:100%; }
 .blueprint-neosubzero .neosubzero-deice-log-groups > article > header { flex-wrap:wrap; gap:8px; }
 .blueprint-neosubzero .neosubzero-deice-log-groups > article > header > div:last-child { display:flex; flex-wrap:wrap; gap:4px 8px; min-width:0; }
-.blueprint-neosubzero .neosubzero-coordinator-layout { grid-template-columns:minmax(190px,250px) minmax(0,1fr); }
 @media (min-width:701px) {
     .blueprint-neosubzero .neosubzero-mission-facts { grid-template-columns:repeat(auto-fit,minmax(78px,1fr)); }
 }
@@ -178,8 +139,7 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
 .subzero-fleet .is-out-of-service,.subzero-fleet button.subzero-fleet-delete { color:#ff9c9c; }
 .subzero-fleet-edit summary { cursor:pointer; color:#b4e2f4; font-size:.78rem; }
 .subzero-fleet-edit form { padding:6px 0; }
-.ucc-mobile-controls,.neosubzero-mobile-ramp-link { display:none; }
-.neosubzero-coordinator-tools { display:contents; }
+.ucc-mobile-controls { display:none; }
 .neosubzero-radio-pending { padding:10px; margin-bottom:8px; border:2px solid var(--subzero-radio-pending-border); background:var(--subzero-radio-pending); color:var(--subzero-status-dark); }
 .neosubzero-radio-pending h2 { margin:0 0 6px; color:inherit; font-size:1rem; }
 .neosubzero-radio-pending [data-radio-script] { font-size:1rem; font-weight:700; }
@@ -189,13 +149,13 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
     .neosubzero-ucc .ucc-mobile-controls { display:grid; gap:6px; margin:0 0 8px; }
     .ucc-mobile-modes { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
     .ucc-mobile-ramp-selector { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; }
-    .ucc-mobile-controls button,.ucc-back-coordinator,.neosubzero-mobile-ramp-link {
+    .ucc-mobile-controls button,.ucc-back-coordinator {
         box-sizing:border-box; min-width:0; min-height:34px; border:1px solid #456c86;
         border-radius:3px; background:#102839; color:#c2eaff; padding:6px;
         font:inherit; font-size:.7rem; line-height:1.2; text-align:center; text-decoration:none;
     }
     .ucc-mobile-controls button[aria-pressed="true"] { border-color:#97d8ff; background:#18374c; color:#fff; }
-    .ucc-mobile-controls button:focus-visible,.ucc-back-coordinator:focus-visible,.neosubzero-mobile-ramp-link:focus-visible { outline:2px solid #97d8ff; outline-offset:1px; }
+    .ucc-mobile-controls button:focus-visible,.ucc-back-coordinator:focus-visible { outline:2px solid #97d8ff; outline-offset:1px; }
     .neosubzero-ucc[data-ucc-mobile-view="staffing"] :is(.ucc-mobile-ramp-selector,.ucc-back-coordinator) { display:none; }
     .neosubzero-ucc[data-ucc-mobile-view="ramp"] :is(.neosubzero-weather,.neosubzero-ucc-upcoming,.neosubzero-ucc-fluid,.ucc-team,.ucc-board-heading,.neosubzero-ucc-tv-enter) { display:none; }
     .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-ramp-board { grid-template-columns:minmax(0,1fr); }
@@ -211,7 +171,4 @@ body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { paddi
     .neosubzero-ucc[data-ucc-mobile-view="ramp"] :is(.ucc-queue-exception,.ucc-location-exceptions) { display:block; }
     .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-aircraft-panel:not([hidden]) { display:block; font-size:.75rem; }
     .neosubzero-ucc[data-ucc-mobile-view="ramp"] .ucc-aircraft-panel h2 { overflow-wrap:anywhere; }
-    .neosubzero-coordinator-tools { display:flex; align-items:stretch; gap:5px; margin-bottom:6px; }
-    .neosubzero-coordinator-tools .neosubzero-script-toggle { flex:1; min-width:0; margin:0; font-size:.7rem; }
-    .neosubzero-mobile-ramp-link { display:flex; align-items:center; justify-content:center; }
 }

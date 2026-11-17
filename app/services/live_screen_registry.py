@@ -39,7 +39,7 @@ LIVE_SCREEN_REGISTRY = (
     LiveScreenDefinition("rain", "NeoRain", "Outbound", "neorain.outbound", "neorain.outbound", "neorain.outbound_revision"),
     LiveScreenDefinition("subzero", "NeoSubZero", "Pretreat", "neosubzero.pretreat", "neosubzero.pretreat", "neosubzero.pretreat_revision_endpoint"),
     LiveScreenDefinition("subzero", "NeoSubZero", "Outbound", "neosubzero.outbound", "neosubzero.outbound", "neosubzero.outbound_revision_endpoint"),
-    LiveScreenDefinition("subzero", "NeoSubZero", "Coordinator", "neosubzero.coordinator", "neosubzero.coordinator", "neosubzero.coordinator_revision_endpoint"),
+    LiveScreenDefinition("subzero", "NeoSubZero", "Coordinator", "neosubzero.coordinator", "neosubzero.operations", "neosubzero.coordinator_revision_endpoint"),
     LiveScreenDefinition("subzero", "NeoSubZero", "UCC", "neosubzero.ucc", "neosubzero.ucc", "neosubzero.ucc_revision_endpoint"),
     LiveScreenDefinition(
         "subzero", "NeoSubZero", "DUCC TV Mode", UCC_TV_REFRESH_KEY,

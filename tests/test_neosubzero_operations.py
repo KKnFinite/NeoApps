@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
 from app.extensions import db
-from app.models import NeoSubZeroAuditEntry, NeoSubZeroUserPreference, SortDateOperation, SortDateMission, SortDateParkingAssignment, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateTailState
+from app.models import NeoSubZeroAuditEntry, NeoSubZeroUserPreference, PermissionRule, SortDateOperation, SortDateMission, SortDateParkingAssignment, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateTailState
 from app.services.live_collaboration import entity_version
 from app.services.neosubzero_operations import operations_context, PRIMARY_RAMPS
 from app.services.neosubzero_preferences import neosubzero_operations_preferences, set_neosubzero_operations_preferences
@@ -39,7 +39,55 @@ class OperationsTest(unittest.TestCase):
             else:
                 self.assertEqual(page.data.count(b'data-ops-primary-pass="1"'), 3)
                 self.assertEqual(page.data.count(b'data-ops-primary-pass="2"'), 3)
-        self.assertEqual(self.client.get('/neosubzero/coordinator').status_code,200)
+    def test_legacy_coordinator_bookmark_preserves_ramp_mission_and_live_settings(self):
+        mission = self.f.bravo.id
+        legacy_url = f'/neosubzero/coordinator?ramp=bravo&mission={mission}&presentation=inline'
+        canonical_url = f'/neosubzero/operations?mode=outbound&ramp=Bravo&mission={mission}'
+        bookmark = self.client.get(legacy_url)
+        self.assertEqual(bookmark.status_code, 302)
+        self.assertEqual(bookmark.location, canonical_url)
+        page = self.client.get(bookmark.location)
+        self.assertIn(b'data-ramp-override="Bravo"', page.data)
+        self.assertIn(b'data-ops-initial-open', page.data)
+        self.assertIn(f'data-mission-id="{mission}"'.encode(), page.data)
+        self.assertNotIn(b'neosubzero-coordinator', page.data)
+        self.assertNotIn(b'/neosubzero/coordinator/revision', page.data)
+        self.assertEqual(self.client.get('/neosubzero/coordinator?ramp=unknown&mission=-1').location,
+                         '/neosubzero/operations?mode=outbound')
+
+        with self.client.session_transaction() as session:
+            session['neosubzero.last_page'] = 'neosubzero.coordinator'
+        self.assertEqual(self.client.get('/neosubzero/').location, '/neosubzero/operations?mode=outbound')
+        retired = self.client.get('/neosubzero/coordinator/revision?revision=old')
+        self.assertEqual(retired.status_code, 410)
+        self.assertTrue(retired.json['changed'])
+        self.assertEqual(retired.headers['Cache-Control'], 'no-store')
+        revision = self.client.get('/neosubzero/operations/revision?mode=outbound&presentation=inline')
+        self.assertEqual(revision.json['operation_id'], self.f.operation.id)
+        self.assertTrue(revision.json['ok'])
+
+    def test_outbound_edit_preserves_coordinator_only_authority(self):
+        actor = self.f._user('outbound-editor', 'simulator')
+        coordinator = PermissionRule.query.filter_by(permission_key='neosubzero.coordinator.edit').one()
+        coordinator.minimum_role = 'master'
+        db.session.commit()
+        self.f._login(self.client, actor)
+        self.assertEqual(self.post(board='outbound', action='initial_contact').status_code, 200)
+        event = NeoSubZeroDepartureDeiceEvent.query.one()
+        for action in ('undo_clear', 'radio_complete'):
+            for board in ('outbound', 'coordinator'):
+                response = self.post(board=board, action=action, expected_version=entity_version(event))
+                self.assertEqual(response.status_code, 403)
+        self.assertEqual(event.status, 'deice_planned')
+
+        coordinator.minimum_role = 'simulator'
+        outbound = PermissionRule.query.filter_by(permission_key='neosubzero.outbound.edit').one()
+        outbound.minimum_role = 'master'
+        db.session.commit()
+        page = self.client.get(f'/neosubzero/operations?mode=outbound&mission={self.f.alpha.id}')
+        self.assertIn(b'name="board" value="coordinator"', page.data)
+        response = self.post(board='coordinator', action='toggle_configured', expected_version=entity_version(event))
+        self.assertEqual(response.status_code, 200, response.json)
 
     def test_inline_pretreat_records_same_minute_and_configures_atomically(self):
         values = dict(mode='pretreat', action='save_treatment', expected_version='',

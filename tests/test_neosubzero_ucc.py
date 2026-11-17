@@ -27,7 +27,6 @@ from app.models import (
     StaffingWorkAssignment,
     User,
 )
-from app.neonodes.neosubzero.routes import _coordinator_workspace_state
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.live_collaboration import entity_version
 from app.services.neosubzero_staffing import (
@@ -212,7 +211,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
             [1, 2],
         )
 
-    def test_coordinator_selection_never_changes_universal_throat(self):
+    def test_outbound_selection_never_changes_universal_throat(self):
         self._deice_event(self.alpha, "deice_planned")
         configured = self._departure("5X203", "N203", "DFW", 3)
         db.session.add(
@@ -231,13 +230,13 @@ class NeoSubZeroUccTest(unittest.TestCase):
         configured.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1)
         db.session.commit()
         before = self._ramp_context("Alpha")["pad"]["mission_id"]
-        departure_rows = self._departure_rows()
-        with self.app.test_request_context(
-            f"/neosubzero/coordinator?ramp=Alpha&mission={self.alpha.id}"
-        ):
-            workspace = _coordinator_workspace_state(self.operation, departure_rows)
-            self.assertEqual(workspace["selected_mission_id"], self.alpha.id)
-            after = self._ramp_context("Alpha")["pad"]["mission_id"]
+        client = self.app.test_client()
+        self._login(client, self._user("outbound-pad-reader", "watcher"))
+        with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation", return_value=self.operation):
+            page = client.get(f"/neosubzero/operations?mode=outbound&ramp=Alpha&mission={self.alpha.id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b'data-ops-detail-content', page.data)
+        after = self._ramp_context("Alpha")["pad"]["mission_id"]
         self.assertEqual(before, configured.id)
         self.assertEqual(after, configured.id)
 

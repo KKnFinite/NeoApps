@@ -8,6 +8,7 @@
 .neosubzero-operations .ops-modes,.neosubzero-operations .ops-layouts { display:flex; gap:3px; }
 .neosubzero-operations .ops-toolbar label { display:flex; gap:6px; align-items:center; color:#a7c4d6; font-size:.7rem; }
 .neosubzero-operations .ops-toolbar .ops-ramp-filter { display:none; }
+.neosubzero-operations[data-mode="outbound"]:not([data-ramp-override=""]) .ops-toolbar .ops-ramp-filter { display:flex; }
 .neosubzero-operations .ops-aircraft-board { display:grid; gap:6px; min-width:0; }
 .neosubzero-operations .ops-aircraft { min-width:0; border:1px solid #57717f; border-radius:4px; color:#f0f7fb; background:#132431; }
 /* Approved status colors are shared with DUCC in neosubzero_workspace.css. */
@@ -26,9 +27,11 @@
 .neosubzero-operations .ops-status strong { font-size:.8rem; }.neosubzero-operations .state-deicing .ops-status strong { font-size:1rem; font-weight:900; }
 .neosubzero-operations .ops-status > span { font-size:.68rem; }.neosubzero-operations .ops-pretreated { color:#c6ffce; background:#143b24; font-weight:800; padding:2px 4px; border-radius:3px; width:fit-content; }
 .neosubzero-operations .ops-ramp-column { display:grid; align-content:start; gap:7px; min-width:0; }
+.neosubzero-operations .ops-ramp-column[hidden] { display:none; }
 .neosubzero-operations .ops-ramp-column > h2 { font-size:.85rem; margin:0; color:#9bdcff; border-bottom:1px solid #456277; padding:6px 2px; }
 .neosubzero-operations .ops-ramp-column > p { color:#7e9dad; font-size:.72rem; }
 .neosubzero-operations[data-layout="visual"] .ops-aircraft-board { grid-template-columns:repeat(5,minmax(0,1fr)); align-items:start; gap:9px; }
+.neosubzero-operations[data-layout="visual"]:not([data-ramp-override=""],[data-ramp-override="All"]) .ops-aircraft-board { grid-template-columns:minmax(0,1fr); }
 .neosubzero-operations[data-layout="visual"] .ops-ramp-column.is-extra { grid-column:1/-1; }
 .neosubzero-operations[data-layout="visual"] .ops-aircraft > a { grid-template-columns:1fr; gap:8px; padding:11px; }
 .neosubzero-operations[data-layout="visual"] .ops-identity strong { font-size:clamp(1.35rem,1.65vw,1.8rem); }

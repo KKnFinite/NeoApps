@@ -181,7 +181,7 @@ class Release2Test(unittest.TestCase):
         self.assertEqual(response.status_code,409,response.json)
         self.assertEqual(application_context(f.operation)['reason_for_application'],'Ice')
 
-    def test_coordinator_omits_sort_context_form_but_preserves_context_and_spray_evidence(self):
+    def test_outbound_omits_sort_context_form_but_preserves_context_and_spray_evidence(self):
         from app.models import NeoSubZeroOperationContext
         from app.services.neosubzero_evidence import evidence_values
         f=self.f
@@ -194,17 +194,14 @@ class Release2Test(unittest.TestCase):
         before_audits=NeoSubZeroAuditEntry.query.count()
         client=self.client('grandmaster')
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=f.operation):
-            for agent in ('Desktop Coordinator','Mozilla/5.0 (iPhone; Mobile)'):
+            for agent in ('Desktop','Mozilla/5.0 (iPhone; Mobile)'):
                 with self.subTest(agent=agent):
-                    page=client.get('/neosubzero/coordinator?ramp=Alpha&mission='+str(f.alpha.id),headers={'User-Agent':agent})
+                    page=client.get('/neosubzero/coordinator?ramp=Alpha&mission='+str(f.alpha.id),headers={'User-Agent':agent},follow_redirects=True)
                     self.assertEqual(page.status_code,200)
                     self.assertNotIn(b'neosubzero-application-context',page.data)
                     self.assertNotIn(b'SAVE CONTEXT',page.data)
                     self.assertIn(b'data-subzero-deice-form',page.data)
-                    self.assertIn(b'data-subzero-script-toggle',page.data)
-                    self.assertIn(b'neosubzero-mobile-ramp-link',page.data)
-                    self.assertLess(page.data.index(b'neosubzero-coordinator-tools'),page.data.index(b'neosubzero-ramp-selector'))
-                    self.assertLess(page.data.index(b'neosubzero-ramp-selector'),page.data.index(b'neosubzero-coordinator-layout'))
+                    self.assertIn(b'data-ops-workspace',page.data)
             for path in ('/neosubzero/operations?mode=outbound','/neosubzero/outbound'):
                 page=client.get(path)
                 self.assertEqual(page.status_code,200,path)

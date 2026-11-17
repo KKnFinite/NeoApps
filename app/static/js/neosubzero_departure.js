@@ -3,10 +3,6 @@
 
     const root = document.querySelector("[data-subzero-departure-board], [data-ops-workspace]");
     if (!root) return;
-    if (root.dataset.mobileDispatch && window.matchMedia('(max-width:900px)').matches) {
-        window.location.replace(root.dataset.mobileDispatch);
-        return;
-    }
 
     const timezone = root.dataset.timezone || "America/Chicago";
     const operationalHHMM = () => {
@@ -169,12 +165,6 @@
                 button.setAttribute("aria-pressed", button === script ? "true" : "false");
             });
             return;
-        }
-        const toggle = event.target.closest("[data-subzero-script-toggle]");
-        if (toggle) {
-            const panel = root.querySelector("[data-subzero-script-panel]");
-            panel.hidden = !panel.hidden;
-            toggle.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
         }
     });
 

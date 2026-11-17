@@ -68,7 +68,7 @@ class RadioCompletionTest(unittest.TestCase):
         self.assertEqual(row['visual_state'],'radio-pending');self.assertFalse(row['terminal'])
         with patch('app.neonodes.neosubzero.routes.neosubzero_weather_context',return_value=self.f._weather_context_fixture()):
             for path in ('/neosubzero/coordinator?mission='+str(self.f.alpha.id),'/neosubzero/operations?mode=outbound&mission='+str(self.f.alpha.id)):
-                self.assertEqual(self.client.get(path).status_code,200)
+                self.assertEqual(self.client.get(path, follow_redirects=True).status_code,200)
         self.assertTrue(radio_pending(event))
         with self.assertRaisesRegex(ValueError,'throat|Position 10'):
             self.mutate(self.second,'save_treatment',treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:21')

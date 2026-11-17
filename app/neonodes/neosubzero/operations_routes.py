@@ -9,15 +9,18 @@ from app.models import SortDateMission, SortDateOperation, NeoSubZeroDepartureDe
 from app.neonodes.neosubzero import bp
 from app.neonodes.neosubzero import routes as legacy
 from app.services.neosubzero_preferences import OPERATIONS_RAMPS, neosubzero_operations_preferences, set_neosubzero_operations_preferences
+from app.services.neosubzero_departure_deice import COORDINATOR_REFRESH_KEY
 from app.services.permission_rules import user_can
 from app.services.live_collaboration import version_conflict
 
 
 def available_modes():
-    return [mode for mode, permissions in (
-        ('pretreat', ('neosubzero.pretreat.view',)),
-        ('outbound', ('neosubzero.outbound.view', 'neosubzero.coordinator.view')),
-    ) if any(user_can(permission) for permission in permissions)]
+    modes = []
+    if user_can('neosubzero.pretreat.view'):
+        modes.append('pretreat')
+    if legacy.can_view_outbound():
+        modes.append('outbound')
+    return modes
 
 
 def operations_revision(gateway, operation, preferences):
@@ -32,7 +35,7 @@ def _refresh_key(mode):
     if mode == 'pretreat':
         return legacy.PRETREAT_REFRESH_KEY
     if request.args.get('presentation') == 'inline' and user_can('neosubzero.coordinator.view'):
-        return legacy.COORDINATOR_REFRESH_KEY
+        return COORDINATOR_REFRESH_KEY
     return legacy.OUTBOUND_REFRESH_KEY
 
 

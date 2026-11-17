@@ -245,18 +245,19 @@
         board.querySelectorAll('.ops-ramp-column').forEach(e => e.remove());
         root.dataset.layout = usesInline() ? 'list' : (root.dataset.desktopLayout || 'list');
         const visual = root.dataset.layout === 'visual';
-        const ramp = media.matches ? root.dataset.rampOverride || root.dataset.ramp : 'All';
+        const override = root.dataset.rampOverride;
+        const ramp = (!isPretreat && override) || (media.matches ? override || root.dataset.ramp : 'All');
         const selector = root.querySelector('[data-ops-ramp]');
         if (![...selector.options].some(option => option.value === ramp)) selector.add(new Option(ramp.toUpperCase(), ramp));
         selector.value = ramp;
         if (visual) {
-            const ramps = [...primaryRamps, ...['Remote','Location Review'].filter(r => rows.some(row => row.dataset.ramp === r))];
+            const ramps = [...primaryRamps, ...['Remote','Location Review'].filter(r => r === ramp || rows.some(row => row.dataset.ramp === r))];
             ramps.forEach(name => {
                 const column = document.createElement('section'); column.className = 'ops-ramp-column'; column.dataset.ramp = name;
                 if (!primaryRamps.includes(name)) column.classList.add('is-extra');
-                column.hidden = media.matches && name !== ramp;
+                column.hidden = ramp !== 'All' && name !== ramp;
                 const heading = document.createElement('h2'); heading.textContent = name.toUpperCase(); column.append(heading);
-                rows.filter(row => row.dataset.ramp === name).forEach(row => { row.hidden = ramp !== 'All' && row.dataset.ramp !== ramp; column.append(row); });
+                rows.filter(row => row.dataset.ramp === name).forEach(row => { row.hidden = false; column.append(row); });
                 if (!column.querySelector('[data-ops-row]:not([hidden])')) { const empty = document.createElement('p'); empty.textContent = 'No aircraft'; column.append(empty); }
                 board.append(column);
             });
@@ -489,7 +490,12 @@
         if (form) { form.dataset.dirty = 'true'; sync(form); saveDraft(); }
         if (form?.matches(autosaveSelector) && !['notes','correction_reason'].includes(event.target.name)) queuePretreat(form);
         if (event.target.matches('[data-ops-ramp]')) {
-            if (await preferences({ramp:event.target.value})) applyLayout();
+            const ramp = event.target.value;
+            if (!media.matches) {
+                root.dataset.rampOverride = ramp === 'All' ? '' : ramp;
+                history.replaceState(null,'',currentUrl(selected));
+                applyLayout();
+            } else if (await preferences({ramp})) applyLayout();
         }
     });
     const openAccordion = async (card, open) => {

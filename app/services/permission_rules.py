@@ -1435,8 +1435,8 @@ PERMISSION_RULE_ITEMS = (
     (
         "subzero",
         "neosubzero.coordinator",
-        "Coordinator",
-        "NeoSub-Zero Coordinator departure-deice workspace.",
+        "Coordinator Controls",
+        "Coordinator access and actions in Deice Dispatch Outbound.",
         {
             "view": "neosubzero.coordinator.view",
             "edit": "neosubzero.coordinator.edit",

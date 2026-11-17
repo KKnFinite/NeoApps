@@ -135,7 +135,7 @@ class FrostTreatmentObservationTest(unittest.TestCase):
         self.assertEqual(self.audits(),[])
         g.pop('_login_user',None)
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=self.f.operation):
-            page = self.client.get('/neosubzero/coordinator?ramp=Alpha&mission='+str(self.f.alpha.id))
+            page = self.client.get('/neosubzero/operations?mode=outbound&ramp=Alpha&mission='+str(self.f.alpha.id))
         token = re.search(rb'name="csrf_token"[^>]*value="([^"]+)"',page.data).group(1).decode()
         self.assertEqual(self.post(no_frost_present='yes',csrf_token=token).status_code,200)
 
@@ -165,7 +165,7 @@ class FrostTreatmentObservationTest(unittest.TestCase):
     def test_checkbox_is_optional_unchecked_and_saved_observation_is_visible(self):
         g.pop('_login_user',None)
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=self.f.operation):
-            page = self.client.get('/neosubzero/coordinator?ramp=Alpha&mission='+str(self.f.alpha.id))
+            page = self.client.get('/neosubzero/operations?mode=outbound&ramp=Alpha&mission='+str(self.f.alpha.id))
         self.assertEqual(page.status_code,200)
         tag = re.search(rb'<input[^>]*name="no_frost_present"[^>]*>',page.data).group()
         self.assertNotIn(b'checked',tag)
@@ -174,7 +174,7 @@ class FrostTreatmentObservationTest(unittest.TestCase):
         self.assertEqual(self.post(no_frost_present='yes').status_code,200)
         g.pop('_login_user',None)
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=self.f.operation):
-            page = self.client.get('/neosubzero/coordinator?ramp=Alpha&mission='+str(self.f.alpha.id))
+            page = self.client.get('/neosubzero/operations?mode=outbound&ramp=Alpha&mission='+str(self.f.alpha.id))
         self.assertIn(b'data-frost-treatment-observation',page.data)
         self.assertIn(('Observer #'+str(self.actor.id)).encode(),page.data)
 

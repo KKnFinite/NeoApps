@@ -22,6 +22,9 @@
             {% set editable = can_edit and row.mobile_open %}
             {% set corrections = can_edit and row.mission_departure_status != 'cancelled' %}
             {% set event_status = row.event.status if row.event else '' %}
+            {% if row.script and not row.radio_pending %}
+                <section class="ops-readback"><h2>PILOT READBACK · FINAL PASS START</h2><p>{{ row.script.text }}</p></section>
+            {% endif %}
             {% if row.radio_pending %}
                 {% if row.script %}<p class="ops-radio-script" data-radio-script>{{ row.script.text }}</p>
                     {% if editable and user_can('neosubzero.coordinator.edit') %}{{ action(row, 'radio_complete', 'RADIO COMPLETE', true) }}<small>Confirm after reading the script to the pilot.</small>{% endif %}

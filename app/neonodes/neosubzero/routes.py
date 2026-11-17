@@ -24,10 +24,8 @@ from app.neonodes.neosubzero.services import (
 from app.services.live_screen_refresh import live_screen_refresh_status
 from app.services.live_screen_registry import UCC_TV_REFRESH_KEY, live_screen_definition
 from app.services.neosubzero_departure_deice import (
-    COORDINATOR_REFRESH_KEY,
     OUTBOUND_REFRESH_KEY,
     PLAN_LABELS,
-    RAMP_ORDER,
     NeoSubZeroDepartureDeiceError,
     departure_deice_context,
     departure_deice_revision,
@@ -78,6 +76,7 @@ from app.services.permission_rules import permission_access, user_can
 from app.services.operation_lifecycle import night_staffing_operation
 
 LAST_PAGE_KEY = "neosubzero.last_page"
+CRYOCHECK_MENU_ITEM = ("CryoCheck", None, "https://cryocheck.onrender.com")
 NEOSUBZERO_PAGES = (
     ('Deice Dispatch', 'neosubzero.operations', 'neosubzero.outbound.view', 'neosubzero.outbound.edit'),
     (
@@ -91,12 +90,6 @@ NEOSUBZERO_PAGES = (
         "neosubzero.outbound",
         "neosubzero.outbound.view",
         "neosubzero.outbound.edit",
-    ),
-    (
-        "Coordinator",
-        "neosubzero.coordinator",
-        "neosubzero.coordinator.view",
-        "neosubzero.coordinator.edit",
     ),
     (
         "DUCC",
@@ -142,7 +135,7 @@ NEOSUBZERO_PAGES = (
     ),
 )
 NEOSUBZERO_NAV_SECTIONS = (
-    (None, ("neosubzero.ucc", "neosubzero.operations", "neosubzero.coordinator",
+    (None, ("neosubzero.ucc", "neosubzero.operations",
             "neosubzero.deicer_mobile", "neosubzero.deice_log", "neosubzero.callouts",
             "neosubzero.truck_management", "neosubzero.settings")),
 )
@@ -153,15 +146,27 @@ def neosubzero_navigation_sections():
     pages = {page[1]: page for page in NEOSUBZERO_PAGES}
     sections = []
     for heading, endpoints in NEOSUBZERO_NAV_SECTIONS:
-        items = [(pages[endpoint][0], endpoint) for endpoint in endpoints
+        items = [(pages[endpoint][0], endpoint, None) for endpoint in endpoints
                  if _navigation_page_allowed(endpoint, pages[endpoint][2])]
         if items:
+            if items[-1][1] == "neosubzero.settings":
+                items.insert(-1, CRYOCHECK_MENU_ITEM)
+            else:
+                items.append(CRYOCHECK_MENU_ITEM)
             sections.append((heading, items))
     return sections
 
 
 def _navigation_page_allowed(endpoint, permission):
-    return any(user_can(key) for key in ('neosubzero.pretreat.view', 'neosubzero.outbound.view', 'neosubzero.coordinator.view')) if endpoint == 'neosubzero.operations' else user_can(permission)
+    if endpoint == "neosubzero.operations":
+        return user_can("neosubzero.pretreat.view") or can_view_outbound()
+    return user_can(permission)
+
+
+def can_view_outbound():
+    return any(user_can(permission) for permission in (
+        "neosubzero.outbound.view", "neosubzero.coordinator.view", "neosubzero.coordinator.edit",
+    ))
 
 
 @bp.context_processor
@@ -169,9 +174,9 @@ def navigation():
     return {
         "neosubzero_menu_sections": neosubzero_navigation_sections,
         "neosubzero_menu_items": lambda: [
-            (label, endpoint)
+            item
             for _heading, items in neosubzero_navigation_sections()
-            for label, endpoint in items
+            for item in items
         ]
     }
 
@@ -181,6 +186,8 @@ def navigation():
 @gateway_node_required("subzero")
 def index():
     endpoint = session.get(LAST_PAGE_KEY)
+    if endpoint == "neosubzero.coordinator" and can_view_outbound():
+        return redirect(url_for("neosubzero.operations", mode="outbound"))
     permitted_endpoints = [
         page[1] for page in NEOSUBZERO_PAGES if _navigation_page_allowed(page[1], page[2])
     ]
@@ -242,44 +249,25 @@ def outbound_revision_endpoint():
 
 @bp.route("/coordinator")
 @gateway_node_required("subzero")
-def coordinator():
-    access = permission_access(
-        "neosubzero.coordinator.view", "neosubzero.coordinator.edit"
-    )
-    if not access["can_view"]:
-        flash("Access denied.", "error")
-        return redirect(url_for("neosubzero.index"))
-    session[LAST_PAGE_KEY] = "neosubzero.coordinator"
-    gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
-    context = departure_deice_context(gateway, operation)
-    coordinator_state = _coordinator_workspace_state(operation, context["rows"])
-    from app.services.neosubzero_ucc import ucc_staffing_version
-    return render_template(
-        "neonodes/neosubzero/coordinator.html",
-        gateway=gateway,
-        can_edit=access["can_edit"],
-        plan_labels=PLAN_LABELS,
-        surface_labels=SURFACE_LABELS,
-        revision=departure_deice_revision(gateway, operation),
-        refresh_status=subzero_refresh_status(
-            gateway, operation, COORDINATOR_REFRESH_KEY
-        ),
-        gateway_timezone=gateway_timezone(gateway),
-        application_context=_application_context(operation),
-        staffing_version=ucc_staffing_version(operation) if operation else '',
-        staffing_pool=current_subzero_staffing_pool(operation) if operation else (),
-        **context,
-        **coordinator_state,
-    )
+def legacy_coordinator_redirect():
+    from app.services.neosubzero_preferences import OPERATIONS_RAMPS
+
+    ramp = request.args.get("ramp", "").strip().title()
+    mission_id = request.args.get("mission", type=int)
+    return redirect(url_for("neosubzero.operations", mode="outbound",
+                            ramp=ramp if ramp in OPERATIONS_RAMPS else None,
+                            mission=mission_id if mission_id and mission_id > 0 else None))
 
 
 @bp.route("/coordinator/revision")
 @gateway_node_required("subzero")
 def coordinator_revision_endpoint():
-    return _departure_revision_response(
-        "neosubzero.coordinator.view", COORDINATOR_REFRESH_KEY
-    )
+    if not user_can("neosubzero.coordinator.view"):
+        return jsonify(ok=False, error="Access denied."), 403
+    # Old tabs reload when their drafts are safe. The bookmark then redirects.
+    response = jsonify(ok=False, changed=True, revision="deice-dispatch", retired=True)
+    response.headers["Cache-Control"] = "no-store"
+    return response, 410
 
 
 @bp.route("/ucc", methods=["GET", "POST"])
@@ -1050,13 +1038,10 @@ def departure_deice_mutate():
     if request.form.get('action') == 'radio_complete' and not user_can('neosubzero.coordinator.edit'):
         return 'Access denied.',403
     board = str(request.form.get("board") or "").strip().lower()
-    endpoint, permission = {
-        "outbound": ("neosubzero.outbound", "neosubzero.outbound.edit"),
-        "coordinator": (
-            "neosubzero.coordinator",
-            "neosubzero.coordinator.edit",
-        ),
-    }.get(board, (None, None))
+    permission = {
+        "outbound": "neosubzero.outbound.edit",
+        "coordinator": "neosubzero.coordinator.edit",
+    }.get(board)
     if permission is None or not user_can(permission):
         return "Access denied.", 403
     gateway = get_current_gateway()
@@ -1070,7 +1055,6 @@ def departure_deice_mutate():
         if operation
         else None
     )
-    coordinator_return_to_list = False
     try:
         from app.neonodes.neosubzero.release2_routes import locked_operation, locked_mission, require_version
         from app.services.neosubzero_evidence import departure_event_for_tail, NeoSubZeroEvidenceError
@@ -1080,7 +1064,7 @@ def departure_deice_mutate():
         if request.form.get('event_id', type=int) not in (None, getattr(event, 'id', None)):
             raise NeoSubZeroEvidenceError('The treatment event changed. Reload this physical tail.')
         require_version(event, request.form.get('expected_version'), 'Departure deice')
-        event = mutate_departure_deice(
+        mutate_departure_deice(
             operation,
             mission,
             request.form.get("action"),
@@ -1090,13 +1074,6 @@ def departure_deice_mutate():
         )
         db.session.commit()
         flash("DEPARTURE DEICE SAVED.", "success")
-        if board == "coordinator":
-            from app.services.neosubzero_radio import radio_pending
-            coordinator_return_to_list = event.status == 'cleared' and not radio_pending(event)
-            _remember_coordinator_mission(
-                operation,
-                None if coordinator_return_to_list else mission.id,
-            )
     except (ValueError, IntegrityError) as exc:
         db.session.rollback()
         flash(
@@ -1105,12 +1082,9 @@ def departure_deice_mutate():
             else "Unable to save departure deice.",
             "error",
         )
-    query = {}
-    if mission and not (board == "coordinator" and coordinator_return_to_list):
-        query["mission"] = mission.id
-    if board == "coordinator":
-        query["ramp"] = request.form.get("ramp")
-    return redirect(url_for(endpoint, **query))
+    return redirect(url_for("neosubzero.operations", mode="outbound",
+                            mission=mission.id if mission else None,
+                            ramp=request.form.get("ramp") or None))
 
 
 @bp.route("/pretreat/mutate", methods=["POST"])
@@ -1310,8 +1284,8 @@ def _context_text(value, maximum, label):
 def _subzero_return_url(board, values):
     mission_id = values.get("mission_id", type=int)
     ramp = str(values.get("ramp") or "").strip().title()
-    if board == "coordinator":
-        return url_for("neosubzero.coordinator", ramp=ramp or None, mission=mission_id)
+    if board in ("coordinator", "outbound"):
+        return url_for("neosubzero.operations", mode="outbound", ramp=ramp or None, mission=mission_id)
     if board == "deicer":
         return url_for("neosubzero.deicer_mobile", mission=mission_id)
     if board == "ucc":
@@ -1335,53 +1309,3 @@ def _departure_revision_response(permission, screen_key):
     )
     response.headers["Cache-Control"] = "no-store"
     return response
-
-
-def _coordinator_workspace_state(operation, rows):
-    if operation is None:
-        return {
-            "ramps": [],
-            "selected_ramp": None,
-            "selected_mission_id": None,
-            "selected_rows": [],
-            "completed_rows": [],
-        }
-    prefix = f"neosubzero.coordinator.{operation.id}"
-    present_ramps = {row["ramp"] for row in rows if row["ramp"] in RAMP_ORDER}
-    active_ramps = {
-        row["ramp"]
-        for row in rows
-        if row["ramp"] in RAMP_ORDER and not row["terminal"]
-    }
-    remembered = set(session.get(f"{prefix}.ramps", ()))
-    known_ramps = [ramp for ramp in RAMP_ORDER if ramp in present_ramps | remembered]
-    if known_ramps != list(session.get(f"{prefix}.ramps", ())):
-        session[f"{prefix}.ramps"] = known_ramps
-    requested_ramp = str(request.args.get("ramp") or "").strip().title()
-    selected_ramp = requested_ramp or session.get(f"{prefix}.ramp")
-    if selected_ramp not in known_ramps:
-        selected_ramp = next(
-            (ramp for ramp in known_ramps if ramp in active_ramps),
-            known_ramps[0] if known_ramps else None,
-        )
-    session[f"{prefix}.ramp"] = selected_ramp
-    selected_rows = [row for row in rows if row["ramp"] == selected_ramp]
-    requested_mission = request.args.get("mission", type=int)
-    selected_mission_id = requested_mission or session.get(f"{prefix}.mission")
-    if selected_mission_id not in {row["mission_id"] for row in selected_rows}:
-        selected_mission_id = None
-    session[f"{prefix}.mission"] = selected_mission_id
-    return {
-        "ramps": [
-            {"name": ramp, "active": ramp in active_ramps} for ramp in known_ramps
-        ],
-        "selected_ramp": selected_ramp,
-        "selected_mission_id": selected_mission_id,
-        "selected_rows": [row for row in selected_rows if not row["terminal"]],
-        "completed_rows": [row for row in selected_rows if row["terminal"]],
-    }
-
-
-def _remember_coordinator_mission(operation, mission_id):
-    if operation:
-        session[f"neosubzero.coordinator.{operation.id}.mission"] = mission_id

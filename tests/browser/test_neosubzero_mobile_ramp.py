@@ -1,4 +1,4 @@
-"""Shared desktop geometry on mobile; actual Coordinator START/END/CLEAR routes."""
+"""Shared desktop geometry on mobile; actual Deice Dispatch START/END/CLEAR routes."""
 import json
 import unittest
 from datetime import datetime
@@ -8,6 +8,7 @@ from app.extensions import db
 from app.models import Gateway,SortDateMission,SortDateOperation,SortDateParkingAssignment,NeoSubZeroDepartureDeiceEvent
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
 from tests.browser import test_neosubzero_ucc as fixtures
+from tests.browser import test_neosubzero_operations as ops
 
 EVIDENCE=Path('instance/ducc-ramp/browser')
 
@@ -91,36 +92,29 @@ class MobileRampBrowserTest(unittest.TestCase):
             expect(root).to_have_attribute('data-ucc-mobile-view','ramp')
             expect(root).to_have_attribute('data-ucc-selected-ramp','Alpha')
             page.screenshot(path=str(EVIDENCE/f'{engine}-queued.png'),full_page=True)
-            # The Coordinator link selects its actual ramp, never grants rights.
-            coordinator=context.new_page();case.ready(coordinator,f'/neosubzero/coordinator?ramp=Alpha&mission={case.missions[0]}')
-            link=coordinator.locator('.neosubzero-mobile-ramp-link')
-            expect(link).to_be_visible();self.assertIn('ramp=Alpha',link.get_attribute('href'))
-            coordinator.set_viewport_size({'width':1920,'height':900})
-            expect(link).to_be_hidden()
-            expect(coordinator.locator('[data-subzero-script-toggle]')).to_be_visible()
-            coordinator.set_viewport_size({'width':390,'height':844})
-            expect(link).to_be_visible()
-            coordinator.screenshot(path=str(EVIDENCE/f'{engine}-coordinator-mobile.png'),full_page=True)
-            link.click();expect(coordinator.locator('[data-subzero-ucc]')).to_have_attribute('data-ucc-mobile-view','ramp')
-            coordinator.locator('[data-ucc-ramp-select="Bravo"]').click()
-            coordinator.locator('[data-ucc-back-coordinator]').click()
-            expect(coordinator.locator('.neosubzero-ramp-selector a.active')).to_contain_text('BRAVO')
-            case.ready(coordinator,f'/neosubzero/coordinator?ramp=Alpha&mission={case.missions[0]}')
-            treatment=coordinator.locator('[data-subzero-deice-form]')
+            # The DUCC shortcut opens the selected ramp in Deice Dispatch.
+            dispatch = context.new_page()
+            case.ready(dispatch, '/neosubzero/ucc?view=ramp&ramp=Bravo')
+            dispatch.locator('[data-ucc-back-coordinator]').click()
+            expect(dispatch.locator('[data-ops-ramp]')).to_have_value('Bravo')
+            ops.OperationsBrowserTest.ready(case, dispatch, f'/neosubzero/coordinator?ramp=Alpha&mission={case.missions[0]}')
+            expect(dispatch.locator('[data-ops-ramp]')).to_have_value('Alpha')
+            editor = dispatch.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"] [data-ops-inline]')
+            treatment=editor.locator('[data-subzero-deice-form]')
             treatment.locator('[name="treatment_plan"]').select_option('one_type_i')
             treatment.locator('[name="pass1_surface_area"]').select_option('wings_only')
             treatment.locator('[name="pass1_start"]').fill('22:10')
-            with coordinator.expect_navigation():treatment.locator('button[type="submit"]').click()
+            ops.OperationsBrowserTest.submit(case, dispatch, treatment.locator('button[type="submit"]'))
             expect(alpha.locator('[data-ucc-deice-pad] .state-deicing')).to_have_count(1,timeout=10000)
             page.screenshot(path=str(EVIDENCE/f'{engine}-deicing.png'),full_page=True)
-            treatment=coordinator.locator('[data-subzero-deice-form]')
+            treatment=editor.locator('[data-subzero-deice-form]')
             treatment.locator('[name="pass1_end"]').fill('22:15')
-            with coordinator.expect_navigation():treatment.locator('button[type="submit"]').click()
+            ops.OperationsBrowserTest.submit(case, dispatch, treatment.locator('button[type="submit"]'))
             expect(alpha.locator('[data-ucc-deice-pad] .state-finished')).to_have_count(1,timeout=10000)
-            with coordinator.expect_navigation():coordinator.locator('button[name="action"][value="clear"]').click()
+            ops.OperationsBrowserTest.submit(case, dispatch, editor.locator('button[name="action"][value="clear"]'))
             expect(alpha.locator('[data-ucc-deice-pad] .state-radio-pending')).to_have_count(1,timeout=10000)
             expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[0]))
-            with coordinator.expect_navigation():coordinator.locator('button[name="action"][value="radio_complete"]').click()
+            ops.OperationsBrowserTest.submit(case, dispatch, editor.locator('button[name="action"][value="radio_complete"]'))
             expect(alpha.locator('[data-ucc-aircraft="%s"]'%case.missions[0])).to_have_count(0,timeout=10000)
             expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_count(0)
             expect(alpha.locator('[data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))

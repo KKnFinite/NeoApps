@@ -19,11 +19,13 @@ class OperationsBrowserTest(unittest.TestCase):
     tearDownClass=classmethod(fixtures.UccBrowserTest.tearDownClass.__func__)
 
     def submit(self, page, button):
+        submitted_form = button.locator('xpath=ancestor::form[1]').element_handle()
         with page.expect_response(lambda response: response.url.endswith('/operations/mutate') and response.request.method == 'POST') as pending:
             button.click()
         response=pending.value
         self.assertEqual(response.status,200,response.text())
         self.assertTrue(response.json()['ok'],response.json())
+        submitted_form.wait_for_element_state('hidden')
 
     def layout(self, page, value):
         with page.expect_response(lambda r:r.url.endswith('/operations/preferences') and r.request.method=='POST') as pending:

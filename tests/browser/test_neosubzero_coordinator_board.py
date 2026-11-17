@@ -60,11 +60,11 @@ class CoordinatorBoardTest(unittest.TestCase):
             errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
             case.login(page)
-            case.ready(page, '/neosubzero/coordinator?ramp=Alpha')
+            case.ready(page, '/neosubzero/operations?mode=outbound&ramp=Alpha')
             for width in (390,1920):
                 page.set_viewport_size({'width':width,'height':1080})
                 for state, color in COLORS.items():
-                    card = page.locator(f'.coordinator-aircraft[href*="mission={ids[state]}"]')
+                    card = page.locator(f'[data-ops-row][data-mission-id="{ids[state]}"]')
                     expect(card).to_have_class(re.compile('state-' + state))
                     expect(card).to_have_css('background-color', palette.rgb(color))
                     foreground = card.evaluate('e=>getComputedStyle(e).color')

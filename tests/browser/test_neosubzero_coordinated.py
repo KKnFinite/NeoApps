@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from playwright.sync_api import expect
+from tests.browser import test_neosubzero_operations as ops
 from app.extensions import db
 from app.models import (SortDateOperation, SortDateParkingAssignment, StaffingUnit,
                         NeoSubZeroDepartureDeiceEvent, NeoSubZeroAuditEntry, StaffingPersonQualification)
@@ -30,19 +31,19 @@ class CoordinatedDuccBrowserTest(unittest.TestCase):
             page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
             page.on('dialog',lambda dialog:dialog.accept())
             case.login(page)
-            # The existing employee modal edits the same qualification as SubZero.
+            # NeoStaffing displays the shared qualification. Deicer Management owns edits.
             case.ready(page,'/neostaffing/people')
             page.evaluate('(id)=>document.dispatchEvent(new CustomEvent("neostaffing:edit-employee",{detail:{personId:id}}))',employee_id)
             editor=page.locator('[data-employee-editor]')
             expect(editor).to_be_visible()
-            expect(editor.locator('[name="deice_trained"]')).to_have_value('no')
-            editor.locator('[name="deice_trained"]').select_option('yes')
-            with page.expect_response(lambda r:'/people/' in r.url and '/update' in r.url and r.request.method=='POST') as saved, page.expect_navigation():
-                editor.locator('button[type="submit"]').click()
-            self.assertEqual(saved.value.status,200)
+            expect(editor.locator('[data-person-field="deice-trained"] strong')).to_have_text('NO')
+            case.ready(page,'/neosubzero/deicer-management?tab=eligibility')
+            grant = page.locator('form').filter(has=page.locator(f'input[name="person_id"][value="{employee_id}"]'))
+            with page.expect_navigation():
+                grant.get_by_role('button', name='GRANT').click()
             with case.app.app_context():
                 self.assertTrue(StaffingPersonQualification.query.filter_by(person_id=employee_id,qualification_key='deice').one().active)
-            case.ready(page,'/neosubzero/callouts')
+            case.ready(page,'/neosubzero/deicer-management?tab=callouts')
             candidate=page.locator('tr').filter(has=page.locator(f'input[name="person_id"][value="{employee_id}"]'))
             expect(candidate.get_by_role('button',name='ADD CALLOUT')).to_be_visible()
             with page.expect_navigation(): candidate.get_by_role('button',name='ADD CALLOUT').click()
@@ -119,25 +120,26 @@ class CoordinatedDuccBrowserTest(unittest.TestCase):
                 if width==390:phone.screenshot(path=str(EVIDENCE/f'{engine}-mobile.png'),full_page=True)
             # Existing spray/CLEAR controls, explicit UNDO, then real readback.
             coordinator=context.new_page();coordinator.on('dialog',lambda d:d.accept())
-            case.ready(coordinator,f'/neosubzero/coordinator?ramp=Alpha&mission={case.missions[0]}')
-            form=coordinator.locator('[data-subzero-deice-form]')
+            ops.OperationsBrowserTest.ready(case, coordinator, f'/neosubzero/operations?mode=outbound&ramp=Alpha&mission={case.missions[0]}')
+            detail = coordinator.locator('[data-ops-detail]')
+            form=detail.locator('[data-subzero-deice-form]')
             form.locator('[name="treatment_plan"]').select_option('one_type_i')
             form.locator('[name="pass1_surface_area"]').select_option('wings_only')
             form.locator('[name="pass1_start"]').fill('22:10')
-            with coordinator.expect_navigation():form.locator('button[type="submit"]').click()
+            ops.OperationsBrowserTest.submit(case, coordinator, form.locator('button[type="submit"]'))
             form.locator('[name="pass1_end"]').fill('22:15')
-            with coordinator.expect_navigation():form.locator('button[type="submit"]').click()
-            with coordinator.expect_navigation():coordinator.locator('button[value="clear"]').click()
+            ops.OperationsBrowserTest.submit(case, coordinator, form.locator('button[type="submit"]'))
+            ops.OperationsBrowserTest.submit(case, coordinator, detail.locator('button[value="clear"]'))
             pad=phone.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]')
             expect(pad.locator('.state-radio-pending')).to_be_visible(timeout=10000)
             self.assertEqual(pad.locator('.ucc-plane-icon').evaluate('e=>getComputedStyle(e).color'),'rgb(240, 45, 159)')
             self.assertEqual(pad.locator('.ucc-plane').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(9, 23, 33)')
-            coordinator.locator('.subzero-undo-clear summary').click()
-            coordinator.locator('.subzero-undo-clear [name="correction_reason"]').fill('Mistaken CLEAR during synthetic verification')
-            with coordinator.expect_navigation():coordinator.locator('button[value="undo_clear"]').click()
+            detail.locator('.subzero-undo-clear summary').click()
+            detail.locator('.subzero-undo-clear [name="correction_reason"]').fill('Mistaken CLEAR during synthetic verification')
+            ops.OperationsBrowserTest.submit(case, coordinator, detail.locator('button[value="undo_clear"]'))
             expect(pad.locator('.state-finished')).to_be_visible(timeout=10000)
-            with coordinator.expect_navigation():coordinator.locator('button[value="clear"]').click()
-            with coordinator.expect_navigation():coordinator.locator('button[value="radio_complete"]').click()
+            ops.OperationsBrowserTest.submit(case, coordinator, detail.locator('button[value="clear"]'))
+            ops.OperationsBrowserTest.submit(case, coordinator, detail.locator('button[value="radio_complete"]'))
             expect(pad.locator('[data-ucc-aircraft]')).to_have_count(0,timeout=10000)
             expect(phone.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[1]))
             with case.app.app_context():

@@ -16,7 +16,6 @@ from app.models import (
     SortDateTailState,
     User,
 )
-from app.neonodes.neosubzero.routes import _coordinator_workspace_state
 from app.neonodes.neosubzero.services import SURFACE_LABELS
 from app.services.neosubzero_departure_deice import (
     COORDINATOR_REFRESH_KEY,
@@ -358,32 +357,8 @@ class NeoSubZeroOutboundCoordinatorTest(unittest.TestCase):
         db.session.commit()
         self.assertNotEqual(before, departure_deice_revision(self.gateway, self.operation))
 
-    def test_coordinator_ramps_and_templates_expose_locked_contract(self):
+    def test_outbound_template_reuses_canonical_aircraft_facts(self):
         context = departure_deice_context(self.gateway, self.operation)
-        with self.app.test_request_context("/neosubzero/coordinator?ramp=Remote"):
-            workspace = _coordinator_workspace_state(
-                self.operation, context["rows"]
-            )
-            self.assertEqual([row["name"] for row in workspace["ramps"]], ["Remote", "Alpha"])
-            self.assertEqual(workspace["selected_ramp"], "Remote")
-            html = render_template(
-                "neonodes/neosubzero/coordinator.html",
-                gateway=self.gateway,
-                can_edit=True,
-                plan_labels=PLAN_LABELS,
-                surface_labels=SURFACE_LABELS,
-                revision="r1",
-                refresh_status={"live_screen_refresh_interval_ms": 5000},
-                gateway_timezone="America/Chicago",
-                **context,
-                **workspace,
-            )
-        # The active card now communicates its actual shared treatment status.
-        self.assertIn('coordinator-aircraft state-untreated', html)
-        self.assertIn('UNTREATED', html)
-        self.assertIn("AIR-TO-GROUND SCRIPT", html)
-        self.assertIn("Remote", html)
-        self.assertNotIn("W&amp;B", html)
         with self.app.test_request_context("/neosubzero/outbound"):
             outbound_html = render_template(
                 "neonodes/neosubzero/outbound.html",
@@ -442,20 +417,21 @@ class NeoSubZeroRouteAccessTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_outbound_and_coordinator_are_readable_without_settings_edit_access(self):
+    def test_outbound_and_legacy_bookmark_are_readable_without_settings_edit_access(self):
         watcher = self._user("subzero_watcher", "watcher")
         self._login(watcher)
         self.assertEqual(self.client.get("/neosubzero/outbound").status_code, 200)
-        denied = self.client.get("/neosubzero/coordinator", follow_redirects=False)
-        self.assertEqual(denied.status_code, 200)
+        legacy = self.client.get("/neosubzero/coordinator")
+        self.assertEqual(legacy.status_code, 302)
+        self.assertEqual(legacy.location, "/neosubzero/operations?mode=outbound")
         settings = self.client.post("/neosubzero/settings", data={"action": "save_fluids"})
         self.assertEqual(settings.status_code, 403)
 
         simulator = self._user("subzero_simulator", "simulator")
         self._login(simulator)
-        coordinator = self.client.get("/neosubzero/coordinator")
-        self.assertEqual(coordinator.status_code, 200)
-        self.assertIn(b"COORDINATOR", coordinator.data)
+        dispatch = self.client.get("/neosubzero/coordinator", follow_redirects=True)
+        self.assertEqual(dispatch.status_code, 200)
+        self.assertIn(b"DEICE DISPATCH", dispatch.data)
 
     def test_master_can_save_fluid_settings(self):
         master = self._user("subzero_master", "master")

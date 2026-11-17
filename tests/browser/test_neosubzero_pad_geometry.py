@@ -137,10 +137,10 @@ class UccPadGeometryBrowserTest(unittest.TestCase):
             for index in (0,1):
                 if index:
                     with self.app.app_context():self.finish_fixture(self.queue_ids[index]);db.session.commit()
-                self.ready(coordinator,f'/neosubzero/coordinator?ramp=Alpha&mission={self.queue_ids[index]}')
-                coordinator.locator('button[name="action"][value="clear"]').click()
+                self.ready(coordinator,f'/neosubzero/operations?mode=outbound&ramp=Alpha&mission={self.queue_ids[index]}')
+                coordinator.locator('[data-ops-detail] button[name="action"][value="clear"]').click()
                 expect(alpha.locator('[data-ucc-deice-pad] .state-radio-pending')).to_have_count(1,timeout=10000)
-                coordinator.locator('button[name="action"][value="radio_complete"]').click()
+                coordinator.locator('[data-ops-detail] button[name="action"][value="radio_complete"]').click()
                 expect(alpha.locator('[data-ucc-aircraft="%s"]'%self.queue_ids[index])).to_have_count(0,timeout=10000)
                 expect(alpha.locator('[data-ucc-deice-pad] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(self.queue_ids[index+1]),timeout=10000)
             expect(alpha.locator('[data-ucc-queue-position="3"]')).to_have_count(0)

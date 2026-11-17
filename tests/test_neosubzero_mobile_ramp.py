@@ -37,6 +37,7 @@ class MobileRampRouteTest(unittest.TestCase):
                 'app.services.permission_rules.user_can',side_effect=allowed),patch(
                 'app.neonodes.neosubzero.routes.user_can',side_effect=allowed),patch('app.user_can',side_effect=allowed):
             self.assertEqual(client.get('/neosubzero/ucc?view=ramp').status_code,302)
-            page=client.get('/neosubzero/coordinator?ramp=Alpha')
+            page=client.get('/neosubzero/operations?mode=outbound&ramp=Alpha')
             self.assertEqual(page.status_code,200)
-            self.assertNotIn(b'neosubzero-mobile-ramp-link',page.data)
+            self.assertIn(b'data-ops-workspace',page.data)
+            self.assertNotIn(b'href="/neosubzero/ucc" aria-label="DUCC"',page.data)
