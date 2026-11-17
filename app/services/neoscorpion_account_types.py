@@ -102,7 +102,7 @@ def convert_account(gateway, actor, user, account_type):
         vendors.audit(gateway, actor, "account_converted_vendor", subject=user,
                       identity_preserved=True, staff_grants_revoked=True)
     else:
-        if operation is not None and state is not None:
+        if operation is not None and not operation.archived_at_utc:
             vendors.disconnect(gateway, operation, actor, user_id=user.id)
             vendors.expire_user_requests(gateway, operation, actor, user.id,
                                          "account_converted_full")
