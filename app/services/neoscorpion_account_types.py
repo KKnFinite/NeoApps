@@ -32,6 +32,19 @@ def convert_account(gateway, actor, user, account_type):
     if not user.email_verified_at:
         raise ValueError("Verify this user's email before changing account type.")
 
+    # Match the nightly driver mutation lock order (Sort first, then
+    # vendor/identity rows) so conversion cannot deadlock against a live claim.
+    operation, state = None, None
+    if account_type == "full":
+        from app.services.neoscorpion import current_sort_operation
+        from app.services.neoscorpion_assets import (
+            lock_nightly_asset_scope_for_mutation,
+            record_nightly_operational_change,
+        )
+        operation = current_sort_operation(gateway)
+        if operation is not None and not operation.archived_at_utc:
+            operation, state = lock_nightly_asset_scope_for_mutation(operation)
+
     membership = GatewayMembership.query.filter_by(
         gateway_id=gateway.id, user_id=user.id
     ).with_for_update().first()
@@ -89,14 +102,7 @@ def convert_account(gateway, actor, user, account_type):
         vendors.audit(gateway, actor, "account_converted_vendor", subject=user,
                       identity_preserved=True, staff_grants_revoked=True)
     else:
-        from app.services.neoscorpion import current_sort_operation
-        from app.services.neoscorpion_assets import (
-            lock_nightly_asset_scope_for_mutation,
-            record_nightly_operational_change,
-        )
-        operation = current_sort_operation(gateway)
-        if operation is not None and not operation.archived_at_utc:
-            operation, state = lock_nightly_asset_scope_for_mutation(operation)
+        if operation is not None and state is not None:
             vendors.disconnect(gateway, operation, actor, user_id=user.id)
             vendors.expire_user_requests(gateway, operation, actor, user.id,
                                          "account_converted_full")
