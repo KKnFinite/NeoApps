@@ -1,3 +1,3 @@
 <a class="aa-my-account-link" href="{{ url_for('auth.my_account') }}" role="menuitem">My Account</a>
-{% if not current_user.scorpion_vendor %}<a class="aa-my-account-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">App switcher</a>{% endif %}
+{% if not current_user.scorpion_vendor and request.endpoint != 'auth.portal_dashboard' %}<a class="aa-my-account-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">App switcher</a>{% endif %}
 {% set scoped_link=local_scope_admin_link() %}{% if scoped_link %}<a class="aa-my-account-link" href="{{ scoped_link }}" role="menuitem">Roles &amp; Permissions</a>{% endif %}
