@@ -1,5 +1,6 @@
 {% from 'neonodes/neosubzero/_operations_inline.html' import inline_feedback, collapse_button %}
 {% from 'neonodes/neosubzero/_operations_outbound_controls.html' import workspace, quick_actions with context %}
+{% from 'neonodes/neosubzero/_departure_deice.html' import treatment_form with context %}
 <details class="ops-mission" data-ops-accordion{% if selected and row.mission_id == selected.mission_id %} open data-ops-initial-open{% endif %}>
     <summary class="ops-mission-summary" aria-label="{{ row.flight }} {{ row.tail }}">
         <span class="ops-mission-line">
@@ -13,8 +14,19 @@
     </summary>
     <div class="ops-pretreat-inline ops-mobile-workspace ops-mission-workspace" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
         {{ inline_feedback() }}
-        {% if row.mission_id in mobile_missions %}{{ workspace(row, inline=true) }}
+        <div class="ops-outbound-primary">
+            <button type="button" class="ops-outbound-identity ops-identity" data-ops-expand-details aria-expanded="{{ 'true' if selected and row.mission_id == selected.mission_id else 'false' }}"><strong>{{ row.tail }}</strong><span>{{ row.flight }}</span></button>
+            <div class="ops-outbound-location ops-location"><strong>{{ row.parking }}</strong><span>ETD {{ row.etd }} · {{ row.destination }}</span>{% if row.final_start %}<strong class="ops-pilot-start">PILOT START {{ row.final_start }}</strong>{% endif %}</div>
+            <div class="ops-outbound-status ops-status"><strong>{{ row.visual_label }}</strong>{{ quick_actions(row) }}</div>
+            {% if row.event and not row.identity_conflict %}
+                {{ treatment_form(row, can_edit and row.mobile_open and row.event.status not in ('negative','not_sprayed','finished','cleared'), board, row.ramp, compact=true, dispatch_row=true) }}
+            {% else %}<span class="ops-outbound-no-treatment">—</span>{% endif %}
+        </div>
+        <details class="ops-outbound-extra" data-ops-disclosure="mission-details"{% if selected and row.mission_id == selected.mission_id %} open{% endif %}>
+        <summary>DETAILS</summary>
+        {% if row.mission_id in mobile_missions %}{{ workspace(row, inline=true, show_treatment=false) }}
         {% else %}<p class="ops-inline-loading" role="status">Loading current aircraft…</p>{% endif %}
         {{ collapse_button() }}
+        </details>
     </div>
 </details>

@@ -302,15 +302,15 @@
 </details>{% endif %}
 {% endmacro %}
 
-{% macro treatment_form(row, can_edit, board, selected_ramp='', compact=false, correction=false) %}
+{% macro treatment_form(row, can_edit, board, selected_ramp='', compact=false, correction=false, dispatch_row=false) %}
 {% set locked = not can_edit or row.event.status == 'cleared' or correction %}
-<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" class="neosubzero-deice-form" data-subzero-deice-form data-locked="{{ 'true' if locked else 'false' }}">
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" class="neosubzero-deice-form{{ ' ops-outbound-pass-form' if dispatch_row else '' }}" data-subzero-deice-form data-locked="{{ 'true' if locked else 'false' }}"{% if dispatch_row and can_edit and not locked %} data-ops-outbound-autosave{% endif %}>
     {{ mutation_identity(row, board, selected_ramp) }}
     <input type="hidden" name="action" value="save_treatment">
-    <label>Treatment Plan
+    <label class="{{ 'ops-outbound-plan' if dispatch_row else '' }}">Treatment Plan
         <select name="treatment_plan" {% if locked %}disabled{% endif %}>
             <option value="">Select plan</option>
-            {% for value, label in plan_labels.items() %}<option value="{{ value }}" {% if row.plan == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            {% for value, label in plan_labels.items() %}<option value="{{ value }}" {% if row.plan == value %}selected{% endif %}>{{ {'one_type_i':'Type I','two_type_i':'Type I + I','type_i_type_iv':'Type I + IV'}[value] if dispatch_row else label }}</option>{% endfor %}
         </select>
     </label>
     <fieldset class="neosubzero-deice-pass type-i" data-subzero-pass="1" {% if not row.plan %}hidden{% endif %}>
@@ -324,7 +324,7 @@
     {% if can_edit and row.event.status in ('finished','cleared') %}<label{% if correction %} data-ops-correction-field hidden{% endif %}>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
     {% if can_edit %}
         <button type="button" data-subzero-edit {% if not locked %}hidden{% endif %}>{{ 'CORRECT RECORDED TREATMENT' if correction else 'EDIT' }}</button>
-        <button type="submit" {% if locked %}hidden{% endif %}>{{ 'SAVE' if compact else 'SAVE TREATMENT' }}</button>
+        <button type="submit" {% if locked or dispatch_row %}hidden{% endif %}>{{ 'SAVE' if compact else 'SAVE TREATMENT' }}</button>
     {% endif %}
 </form>
 {% endmacro %}

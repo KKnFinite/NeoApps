@@ -1036,6 +1036,7 @@ def _save_deice_qualification(access):
 @bp.route("/departure-deice/mutate", methods=["POST"])
 @gateway_node_required("subzero")
 def departure_deice_mutate():
+    acknowledged_version = None
     if request.form.get('action') == 'reset' and not user_can('neosubzero.coordinator.edit'):
         return 'Access denied.', 403
     if request.form.get('action') == 'undo_clear' and not user_can('neosubzero.coordinator.edit'):
@@ -1069,7 +1070,7 @@ def departure_deice_mutate():
         if request.form.get('event_id', type=int) not in (None, getattr(event, 'id', None)):
             raise NeoSubZeroEvidenceError('The treatment event changed. Reload this physical tail.')
         require_version(event, request.form.get('expected_version'), 'Departure deice')
-        mutate_departure_deice(
+        changed_event = mutate_departure_deice(
             operation,
             mission,
             request.form.get("action"),
@@ -1077,9 +1078,14 @@ def departure_deice_mutate():
             event=event,
             actor_id=current_user.id,
         )
+        db.session.flush()
+        from app.services.live_collaboration import entity_version
+        acknowledged_version = entity_version(changed_event)
+        acknowledged_event_id = changed_event.id
         db.session.commit()
         flash("DEPARTURE DEICE SAVED.", "success")
     except (ValueError, IntegrityError) as exc:
+        acknowledged_version = None
         db.session.rollback()
         flash(
             str(exc)
@@ -1087,9 +1093,13 @@ def departure_deice_mutate():
             else "Unable to save departure deice.",
             "error",
         )
-    return redirect(url_for("neosubzero.operations", mode="outbound",
-                            mission=mission.id if mission else None,
-                            ramp=request.form.get("ramp") or None))
+    response = redirect(url_for("neosubzero.operations", mode="outbound",
+                                mission=mission.id if mission else None,
+                                ramp=request.form.get("ramp") or None))
+    if acknowledged_version is not None:
+        response.headers['X-NeoSubZero-Event-Version'] = acknowledged_version
+        response.headers['X-NeoSubZero-Event-ID'] = str(acknowledged_event_id)
+    return response
 
 
 @bp.route("/pretreat/mutate", methods=["POST"])

@@ -1,5 +1,6 @@
 """Real OUTBOUND controls and compact layouts in isolated Chromium/WebKit fixtures."""
 import unittest
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from playwright.sync_api import expect
@@ -41,8 +42,20 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             page.clock.install(time=datetime(2026,10,23,3,10,tzinfo=timezone.utc))
             case.login(page);case.ready(page,'/neosubzero/operations?mode=outbound')
             row=page.locator(f'[data-ops-row][data-mission-id="{case.flow_id}"]')
-            actions=row.locator('.ops-mission-summary [data-ops-quick-actions]')
+            actions=row.locator('[data-ops-quick-actions]:visible')
             def action(key):case.submit(page,actions.locator(f'button[value="{key}"]'))
+            def toggle_details():
+                if page.viewport_size['width'] > 900 and page.locator('[data-ops-workspace]').get_attribute('data-layout') == 'list':
+                    row.locator('[data-ops-expand-details]').click()
+                else:row.locator('[data-ops-accordion] > summary').click()
+            def change(name,value):
+                field=row.locator('.ops-outbound-pass-form').locator(f'[name="{name}"]')
+                if field.input_value()==value:return
+                old=field.evaluate_handle('field=>field.form').as_element()
+                with page.expect_response(lambda r:r.url.endswith('/operations/mutate') and r.request.method=='POST') as pending:
+                    field.select_option(value)
+                self.assertEqual(pending.value.status,200,pending.value.text())
+                page.wait_for_function('form=>!form.isConnected',arg=old)
             expect(row).to_have_attribute('data-status','untreated')
             action('initial_contact');action('reset')
             expect(row).to_have_attribute('data-status','untreated')
@@ -68,7 +81,7 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
                     expect(actions.locator('button[value="initial_contact"]')).to_be_visible()
                     self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
             action('initial_contact');action('toggle_configured')
-            row.locator('[data-ops-accordion] > summary').click()
+            toggle_details()
             detail=row.locator('[data-ops-inline]')
             expect(detail).to_be_visible()
             self.assertEqual(detail.locator('.neosubzero-mission-facts,.ops-team-controls,[data-open-frost-inspection]').count(),0)
@@ -78,18 +91,18 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
                 reason.select_option('Freezing Rain')
             self.assertEqual(saved.value.status,200,saved.value.text())
             expect(reason).to_have_value('Freezing Rain')
-            form=detail.locator('[data-subzero-deice-form]')
+            form=detail.locator('.ops-outbound-pass-form')
             expect(form.locator('[name="treatment_plan"]')).to_be_enabled()
-            form.locator('[name="treatment_plan"]').select_option('type_i_type_iv')
-            form.locator('[name="pass1_surface_area"]').select_option('wings_only')
-            form.locator('[name="pass2_surface_area"]').select_option('wings_tail')
+            change('treatment_plan','type_i_type_iv')
+            change('pass1_surface_area','wings_only')
+            change('pass2_surface_area','wings_tail')
             posts=[]
             page.on('request',lambda r:posts.append(r.url) if r.method=='POST' and r.url.endswith('/operations/mutate') else None)
             form.locator('[name="pass1_start"]').fill('2')
             form.locator('[name="treatment_plan"]').focus()
             self.assertFalse(posts,'Incomplete treatment clocks must not autosave')
             form.locator('[name="pass1_start"]').fill('')
-            case.submit(page,form.locator('button[type="submit"]'))
+            form.locator('[name="treatment_plan"]').focus()
             recorded=len(posts)
             form.locator('[name="pass1_start"]').fill('2')
             actions.locator('[data-ops-pass-stamp="pass1_start"]').click()
@@ -97,20 +110,22 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             self.assertEqual(len(posts),recorded)
             expect(detail.locator('[data-ops-reload-inline]')).to_be_hidden()
             form.locator('[name="pass1_start"]').fill('')
-            case.submit(page,form.locator('button[type="submit"]'))
+            form.locator('[name="treatment_plan"]').focus()
             for width,height in ((1366,768),(1920,1080)):
                 page.set_viewport_size({'width':width,'height':height})
                 for layout in ('visual','list'):
                     case.layout(page,layout)
                     expect(detail).to_be_visible()
                     summary=row.locator('[data-ops-accordion] > summary')
-                    self.assertGreaterEqual(detail.bounding_box()['y'],summary.bounding_box()['y']+summary.bounding_box()['height']-1)
-                    self.assertEqual(detail.locator('.ops-identity,.ops-location,.ops-status').count(),0)
+                    if layout=='visual':
+                        self.assertGreaterEqual(detail.bounding_box()['y'],summary.bounding_box()['y']+summary.bounding_box()['height']-1)
+                    self.assertEqual(detail.locator('.ops-outbound-extra .ops-identity,.ops-outbound-extra .ops-location,.ops-outbound-extra .ops-status').count(),0)
                     self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
                     page.screenshot(path=str(EVIDENCE/f'{engine}-after-{layout}-{width}.png'),full_page=True)
-                    summary.click();expect(detail).to_be_hidden()
+                    toggle_details()
+                    expect(row.locator('.ops-outbound-extra')).to_be_hidden()
                     expect(actions.locator('button[value="reset"]')).to_be_visible()
-                    summary.click();expect(detail).to_be_visible()
+                    toggle_details();expect(detail).to_be_visible()
 
             for width in (375,390,430):
                 page.set_viewport_size({'width':width,'height':844})
@@ -125,14 +140,14 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
                 page.screenshot(path=str(EVIDENCE/f'{engine}-after-mobile-{width}.png'),full_page=True)
             page.set_viewport_size({'width':1366,'height':768})
             expect(detail).to_be_visible(timeout=12000)
-            row.locator('[data-ops-accordion] > summary').click()
-            expect(detail).to_be_hidden()
+            toggle_details()
+            expect(row.locator('.ops-outbound-extra')).to_be_hidden()
             case.submit(page,actions.locator('[data-ops-pass-stamp="pass1_start"]'))
             expect(row).to_have_attribute('data-status','deicing')
             expect(row.locator('.ops-mission-summary .ops-pilot-start')).to_have_count(0)
 
             # A live peer edit cannot overwrite or silently submit a local draft.
-            row.locator('[data-ops-accordion] > summary').click()
+            toggle_details()
             detail.locator('[data-ops-disclosure="notes"] > summary').click()
             notes=detail.locator('[name="notes"]');notes.fill('Unsaved local note')
             with case.app.app_context():
@@ -148,12 +163,12 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             expect(notes).to_have_value('Unsaved local note')
             detail.locator('[data-ops-reload-inline]').click()
             expect(detail.locator('[name="notes"]')).to_have_value('Peer saved note')
-            row.locator('[data-ops-accordion] > summary').click()
+            toggle_details()
             for clock,minute,state in (('pass1_end',15,'deicing'),('pass2_start',16,'deicing'),('pass2_end',20,'fin')):
                 page.clock.set_system_time(datetime(2026,10,23,3,minute,tzinfo=timezone.utc))
                 case.submit(page,actions.locator(f'[data-ops-pass-stamp="{clock}"]'))
                 expect(row).to_have_attribute('data-status',state)
-            expect(row.locator('.ops-mission-summary .ops-pilot-start')).to_have_text('PILOT START 22:16')
+            expect(row.locator('.ops-pilot-start:visible')).to_have_text('PILOT START 22:16')
             action('clear')
             expect(row).to_have_attribute('data-status','radio-pending')
             expect(row).to_have_css('background-color','rgb(240, 45, 159)')
@@ -163,8 +178,8 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             before_radio_dialogs=len(dialogs)
             actions.get_by_role('button',name='RADIO',exact=True).click()
             expect(detail.locator('[data-radio-script]')).to_contain_text('2216')
-            row.locator('[data-ops-accordion] > summary').click()
-            expect(detail).to_be_hidden()
+            toggle_details()
+            expect(row.locator('.ops-outbound-extra')).to_be_hidden()
             expect(row).to_have_attribute('data-status','radio-pending')
             actions.get_by_role('button',name='RADIO',exact=True).click()
             expect(detail.locator('[data-radio-script]')).to_be_visible()
@@ -189,9 +204,9 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
                 peer_row=peer_page.locator(f'[data-ops-row][data-mission-id="{case.flow_id}"]')
                 expect(peer_row.locator('[data-radio-script]')).to_contain_text('2216')
                 case.submit(peer_page,peer_row.locator('[data-ops-radio-section] button[value="radio_complete"]'))
-                expect(peer_row.locator('[data-ops-inline]')).to_be_hidden()
+                expect(peer_row.locator('.ops-outbound-extra')).to_be_hidden()
             finally:peer_context.close()
-            expect(detail).to_be_hidden()
+            expect(row.locator('.ops-outbound-extra')).to_be_hidden()
             expect(row).to_have_attribute('data-status','gone')
             expect(row).to_have_css('background-color','rgb(104, 116, 128)')
             expect(actions.locator('button')).to_have_count(0)
@@ -227,17 +242,24 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
                 case.login(page);case.ready(page,f'/neosubzero/operations?mode=outbound&mission={case.missions[0]}')
                 row=page.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')
                 inline=row.locator('[data-ops-inline]');form=inline.locator('[data-subzero-deice-form]')
-                form.locator('[name="treatment_plan"]').select_option('one_type_i')
-                form.locator('[name="pass1_surface_area"]').select_option('wings_only')
+                for name,value in (('treatment_plan','one_type_i'),('pass1_surface_area','wings_only')):
+                    if form.locator(f'[name="{name}"]').input_value()==value:continue
+                    old=form.element_handle()
+                    with page.expect_response(lambda r:r.url.endswith('/operations/mutate') and r.request.method=='POST') as saved:
+                        form.locator(f'[name="{name}"]').select_option(value)
+                    self.assertEqual(saved.value.status,200,saved.value.text())
+                    page.wait_for_function('form=>!form.isConnected',arg=old)
                 draft=form.locator('[name="pass1_start"]');draft.fill('21:45');draft.focus()
                 with case.app.app_context():
                     mission=db.session.get(SortDateMission,case.missions[0]);mission.assigned_tail_number='N-REPLACED';db.session.commit()
-                expect(row.locator('.ops-identity strong')).to_have_text('N-REPLACED',timeout=12000)
+                expect(row.locator('.ops-identity strong:visible')).to_have_text('N-REPLACED',timeout=12000)
                 expect(draft).to_have_value('21:45')
                 expect(inline).to_have_attribute('data-tail','N440UP')
-                expect(inline.locator('[data-ops-inline-feedback]')).to_contain_text('identity or eligibility changed')
+                feedback=inline.locator('[data-ops-inline-feedback]')
+                expect(feedback).to_contain_text('identity')
+                expect(feedback).to_contain_text(re.compile(r'draft.*(?:retained|preserved)',re.I))
                 with page.expect_response(lambda r:r.url.endswith('/operations/mutate') and r.request.method=='POST') as rejected:
-                    form.locator('button[type="submit"]').click()
+                    form.evaluate('form=>form.requestSubmit()')
                 self.assertEqual(rejected.value.status,409)
                 expect(draft).to_have_value('21:45')
                 inline.locator('[data-ops-reload-inline]').click()

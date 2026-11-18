@@ -43,7 +43,7 @@
 {% endif %}
 {% endmacro %}
 
-{% macro workspace(row, inline=false) %}
+{% macro workspace(row, inline=false, show_treatment=true) %}
 {% set editable = can_edit and row.mobile_open and not row.identity_conflict %}
 {% set corrections = can_edit and row.mission_departure_status != 'cancelled' and not row.identity_conflict %}
 {% set event_status = row.event.status if row.event else '' %}
@@ -63,7 +63,7 @@
     {% if not row.has_actual_spray and event_status not in ('finished','cleared') %}
         {{ spray_reason(row, editable, board, row.ramp, show_observation=false) }}
     {% else %}<p class="ops-reason-recorded">Reason for Application · <strong>{{ row.reason_for_application }}</strong></p>{% endif %}
-    {% if event_status not in ('negative','not_sprayed','finished','cleared') %}
+    {% if show_treatment and event_status not in ('negative','not_sprayed','finished','cleared') %}
         {{ treatment_form(row, editable, board, row.ramp, compact=true) }}
     {% endif %}
 </section>

@@ -9,6 +9,24 @@ from tests import test_neosubzero_radio_postgres as fixtures
 
 
 class OutboundResetPostgresTest(fixtures.RadioPostgresTest):
+    def test_concurrent_configuration_on_same_ramp_allows_both_aircraft(self):
+        first=Event.query.filter_by(sort_date_mission_id=self.f.alpha.id).one()
+        second=Event.query.filter_by(sort_date_mission_id=self.second.id).one()
+        self.assertCountEqual(self.race(self.data(first,self.f.alpha,'toggle_configured'),
+                                      self.data(second,self.second,'toggle_configured')),[200,200])
+        db.session.expire_all()
+        self.assertEqual(db.session.get(Event,first.id).status,'configured')
+        self.assertEqual(db.session.get(Event,second.id).status,'configured')
+
+    def test_configured_aircraft_still_cannot_concurrently_start_on_one_pad(self):
+        first=self.mutate(self.f.alpha,'toggle_configured')
+        second=self.mutate(self.second,'toggle_configured')
+        fields=dict(treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:10')
+        self.assertCountEqual(self.race(self.data(first,self.f.alpha,'save_treatment',**fields),
+                                      self.data(second,self.second,'save_treatment',**fields)),[200,409])
+        db.session.expire_all()
+        self.assertEqual(Event.query.filter(Event.pass1_started_at_utc.is_not(None)).count(),1)
+
     def test_reset_and_start_have_one_winner_and_never_retire_actual_spray(self):
         event=Event.query.filter_by(sort_date_mission_id=self.f.alpha.id).one()
         eid=event.id

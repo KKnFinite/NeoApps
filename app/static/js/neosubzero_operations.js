@@ -8,6 +8,7 @@
     const primaryRamps = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'];
     let selected = new URL(location.href).searchParams.get('mission');
     const isPretreat = root.dataset.mode === 'pretreat';
+    const desktopInline = () => !isPretreat && !media.matches && root.dataset.layout !== 'visual';
     const needsReload = message => /changed|conflict|stale|session|current sort|identity|network|timed out|could not be confirmed|expired|restored.*draft|another.*(?:inspection|coordinator|saved|user)/i.test(message);
     const accordion = row => row.querySelector('[data-ops-accordion]');
     const dirtyForm = 'form[data-dirty="true"]';
@@ -39,7 +40,7 @@
         searchInput.focus({preventScroll:true});
         filterPretreat();
     });
-    const autosaveSelector = '[data-ops-pretreat-autosave]';
+    const autosaveSelector = ':is([data-ops-pretreat-autosave],[data-ops-outbound-autosave])';
     const pendingPretreat = new Set();
     let reconcilingPretreat = false;
     const autosaveValues = form => new URLSearchParams([...new FormData(form)].filter(([name]) =>
@@ -111,7 +112,7 @@
         root.dataset.operationId, root.dataset.mode, detail.dataset.missionId, detail.dataset.tail].join(':');
     const draftContents = () => [...root.querySelectorAll('[data-ops-inline]')];
     const inlineFor = element => element.closest('[data-ops-inline]') ||
-        (element.matches('[data-ops-planned]') ? element.closest('[data-ops-row]').querySelector('[data-ops-inline]') : null);
+        element.closest('[data-ops-row]')?.querySelector('[data-ops-inline]') || null;
     const inlineMessage = (content, text, error = false) => {
         const line = content.querySelector('[data-ops-inline-feedback]');
         line.textContent = text;
@@ -167,6 +168,8 @@
     };
     const initialize = (restore = false, onlyFresh = false) => {
         for (const content of draftContents()) {
+            const extra = content.querySelector('.ops-outbound-extra');
+            if (extra && !desktopInline()) extra.open = true;
             content.querySelectorAll('form').forEach(form => { sync(form); rememberAutosave(form); });
             if (!restore) continue;
             let drafts = [];
@@ -223,6 +226,7 @@
         }
     };
     const applyLayout = () => {
+        const wasInline = desktopInline();
         const board = root.querySelector('[data-ops-board]');
         const rows = [...board.querySelectorAll('[data-ops-row]')];
         // Preserve global server ordering while moving rows into/out of columns.
@@ -231,6 +235,18 @@
         board.querySelectorAll('.ops-ramp-column').forEach(e => e.remove());
         root.dataset.layout = (isPretreat || media.matches) ? 'list' : (root.dataset.desktopLayout || 'list');
         const visual = root.dataset.layout === 'visual';
+        if (visual && wasInline) rows.forEach(row => {
+            const card = accordion(row);
+            card.open = card.contains(document.activeElement) || !!card.querySelector(dirtyForm) || row.dataset.missionId === selected;
+        });
+        if (desktopInline()) rows.forEach(row => { accordion(row).open = true; });
+        if (!isPretreat) rows.forEach(row => {
+            const extra = row.querySelector('.ops-outbound-extra');
+            if (extra) {
+                extra.open = !desktopInline() || row.dataset.missionId === selected || !!extra.querySelector(dirtyForm);
+                row.querySelector('[data-ops-expand-details]')?.setAttribute('aria-expanded',String(extra.open));
+            }
+        });
         const override = root.dataset.rampOverride;
         const ramp = (!isPretreat && override) || (media.matches ? override || root.dataset.ramp : 'All');
         const selector = root.querySelector('[data-ops-ramp]');
@@ -290,6 +306,10 @@
                     if (next) {
                         const nextEditor = accordion(next);
                         nextEditor.open = true;
+                        for (const selector of ['.ops-outbound-identity','.ops-outbound-location','.ops-outbound-status']) {
+                            const fresh = nextEditor.querySelector(selector);
+                            if (fresh) retained.querySelector(selector)?.replaceWith(fresh);
+                        }
                         nextEditor.querySelector('[data-ops-inline]').replaceWith(retained);
                     }
                     else incoming.append(row);
@@ -300,24 +320,30 @@
             if (plan && pendingPretreat.has(plan)) next.querySelector('[data-ops-planned]')?.replaceWith(plan);
             const nextEditor = accordion(next);
             const radioFinished = !isPretreat && row.dataset.status === 'radio-pending' && next.dataset.status === 'gone';
-            nextEditor.open = !radioFinished && ((isPretreat && !media.matches) || editor.open);
+            nextEditor.open = desktopInline() || (!radioFinished && ((isPretreat && !media.matches) || editor.open));
             if (radioFinished && selected === row.dataset.missionId) selected = null;
             const disclosureKey = section => section.dataset.opsDisclosure ||
                 section.querySelector(':scope > summary')?.textContent.trim();
             const opened = new Set([...editor.querySelectorAll('details[open]')].map(disclosureKey));
             nextEditor.querySelectorAll('details').forEach(section => {
-                section.open = opened.has(disclosureKey(section));
+                section.open = !(radioFinished && section.matches('.ops-outbound-extra')) && opened.has(disclosureKey(section));
             });
             if (preserve) {
                 const current = editor.querySelector('[data-ops-inline]');
                 const replacement = nextEditor.querySelector('[data-ops-inline]');
                 // A draft in a different card can be intentionally kept in
                 // memory even when this response only expands the chosen card.
-                if (replacement.querySelector('.ops-inline-loading')) {
+                if (replacement.querySelector('.ops-inline-loading') && !replacement.querySelector('.ops-outbound-primary')) {
                     const summary = editor.querySelector('summary');
                     summary.replaceChildren(...nextEditor.querySelector('summary').childNodes);
                     nextEditor.replaceWith(editor);
                 } else {
+                    const currentExtra = current.querySelector('.ops-outbound-extra');
+                    const freshExtra = replacement.querySelector('.ops-outbound-extra');
+                    if (freshExtra?.querySelector('.ops-inline-loading') && currentExtra &&
+                        (currentExtra.contains(active) || currentExtra.querySelector(dirtyForm))) {
+                        freshExtra.replaceWith(currentExtra);
+                    }
                     const freshForms = [...replacement.querySelectorAll('form')];
                     const draftNotice = replacement.querySelector('[data-ops-draft-status]');
                     if (current.querySelector(dirtyForm) && draftNotice) {
@@ -379,8 +405,8 @@
         const activeRowField = currentBoard.contains(document.activeElement) ? document.activeElement : null;
         const caret = activeRowField && 'selectionStart' in activeRowField ? [activeRowField.selectionStart, activeRowField.selectionEnd] : null;
         const activeTop = activeRowField?.getBoundingClientRect().top;
-        reconcilingPretreat = isPretreat;
-        if (next.dataset.operationId === root.dataset.operationId) reconcileInline(currentBoard, nextBoard, activeRowField, isPretreat ? saved : null);
+        reconcilingPretreat = true;
+        if (next.dataset.operationId === root.dataset.operationId) reconcileInline(currentBoard, nextBoard, activeRowField, saved);
         currentBoard.replaceWith(nextBoard);
         ['operationId','ramp','rampOverride'].forEach(key => { root.dataset[key] = next.dataset[key]; });
         root.dataset.desktopLayout = next.dataset.layout;
@@ -392,7 +418,7 @@
             const activeContent = activeRowField?.closest('[data-ops-inline]');
             const newRow = activeContent && [...nextBoard.querySelectorAll('[data-ops-inline]')].find(content =>
                 content.dataset.missionId === activeContent.dataset.missionId && content.dataset.tail === activeContent.dataset.tail);
-            const replacement = isPretreat && activeRowField?.form && activeRowField.name && newRow && [...newRow.querySelectorAll('form')].find(form =>
+            const replacement = activeRowField?.form && activeRowField.name && newRow && [...newRow.querySelectorAll('form')].find(form =>
                 formKey(form) === formKey(activeRowField.form))?.elements[activeRowField.name];
             const focus = activeRowField?.isConnected ? activeRowField : replacement;
             if (focus && !focus.disabled && !focus.readOnly) {
@@ -476,14 +502,19 @@
         const mission = card.closest('[data-ops-row]').dataset.missionId;
         if (open) {
             root.querySelectorAll('[data-ops-accordion][open]').forEach(other => {
-                if (other !== card && !other.querySelector(dirtyForm)) other.open = false;
+                if (other !== card && !other.querySelector(dirtyForm)) {
+                    if (desktopInline()) other.querySelector('.ops-outbound-extra')?.removeAttribute('open');
+                    else other.open = false;
+                }
             });
             card.open = true;
             selected = mission;
         } else {
-            card.open = false;
+            card.open = desktopInline();
+            const extra = card.querySelector('.ops-outbound-extra');
+            if (extra) extra.open = false;
             if (selected === mission) selected = null;
-            card.querySelector('summary').focus({preventScroll:true});
+            (desktopInline() ? card.querySelector('[data-ops-expand-details]') : card.querySelector('summary')).focus({preventScroll:true});
         }
         history.replaceState(null,'',currentUrl(selected));
         if (!open) ++epoch;
@@ -493,6 +524,21 @@
         }
     };
     root.addEventListener('click', async event => {
+        const expand = event.target.closest('[data-ops-expand-details]');
+        if (expand) {
+            event.preventDefault();
+            const card = expand.closest('[data-ops-accordion]');
+            const extra = card.querySelector('.ops-outbound-extra');
+            if (extra.open) {
+                await openAccordion(card,false);
+                expand.setAttribute('aria-expanded','false');
+            } else {
+                extra.open = true;
+                expand.setAttribute('aria-expanded','true');
+                await openAccordion(card,true);
+            }
+            return;
+        }
         const radio = event.target.closest('[data-ops-radio]');
         if (radio) {
             event.preventDefault();
@@ -500,6 +546,7 @@
             const card = radio.closest('[data-ops-accordion]');
             const mission = card.closest('[data-ops-row]').dataset.missionId;
             await openAccordion(card, true);
+            root.querySelector(`[data-ops-row][data-mission-id="${mission}"] .ops-outbound-extra`)?.setAttribute('open','');
             const section = root.querySelector(`[data-ops-row][data-mission-id="${mission}"] [data-ops-radio-section]`);
             if (section) { section.scrollIntoView({block:'nearest'}); section.focus({preventScroll:true}); }
             return;
@@ -662,7 +709,7 @@
         const toggle = form.querySelector('[data-ops-quick-toggle]');
         const planned = form.matches('[data-ops-planned]');
         const reasonSave = form.matches('[data-ops-reason-form]');
-        const quiet = reasonSave || (isPretreat && (form.matches(autosaveSelector) || planned || form.matches('[data-ops-pretreat-config]')));
+        const quiet = !isPretreat || reasonSave || (isPretreat && (form.matches(autosaveSelector) || planned || form.matches('[data-ops-pretreat-config]')));
         const toggleError = form.querySelector('[data-ops-toggle-error]');
         if (planned) body.set('planned',toggle.checked ? '1' : '0');
         const key = formKey(form), abort = new AbortController();
@@ -689,6 +736,12 @@
             }
             saved = true;
             delete form.dataset.autosaveRetry;
+            if (form.matches('[data-ops-outbound-autosave]') && typeof payload.version === 'string' &&
+                payload.event_id === body.get('event_id') && form.elements.expected_version.value === body.get('expected_version')) {
+                // Advance only this form to its own committed receipt. Other
+                // dirty forms retain their original concurrency evidence.
+                form.elements.expected_version.value = payload.version;
+            }
             if (isPretreat && typeof payload.version === 'string') {
                 const previous = body.get('expected_version'), endpoint = formAction(form);
                 for (const field of row.querySelectorAll('[name="expected_version"]')) {
@@ -715,7 +768,7 @@
             }
             else notify(quiet ? '' : payload.message);
             if (!reasonSave) unlock();
-            await fetchPage(selected,isPretreat ? form : key,true);
+            await fetchPage(selected,form,true);
             if (reasonSave) unlock();
         } catch(error) {
             const message = error.name === 'AbortError' ? 'Save timed out. Your draft is kept. Check current state before retrying; no automatic retry was sent.'
@@ -730,13 +783,15 @@
                 if (isPretreat && (!media.matches || accordion(row).open)) inlineMessage(inline, message, true);
                 else notify(message,true);
             } else if (inline) {
+                if (!isPretreat && !desktopInline()) accordion(row).open = true;
                 inlineMessage(inline, message, true);
                 if (correctionRequired) {
                     form.querySelector('[data-ops-participant-correction]').hidden = false;
                     form.elements.correction_reason.disabled = false;
                     form.elements.correction_reason.focus({preventScroll:true});
                 } else if (autosave && !saved && !message.includes('changed')) {
-                    inline.querySelector('[data-ops-pretreat-retry]').hidden = false;
+                    const retry = inline.querySelector('[data-ops-pretreat-retry]');
+                    if (retry) retry.hidden = false;
                 } else if (autosave && !saved) form.dataset.autosaveConflict = 'true';
             }
             else notify(message,true);
@@ -749,7 +804,7 @@
     });
     root.dataset.desktopLayout = root.dataset.layout;
     root.querySelectorAll('[data-ops-accordion]').forEach(card => {
-        card.open = (!media.matches && isPretreat) || card.hasAttribute('data-ops-initial-open');
+        card.open = desktopInline() || (!media.matches && isPretreat) || card.hasAttribute('data-ops-initial-open');
     });
     tagOrder(); applyLayout(); initialize(true);
     root.dataset.ready = 'true';

@@ -417,8 +417,9 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
                 raise NeoSubZeroDepartureDeiceError(
                     "Move this mission to Deice Planned before configuring it."
                 )
-            if event.configured_at_utc is None:
-                _validate_ramp_configuration_available(operation, mission, event)
+            # CONFIGURED is aircraft readiness, not physical pad occupancy.
+            # Actual START still takes the operation lock and validates the
+            # authoritative pad/queue projection independently below.
             event.configured_at_utc = (
                 None
                 if event.configured_at_utc
@@ -899,61 +900,6 @@ def _validate_mission(operation, mission):
     ):
         raise NeoSubZeroDepartureDeiceError(
             "Departure deice applies only to a current mission with an assigned tail."
-        )
-
-
-def _validate_ramp_configuration_available(operation, mission, event):
-    parking_rows = SortDateParkingAssignment.query.filter_by(
-        sort_date_operation_id=operation.id
-    ).all()
-    ramp_by_tail = {
-        _tail(row.tail_number): _ramp_name(row.ramp_code)
-        for row in parking_rows
-        if _tail(row.tail_number) and _ramp_name(row.ramp_code)
-    }
-    mission_ramp = ramp_by_tail.get(_tail(mission.assigned_tail_number))
-    if not mission_ramp:
-        return
-    active_events = (
-        db.session.query(
-            NeoSubZeroDepartureDeiceEvent,
-            SortDateMission.assigned_tail_number,
-        )
-        .join(
-            SortDateMission,
-            (SortDateMission.sort_date_operation_id == NeoSubZeroDepartureDeiceEvent.sort_date_operation_id)
-            & (func.upper(func.trim(SortDateMission.assigned_tail_number)) == func.upper(func.trim(NeoSubZeroDepartureDeiceEvent.tail_number))),
-        )
-        .filter(
-            NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == operation.id,
-            NeoSubZeroDepartureDeiceEvent.reset_at_utc.is_(None),
-            or_(NeoSubZeroDepartureDeiceEvent.status.in_(("configured", "finished")),
-                NeoSubZeroDepartureDeiceEvent.pass1_started_at_utc.is_not(None)),
-            or_(NeoSubZeroDepartureDeiceEvent.status != 'cleared',
-                NeoSubZeroDepartureDeiceEvent.radio_state == 'pending'),
-            SortDateMission.mission_type == "departure",
-            or_(
-                SortDateMission.departure_status.is_(None),
-                SortDateMission.departure_status != "cancelled",
-            ),
-            NeoSubZeroDepartureDeiceEvent.id
-            != (getattr(event, "id", None) or -1),
-        )
-        .all()
-    )
-    conflict = next(
-        (
-            active_event
-            for active_event, active_tail in active_events
-            if ramp_by_tail.get(_tail(active_event.tail_number))
-            == mission_ramp
-        ),
-        None,
-    )
-    if conflict is not None:
-        raise NeoSubZeroDepartureDeiceError(
-            f"{mission_ramp} already has an active Configured departure. "
-            "Clear or reset it before configuring another aircraft."
         )
 
 

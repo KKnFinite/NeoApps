@@ -181,4 +181,8 @@ def operations_mutate():
     errors = [message for category, message in messages if category == 'error']
     if errors:
         return jsonify(ok=False, error=' '.join(errors)), 409
-    return jsonify(ok=True, message=' '.join(message for _category, message in messages) or 'Saved.')
+    receipt = {}
+    if response.headers.get('X-NeoSubZero-Event-Version'):
+        receipt = dict(version=response.headers['X-NeoSubZero-Event-Version'],
+                       event_id=response.headers.get('X-NeoSubZero-Event-ID'))
+    return jsonify(ok=True, message=' '.join(message for _category, message in messages) or 'Saved.', **receipt)
