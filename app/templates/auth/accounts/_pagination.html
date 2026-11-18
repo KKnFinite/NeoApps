@@ -1,0 +1,5 @@
+<nav class="aa-pagination" aria-label="Pagination">
+  <span>{{ page.total }} records · Page {{ page.page }} of {{ page.pages or 1 }}</span>
+  {% if page.has_prev %}<a class="aa-button secondary" href="{{ request.path }}?{{ pagination_query(page.prev_num) }}">Previous</a>{% endif %}
+  {% if page.has_next %}<a class="aa-button secondary" href="{{ request.path }}?{{ pagination_query(page.next_num) }}">Next</a>{% endif %}
+</nav>

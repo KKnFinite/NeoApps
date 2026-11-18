@@ -279,20 +279,15 @@ def _authenticated_landing_endpoint(user):
     """Choose only an accessible canonical landing page, never a supplied URL."""
     if user.scorpion_vendor:
         return "scorpion_vendor.my_truck"
-    permissions = {
-        "neogateway": "neogateway.landing.view",
-        "neostaffing": "neostaffing.board.view",
-    }
-    available = []
-    for app in portal_app_definitions():
-        permission = permissions.get(app['code'])
-        if app.get('coming_soon') or not permission or not user_has_app_access(user, app['code']):
-            continue
-        if not user_can(permission, user=user):
-            continue
-        if app['code'] == 'neogateway' and not user_has_gateway_access(user, get_current_gateway().code):
-            continue
-        available.append(app['endpoint'])
+    from app.services.accounts_workspace import authorized_applications, preference
+
+    apps = authorized_applications(user)
+    available = [app['endpoint'] for app in apps]
+    preferred = preference(user)
+    if preferred and preferred.preferred_app:
+        for app in apps:
+            if app['code'] == preferred.preferred_app:
+                return app['endpoint']
     if len(available) == 1:
         return available[0]
     return 'auth.portal_dashboard' if available else 'auth.access_pending'
@@ -317,40 +312,21 @@ def portal_dashboard():
         flash("NeoApps Portal access denied.", "error")
         return redirect(url_for("auth.access_pending"))
 
+    from app.services.accounts_workspace import CRYOCHECK_URL, authorized_applications, preference
     return render_template(
         "auth/portal.html",
         app_rows=portal_dashboard_rows_for_user(current_user),
         install_rows=portal_install_rows_for_user(current_user),
+        authorized_apps=authorized_applications(current_user),
+        account_preference=preference(current_user), cryocheck_url=CRYOCHECK_URL,
     )
 
 
 @bp.route("/portal/request-access", methods=["POST"])
 @login_required
 def request_portal_app_access():
-    if not user_can(PORTAL_REQUEST_ACCESS_PERMISSION):
-        flash("Access request permission denied.", "error")
-        return redirect(url_for("auth.portal_dashboard"))
-
-    app_code = request.form.get("app_code", "").strip().lower()
-    app_definition = portal_app_definition(app_code)
-    if not app_definition:
-        flash("Unsupported app access request.", "error")
-        return redirect(url_for("auth.portal_dashboard"))
-
-    try:
-        _lock_staff_account(current_user)
-        if app_code == "neogateway":
-            request_default_gateway_access_for_user(current_user)
-        else:
-            request_app_access_for_user(current_user, app_code)
-        db.session.commit()
-    except ValueError as error:
-        db.session.rollback()
-        flash(str(error), "error")
-    else:
-        flash(f"{app_definition['name']} access requested.", "info")
-
-    return redirect(url_for("auth.portal_dashboard"))
+    # Old launcher bookmarks lead to the justified, history-backed request flow.
+    return redirect(url_for("auth.my_account", _anchor="app-access"), code=303)
 
 
 @bp.route("/neobid")
@@ -401,6 +377,8 @@ def create_account():
                     request_default_gateway_access_for_user(user)
                 else:
                     request_app_access_for_user(user, app_code)
+                from app.services.accounts_workspace import new_attempt
+                new_attempt(user, app_code, form["access_reason"], registration=True)
             raw_token, _token_record = create_user_token(user, EMAIL_VERIFICATION)
             db.session.commit()
         except ValueError as error:
@@ -610,44 +588,7 @@ def change_password():
     "Portal Management requires Grandmaster access.",
 )
 def portal_management():
-    gateway = get_current_gateway()
-    memberships = _pending_memberships_for_gateway(gateway).all()
-    app_definitions = portal_app_definitions()
-    selected_app = _portal_management_app_filter(app_definitions)
-    selected_status = _portal_management_status_filter()
-    app_access_requests = _portal_app_access_requests(
-        app_code=selected_app,
-        status=selected_status,
-    ).all()
-    search = request.args.get("q", "").strip()
-    rows = _search_user_management_rows(gateway, search) if search else []
-    search_hidden_fields = {"status": selected_status}
-    if selected_app:
-        search_hidden_fields["app"] = selected_app
-    return render_template(
-        "auth/portal_management.html",
-        app_access_requests=app_access_requests,
-        app_definition_by_code={app["code"]: app for app in app_definitions},
-        app_definitions=app_definitions,
-        app_pending_counts=_portal_app_pending_counts(app_definitions),
-        gateway=gateway,
-        memberships=memberships,
-        request_status_filters=PORTAL_ACCESS_REQUEST_STATUS_FILTERS,
-        role_choices=ROLE_CHOICES,
-        rows=rows,
-        search=search,
-        search_clear_url=url_for(
-            "auth.portal_management",
-            app=selected_app,
-            status=selected_status,
-        ),
-        search_hidden_fields=search_hidden_fields,
-        selected_app=selected_app,
-        selected_status=selected_status,
-        can_list_all_users=user_can(USER_MANAGEMENT_VIEW_PERMISSION),
-        can_edit_portal_management=user_can(PORTAL_MANAGEMENT_EDIT_PERMISSION),
-        can_assign_driver=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
-    )
+    return redirect(url_for("auth.accounts_requests", app=request.args.get("app", ""), status=request.args.get("status", "pending"), q=request.args.get("q", "")))
 
 
 @bp.route("/portal/manage/app-access/<int:access_id>/update", methods=["POST"])
@@ -692,48 +633,21 @@ def update_portal_app_access(access_id):
 @bp.route("/portal/manage/users")
 @portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def users():
-    gateway = get_current_gateway()
-    memberships = _pending_memberships_for_gateway(gateway).all()
-    search = request.args.get("q", "").strip()
-    rows = _search_user_management_rows(gateway, search) if search else []
-    return render_template(
-        "auth/users.html",
-        gateway=gateway,
-        memberships=memberships,
-        role_choices=ROLE_CHOICES,
-        rows=rows,
-        search=search,
-    )
+    return redirect(url_for("auth.accounts_people", q=request.args.get("q", "")))
 
 
 @bp.route("/admin/users/all")
 @bp.route("/portal/manage/users/all")
 @portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def all_users():
-    """List every NeoApps user and enter the established user edit workflow."""
-    gateway = get_current_gateway()
-    return render_template(
-        "auth/all_users.html",
-        can_edit_users=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
-        gateway=gateway,
-        rows=_all_user_management_rows(gateway),
-    )
+    return redirect(url_for("auth.accounts_people"))
 
 
 @bp.route("/admin/users/edit-users")
 @bp.route("/portal/manage/users/edit-users")
 @portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def edit_users():
-    gateway = get_current_gateway()
-    search = request.args.get("q", "").strip()
-    rows = _search_user_management_rows(gateway, search) if search else []
-
-    return render_template(
-        "auth/edit_users.html",
-        gateway=gateway,
-        rows=rows,
-        search=search,
-    )
+    return redirect(url_for("auth.accounts_people", q=request.args.get("q", "")))
 
 
 @bp.route("/admin/users/manage-roles")
@@ -747,22 +661,18 @@ def manage_roles():
 @bp.route("/portal/manage/users/pending")
 @portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def pending_users():
-    gateway = get_current_gateway()
-    memberships = _pending_memberships_for_gateway(gateway).all()
-    return render_template(
-        "auth/pending_users.html",
-        gateway=gateway,
-        memberships=memberships,
-        can_assign_driver=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
-        approval_node_rows=_approval_node_role_rows(),
-        role_choices=ROLE_CHOICES,
-    )
+    return redirect(url_for("auth.accounts_requests"))
 
 
+@bp.route("/accounts/security/permissions", methods=["GET", "POST"])
 @bp.route("/admin/permissions", methods=["GET", "POST"])
 @bp.route("/motherbrain/permissions", methods=["GET", "POST"])
 @login_required
 def permission_rules():
+    from app.auth.accounts import _tabs
+    workspace = request.path.startswith("/accounts/")
+    if workspace and not platform_grandmaster(current_user):
+        abort(403)
     ensure_default_permission_rules()
     def scoped_rules():
         return [rule for rule in PermissionRule.query.order_by(PermissionRule.permission_key.asc()).all()
@@ -779,7 +689,7 @@ def permission_rules():
             _apply_permission_rule_form()
             db.session.commit()
             flash("Permission rules updated.", "info")
-            return redirect(url_for("auth.permission_rules"))
+            return redirect("/accounts/security/permissions" if workspace else url_for("auth.permission_rules"))
         except ValueError as error:
             db.session.rollback()
             flash(str(error), "error")
@@ -791,6 +701,8 @@ def permission_rules():
         protected_policy_threshold=protected_policy_threshold,
         role_choices=ROLE_CHOICES,
         rules=rules,
+        workspace_tabs=_tabs("security")["workspace_tabs"] if workspace else [],
+        active_tab="security", account_workspace=workspace,
     )
 
 
@@ -798,28 +710,7 @@ def permission_rules():
 @bp.route("/portal/manage/users/<int:user_id>")
 @portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def user_detail(user_id):
-    from app.services.grandmaster_commissioning import may_commission
-
-    target_user = User.query.get_or_404(user_id)
-    gateway = get_current_gateway()
-    membership = _current_gateway_membership_for_user(target_user, gateway)
-    node_rows = _node_role_rows(target_user, membership)
-    return render_template(
-        "auth/user_detail.html",
-        app_access_rows=_portal_app_access_rows(target_user),
-        gateway=gateway,
-        membership=membership,
-        node_rows=node_rows,
-        role_choices=ROLE_CHOICES,
-        target_user=target_user,
-        can_resend_email_verification=(
-            bool(target_user.email)
-            and not bool(target_user.email_verified_at)
-            and user_can(EMAIL_VERIFICATION_RESEND_PERMISSION)
-        ),
-        can_edit_user=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
-        can_commission_grandmaster=may_commission(current_user, target_user),
-    )
+    return redirect(url_for("auth.account_profile", user_id=user_id, tab=request.args.get("tab", "identity")))
 
 
 @bp.route("/admin/users/<int:user_id>/commission-grandmaster", methods=["GET", "POST"])
@@ -848,7 +739,7 @@ def commission_platform_grandmaster(user_id):
                 reason=request.form.get("reason", ""))
             db.session.commit()
             flash("NeoApps platform Grandmaster commissioned. Existing sessions were invalidated; application and node grants were preserved.", "info")
-            return redirect(url_for("auth.user_detail", user_id=user_id))
+            return redirect(url_for("auth.account_profile", user_id=user_id, tab="security"))
         except ReauthenticationFailed as error:
             try:
                 record_login_failure(client_ip, identifier)
@@ -952,6 +843,8 @@ def change_user_account_type(user_id):
 @bp.route("/portal/manage/users/<int:user_id>/edit", methods=["GET", "POST"])
 @portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
 def edit_user(user_id):
+    if request.method == "GET":
+        return redirect(url_for("auth.account_profile", user_id=user_id, tab="identity"))
     target_user = User.query.get_or_404(user_id)
     if target_user.scorpion_vendor:
         flash("Convert to FULL NEO ACCOUNT before editing staff roles or identity.", "error")
@@ -994,6 +887,8 @@ def edit_user(user_id):
 @bp.route("/portal/manage/users/<int:user_id>/roles", methods=["GET", "POST"])
 @node_role_management_required
 def user_roles(user_id):
+    if request.method == "GET" and user_can(USER_MANAGEMENT_VIEW_PERMISSION):
+        return redirect(url_for("auth.account_profile", user_id=user_id, tab="access"))
     target_user = User.query.get_or_404(user_id)
     if target_user.scorpion_vendor:
         flash("Convert this Truck Driver to FULL NEO ACCOUNT before granting NeoNode roles.", "error")
@@ -1086,22 +981,7 @@ def update_user_gateway_membership(user_id):
 @bp.route("/portal/manage/access-requests")
 @portal_permission_required(ACCESS_REQUESTS_VIEW_PERMISSION, "Access Requests access denied.")
 def access_requests():
-    gateway = get_current_gateway()
-    memberships = (
-        GatewayMembership.query.filter_by(gateway_id=gateway.id, status="pending")
-        .join(User, GatewayMembership.user_id == User.id)
-        .order_by(GatewayMembership.created_at.asc())
-        .all()
-    )
-    return render_template(
-        "auth/access_requests.html",
-        gateway=gateway,
-        memberships=memberships,
-        approval_node_rows=_approval_node_role_rows(),
-        role_choices=ROLE_CHOICES,
-        can_edit_access_requests=user_can(ACCESS_REQUESTS_EDIT_PERMISSION),
-        can_assign_driver=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
-    )
+    return redirect(url_for("auth.accounts_requests"))
 
 
 @bp.route("/admin/access-requests/<int:membership_id>/approve", methods=["POST"])
@@ -1210,7 +1090,11 @@ def _requested_portal_apps_from_form():
     selected = request.form.getlist("app_codes")
     if not selected and "app_codes" not in request.form:
         selected = ["neogateway"]
-    valid_codes = {app["code"] for app in portal_app_definitions()}
+    valid_codes = {app["code"] for app in portal_app_definitions() if not app.get("coming_soon")}
+    if any(str(code).strip().lower() not in valid_codes for code in selected):
+        # Return invalid selections for the server validator; never silently turn
+        # a forged NeoBid request into a different application's request.
+        return [str(code).strip().lower() for code in selected]
     normalized = []
     for code in selected:
         app_code = str(code or "").strip().lower()
@@ -1295,24 +1179,9 @@ def _portal_management_return_url():
 
 
 def _portal_app_access_rows(user):
-    rows = []
-    access_by_code = None
-    for app in portal_app_definitions():
-        if app["code"] != "neogateway" and access_by_code is None:
-            access_by_code = {access.app_code: access for access in PortalAppAccess.query.filter(
-                PortalAppAccess.user_id == user.id,
-                PortalAppAccess.app_code.in_([definition["code"] for definition in portal_app_definitions()
-                                             if definition["code"] != "neogateway"]),
-            ).all()}
-        rows.append(
-            {
-                "app": app,
-                "access": ensure_user_app_access(user, app["code"])
-                if app["code"] == "neogateway"
-                else access_by_code.get(app["code"]),
-            }
-        )
-    return rows
+    # Profiles are read-only. Missing legacy mappings are displayed, never seeded.
+    access_by_code = {a.app_code: a for a in PortalAppAccess.query.filter_by(user_id=user.id).all()}
+    return [{"app": app, "access": access_by_code.get(app["code"])} for app in portal_app_definitions()]
 
 
 def _has_app_access_form_fields():
@@ -1340,6 +1209,8 @@ def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
         app_code = app["code"]
         if f"app_status_{app_code}" not in request.form:
             continue
+        if app.get("coming_soon"):
+            raise ValueError("NeoBid access changes are unavailable before launch.")
         status = request.form.get(f"app_status_{app_code}", "none").strip().lower()
         is_active = request.form.get(f"app_active_{app_code}") == "1"
         if status not in {"none", "pending", "approved", "denied"}:
@@ -1383,6 +1254,9 @@ def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
 def _approve_portal_app_access(
     access, role, notes, is_active=True, bypass_email_verification=False
 ):
+    from app.services.accounts_workspace import require_available_app, close_open_attempt
+    if access:
+        require_available_app(access.app_code)
     if access and access.user.scorpion_vendor:
         raise ValueError("Convert this Truck Driver to FULL NEO ACCOUNT before granting app access.")
     if not access:
@@ -1413,6 +1287,7 @@ def _approve_portal_app_access(
     access.denied_by_user_id = None
     access.denied_at = None
     access.denial_notes = None
+    close_open_attempt(access.user, access.app_code, "approved", notes)
 
 
 def _deny_portal_app_access(access, notes):
@@ -1434,6 +1309,8 @@ def _deny_portal_app_access(access, notes):
     access.approved_by_user_id = None
     access.approved_at = None
     access.approval_notes = None
+    from app.services.accounts_workspace import close_open_attempt
+    close_open_attempt(access.user, access.app_code, "denied", notes)
 
 
 def _account_form_from_request():
@@ -1469,6 +1346,15 @@ def _build_user_from_account_form(form):
     missing = [label for label, value in required_values.items() if not value]
     if missing:
         raise ValueError(f"{', '.join(missing)} required.")
+    from app.services.accounts_workspace import require_available_app
+    for app_code in form["app_codes"]:
+        require_available_app(app_code)
+    import re
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or len(email) > 80:
+        raise ValueError("Enter a valid email address (80 characters maximum).")
+    for key, limit in (("first_name", 80), ("last_name", 80), ("employee_id", 80), ("supervisor_name", 160), ("work_area", 160), ("access_reason", 2000)):
+        if len(form[key]) > limit:
+            raise ValueError(f"{key.replace('_', ' ').title()} is too long.")
 
     _raise_for_duplicate_identity(
         email,
@@ -1586,6 +1472,12 @@ def _apply_user_edit_form(user, form):
     missing = [label for label, value in required_values.items() if not value]
     if missing:
         raise ValueError(f"{', '.join(missing)} required.")
+    import re
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or len(email) > 80:
+        raise ValueError("Enter a valid email address (80 characters maximum).")
+    for key, limit in (("first_name",80),("last_name",80),("employee_id",80),("supervisor_name",160),("work_area",160),("access_reason",2000)):
+        if len(form[key]) > limit:
+            raise ValueError(f"{key.replace('_',' ').title()} is too long.")
 
     _raise_for_duplicate_identity(email, employee_id, user_id=user.id)
 
@@ -1940,8 +1832,6 @@ def _node_role_rows(user, membership):
     seed_role = _neogateway_seed_role_for_membership(user, membership)
     existing_roles = {}
     if membership:
-        if _membership_is_approved_active(membership) and platform_grandmaster(current_user):
-            seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
         existing_roles = {
             role.node_id: role for role in GatewayNodeRole.query.filter_by(
                 gateway_membership_id=membership.id,
@@ -2261,6 +2151,9 @@ def _change_driver_account_type(gateway, target_user, account_type):
             raise ValueError("User Management authority changed.")
         if locked_target.role == "grandmaster":
             raise ValueError("A protected platform Grandmaster cannot be converted through ordinary account controls.")
+        if "review_token" in request.form:
+            from app.services.accounts_workspace import verify_review
+            verify_review(locked_target, request.form.get("review_token", ""))
     from app.services.neoscorpion_account_types import convert_account
     return convert_account(gateway, current_user, target_user, account_type,
                            can_change_role=lambda role: platform_grandmaster(current_user) and role in ROLE_CHOICES,
@@ -2359,6 +2252,8 @@ def _approve_membership(
         send_result = email_service.send_access_approved(membership.user, membership.gateway)
         if send_result.get("sent"):
             membership.approval_email_sent_at = datetime.utcnow()
+    from app.services.accounts_workspace import close_open_attempt
+    close_open_attempt(membership.user, "neogateway", "approved", notes)
 
 
 def _deny_membership(membership, notes):
@@ -2385,3 +2280,5 @@ def _deny_membership(membership, notes):
         app_access.approved_by_user_id = None
         app_access.approved_at = None
         app_access.approval_notes = None
+    from app.services.accounts_workspace import close_open_attempt
+    close_open_attempt(membership.user, "neogateway", "denied", notes)

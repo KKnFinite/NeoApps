@@ -30,23 +30,24 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         self.assertNotIn('Approved', launcher)
 
     def test_launcher_pending_remains_non_launchable(self):
-        rows = [{'app': app, 'access': {'status':'pending', 'is_active':True}} for app in PORTAL_APPS]
-        with patch('app.auth.routes.portal_dashboard_rows_for_user', return_value=rows):
-            html = self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
-        self.assertEqual(html.count('aria-disabled="true"'), 1)
-        self.assertEqual(html.count('PENDING REVIEW'), 1)
-        self.assertNotIn('data-portal-app="neostaffing"', html)
-        self.assertNotIn('<button', html)
-        self.assertNotIn('href=', html)
+        for access in PortalAppAccess.query.filter_by(user_id=self.admin.id):
+            access.status = "pending"
+        db.session.commit()
+        html = self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"',1)[1]
+        self.assertNotIn('data-portal-app=', html)
+        self.assertIn('My Account', html)
+        self.assertNotIn('action="/portal/request-access"', html)
 
     def test_launcher_other_states_preserve_request_form(self):
-        for access in (None, {'status':'denied','is_active':True}, {'status':'approved','is_active':False}, {'status':'pending','is_active':False}):
-            with self.subTest(access=access), patch('app.auth.routes.portal_dashboard_rows_for_user', return_value=[{'app': app, 'access':access} for app in PORTAL_APPS]):
-                html = self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
-                self.assertEqual(html.count('action="/portal/request-access"'), 1)
-                self.assertEqual(html.count('name="csrf_token"'), 1)
-                self.assertIn('name="app_code" value="neogateway"', html)
-                self.assertNotIn('data-portal-app="neostaffing"', html)
+        for status, active in [('denied',True),('approved',False),('pending',False)]:
+            with self.subTest(status=status, active=active):
+                for access in PortalAppAccess.query.filter_by(user_id=self.admin.id):
+                    access.status, access.is_active = status, active
+                db.session.commit()
+                html=self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"',1)[1]
+                self.assertNotIn('data-portal-app=',html)
+                self.assertIn('href="/my-account"',html)
+                self.assertNotIn('action="/portal/request-access"',html)
 
     def test_neobid_approved_access_renders_existing_placeholder(self):
         db.session.add(PortalAppAccess(user_id=self.admin.id, app_code="neobid",
@@ -119,7 +120,7 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         db.session.commit()
 
         response = self.client.get(
-            "/portal/manage",
+            "/accounts/requests",
             query_string={"status": "all"},
         )
         html = response.get_data(as_text=True)
@@ -127,21 +128,21 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(gateway.user.email, html)
         self.assertIn(staffing.user.email, html)
-        self.assertIn(bid.user.email, html)
-        self.assertIn('data-app-filter="all"', html)
-        self.assertIn('data-status-filter="all"', html)
+        self.assertNotIn(bid.user.email, html)
+        self.assertIn('All available applications', html)
+        self.assertIn('value="all" selected', html)
 
     def test_each_application_filter_returns_only_that_application(self):
         accesses = {
             app_code: self._access(f"{app_code}_pending", app_code, "pending")
-            for app_code in ("neogateway", "neostaffing", "neobid")
+            for app_code in ("neogateway", "neostaffing")
         }
         db.session.commit()
 
         for app_code, expected_access in accesses.items():
             with self.subTest(app_code=app_code):
                 response = self.client.get(
-                    "/portal/manage",
+                    "/accounts/requests",
                     query_string={"app": app_code, "status": "pending"},
                 )
                 html = response.get_data(as_text=True)
@@ -152,7 +153,7 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
                     if other_code != app_code:
                         self.assertNotIn(other_access.user.email, html)
                 self.assertIn(
-                    f'data-app-filter="{app_code}"',
+                    f'value="{app_code}" selected',
                     html,
                 )
 
@@ -171,7 +172,7 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         for status, expected, excluded in cases:
             with self.subTest(status=status):
                 response = self.client.get(
-                    "/portal/manage",
+                    "/accounts/requests",
                     query_string={"app": "neostaffing", "status": status},
                 )
                 html = response.get_data(as_text=True)
@@ -181,96 +182,47 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
                     self.assertNotIn(access.user.email, html)
 
     def test_pending_counts_are_per_application_and_ignore_resolved_requests(self):
-        self._access("gateway_pending_one", "neogateway", "pending")
-        self._access("gateway_pending_two", "neogateway", "pending")
-        self._access("gateway_approved", "neogateway", "approved")
-        self._access("staffing_pending_one", "neostaffing", "pending")
-        self._access("bid_denied_one", "neobid", "denied")
+        self._access("gateway_pending_one","neogateway","pending")
+        self._access("gateway_pending_two","neogateway","pending")
+        self._access("gateway_approved","neogateway","approved")
+        self._access("staffing_pending_one","neostaffing","pending")
+        self._access("bid_denied_one","neobid","denied")
         db.session.commit()
-
-        response = self.client.get(
-            "/portal/manage",
-            query_string={"status": "all"},
-        )
-        html = response.get_data(as_text=True)
-
-        self.assertRegex(
-            html,
-            r"NeoGateway\s*<span class=\"portal-request-filter-count\">\(2\)</span>",
-        )
-        self.assertRegex(
-            html,
-            r"NeoStaffing\s*<span class=\"portal-request-filter-count\">\(1\)</span>",
-        )
-        self.assertRegex(
-            html,
-            r"NeoBid\s*<span class=\"portal-request-filter-count\">\(0\)</span>",
-        )
+        html=self.client.get("/accounts/requests?status=all").get_data(as_text=True)
+        self.assertIn("NeoGateway (2)",html)
+        self.assertIn("NeoStaffing (1)",html)
+        self.assertNotIn('value="neobid"',html)
 
     def test_filter_links_and_search_preserve_query_state(self):
-        self._access("query_state", "neostaffing", "approved")
+        target=self._access("query_state","neostaffing","approved")
+        for index in range(26):
+            self._access(f"query_state_{index}","neostaffing","approved")
         db.session.commit()
-
-        response = self.client.get(
-            "/portal/manage",
-            query_string={
-                "app": "neostaffing",
-                "status": "approved",
-                "q": "Query State",
-            },
-        )
-        html = response.get_data(as_text=True)
-
-        self.assertIn('name="app" value="neostaffing"', html)
-        self.assertIn('name="status" value="approved"', html)
-        self.assertIn('name="q" value="Query State"', html)
-        self.assertIn("app=neostaffing", html)
-        self.assertIn("status=approved", html)
-        self.assertIn("q=Query+State", html)
+        html=self.client.get("/accounts/requests",query_string={"app":"neostaffing","status":"approved","q":"Query State"}).get_data(as_text=True)
+        self.assertIn('value="neostaffing" selected',html)
+        self.assertIn('value="approved" selected',html)
+        self.assertIn('name="q" value="Query State"',html)
+        self.assertIn('page=2',html)
+        self.assertIn('q=Query+State',html)
+        self.assertIn(target.user.email,html)
 
     def test_invalid_application_filter_falls_back_to_all_requests(self):
-        gateway = self._access("invalid_gateway", "neogateway", "pending")
-        staffing = self._access("invalid_staffing", "neostaffing", "pending")
+        gateway=self._access("invalid_gateway","neogateway","pending")
+        staffing=self._access("invalid_staffing","neostaffing","pending")
         db.session.commit()
-
-        response = self.client.get(
-            "/portal/manage",
-            query_string={"app": "not-a-real-app", "status": "pending"},
-        )
-        html = response.get_data(as_text=True)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(gateway.user.email, html)
-        self.assertIn(staffing.user.email, html)
-        self.assertRegex(
-            html,
-            r'data-app-filter="all"[^>]*aria-current="page"',
-        )
+        response=self.client.get("/accounts/requests?app=not-a-real-app&status=pending")
+        self.assertEqual(response.status_code,200)
+        self.assertIn(gateway.user.email,response.get_data(as_text=True))
+        self.assertIn(staffing.user.email,response.get_data(as_text=True))
+        self.assertNotIn('value="not-a-real-app"',response.get_data(as_text=True))
 
     def test_registry_entries_automatically_receive_application_tabs(self):
-        future_apps = PORTAL_APPS + (
-            {
-                "code": "neofuture",
-                "name": "NeoFuture",
-                "description": "Future application.",
-                "endpoint": "auth.portal_dashboard",
-                "icon_folder": "neogateway",
-                "coming_soon": True,
-            },
-        )
-
-        with patch(
-            "app.auth.routes.portal_app_definitions",
-            return_value=future_apps,
-        ):
-            response = self.client.get("/portal/manage")
-
-        html = response.get_data(as_text=True)
-        self.assertIn('data-app-filter="neofuture"', html)
-        self.assertRegex(
-            html,
-            r"NeoFuture\s*<span class=\"portal-request-filter-count\">\(0\)</span>",
-        )
+        future_apps=PORTAL_APPS+({"code":"neofuture","name":"NeoFuture","coming_soon":True},)
+        with patch("app.services.accounts_workspace.portal_app_definitions",return_value=future_apps):
+            html=self.client.get("/accounts/requests").get_data(as_text=True)
+        self.assertNotIn('value="neofuture"',html)
+        self.assertNotIn('value="neobid"',html)
+        self.assertIn('value="neostaffing"',html)
 
     def test_approval_and_denial_preserve_active_filters(self):
         approve_access = self._access("filtered_approve", "neostaffing", "pending")
@@ -336,29 +288,21 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         self.assertIn("EMAIL VERIFICATION BYPASS", updated.approval_notes)
 
     def test_portal_management_renders_unverified_override_action_for_editors(self):
-        access = self._access("unverified_ui", "neostaffing", "pending", verified=False)
+        access=self._access("unverified_ui","neostaffing","pending",verified=False)
         db.session.commit()
-
-        response = self.client.get("/portal/manage", query_string={"status": "pending"})
-        html = response.get_data(as_text=True)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(access.user.email, html)
-        self.assertIn("EMAIL UNVERIFIED", html)
-        self.assertIn("APPROVE WITHOUT VERIFICATION", html)
+        response=self.client.get(f"/accounts/people/{access.user_id}?tab=access")
+        self.assertEqual(response.status_code,200)
+        self.assertIn(access.user.email,response.get_data(as_text=True))
+        self.assertIn('name="bypass_email_verification"',response.get_data(as_text=True))
+        self.assertIn('Explicitly approve without verifying email',response.get_data(as_text=True))
 
     def test_user_search_renders_nonwrapping_edit_user_action(self):
-        target = self._user("edit_button_target", verified=True)
+        target=self._user("edit_button_target",verified=True)
         db.session.commit()
-
-        response = self.client.get(
-            "/portal/manage/users/edit-users",
-            query_string={"q": target.email},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('class="portal-edit-action"', response.get_data(as_text=True))
-        self.assertIn("EDIT USER", response.get_data(as_text=True))
+        response=self.client.get("/accounts",query_string={"q":target.email})
+        self.assertEqual(response.status_code,200)
+        self.assertIn(f'href="/accounts/people/{target.id}"',response.get_data(as_text=True))
+        self.assertEqual(response.data.count(b'class="aa-person"'),1)
 
     def _assert_filter_redirect(self, location):
         parsed = urlparse(location)

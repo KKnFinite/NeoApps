@@ -75,7 +75,7 @@ class GrandmasterCommissioningBrowserTest(unittest.TestCase):
                         page.screenshot(path=str(evidence/f'review-{viewport["width"]}.png'),full_page=True)
                         page.locator('[name="current_password"]').fill(PASSWORD)
                         page.get_by_role("button",name="PROMOTE TO NEOAPPS GRANDMASTER",exact=True).click()
-                        page.wait_for_url(lambda url:url.endswith("/users/"+str(target)))
+                        page.wait_for_url(lambda url:f"/accounts/people/{target}" in url and "tab=security" in url)
                         self.assertTrue(page.get_by_text("NeoApps platform Grandmaster commissioned.",exact=False).is_visible())
                         self.assertEqual(page.locator('dt',has_text="NEOAPPS PLATFORM ROLE").locator('..').locator('dd').inner_text(),"Grandmaster")
                         with app.app_context():

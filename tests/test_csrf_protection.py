@@ -121,7 +121,7 @@ class CsrfProtectionTest(unittest.TestCase):
             f"/portal/manage/app-access/{access.id}/update",
             data={"action": "approve", "role": "simulator"},
         )
-        token = self._csrf_token(self.client.get("/portal/manage"))
+        token = self._csrf_token(self.client.get("/accounts/requests"))
         with_token = self.client.post(
             f"/portal/manage/app-access/{access.id}/update",
             data={
@@ -146,7 +146,7 @@ class CsrfProtectionTest(unittest.TestCase):
         without_token = self.client.post(
             f"/admin/users/{target.id}/resend-verification",
         )
-        token = self._csrf_token(self.client.get(f"/admin/users/{target.id}"))
+        token = self._csrf_token(self.client.get(f"/accounts/people/{target.id}?tab=security"))
         with patch(
             "app.auth.routes.email_service.send_email_verification",
             return_value={"sent": True},

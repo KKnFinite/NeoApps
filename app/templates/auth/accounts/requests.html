@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="aa-workspace">
+{% include "auth/accounts/_nav.html" %}
+<form class="aa-filters" method="get">
+  <label class="aa-search"><span>Search requests</span><input type="search" name="q" value="{{ search }}" maxlength="160" placeholder="Name or email"></label>
+  <label><span>Review status</span><select name="status">{% for value in ['pending','approved','denied','all'] %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
+  <label><span>Application · pending</span><select name="app"><option value="">All available applications</option>{% for app in applications %}<option value="{{ app.code }}" {% if selected_app == app.code %}selected{% endif %}>{{ app.name }} ({{ pending_counts.get(app.code, 0) }})</option>{% endfor %}</select></label><button class="aa-button" type="submit">Filter</button>
+</form>
+<div class="aa-request-list">
+{% for row in requests %}
+<article class="aa-request"><div><strong>{{ row.User.display_name }}</strong><small>{{ row.User.email }}</small></div><div><strong>{{ row.app_code|replace('neogateway','NeoGateway')|replace('neostaffing','NeoStaffing') }}</strong><small>{{ 'Existing account request' if row.source == 'legacy' else 'Application request' }} · {{ row.created_at.strftime('%b %d, %Y') }}</small></div><span class="aa-state">{{ row.state|title }}</span><a class="aa-button secondary" href="{{ url_for('auth.account_profile', user_id=row.user_id, tab='access') }}">Review</a></article>
+{% else %}<p class="aa-empty">No requests in this view.</p>{% endfor %}
+</div>
+{% include "auth/accounts/_pagination.html" %}
+</section>
+{% endblock %}

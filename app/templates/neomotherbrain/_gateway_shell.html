@@ -14,7 +14,7 @@
     {% include "_change_characters.html" %}
     <details class="gateway-shell-account-menu">
         <summary aria-label="Account menu">{{ current_user.header_display_name|upper }}</summary>
-        <div role="menu"><a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">NeoPortal</a><form method="post" action="{{ url_for('auth.logout') }}"><button type="submit" role="menuitem">Logout</button></form></div>
+        <div role="menu">{% include "auth/_account_links.html" %}<a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">NeoPortal</a><form method="post" action="{{ url_for('auth.logout') }}"><button type="submit" role="menuitem">Logout</button></form></div>
     </details>
 </header>
 

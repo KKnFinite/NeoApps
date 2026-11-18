@@ -1,0 +1,7 @@
+<header class="aa-heading">
+  <div><a class="aa-eyebrow" href="{{ url_for('auth.portal_dashboard') }}">NEOAPPS</a><h1>Accounts &amp; Access</h1><p>People, requests and security in one workspace.</p></div>
+  <a class="aa-button secondary" href="{{ url_for('auth.my_account') }}">My Account</a>
+</header>
+<nav class="aa-tabs" aria-label="Accounts & Access">
+{% for key, label, href in workspace_tabs %}<a href="{{ href }}" {% if active_tab == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>

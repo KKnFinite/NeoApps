@@ -532,7 +532,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         db.session.commit()
         self._login(grandmaster.username)
 
-        review = self.client.get("/admin/access-requests")
+        review = self.client.get(f"/accounts/people/{user.id}?tab=access")
 
         response = self.client.post(
             f"/admin/access-requests/{membership.id}/approve",
@@ -541,8 +541,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
         )
         motherbrain = NeoNode.query.filter_by(code="motherbrain").one()
         sektor = NeoNode.query.filter_by(code="sektor").one()
-        detail = self.client.get(f"/portal/manage/users/{user.id}")
-        edit = self.client.get(f"/portal/manage/users/{user.id}/edit")
+        detail = self.client.get(f"/accounts/people/{user.id}?tab=access")
+        edit = self.client.get(f"/accounts/people/{user.id}?tab=access")
         role_save = self.client.post(
             f"/portal/manage/users/{user.id}/roles",
             data={f"node_{motherbrain.id}": "master"},
@@ -561,13 +561,13 @@ class AuthAccountFlowsTest(unittest.TestCase):
         ).one()
 
         self.assertEqual(review.status_code, 200)
-        self.assertIn(b"EMAIL UNVERIFIED", review.data)
-        self.assertIn(b"APPROVE WITHOUT VERIFICATION", review.data)
+        self.assertIn(b'name="bypass_email_verification"', review.data)
+        self.assertIn(b"Explicitly approve without verifying email", review.data)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(detail.status_code, 200)
-        self.assertIn(b"MANAGE NODE ROLES", detail.data)
+        self.assertIn(b"gateway &amp; NeoNodes", detail.data)
         self.assertEqual(edit.status_code, 200)
-        self.assertIn(f'name="node_{motherbrain.id}"'.encode(), edit.data)
+        self.assertIn(f'name="node_id" value="{motherbrain.id}"'.encode(), edit.data)
         self.assertEqual(role_save.status_code, 302)
         self.assertEqual(updated_membership.status, "approved")
         self.assertTrue(updated_membership.is_active)
@@ -701,7 +701,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         )
         motherbrain = NeoNode.query.filter_by(code="motherbrain").one()
         sektor = NeoNode.query.filter_by(code="sektor").one()
-        edit = self.client.get(f"/portal/manage/users/{target.id}/edit")
+        edit = self.client.get(f"/accounts/people/{target.id}?tab=access")
         saved = self.client.post(
             f"/portal/manage/users/{target.id}/roles",
             data={f"node_{motherbrain.id}": "master"},
@@ -1867,7 +1867,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn(b'name="app_codes"', response.data)
         self.assertIn(b'NeoGateway', response.data)
         self.assertIn(b'NeoStaffing', response.data)
-        self.assertIn(b'NeoBid', response.data)
+        self.assertNotIn(b'value="neobid"', response.data)
         self.assertIn(b'minlength="12"', response.data)
         self.assertIn(b'maxlength="128"', response.data)
         self.assertIn(b"Common or compromised passwords are not allowed.", response.data)
@@ -1998,7 +1998,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('class="portal-header-management-link neo-menu-text"', topbar)
-        self.assertLess(topbar.index("Portal Management"), topbar.index("Change Characters"))
+        self.assertLess(topbar.index("Accounts &amp; Access"), topbar.index("Change Characters"))
         self.assertNotIn('class="action-row"', html)
         self.assertNotIn(">LOGOUT</a>", html)
 
@@ -2191,8 +2191,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
         ))
         db.session.commit()
         self._login(admin.username)
-        page = self.client.get("/portal/manage/access-requests")
-        self.assertIn(b'value="vendor"', page.data)
+        page = self.client.get(f"/accounts/people/{driver.id}?tab=security")
+        self.assertIn(b'name="account_type" value="vendor"', page.data)
         approved = self.client.post(
             f"/portal/manage/access-requests/{membership.id}/approve",
             data={"account_type": "vendor"},

@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en"{% if request.endpoint == 'neosektor.driver_routing' and request.args.get('tv') == '1' %} id="sektor-tv"{% endif %}>
 {% from "_neo_brand.html" import neo_brand, neo_brand_name %}
+{% set is_accounts_workspace = request.blueprint == 'auth' and (request.path.startswith('/accounts') or request.endpoint == 'auth.my_account') %}
+{% if is_accounts_workspace %}{% set uses_mobile_chrome = false %}{% set show_mobile_bottom_nav = false %}{% endif %}
 {% set is_sektor_dashboard = request.endpoint == 'neosektor.index' %}
 {% set uses_shared_mobile_drawer = uses_operational_shell or is_rfd_hub_page or is_portal_page or is_neostaffing_page %}
 {% set is_gateway_typography_page = uses_operational_shell or is_rfd_hub_page or request.blueprint == 'neonodes' or (request.blueprint == 'auth' and request.path.startswith('/motherbrain/')) %}
@@ -34,6 +36,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, subzero='20261116-dispatch-v1' if stylesheet == 'css/23-neosubzero.css' else none, rain='20261016-rain-ui-v1' if stylesheet == 'css/22-neorain.css' else none, discharge='20260911-controls-v1' if stylesheet == 'css/16-neosektor.css' else none, v=config.STATIC_ASSET_VERSION, ucc='20261103-palette-v1' if stylesheet == 'css/25-neosubzero.css' else none, ermac='20260910-cleanup-v1' if stylesheet in ['css/01-neoermac.css', 'css/03-neoermac.css', 'css/05-neoermac.css', 'css/11-neoermac.css'] else none, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none, viewport='20260907-shared-v1' if stylesheet in ['css/13-shared.css', 'css/17-shared.css'] else none, desktop='20260909-gateway-fade-v3' if stylesheet == 'css/28-shared.css' else '20260909-hero-v1' if stylesheet == 'css/06-shared.css' else none, scorpion='20261021-responsive-v1' if stylesheet == 'css/14-neoscorpion.css' else 'vendor-account-controls-v1' if stylesheet == 'css/26-neoscorpion.css' else none, shiftflow='20261007-editor-rail-v1' if stylesheet == 'css/18-neostaffing.css' else none, attendance='20261111-scope-here-v1' if request.endpoint == 'neostaffing.attendance' and stylesheet in ['css/18-neostaffing.css', 'css/20-neostaffing.css'] else none) }}">
     {% endfor %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/interaction_states.css', v=config.STATIC_ASSET_VERSION) }}">
+    {% if request.blueprint == 'auth' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accounts.css', v=config.STATIC_ASSET_VERSION) }}">
+    <script defer src="{{ url_for('static', filename='js/accounts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/csp_compatibility.css', v='20261031-csp-v1') }}">
     {% if request.endpoint == 'neostaffing.shift_flow' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_map.css', v='20261012-setup-colors-v1') }}">
@@ -143,9 +149,11 @@
     <script src="{{ url_for('static', filename='js/csrf.js', v='20261031-renewal-v1') }}"></script>
     <script src="{{ url_for('static', filename='js/form_actions.js', v='20261031-csp-v1') }}"></script>
 </head>
-<body class="{% if is_neostaffing_page and request.endpoint == "neostaffing.index" %}staffing-dashboard {% endif %}blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page gateway-shell-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}{% if is_rfd_hub_page %} data-gateway-shell{% endif %}>
+<body class="{% if is_accounts_workspace %}accounts-workspace-page {% endif %}{% if is_neostaffing_page and request.endpoint == "neostaffing.index" %}staffing-dashboard {% endif %}blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page gateway-shell-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}{% if is_rfd_hub_page %} data-gateway-shell{% endif %}>
     <div class="shell"{% if is_gateway_dock_page %} data-gateway-dock{% endif %}{% if is_gateway_typography_page %} data-gateway-typography{% endif %}>
-        {% if uses_operational_shell %}
+        {% if is_accounts_workspace %}
+        <header class="aa-platform-header"><a class="aa-platform-brand" href="{{ url_for('auth.portal_dashboard') if not current_user.scorpion_vendor else url_for('scorpion_vendor.my_truck') }}">{{ neo_brand('Apps','apps') }}</a><nav aria-label="Account navigation">{% include "auth/_account_links.html" %}<form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button type="submit">Sign out</button></form></nav></header>
+        {% elif uses_operational_shell %}
         <header class="operational-node-topbar" data-operational-topbar>
             {% if is_neostaffing_page %}<span class="operational-node-identity" aria-label="NeoStaffing">{% else %}<a class="operational-node-identity" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
                 <span>{{ neo_brand_name(node_header_name, node_header_key) }}<small>{{ node_current_label }}</small></span>
@@ -158,7 +166,7 @@
                 <summary aria-label="Account menu"><span>{{ current_user.header_display_name|upper }}</span></summary>
                 <div role="menu">
                     <a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">NeoPortal</a>
-                    <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit" role="menuitem">Logout</button></form>
+                    {% include "auth/_account_links.html" %}<form method="post" action="{{ url_for('auth.logout') }}"><button type="submit" role="menuitem">Logout</button></form>
                 </div>
             </details>
         </header>
@@ -263,7 +271,7 @@
                         <span>Logged In</span>
                         <strong>{{ current_user.header_display_name|upper }}</strong>
                     </div>
-                    <form class="logout-form mobile-banner-logout" method="post" action="{{ url_for('auth.logout') }}">
+                    {% include "auth/_account_links.html" %}<form class="logout-form mobile-banner-logout" method="post" action="{{ url_for('auth.logout') }}">
                         <button class="logout-link neo-menu-text" type="submit">Logout</button>
                     </form>
                 </div>
@@ -337,7 +345,7 @@
                 {% endif %}
                 {% if not is_rfd_hub_page and not is_neosektor_standalone_operator_page and not is_neostaffing_page %}
                 {% if is_portal_page and current_user.role == "grandmaster" %}
-                <a class="portal-header-management-link neo-menu-text" href="{{ url_for('auth.portal_management') }}">Portal Management</a>
+                <a class="portal-header-management-link neo-menu-text" href="{{ url_for('auth.accounts_people') }}">Accounts &amp; Access</a>
                 {% endif %}
                 {% set character_switcher_modifier = "character-switcher-header" %}
                 {% set character_switcher_use_neofont = is_portal_page %}
@@ -351,7 +359,7 @@
                     <strong>{% if is_rfd_hub_page %}{{ current_user.header_display_name|upper }}{% else %}{{ current_user.header_display_name }}{% endif %}</strong>
                 </div>
                 <nav class="nav" aria-label="Primary">
-                    <form class="logout-form mobile-banner-logout" method="post" action="{{ url_for('auth.logout') }}">
+                    {% include "auth/_account_links.html" %}<form class="logout-form mobile-banner-logout" method="post" action="{{ url_for('auth.logout') }}">
                         <button class="logout-link{% if is_rfd_hub_page %} neo-menu-text{% endif %}" type="submit">Logout</button>
                     </form>
                 </nav>
@@ -431,7 +439,7 @@
                         {% if not is_portal_page %}
                         <a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">Back to {{ neo_brand("Apps", "apps") }} Portal</a>
                         {% endif %}
-                        <form class="logout-form" method="post" action="{{ url_for('auth.logout') }}">
+                        {% include "auth/_account_links.html" %}<form class="logout-form" method="post" action="{{ url_for('auth.logout') }}">
                             <button type="submit" role="menuitem">Logout</button>
                         </form>
                     </div>
@@ -551,7 +559,7 @@
                         {% set staffing_nav_class = 'mobile-shell-menu-link' %}{% set staffing_nav_role = 'menuitem' %}{% include "neostaffing/_navigation_items.html" %}
                         {% set mobile_node_utility_class = 'mobile-shell-menu-link' %}{% include "_mobile_node_utilities.html" %}
                     {% else %}
-                        <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">{{ neo_brand("Apps", "apps") }}</a>
+                        <a class="mobile-shell-menu-link" href="{{ url_for('auth.my_account') }}" role="menuitem">My Account</a><a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">{{ neo_brand("Apps", "apps") }}</a>
                         {% if not is_rfd_hub_page %}
                         <a class="mobile-shell-menu-link" href="{{ url_for('neomotherbrain.rfd_hub') }}" role="menuitem">{{ neo_brand("Gateway", "gateway") }}</a>
                         {% endif %}

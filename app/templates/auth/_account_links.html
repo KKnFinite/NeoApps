@@ -1,0 +1,2 @@
+<a class="aa-my-account-link" href="{{ url_for('auth.my_account') }}" role="menuitem">My Account</a>
+{% if not current_user.scorpion_vendor %}<a class="aa-my-account-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">App switcher</a>{% endif %}

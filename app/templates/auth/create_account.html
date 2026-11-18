@@ -1,74 +1,19 @@
 {% extends "base.html" %}
-{% from "_neo_brand.html" import neo_brand, neo_brand_name %}
-
-{% block title %}Create Account | NeoApps Portal{% endblock %}
-
 {% block content %}
-<section class="panel compact-panel centered-command-page">
-    <div class="section-heading">
-        <h1>Create Account</h1>
-        <p class="muted">New accounts request access to one or more {{ neo_brand("Apps", "apps") }} systems for review.</p>
-    </div>
-
-    <form class="operation-form" method="post">
-        <label>
-            <span>First Name</span>
-            <input name="first_name" value="{{ form.first_name }}" autocomplete="given-name" required>
-        </label>
-        <label>
-            <span>Last Name</span>
-            <input name="last_name" value="{{ form.last_name }}" autocomplete="family-name" required>
-        </label>
-        <label>
-            <span>Employee / Contractor ID (optional)</span>
-            <input name="employee_id" value="{{ form.employee_id }}">
-        </label>
-        <label>
-            <span>Supervisor / Manager</span>
-            <input name="supervisor_name" value="{{ form.supervisor_name }}" required>
-        </label>
-        <label>
-            <span>Email</span>
-            <input name="email" type="email" value="{{ form.email }}" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-        </label>
-        <label>
-            <span>Work Area</span>
-            <input name="work_area" value="{{ form.work_area }}" required>
-        </label>
-        <label>
-            <span>Reason For Access</span>
-            <textarea name="access_reason" required>{{ form.access_reason }}</textarea>
-        </label>
-        <fieldset class="portal-app-request-fieldset">
-            <legend>REQUEST APP ACCESS</legend>
-            {% for app in app_definitions %}
-            {% set app_brand_key = "gateway" if app.code == "neogateway" else ("staffing" if app.code == "neostaffing" else ("bid" if app.code == "neobid" else app.code)) %}
-            <label class="checkbox-line">
-                <input
-                    type="checkbox"
-                    name="app_codes"
-                    value="{{ app.code }}"
-                    {% if app.code in form.app_codes %}checked{% endif %}
-                >
-                <span>{{ neo_brand_name(app.name, app_brand_key) }}</span>
-            </label>
-            {% endfor %}
-        </fieldset>
-        <label>
-            <span>Password</span>
-            <input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
-        </label>
-        <label>
-            <span>Confirm Password</span>
-            <input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
-        </label>
-        <p class="muted">Truck drivers use this same account request and sign-in. An administrator selects your account type during approval.</p>
-        <p class="muted">Use 12–128 characters. Longer passphrases are recommended. Common or compromised passwords are not allowed.</p>
-        <button type="submit">Request Access</button>
-    </form>
-
-    <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.login') }}">Back to Login</a>
-    </div>
-</section>
+<section class="aa-workspace aa-registration">
+<header class="aa-heading"><div><a class="aa-eyebrow" href="{{ url_for('auth.login') }}">NEOAPPS</a><h1>Create your account</h1><p>One identity. Request the applications you need.</p></div><a class="aa-button secondary" href="{{ url_for('auth.login') }}">Sign in</a></header>
+<form class="aa-form aa-section" method="post" data-account-registration>
+{{ csrf_field() }}
+<div class="aa-grid">
+{% for key,label,kind,limit in [('first_name','First name','text',80),('last_name','Last name','text',80),('email','Email','email',80),('employee_id','Employee / UPS ID (if applicable)','text',80),('supervisor_name','Supervisor / manager','text',160),('work_area','Work area','text',160)] %}
+<label><span>{{ label }}</span><input name="{{ key }}" type="{{ kind }}" value="{{ form[key] }}" maxlength="{{ limit }}" {% if key != 'employee_id' %}required{% endif %} {% if key == 'email' %}autocapitalize="none" spellcheck="false"{% endif %} autocomplete="{{ 'given-name' if key == 'first_name' else 'family-name' if key == 'last_name' else 'username' if key == 'email' else 'off' }}"></label>
+{% endfor %}
+</div>
+<fieldset><legend>Applications requested</legend><div class="aa-app-options">{% for app in app_definitions if not app.coming_soon %}<label class="aa-check"><input type="checkbox" name="app_codes" value="{{ app.code }}" {% if app.code in form.app_codes %}checked{% endif %}><span>{{ app.name }}</span></label>{% endfor %}</div></fieldset>
+<label><span>Why do you need access?</span><textarea name="access_reason" rows="2" minlength="3" maxlength="2000" required>{{ form.access_reason }}</textarea></label>
+<div class="aa-grid"><label><span>Password</span><input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label><label><span>Confirm password</span><input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label></div>
+<p class="aa-muted">Use 12–128 characters. Common or compromised passwords are not allowed. You select applications; administrators assign roles. Fuel Truck Drivers use this same sign-up and sign-in.</p>
+<button class="aa-button aa-submit" type="submit">Create account &amp; request access</button>
+<p class="aa-muted">Verify your email using the link we send. Each application request is reviewed separately.</p>
+</form></section>
 {% endblock %}

@@ -3,10 +3,11 @@
 {% block title %}Node Permissions | NeoMotherBrain{% endblock %}
 
 {% block content %}
-<section class="panel users-panel centered-command-page">
+<section class="{{ 'aa-workspace' if account_workspace|default(false) else 'panel users-panel centered-command-page' }}">
+    {% if account_workspace|default(false) %}{% include "auth/accounts/_nav.html" %}{% endif %}
     <div class="section-heading">
-        <h1 class="motherbrain-body-duplicate-title">Node Permissions</h1>
-        <p class="muted">CONFIGURE PAGE VISIBILITY FOR MOTHERBRAIN AND MUTATION THRESHOLDS ACROSS NEOAPPS.</p>
+        <h1 class="{{ '' if account_workspace|default(false) else 'motherbrain-body-duplicate-title' }}">{{ 'Permission oversight' if account_workspace|default(false) else 'Node Permissions' }}</h1>
+        <p class="muted">Review permitted scopes. Platform security thresholds remain protected.</p>
     </div>
 
     <form class="operation-form permission-rules-form" method="post">

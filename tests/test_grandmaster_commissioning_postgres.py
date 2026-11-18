@@ -168,11 +168,13 @@ class GrandmasterCommissioningPostgresTest(unittest.TestCase):
             db.session.commit()
         clients=[self.client(name) for name in names]
         for client,form,id_ in zip(clients,identities,(a,b)):
-            form["csrf_token"]=field(client.get(f"/admin/users/{id_}/edit"),"csrf_token")
+            review=client.get(f"/accounts/people/{id_}")
+            form["csrf_token"]=field(review,"csrf_token")
+            form["review_token"]=field(review,"review_token")
         start=Barrier(2)
         def correct(index):
             start.wait(5)
-            return clients[index].post(f"/admin/users/{(a,b)[index]}/edit",data=identities[index]).status_code
+            return clients[index].post(f"/accounts/people/{(a,b)[index]}/identity",data=identities[index]).status_code
         with ThreadPoolExecutor(max_workers=2) as pool:
             statuses=list(pool.map(correct,range(2)))
         self.assertEqual(sorted(statuses),[302,400])

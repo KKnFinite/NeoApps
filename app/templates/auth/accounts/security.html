@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="aa-workspace">{% include "auth/accounts/_nav.html" %}
+<section class="aa-section"><h2>Security &amp; Permissions</h2><p>Platform oversight with scope-protected permission management.</p><div class="aa-actions"><a class="aa-button" href="/accounts/security/permissions">Review permission rules</a><a class="aa-button secondary" href="{{ url_for('auth.accounts_people') }}">Review administrator accounts</a></div><p class="aa-muted">Scoped-role staging remains inactive. Existing platform, application and NeoNode grants determine access. Platform Grandmaster commissioning requires separate password reauthentication.</p></section>
+<section class="aa-section"><h3>Recent security activity</h3>{% for event in page.items %}<div class="aa-history"><strong>{{ event.action|replace('_',' ')|title }}</strong><small>Audit {{ event.id }} · Actor {{ event.actor_user_id }} · Account <a href="{{ url_for('auth.account_profile',user_id=event.subject_user_id,tab='history') }}">{{ event.subject_user_id }}</a> · {{ event.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</small></div>{% else %}<p>No security activity recorded.</p>{% endfor %}</section>{% include "auth/accounts/_pagination.html" %}</section>
+{% endblock %}

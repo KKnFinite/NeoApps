@@ -88,7 +88,7 @@ def vendor_request_boundary():
     if request.endpoint in VENDOR_ENDPOINTS or request.endpoint in {
         'scorpion_vendor.fuel_reading', 'auth.renew_csrf', 'auth.login',
         'auth.logout', 'auth.forgot_password', 'auth.reset_password',
-        'auth.change_password', 'auth.verify_email', 'healthz',
+        'auth.change_password', 'auth.verify_email', 'auth.my_account', 'healthz',
     }:
         return None
     abort(403)

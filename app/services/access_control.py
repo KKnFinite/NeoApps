@@ -799,6 +799,9 @@ def user_can_access_app(user, app_code, minimum_role="watcher"):
 
 
 def request_app_access_for_user(user, app_code):
+    definition = portal_app_definition(app_code)
+    if not definition or definition.get("coming_soon"):
+        raise ValueError("This application is not available for new access requests.")
     access = ensure_user_app_access(user, app_code)
     access = PortalAppAccess.query.filter_by(id=access.id).with_for_update().populate_existing().one()
     _request_reinstatement(access)
@@ -1017,6 +1020,11 @@ def _is_real_user(user):
 
 
 def _is_lightweight_live_state_request():
+    if has_request_context() and request.method in {"GET", "HEAD"} and request.endpoint in {
+        "auth.accounts_people", "auth.accounts_requests", "auth.accounts_security", "auth.account_profile", "auth.my_account",
+    }:
+        # Use the identical legacy projection, without read-side grant backfills.
+        return True
     from app.services.operational_request_policy import (
         current_request_is_lightweight_live_state,
     )

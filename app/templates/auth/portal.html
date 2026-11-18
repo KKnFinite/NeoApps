@@ -20,33 +20,11 @@
              width="1672" height="941" alt="NeoApps Portal" fetchpriority="high">
     </picture>
     <div class="portal-launcher-apps" aria-label="NeoApps applications">
-        {% for code in ('neogateway', 'neostaffing') %}
-        {% for row in app_rows if row.app.code == code %}
-        {% set app = row.app %}
-        {% set access = row.access %}
-        {% set status = access.status if access else 'none' %}
-        {% set key = 'gateway' if code == 'neogateway' else 'staffing' %}
-        {% if code != 'neostaffing' or (status == 'approved' and access.is_active and user_can('neostaffing.board.view')) %}
-        {% if status == 'approved' and access.is_active %}
-        <a class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" href="{{ url_for(app.endpoint) }}">
-            {{ card_content(key, 'LAUNCH') }}
-        </a>
-        {% elif status == 'pending' and access.is_active %}
-        <article class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" aria-disabled="true">
-            {{ card_content(key, 'PENDING REVIEW') }}
-        </article>
-        {% else %}
-        <form class="portal-request-form" method="post" action="{{ url_for('auth.request_portal_app_access') }}" data-interaction-form>
-            {{ csrf_field() }}
-            <input type="hidden" name="app_code" value="{{ app.code }}">
-            <button class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" type="submit">
-                {{ card_content(key, 'REQUEST ACCESS') }}
-            </button>
-        </form>
-        {% endif %}
-        {% endif %}
-        {% endfor %}
-        {% endfor %}
+        {% for app in authorized_apps %}
+        {% set code=app.code %}{% set key='gateway' if code == 'neogateway' else 'staffing' %}
+        <a class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" href="{{ url_for(app.endpoint) }}">{{ card_content(key, 'LAUNCH') }}</a>
+        {% else %}<p class="aa-muted">No approved applications available. Review App Access in My Account.</p>{% endfor %}
     </div>
+    <div class="aa-apps-extra"><a href="{{ url_for('auth.my_account') }}">My Account · App Access</a>{% if user_can('neoapps.user_management.view') %}<a href="{{ url_for('auth.accounts_people') }}">Accounts &amp; Access</a>{% endif %}{% if account_preference and account_preference.show_cryocheck %}<a href="{{ cryocheck_url }}" target="_blank" rel="noopener noreferrer">CryoCheck ↗ · External</a>{% endif %}</div>
 </section>
 {% endblock %}

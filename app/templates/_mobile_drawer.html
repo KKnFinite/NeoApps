@@ -50,8 +50,9 @@
         {% include "_mobile_node_utilities.html" %}
         {% else %}
         <section class="neo-drawer-links" aria-label="Utilities">
+            <a href="{{ url_for('auth.my_account') }}">My Account</a>
             {% if not is_portal_page %}<a href="{{ url_for('auth.portal_dashboard') }}">NeoPortal</a>{% endif %}
-            {% if is_portal_page and user_can('neoapps.portal_management.view') %}<a href="{{ url_for('auth.portal_management') }}">Portal Management</a>{% endif %}
+            {% if is_portal_page and user_can('neoapps.user_management.view') %}<a href="{{ url_for('auth.accounts_people') }}">Accounts &amp; Access</a>{% endif %}
             {% if is_portal_page %}
             <details class="neo-drawer-share"><summary>Share NeoApps</summary><p>Scan to request access or sign in</p><img src="{{ url_for('auth.neoapps_share_qr') }}" alt="QR code for the NeoApps portal" width="180" height="180"><button type="button" data-drawer-copy-link data-share-url="{{ url_for('neonodes.index', _external=True) }}">Copy Link</button><span data-drawer-copy-status aria-live="polite"></span></details>
             {% endif %}
