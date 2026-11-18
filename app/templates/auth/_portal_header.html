@@ -1,0 +1,17 @@
+{# Portal utilities stay outside the artwork. Mobile uses the existing MENU. #}
+<header class="topbar portal-topbar" aria-label="NeoApps Portal header">
+    <a class="portal-header-home" href="{{ url_for('auth.portal_dashboard') }}" aria-label="NeoApps Portal">
+        <img class="portal-header-logo portal-header-logo-icon" src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="38" height="38" decoding="async">
+    </a>
+    <nav class="portal-header-primary" aria-label="Portal navigation">
+        {% if user_can('neoapps.user_management.view') %}<a class="portal-header-button" href="{{ url_for('auth.accounts_people') }}">Accounts &amp; Access</a>{% endif %}
+        {% with character_switcher_modifier='character-switcher-header', character_switcher_use_neofont=false %}{% include '_change_characters.html' %}{% endwith %}
+        {% if my_alert_tray %}{% include '_my_alert_tray.html' %}{% endif %}
+    </nav>
+    <nav class="portal-header-account" aria-label="Account navigation">
+        <div class="user-chip" aria-label="Logged in user" title="{{ current_user.header_display_name }}"><span>Logged in</span><strong>{{ current_user.header_display_name }}</strong></div>
+        {% include 'auth/_account_links.html' %}
+        {% if account_preference and account_preference.show_cryocheck %}<a class="portal-header-button" href="{{ cryocheck_url }}" target="_blank" rel="noopener noreferrer">CryoCheck ↗ · External</a>{% endif %}
+        <form class="logout-form" method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button class="portal-header-button" type="submit">Logout</button></form>
+    </nav>
+</header>

@@ -41,6 +41,9 @@
     <script defer src="{{ url_for('static', filename='js/accounts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/csp_compatibility.css', v='20261031-csp-v1') }}">
+    {% if request.endpoint == 'auth.portal_dashboard' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/portal_navigation.css', v=config.STATIC_ASSET_VERSION) }}">
+    {% endif %}
     {% if request.endpoint == 'neostaffing.shift_flow' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_map.css', v='20261012-setup-colors-v1') }}">
     {% endif %}
@@ -172,6 +175,8 @@
         </header>
         {% elif is_rfd_hub_page %}
         {% include "neomotherbrain/_gateway_shell.html" %}
+        {% elif request.endpoint == 'auth.portal_dashboard' %}
+        {% include "auth/_portal_header.html" %}
         {% elif not public_landing|default(false) and not is_neosektor_driver_page %}
         <header class="topbar">
             {% if uses_node_header %}
