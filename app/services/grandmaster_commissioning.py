@@ -115,7 +115,7 @@ def commission_grandmaster(target_id, *, review_token, current_password, confirm
                 or review.get("grants") != scoped_grant_fingerprint(target.id)):
             raise CommissioningConflict("Account or permission state changed. Review and confirm the current account again.")
         if str(confirmed_target_id).strip() != str(target.id) or confirm_platform_authority != "yes":
-            raise CommissioningDenied("Confirm the exact target ID and NeoApps platform-wide authority.")
+            raise CommissioningDenied(f"Type {target.id} to confirm this NeoApps account and check the platform-wide authority box.")
         if not isinstance(reason, str) or not 10 <= len(reason.strip()) <= 1000:
             raise CommissioningDenied("A commissioning reason of 10–1000 characters is required.")
         if not isinstance(current_password, str) or len(current_password) > 1024 or not actor.check_password(current_password):

@@ -126,6 +126,7 @@ class GrandmasterCommissioningTest(TestCase):
         self.assertEqual(page.status_code,200)
         self.assertEqual(statements,[])
         self.assertIn(b"platform-wide",page.data)
+        self.assertIn(f"Type {self.target.id} to confirm {self.target.display_name}".encode(),page.data)
         self.assertIn(b'name="current_password"',page.data)
         self.assertNotIn(b'name="node_',page.data)
         self.assertNotIn(b'name="app_role_',page.data)

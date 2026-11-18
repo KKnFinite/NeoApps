@@ -51,9 +51,9 @@ def bootstrap_database(app=None):
 def _bootstrap_database_once(app, username, email, password, used_fallback):
     db.create_all()
     sync_database_schema(app)
-    from app.services.account_security_history import ensure_account_security_history
+    from app.services.account_foundation_schema import ensure_account_history_guards
 
-    ensure_account_security_history(db.session.connection())
+    ensure_account_history_guards(db.session.connection())
     if not _is_sqlite_database(app):
         # Sync owns additive DDL; verify in the same transaction before seeds.
         # Do not replay the former worker-startup ALTER/CREATE ensures here.

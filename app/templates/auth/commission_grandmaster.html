@@ -10,7 +10,7 @@
     {% if review_token %}
     <form method="post" class="operation-form">
         <input type="hidden" name="review_token" value="{{ review_token }}">
-        <label>Confirm target User ID
+        <label>Type {{ target_user.id }} to confirm {{ target_user.display_name }}
             <input name="confirmed_target_id" inputmode="numeric" pattern="[0-9]+" required autocomplete="off">
         </label>
         <label>Commissioning reason
