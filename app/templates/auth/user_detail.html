@@ -10,6 +10,9 @@
     </div>
 
     <div class="action-row">
+        {% if can_commission_grandmaster %}
+        <a class="action-button" href="{{ url_for('auth.commission_platform_grandmaster', user_id=target_user.id) }}">PROMOTE TO NEOAPPS GRANDMASTER</a>
+        {% endif %}
         <a class="action-button" href="{{ url_for('auth.edit_user', user_id=target_user.id) }}">EDIT USER</a>
         {% if membership and membership.status == "approved" and membership.is_active and can_edit_user %}
         <a class="action-button" href="{{ url_for('auth.user_roles', user_id=target_user.id) }}">MANAGE NODE ROLES</a>
@@ -26,6 +29,7 @@
     </div>
 
     <dl class="detail-list">
+        <div><dt>NEOAPPS PLATFORM ROLE</dt><dd>{{ target_user.role|role_label }}</dd></div>
         <div><dt>FIRST NAME</dt><dd>{{ target_user.first_name or "" }}</dd></div>
         <div><dt>LAST NAME</dt><dd>{{ target_user.last_name or "" }}</dd></div>
         <div><dt>EMAIL</dt><dd>{{ target_user.email or "" }}</dd></div>

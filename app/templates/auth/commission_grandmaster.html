@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}NeoApps Grandmaster Commissioning{% endblock %}
+{% block content %}
+<section class="panel compact-panel centered-command-page">
+    <div class="section-heading"><h1>PROMOTE TO NEOAPPS GRANDMASTER</h1></div>
+    <p><strong>User #{{ target_user.id }} · {{ target_user.display_name }}</strong></p>
+    <p>{{ target_user.email }} · Current platform role: {{ target_user.role|role_label }}</p>
+    <p>This grants platform-wide account and security administration. Existing application and NeoNode grants are preserved. The target must sign in again.</p>
+    {% if unavailable %}<p role="alert">{{ unavailable }}</p>{% endif %}
+    {% if review_token %}
+    <form method="post" class="operation-form">
+        <input type="hidden" name="review_token" value="{{ review_token }}">
+        <label>Confirm target User ID
+            <input name="confirmed_target_id" inputmode="numeric" pattern="[0-9]+" required autocomplete="off">
+        </label>
+        <label>Commissioning reason
+            <textarea name="reason" required minlength="10" maxlength="1000" rows="2"></textarea>
+        </label>
+        <label>Your current password
+            <input type="password" name="current_password" required maxlength="1024" autocomplete="current-password">
+        </label>
+        <label class="checkbox-label"><input type="checkbox" name="confirm_platform_authority" value="yes" required>
+            I confirm User #{{ target_user.id }} will receive NeoApps platform-wide Grandmaster authority.
+        </label>
+        <div class="action-row"><button type="submit" class="action-button">PROMOTE TO NEOAPPS GRANDMASTER</button></div>
+    </form>
+    {% endif %}
+    <a class="action-button action-button-secondary" href="{{ url_for('auth.user_detail', user_id=target_user.id) }}">BACK TO ACCOUNT</a>
+</section>
+{% endblock %}

@@ -798,6 +798,8 @@ def permission_rules():
 @bp.route("/portal/manage/users/<int:user_id>")
 @portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def user_detail(user_id):
+    from app.services.grandmaster_commissioning import may_commission
+
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
     membership = _current_gateway_membership_for_user(target_user, gateway)
@@ -816,7 +818,68 @@ def user_detail(user_id):
             and user_can(EMAIL_VERIFICATION_RESEND_PERMISSION)
         ),
         can_edit_user=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
+        can_commission_grandmaster=may_commission(current_user, target_user),
     )
+
+
+@bp.route("/admin/users/<int:user_id>/commission-grandmaster", methods=["GET", "POST"])
+@login_required
+def commission_platform_grandmaster(user_id):
+    from app.services.grandmaster_commissioning import (
+        CommissioningConflict, CommissioningDenied, ReauthenticationFailed,
+        commission_grandmaster, commissioning_review, may_initiate_commissioning,
+    )
+    if not may_initiate_commissioning(current_user):
+        abort(403)
+    target = User.query.get_or_404(user_id)
+    status = 200
+    if request.method == "POST":
+        client_ip = client_ip_for_request(request)
+        identifier = current_user.email
+        if login_is_limited(client_ip, identifier):
+            db.session.rollback()
+            return Response("Reauthentication is temporarily limited. Try again later.", 429,
+                            headers={"Retry-After": "60"})
+        try:
+            commission_grandmaster(user_id, review_token=request.form.get("review_token", ""),
+                current_password=request.form.get("current_password", ""),
+                confirmed_target_id=request.form.get("confirmed_target_id", ""),
+                confirm_platform_authority=request.form.get("confirm_platform_authority", ""),
+                reason=request.form.get("reason", ""))
+            db.session.commit()
+            flash("NeoApps platform Grandmaster commissioned. Existing sessions were invalidated; application and node grants were preserved.", "info")
+            return redirect(url_for("auth.user_detail", user_id=user_id))
+        except ReauthenticationFailed as error:
+            try:
+                record_login_failure(client_ip, identifier)
+                db.session.commit()
+                flash(str(error), "error")
+                status = 400
+            except SQLAlchemyError:
+                db.session.rollback()
+                flash("Reauthentication could not be recorded. No change was made. Please retry.", "error")
+                status = 503
+        except CommissioningConflict as error:
+            flash(str(error), "error")
+            status = 409
+        except CommissioningDenied as error:
+            flash(str(error), "error")
+            status = 403
+        except SQLAlchemyError:
+            db.session.rollback()
+            flash("Commissioning could not be saved. No change was made. Please retry.", "error")
+            status = 503
+        db.session.expire_all()
+        if not may_initiate_commissioning(current_user):
+            abort(403)
+        target = User.query.get_or_404(user_id)
+    try:
+        review_token = commissioning_review(current_user, target)
+    except CommissioningDenied as error:
+        return render_template("auth/commission_grandmaster.html", target_user=target,
+                               review_token=None, unavailable=str(error)), status if status != 200 else 409
+    return render_template("auth/commission_grandmaster.html", target_user=target,
+                           review_token=review_token, unavailable=None), status
 
 
 @bp.route("/admin/users/<int:user_id>/resend-verification", methods=["POST"])
@@ -1529,6 +1592,9 @@ def _apply_user_edit_form(user, form):
     old_email = _normalize_email(user.email)
     old_username = user.username
     if email != old_email:
+        from app.services.grandmaster_commissioning import guard_last_recoverable_platform_admin_email_change
+
+        guard_last_recoverable_platform_admin_email_change(user)
         if old_email and _normalize_email(old_username) == old_email:
             user.username = email
         user.email_verified_at = None
