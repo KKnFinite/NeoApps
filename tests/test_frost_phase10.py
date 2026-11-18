@@ -42,7 +42,8 @@ class InspectionTest(unittest.TestCase):
         for result in ('absent','uncertain'):
             entry=self.save(frost_result=result,inspection_request_id=str(uuid4()),expected_inspection_id=str(entry.id))
             value=entry.after_values['inspection']
-            self.assertEqual(value['learning_eligible'],result!='uncertain')
+            self.assertFalse(value['learning_eligible'], 'Live learning defaults OFF, including direct inspections.')
+            self.assertTrue(value['testing_phase'])
             self.assertEqual(value['physical_frost_confirmed'],False if result=='absent' else None)
 
     def test_confirmation_timestamp_dst_and_missing_inputs_rejected(self):

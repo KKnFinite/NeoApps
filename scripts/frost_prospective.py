@@ -266,8 +266,8 @@ def outcome(payload, source_hash):
         from app.services.frost_analysis import classification
         # Canonical Xchange reason mapping is reused, never guessed from absence.
         interpreted=classification(payload.get('reason'))
-        if interpreted['label']=='LIKELY FROST PRESENT': label=1
-        elif interpreted['label']=='NON-FROST TREATMENT': label=0
+        # Official treatment reason is not verified live physical frost truth.
+        # Legacy/pre-launch nightly records have no admissible learning epoch.
         cohort='treatment_reason' if payload['activity']=='departure' else 'anticipated_pretreatment'
         if cohort=='anticipated_pretreatment':label=None;confounded=True
         at=payload['start_utc']
@@ -281,13 +281,15 @@ def outcome(payload, source_hash):
     elif schema=='frost-physical-inspection-v1':
         if not payload.get('evidence_active'): return None
         cohort='physical_inspection'; at=payload['observed_at_utc']
-        label=1 if payload.get('result')=='present' else 0 if payload.get('result')=='absent' else None
+        from app.services.frost_intelligence import eligible_evidence
+        if payload.get('learning_eligible') is True and eligible_evidence(payload):
+            label=1 if payload.get('result')=='present' else 0 if payload.get('result')=='absent' else None
         confounded=payload.get('prior_pretreat') is True
     elif schema=='frost-outcome-evidence-v1':
         if not payload.get('evidence_active'): return None
         cohort='likely_no_treatment'; at=payload['observed_at_utc']
         confounded=payload.get('prior_pretreat') is True
-        if payload.get('outcome')=='explicit_not_sprayed' and payload.get('learning_eligible') and payload.get('prior_pretreat') is False: label=0
+        # No treatment is not a direct observation of physical frost absence.
     else: return None
     if not payload.get('tail'): return None
     return dict(source_sha256=source_hash,source_id=payload['id'],tail=payload['tail'],at=clock.instant(at).isoformat(),

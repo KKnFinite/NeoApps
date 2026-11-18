@@ -49,7 +49,7 @@ def capture(operation,mission,event,*,actor_id,action,previous):
     if parking and (not parking.updated_at or parking.updated_at>block):parking=None
     exposure=(block-arrival.actual_block_in_datetime_utc).total_seconds()/3600 if arrival else None
     label=analysis.classification(None,actual_spray=False,verified_not_sprayed=bool(arrival),prior_pretreat=prior)
-    return dict(schema_version=VERSION,record_type='explicit_no_treatment_evidence',
+    payload = dict(schema_version=VERSION,record_type='explicit_no_treatment_evidence',
         operation_id=operation.id,sort_date=operation.sort_date.isoformat(),sort_name=operation.sort_name,
         tail=tail,mission_id=mission.id,outcome='explicit_not_sprayed',actor_user_id=actor_id,
         observed_at_utc=stamp(now),block_out_at_utc=stamp(block),block_out_source=mission.actual_block_out_source,
@@ -64,6 +64,8 @@ def capture(operation,mission,event,*,actor_id,action,previous):
         classification=label,physical_frost_confirmed=None,
         learning_eligible=bool(arrival and prior is not None),
         limitation='No measured aircraft surface condition. Pretreatment is a confounder; outcome is likely absence evidence, not physical confirmation.')
+    from app.services.frost_intelligence import stamp_learning
+    return stamp_learning(operation, payload)
 
 
 def payloads(operation):

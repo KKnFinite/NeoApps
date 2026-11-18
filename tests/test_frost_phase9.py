@@ -165,7 +165,8 @@ class OutcomeTest(unittest.TestCase):
     def test_explicit_outcome_compact_attributed_not_a_spray_and_rolls_back(self):
         f=self.f;event=self.explicit();item=next(iter(payloads(f.operation).values()))
         self.assertEqual(item['tail'],f.alpha.assigned_tail_number);self.assertEqual(item['actor_user_id'],self.actor.id)
-        self.assertEqual(item['classification']['label'],'LIKELY FROST ABSENT');self.assertTrue(item['learning_eligible'])
+        self.assertEqual(item['classification']['label'],'LIKELY FROST ABSENT');self.assertFalse(item['learning_eligible'])
+        self.assertFalse(item['learning_control']['enabled'])
         self.assertEqual(item['parking']['position'],'A03');self.assertFalse(item['physical_frost_confirmed'])
         self.assertNotIn('before_values',item);self.assertEqual(NeoSubZeroSprayRecord.query.count(),0)
         mutate_departure_deice(f.operation,f.alpha,'clear',{},event=event,actor_id=self.actor.id);db.session.rollback()

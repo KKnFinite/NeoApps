@@ -88,7 +88,10 @@ def forecast_features(observations, forecasts, *, issued_at, as_of, target):
     return frost_analysis.features(target.isoformat(),measured+future)
 
 
-def predict(gateway_id, *, now=None, observations=None, record=False):
+def predict(gateway_id, *, now=None, observations=None, record=False, operational=False):
+    if operational:
+        from app.services.frost_intelligence import operational_prediction
+        return operational_prediction(gateway_id)
     now=now or datetime.now(timezone.utc)
     if now.tzinfo is None:raise ValueError('Prediction time must be timezone-aware.')
     row,artifact=approved(gateway_id)

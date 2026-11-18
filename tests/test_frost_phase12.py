@@ -66,6 +66,11 @@ class ProspectiveTest(unittest.TestCase):
     def inspection(self,**kwargs):
         return dict(dict(schema_version='frost-physical-inspection-v1',id='frost:inspection:1:0',tail='NREAL',
             evidence_active=True,observed_at_utc=(NOW+timedelta(hours=1,minutes=20)).isoformat(),
+            record_type='direct_aircraft_frost_inspection',observer_user_id=7,
+            source='explicit direct visual inspection attestation',evidence_strength='direct_physical_inspection',
+            weather={'source_sha256':'a'*64},learning_eligible=True,testing_phase=False,
+            learning_control=dict(schema='frost-intelligence-v1',gateway_id=1,revision=1,enabled=True,
+                since=(NOW-timedelta(days=1)).isoformat(),operation_created_at_utc=NOW.isoformat()),
             result='absent',prior_pretreat=None),**kwargs)
 
     def test_exact_eight_artifacts_hashes_reports_and_thresholds_frozen(self):
@@ -147,12 +152,13 @@ class ProspectiveTest(unittest.TestCase):
         self.assertEqual(physical[0]['primary_independent_nights'],1)
         self.assertEqual(physical[0]['aircraft_cases'],2);self.assertIsNone(physical[0]['metrics']['brier'])
         treatment=[r for r in report['metrics'] if r['cohort']=='treatment_reason']
-        self.assertEqual(treatment[0]['metrics']['positive'],1)
+        self.assertEqual(treatment, [], 'Unverified nightly spray reasons cannot become live validation truth.')
+        self.assertIsNone(study.outcome(items[-1], 'a'*64)['label'])
 
     def test_no_spray_pretreatment_ambiguous_clear_and_revisions(self):
         sample=dict(schema_version='frost-outcome-evidence-v1',id='x',tail='N1',evidence_active=True,
             observed_at_utc=NOW.isoformat(),learning_eligible=True,prior_pretreat=False,outcome='explicit_not_sprayed')
-        self.assertEqual(study.outcome(sample,'a'*64)['label'],0)
+        self.assertIsNone(study.outcome(sample,'a'*64)['label'], 'No-spray alone is not verified physical frost absence.')
         self.assertIsNone(study.outcome(dict(sample,prior_pretreat=None),'a'*64)['label'])
         self.assertTrue(study.outcome(dict(sample,prior_pretreat=True),'a'*64)['confounded'])
         self.assertIsNone(study.outcome(dict(sample,evidence_active=False),'a'*64))

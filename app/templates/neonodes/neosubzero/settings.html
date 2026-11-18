@@ -1,12 +1,34 @@
 {% extends "base.html" %}
 {% block title %}Settings | NeoSub-Zero{% endblock %}
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_intelligence.css',v='20261118-v1') }}">
 <section class="neosubzero-shell">
     <header class="neosubzero-head">
         <div><p>NEOSUB-ZERO</p><h1>SETTINGS</h1></div>
     </header>
     {% include "neonodes/neosubzero/_nav.html" %}
     {% if can_edit %}<p><a href="{{ url_for('neosubzero.frost_vault') }}">FROST VAULT · SOURCE EVIDENCE</a></p>{% endif %}
+
+    <section class="neosubzero-settings frost-intelligence" aria-labelledby="subzero-frost-intelligence">
+        <h2 id="subzero-frost-intelligence">FROST INTELLIGENCE</h2>
+        <p>Historical-model experimental research predictions and weather collection remain independent.</p>
+        <p class="frost-note">Verified future physical observations only. Retraining uses the controlled workstation worker; frozen models stay unchanged.</p>
+        <form method="post" action="{{ url_for('neosubzero.frost_intelligence_settings') }}" class="neosubzero-settings-grid">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="expected_revision" value="{{ frost_intelligence.revision }}">
+            {% for key,label in frost_intelligence_fields %}
+            <label class="frost-toggle"><span>{{ label }}</span>
+                <input type="checkbox" role="switch" name="{{ key }}"{% if frost_intelligence[key] %} checked{% endif %}{% if not can_edit_frost_intelligence %} disabled{% endif %}>
+                <small aria-hidden="true"></small>
+            </label>
+            {% endfor %}
+            <p class="frost-note">{{ frost_operational_prerequisite }}</p>
+            {% if can_edit_frost_intelligence %}
+            <label class="frost-confirm"><input type="checkbox" name="confirm_operational">I confirm activation of independently validated operational predictions and alerts.</label>
+            <button type="submit">SAVE FROST INTELLIGENCE</button>
+            {% else %}<p>Only authorized NeoApps platform Grandmasters may change these settings.</p>{% endif %}
+        </form>
+    </section>
 
     <section class="neosubzero-settings" aria-labelledby="subzero-fluid-settings">
         <h2 id="subzero-fluid-settings">DEICE FLUIDS</h2>

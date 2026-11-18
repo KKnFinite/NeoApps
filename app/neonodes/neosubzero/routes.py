@@ -1174,6 +1174,7 @@ def pretreat_mutate():
 @bp.route("/settings", methods=["GET", "POST"])
 @gateway_node_required("subzero")
 def settings():
+    from app.services import frost_intelligence
     access = permission_access("neosubzero.settings.view", "neosubzero.settings.edit")
     if not access["can_view"]:
         flash("Access denied.", "error")
@@ -1214,6 +1215,10 @@ def settings():
         "neonodes/neosubzero/settings.html",
         can_edit=access["can_edit"],
         fluid_settings=neosubzero_fluid_settings(gateway),
+        frost_intelligence=frost_intelligence.read(gateway.id),
+        frost_intelligence_fields=zip(frost_intelligence.KEYS, frost_intelligence.LABELS),
+        can_edit_frost_intelligence=frost_intelligence.can_edit(current_user),
+        frost_operational_prerequisite=frost_intelligence.operational_prerequisite(gateway.id),
     )
 
 

@@ -1,6 +1,6 @@
 """Minimal private source-evidence administration; never writes spray records."""
 import io
-from flask import abort,flash,jsonify,render_template,request,send_file
+from flask import abort,flash,jsonify,render_template,request,send_file,redirect,url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 from app.neonodes.neosubzero import bp
@@ -34,6 +34,46 @@ def authorized():
     # Reuse MotherBrain's configured SubZero administration authority.
     if not user_can('neosubzero.settings.edit'): abort(403)
     return get_current_gateway()
+
+
+@bp.route('/frost-vault/intelligence-settings', methods=['GET', 'POST'])
+@gateway_node_required('subzero')
+def frost_intelligence_settings():
+    from app.services import frost_intelligence as intelligence
+    if not user_can('neosubzero.settings.view'):
+        abort(403)
+    gateway = get_current_gateway()
+    if request.method == 'GET':
+        response = jsonify(ok=True, settings=intelligence.read(gateway.id),
+            operational_prerequisite=intelligence.operational_prerequisite(gateway.id))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    if not intelligence.can_edit(current_user):
+        abort(403)
+    data = request.get_json() if request.is_json else request.form
+    if request.is_json and not isinstance(data, dict):
+        abort(400)
+    if not request.is_json and any(data.get(key) not in (None, 'on') for key in intelligence.KEYS + ('confirm_operational',)):
+        abort(400)
+    values = {key: data.get(key) if request.is_json else data.get(key) == 'on' for key in intelligence.KEYS}
+    confirm = data.get('confirm_operational') is True if request.is_json else data.get('confirm_operational') == 'on'
+    try:
+        result = intelligence.save(gateway.id, values, data.get('expected_revision'), confirm_operational=confirm)
+        db.session.commit()
+    except PermissionError:
+        db.session.rollback()
+        abort(403)
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        message = str(error) if isinstance(error, ValueError) else 'Concurrent FROST settings change. Reload current values.'
+        if request.is_json:
+            return jsonify(ok=False, error=message), 409
+        flash(message, 'error')
+        return redirect(url_for('neosubzero.settings'))
+    if request.is_json:
+        return jsonify(ok=True, settings=result)
+    flash('FROST INTELLIGENCE SETTINGS SAVED.', 'success')
+    return redirect(url_for('neosubzero.settings'))
 
 
 def catalog(gateway):

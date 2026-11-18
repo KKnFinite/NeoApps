@@ -131,6 +131,8 @@ def record(operation, mission, values, *, actor_id):
         physical_frost_confirmed={'present':True, 'absent':False, 'uncertain':None}[result],
         physical_label={'present':'OBSERVED FROST PRESENT', 'absent':'OBSERVED FROST ABSENT', 'uncertain':'UNKNOWN'}[result],
         treatment_reason_target_eligible=False, learning_eligible=result != 'uncertain')
+    from app.services.frost_intelligence import stamp_learning
+    payload = stamp_learning(operation, payload, previous=previous if request_body['correction'] else None)
     entry = audit_change(operation, ACTION, actor_id=actor_id, mission=mission, tail=tail, reason=reason,
         before=dict(previous_audit_id=latest.id, inspection=previous) if request_body['correction'] else None,
         after={})
