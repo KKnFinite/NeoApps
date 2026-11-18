@@ -1837,7 +1837,7 @@ def grouped_permission_rules(rules):
 
 def user_can(permission_key, user=None):
     user = user or current_user
-    if not _is_authenticated_user(user) or is_restricted_driver(user):
+    if not _is_authenticated_user(user) or not user.is_active or is_restricted_driver(user):
         return False
 
     normalized_key = normalize_permission_key(permission_key)
@@ -1849,6 +1849,15 @@ def user_can(permission_key, user=None):
         # even if a legacy or forged policy row has a permissive threshold.
         if platform_security_permission(normalized_key) and not platform_grandmaster(user):
             return False
+        from app.services.account_scope_runtime import scoped_active, GATEWAY_PROTECTED, authority
+        if scoped_active() and normalized_key in GATEWAY_PROTECTED:
+            from app.services.account_authority import Scope
+            if get_permission_rule(normalized_key) is None:
+                return False
+            gateway=get_current_gateway()
+            evidence=authority(user)
+            return bool(gateway.id in evidence.gateways and 'neogateway' in evidence.applications
+                        and evidence.can_administer(Scope('gateway','neogateway',gateway.id)))
         role = _role_for_permission_key(normalized_key, user)
         if role is None:
             return False
@@ -1858,8 +1867,18 @@ def user_can(permission_key, user=None):
 
         rule = get_permission_rule(normalized_key)
         minimum_role = rule.minimum_role if rule else None
+        if rule and scoped_active():
+            from app.services.account_scope_runtime import owner_scope,scoped_minimum
+            scope=owner_scope(normalized_key)
+            if scope:minimum_role=scoped_minimum(scope,normalized_key,minimum_role)
         if minimum_role not in ROLE_LEVELS:
             return False
+
+        # Platform oversight preserves the two mapped administrators' former
+        # node-GM capabilities only where an explicit node Master grant exists.
+        # It never manufactures access to another node or bypasses domain guards.
+        if scoped_active() and role=='master' and platform_grandmaster(user) and _node_code_from_permission_key(normalized_key) in {'motherbrain','sektor','scorpion','reptile','ermac','subzero','rain'}:
+            return True
 
         if role == "grandmaster":
             return True

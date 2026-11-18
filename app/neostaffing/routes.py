@@ -2050,9 +2050,16 @@ def delete_floating_holiday_setting(holiday_id):
 
 
 @bp.route("/permissions", methods=["GET", "POST"])
-@neostaffing_app_required()
+@login_required
 def permissions():
-    return redirect(url_for("auth.permission_rules"), code=303)
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():
+        from app.auth.scoped_access import scoped_permissions
+        return scoped_permissions('neostaffing')
+    @neostaffing_app_required()
+    def legacy_redirect():
+        return redirect(url_for("auth.permission_rules"), code=303)
+    return legacy_redirect()
 
 
 @bp.route("/people/<int:person_id>/assign-work-area", methods=["POST"])

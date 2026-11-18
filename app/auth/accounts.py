@@ -215,6 +215,8 @@ def account_action(user_id, action):
                 from app.services.account_security import guard_app_role_change
                 guard_app_role_change(target, access, access.role, granting=False)
                 if code == "neogateway":
+                    from app.services.account_scope_runtime import revoke_gateway_ranks
+                    revoke_gateway_ranks(target.id,reason)
                     legacy._guard_last_grandmaster_gateway_change(target)
                     membership = legacy._current_gateway_membership_for_user(target, get_current_gateway())
                     if membership:
@@ -267,6 +269,7 @@ def account_action(user_id, action):
 @bp.get("/my-account")
 @login_required
 def my_account():
+    from app.services.accounts_workspace import gateway_membership_needs_review
     restricted = bool(current_user.scorpion_vendor)
     apps = [] if restricted else available_applications()
     accesses = {a.app_code: a for a in PortalAppAccess.query.filter_by(user_id=current_user.id).all()} if not restricted else {}
@@ -274,7 +277,8 @@ def my_account():
     return render_template("auth/accounts/my_account.html", applications=apps, accesses=accesses, attempts=attempts,
         browser_tab_title="My Account | NeoApps",
         decisions=_decisions(attempts), authorized=authorized_applications(current_user), preference=preference(current_user), restricted=restricted,
-        review=None if restricted else review_token(current_user), request_key=str(uuid4()))
+        review=None if restricted else review_token(current_user), request_key=str(uuid4()),
+        gateway_review=False if restricted else gateway_membership_needs_review(current_user))
 
 
 @bp.post("/my-account/app-access")

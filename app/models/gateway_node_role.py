@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.extensions import db
+from sqlalchemy import event
 from app.models.user import ROLE_LEVELS
 
 
@@ -45,3 +46,12 @@ class GatewayNodeRole(db.Model):
     @property
     def role_level(self):
         return ROLE_LEVELS.get(self.role, 0)
+
+
+@event.listens_for(GatewayNodeRole,'before_insert')
+@event.listens_for(GatewayNodeRole,'before_update')
+def _no_retired_node_grandmaster(_mapper,_connection,row):
+    if row.role=='grandmaster':
+        from app.services.account_scope_runtime import scoped_active
+        if scoped_active():
+            raise ValueError('NeoNode Grandmaster is retired. Use node Master and protected parent administration.')

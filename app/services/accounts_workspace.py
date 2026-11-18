@@ -53,6 +53,8 @@ def _snapshot(user_id):
     grants = db.session.execute(GatewayNodeRole.__table__.select().where(
         GatewayNodeRole.gateway_membership_id.in_([m["id"] for m in memberships])).order_by(GatewayNodeRole.id)).mappings().all()
     apps = db.session.execute(PortalAppAccess.__table__.select().where(PortalAppAccess.user_id == user_id).order_by(PortalAppAccess.id)).mappings().all()
+    from app.models import AccountScopedRole,AccountAuthorizationState
+    scopes=db.session.execute(AccountScopedRole.__table__.select().where(AccountScopedRole.user_id==user_id).order_by(AccountScopedRole.id)).mappings().all()
     attempts = db.session.execute(AccountAccessRequest.__table__.select().where(AccountAccessRequest.user_id == user_id).order_by(AccountAccessRequest.id)).mappings().all()
     pref = db.session.execute(AccountPreference.__table__.select().where(AccountPreference.user_id == user_id)).mappings().first()
     # Last-login changes do not make an administrator's independent review stale.
@@ -61,8 +63,9 @@ def _snapshot(user_id):
     driver = db.session.execute(FuelDriverIdentity.__table__.select().where(FuelDriverIdentity.user_id == user_id)).mappings().first()
     affiliations = db.session.execute(FuelVendorMembership.__table__.select().where(FuelVendorMembership.user_id == user_id).order_by(FuelVendorMembership.id)).mappings().all()
     companies = db.session.execute(FuelVendorCompany.__table__.select().where(FuelVendorCompany.id.in_([m['company_id'] for m in affiliations])).order_by(FuelVendorCompany.id)).mappings().all()
-    payload = [identity, [dict(m) for m in memberships], [dict(g) for g in grants], [dict(a) for a in apps], [dict(a) for a in attempts], dict(pref) if pref else None,
-        dict(driver) if driver else None, [dict(m) for m in affiliations], [dict(c) for c in companies]]
+    state=db.session.get(AccountAuthorizationState,1)
+    payload = [(state.active,state.version) if state else None,identity, [dict(m) for m in memberships], [dict(g) for g in grants], [dict(a) for a in apps], [dict(a) for a in attempts], dict(pref) if pref else None,
+        dict(driver) if driver else None, [dict(m) for m in affiliations], [dict(c) for c in companies], [dict(s) for s in scopes]]
     return sha256(json.dumps(payload, default=str, sort_keys=True).encode()).hexdigest()
 
 
@@ -91,6 +94,15 @@ def lock_self():
     return actor
 
 
+def gateway_membership_needs_review(user):
+    """An app entitlement never substitutes for an approved gateway membership."""
+    gateway = get_current_gateway()
+    if not gateway or not gateway.is_active:
+        return False
+    membership = GatewayMembership.query.filter_by(user_id=user.id, gateway_id=gateway.id).first()
+    return not membership or membership.status != 'approved' or not membership.is_active
+
+
 def new_attempt(user, code, reason, key=None, *, registration=False):
     require_available_app(code)
     reason = str(reason or "").strip()
@@ -108,7 +120,9 @@ def new_attempt(user, code, reason, key=None, *, registration=False):
     if AccountAccessRequest.query.filter_by(user_id=user.id, app_code=code, state="pending").first():
         raise AccountConflict("An open request already exists for this application.")
     live = PortalAppAccess.query.filter_by(user_id=user.id, app_code=code).first()
-    if not registration and live and (live.status == "pending" and live.is_active or live.status == "approved" and live.is_active):
+    gateway_review = bool(not registration and code == 'neogateway' and live and live.status == 'approved'
+                          and live.is_active and gateway_membership_needs_review(user))
+    if not registration and live and (live.status == "pending" and live.is_active or live.status == "approved" and live.is_active) and not gateway_review:
         raise AccountConflict("This application already has access or a pending request.")
     attempt = AccountAccessRequest(user_id=user.id, app_code=code, reason=reason, request_key=key)
     db.session.add(attempt)
@@ -122,7 +136,8 @@ def new_attempt(user, code, reason, key=None, *, registration=False):
     db.session.add(AccountSecurityEvent(actor_user_id=user.id, subject_user_id=user.id,
         action="access_request_created", details={"request_id": attempt.id, "app_code": code,
             "origin": "registration" if registration else "my_account", "effective_access_changed": False,
-            "previous_legacy_decision_observed": previous}))
+            "previous_legacy_decision_observed": previous,
+            "gateway_membership_review": get_current_gateway().id if gateway_review else None}))
     return attempt
 
 

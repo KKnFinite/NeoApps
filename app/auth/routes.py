@@ -669,6 +669,10 @@ def pending_users():
 @bp.route("/motherbrain/permissions", methods=["GET", "POST"])
 @login_required
 def permission_rules():
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():
+        from app.auth.scoped_access import scoped_permissions
+        return scoped_permissions('motherbrain' if request.path.startswith('/motherbrain/') else 'neoapps')
     from app.auth.accounts import _tabs
     workspace = request.path.startswith("/accounts/")
     if workspace and not platform_grandmaster(current_user):
@@ -1298,6 +1302,8 @@ def _deny_portal_app_access(access, notes):
         raise ValueError("App access request was not found.")
 
     if access.app_code == "neogateway":
+        from app.services.account_scope_runtime import revoke_gateway_ranks
+        revoke_gateway_ranks(access.user_id,notes or 'NeoGateway access denied.')
         gateway = get_current_gateway()
         membership = _current_gateway_membership_for_user(access.user, gateway)
         if membership:
@@ -1891,6 +1897,8 @@ def _approval_node_role_rows():
 
 
 def _neogateway_seed_role_for_membership(user, membership):
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():return 'watcher'
     if not _membership_is_approved_active(membership):
         return "watcher"
 
@@ -2058,6 +2066,9 @@ def _guard_role_assignment_allowed(selected_role, existing_role, node=None):
 
 
 def _current_user_can_assign_role(role, node=None):
+    from app.services.account_scope_runtime import scoped_active
+    if node is not None and role=='grandmaster' and scoped_active():
+        return False
     if role not in ROLE_LEVELS:
         return False
     if node is not None:

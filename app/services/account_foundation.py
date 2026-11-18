@@ -1,8 +1,7 @@
-"""Transaction-owned foundation for future account workflows.
+"""Phase 2 request/candidate primitives and shared transaction boundaries.
 
-No HTTP routes call these services in Phase 2. Staging and request decisions do
-not change PortalAppAccess, User.role, memberships, live sessions or permissions.
-Entitlement fulfillment/cutover deliberately has no implementation here.
+After Phase 5 cutover, candidate staging/decisions are closed. Live entitlement
+changes use scoped_access_management with the same history and atomic wrapper.
 """
 from datetime import datetime
 from hashlib import sha256
@@ -154,6 +153,9 @@ def request_access(app_code, reason, request_key, *, expected_session):
 @atomic_account_change
 def decide_access(request_id, outcome, reason, *, expected_version, expected_session,
                   expected_target_session, expected_entitlement):
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():
+        raise FoundationNotActivated('Use the live scoped application decision service after cutover.')
     if not isinstance(outcome, str) or outcome not in {"approved", "denied", "withdrawn"}:
         raise ValueError("Invalid access decision.")
     reason = _text(reason, "decision reason")
@@ -203,6 +205,9 @@ def decide_access(request_id, outcome, reason, *, expected_version, expected_ses
 @atomic_account_change
 def stage_role(user_id, scope, role, active, reason, *, expected_version, expected_session, expected_target_session):
     """Stage a reviewed candidate grant; never changes any runtime entitlement."""
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():
+        raise FoundationNotActivated('Candidate staging is closed after the reviewed cutover. Use the scoped role service.')
     if not isinstance(scope, Scope) or not isinstance(role, str) or role not in ROLE_LEVELS or type(active) is not bool:
         raise ValueError("Invalid role staging request.")
     reason = _text(reason, "staging reason")

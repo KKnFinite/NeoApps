@@ -1,4 +1,8 @@
-"""Dormant control-plane records. These are NOT live authorization sources."""
+"""Shared account history and scoped records.
+
+Phase 5 activates gateway-kind roles only through its reviewed atomic cutover;
+the canonical User/app/node adapters remain the other live rank sources.
+"""
 from datetime import datetime
 
 from sqlalchemy import event, text
@@ -36,7 +40,7 @@ class AccountScopedRole(db.Model):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     version = db.Column(db.Integer, nullable=False, default=1)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    # Every staged change has an immutable receipt. No role is seeded on GET.
+    # Every staged/live gateway change has a receipt. No role is seeded on GET.
     security_event_id = db.Column(db.Integer, db.ForeignKey("account_security_events.id"), nullable=False)
 
 

@@ -181,6 +181,12 @@ def eligible_nightly_fueler_users(gateway, *, active_users=None, permission_key=
         if rule is not None
         else default_minimum_role(permission_key)
     )
+    from app.services.account_scope_runtime import scoped_active,owner_scope,scoped_minimum
+    explicit=scoped_active()
+    if explicit:
+        if not gateway.is_active:return []
+        scope=owner_scope(permission_key,gateway.id)
+        minimum_role=scoped_minimum(scope,permission_key,minimum_role)
     minimum_level = ROLE_LEVELS.get(minimum_role, 0)
 
     facts = (
@@ -229,6 +235,8 @@ def eligible_nightly_fueler_users(gateway, *, active_users=None, permission_key=
 
     eligible_ids = set()
     for fact in facts:
+        if explicit and (fact.app_access_id is None or fact.node_role is None):
+            continue
         if fact.app_access_id is not None and not (
             fact.app_status == "approved" and fact.app_is_active
         ):

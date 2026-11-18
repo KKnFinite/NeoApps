@@ -100,6 +100,8 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
 
     if account_type == "vendor":
         _guard_last_grandmaster(user)
+        from app.services.account_scope_runtime import revoke_gateway_ranks
+        revoke_gateway_ranks(user.id,'Account converted to restricted Fuel Truck Driver.',actor=actor)
         current_ids = [op.id for op, _rev in locked if not op.archived_at_utc]
         if NeoScorpionSortFueler.query.filter(
             NeoScorpionSortFueler.sort_date_operation_id.in_(current_ids), NeoScorpionSortFueler.user_id == user.id,

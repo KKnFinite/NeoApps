@@ -46,6 +46,10 @@ def lock_administration():
 
 
 def may_manage_permission(user, key):
+    from app.services.account_scope_runtime import scoped_active, owner_scope, can_configure
+    if scoped_active():
+        scope=owner_scope(key)
+        return bool(scope and can_configure(user,scope,key))
     from app.services.access_control import get_current_gateway, get_user_app_role, get_user_node_role, prime_user_node_roles_for_request
     if platform_grandmaster(user):
         return True
@@ -63,12 +67,25 @@ def node_authority(user, node):
     """A platform parent may oversee nodes; unrelated node roles never combine."""
     if platform_grandmaster(user):
         return ROLE_LEVELS["grandmaster"]
+    from app.services.account_scope_runtime import scoped_active,authority
+    if scoped_active():
+        from app.services.account_authority import Scope
+        from app.services.access_control import get_current_gateway
+        evidence=authority(user);gateway=get_current_gateway()
+        if evidence.can_administer(Scope('gateway','neogateway',gateway.id)):
+            return ROLE_LEVELS['grandmaster']
     from app.services.access_control import get_current_gateway, get_user_node_role, prime_user_node_roles_for_request
     prime_user_node_roles_for_request(user, get_current_gateway().code, [node.code])
     return ROLE_LEVELS.get(get_user_node_role(user, get_current_gateway().code, node.code), 0)
 
 
 def guard_node_change(actor, target, node, existing, selected):
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():
+        from app.services.account_authority import Scope
+        from app.services.access_control import get_current_gateway
+        from app.services.scoped_access_management import role_guard
+        return role_guard(actor,target,Scope('node','neogateway',get_current_gateway().id,node.id),existing,selected)
     authority = node_authority(actor, node)
     if authority < ROLE_LEVELS["master"]:
         raise ValueError("You cannot manage roles outside your authorized node.")
@@ -93,6 +110,12 @@ def record_security_change(action, subject, **details):
 
 
 def guard_app_role_change(target, access, selected, *, granting=True):
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():
+        from app.services.account_authority import Scope
+        from app.services.scoped_access_management import role_guard
+        if not access:raise ValueError('An explicit application entitlement is required.')
+        return role_guard(current_user,target,Scope('application',access.app_code),access,selected,granting=granting)
     # Phase 1 retains platform oversight; it does not introduce the future
     # delegated application-account administration model.
     if not platform_grandmaster(current_user):

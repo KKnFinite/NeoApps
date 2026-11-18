@@ -21,6 +21,10 @@ def can_manage_system(user):
     if not _is_authenticated(user):
         return False
 
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():
+        from app.services.permission_rules import user_can
+        return user_can('neomotherbrain.integrations.edit',user=user)
     return _can_access_motherbrain(user, "grandmaster")
 
 

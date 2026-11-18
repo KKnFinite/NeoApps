@@ -7,6 +7,7 @@ from app.models.auth_rate_limit_state import AuthRateLimitState
 from app.models.neoscorpion_dispatch_preference import NeoScorpionDispatchPreference
 from app.models.account_preference import AccountPreference
 from app.models.fuel_driver_access import FuelDriverIdentity, FuelVendorCompany, FuelVendorMembership
+from app.models.account_authorization_state import AccountAuthorizationState, AccountScopedPolicy
 from app.models.neorain_mission_override import NeoRainMissionOverride, NeoRainOverrideAudit
 from app.models.crew import Crew
 from app.models.flight_api_review_item import FlightApiReviewItem

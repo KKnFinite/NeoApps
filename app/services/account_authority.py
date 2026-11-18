@@ -1,7 +1,7 @@
-"""Explicit scope projection and shadow evaluation, never a live permission fallback.
+"""Explicit canonical scope projection and isolated candidate comparison.
 
 The deployed permission_rules/user_can engine remains authoritative. This module
-reads its legacy inputs without calling the getters which can seed missing grants.
+reads canonical adapters without calling getters which can seed missing grants.
 Staged roles are evaluated separately; old and new rights are never unioned.
 """
 from dataclasses import dataclass
@@ -75,13 +75,21 @@ class Authority:
             return (self.role(Scope("neoapps")) == "master"
                     and self.role(scope) == "grandmaster")
         if scope.kind in {"gateway", "node"}:
-            return ROLE_LEVELS.get(self.role(scope), 0) >= ROLE_LEVELS["master"]
+            if scope.gateway_id not in self.gateways or 'neogateway' not in self.applications:
+                return False
+            if scope.kind=='node' and scope.node_id not in self.nodes:
+                return False
+            parent=self.role(Scope('application','neogateway'))=='grandmaster'
+            gateway=self.role(Scope('gateway','neogateway',scope.gateway_id))=='grandmaster'
+            return parent or gateway or (scope.kind=='node' and self.role(scope)=='master')
         return False
 
 
 def read_authority(user_id, *, proposed=False):
     """Read-only bounded adapter. No seeding, autoflush, mutations or global cache."""
     with db.session.no_autoflush:
+        from app.services.account_scope_runtime import scoped_active
+        explicit=scoped_active()
         user = db.session.query(User.id, User.role, User.is_active, User.auth_session_version).filter(User.id == user_id).one()
         restricted = db.session.query(NeoScorpionVendorAccount.user_id).filter_by(user_id=user_id).first() is not None
         apps = db.session.query(PortalAppAccess.app_code, PortalAppAccess.status, PortalAppAccess.is_active, PortalAppAccess.role).filter_by(user_id=user_id).all()
@@ -96,21 +104,24 @@ def read_authority(user_id, *, proposed=False):
         # Preserve the live adapter's documented legacy app fallback ONLY on the
         # current side of comparison. An explicit denial/tombstone always wins.
         app_roles = {r.app_code: r.role for r in apps if r.app_code in entitled_apps}
-        if not any(r.app_code == "neogateway" for r in apps) and gateways:
+        if not explicit and not any(r.app_code == "neogateway" for r in apps) and gateways:
             entitled_apps.add("neogateway")
             app_roles["neogateway"] = user.role
         roles = {"neoapps": user.role}
         roles.update({"app:" + code: role for code, role in app_roles.items()})
         grant_map = {(r.gateway_id, r.node_id): r for r in grants}
+        if explicit:
+            roles.update({r.scope_key:r.role for r in db.session.query(AccountScopedRole.scope_key,AccountScopedRole.role)
+                          .filter_by(user_id=user_id,kind='gateway',is_active=True).all()})
         for gateway_id in gateways:
             # Membership has no rank column. Do not invent a gateway admin rank
             # from the app role; its future mapping requires explicit review.
             for node in nodes:
                 existing = grant_map.get((gateway_id, node.id))
-                role = existing.role if existing and existing.is_active else None if existing else app_roles.get("neogateway")
+                role = existing.role if existing and existing.is_active else None if existing or explicit else app_roles.get("neogateway")
                 if role:
                     roles[f"node:{gateway_id}:{node.id}"] = role
-        if proposed:
+        if proposed and not explicit:
             roles = {r.scope_key: r.role for r in db.session.query(AccountScopedRole.scope_key, AccountScopedRole.role)
                      .filter_by(user_id=user_id, is_active=True).all()}
         return Authority(user.id, user.auth_session_version, user.is_active, restricted,

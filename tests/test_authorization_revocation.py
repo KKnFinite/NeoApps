@@ -2,6 +2,7 @@
 from datetime import datetime
 import unittest
 from unittest.mock import patch
+from uuid import uuid4
 
 from flask import g
 from flask_login import current_user
@@ -10,7 +11,7 @@ from sqlalchemy import event
 from app import create_app
 from app.extensions import db
 from app.auth.decorators import gateway_node_required
-from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User
+from app.models import AccountAccessRequest, Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User
 from app.services import access_control as access
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -50,6 +51,26 @@ class AuthorizationRevocationTest(unittest.TestCase):
     def grant(self, code='neogateway'):
         return PortalAppAccess.query.filter_by(user_id=self.user.id, app_code=code).one()
 
+    def request_current_access(self, code, **forged):
+        from tests.html_contracts import document
+        page=self.client.get('/my-account')
+        self.assertEqual(page.status_code,200)
+        token=document(page).findall('input',name='review_token')[0].attrs['value']
+        return self.client.post('/my-account/app-access',data={
+            'review_token':token,'request_key':str(uuid4()),'app_code':code,
+            'reason':'Verified synthetic reinstatement request',**forged})
+
+    def assert_in_current_request_queue(self, code):
+        administrator=User(username='queue-admin-'+code,role='grandmaster',email='queue-'+code+'@example.test',email_verified_at=datetime(2026,1,1))
+        set_user_password(administrator,'TestPassword123!');db.session.add(administrator);db.session.commit()
+        viewer=self.app.test_client();g.pop('_login_user',None)
+        self.assertEqual(viewer.post('/login',data={'username':administrator.username,'password':'TestPassword123!'}).status_code,302)
+        g.pop('_login_user',None)
+        page=viewer.get('/accounts/requests?app='+code)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(f'/accounts/people/{self.user.id}?tab=access'.encode(),page.data)
+        g.pop('_login_user',None)
+
     def test_access_request_state_matrix_and_preserved_metadata(self):
         for code in access.PORTAL_APP_CODES:
             grant = access.ensure_user_app_access(self.user, code)
@@ -59,6 +80,15 @@ class AuthorizationRevocationTest(unittest.TestCase):
                     grant.approved_at=datetime(2026,1,1);grant.approved_by_user_id=self.user.id
                     grant.approval_notes='Original approval';grant.denial_notes='Original denial'
                     db.session.commit()
+                    if access.portal_app_definition(code).get('coming_soon'):
+                        with self.assertRaisesRegex(ValueError,'not available'):
+                            access.request_app_access_for_user(self.user,code)
+                        db.session.refresh(grant)
+                        self.assertEqual((grant.status,grant.is_active),(status,active))
+                        self.assertEqual(grant.approval_notes,'Original approval')
+                        self.assertEqual(grant.denial_notes,'Original denial')
+                        self.assertEqual(access.user_has_app_access(self.user,code),status=='approved' and active)
+                        continue
                     result = access.request_app_access_for_user(self.user,code); db.session.commit()
                     expected = 'pending' if status=='approved' and not active else status
                     self.assertEqual(result.status, expected)
@@ -75,23 +105,36 @@ class AuthorizationRevocationTest(unittest.TestCase):
     def test_disabled_membership_reinstatement_enters_queue_without_authority(self):
         self.membership.is_active=False;self.membership.approval_notes='Previous decision'
         self.membership.approved_at=datetime(2026,1,1);db.session.commit()
-        self.client.post('/portal/request-access',data={'app_code':'neogateway'})
-        self.assertEqual(self.membership.status,'pending')
+        legacy=self.client.post('/portal/request-access',data={'app_code':'neogateway','role':'grandmaster'})
+        self.assertEqual(legacy.status_code,303)
+        self.assertTrue(legacy.location.endswith('/my-account#app-access'))
+        self.assertEqual(self.membership.status,'approved')
+        self.assertFalse(self.membership.is_active)
+        self.assertTrue(self.grant().is_active)
+        self.assertEqual(self.request_current_access('neogateway').status_code,302)
+        self.assertEqual(self.membership.status,'approved')
         self.assertFalse(access.user_has_gateway_access(self.user,'RFD'))
         self.assertEqual(self.membership.approved_at,datetime(2026,1,1))
-        self.assertIn('Reinstatement requested',self.membership.approval_notes)
-        from app.auth.routes import _pending_memberships_for_gateway
-        self.assertIn(self.membership,_pending_memberships_for_gateway(self.gateway).all())
+        self.assertEqual(self.membership.approval_notes,'Previous decision')
+        self.assertEqual(AccountAccessRequest.query.filter_by(user_id=self.user.id,app_code='neogateway',state='pending').count(),1)
+        self.assert_in_current_request_queue('neogateway')
 
     def test_disabled_apps_enter_existing_administrator_queue(self):
-        from app.auth.routes import _portal_app_access_requests
         for code in access.PORTAL_APP_CODES:
             grant=access.ensure_user_app_access(self.user,code)
             grant.status='approved';grant.is_active=False;db.session.commit()
             response=self.client.post('/portal/request-access',data={'app_code':code})
-            self.assertEqual(response.status_code,302)
+            self.assertEqual(response.status_code,303)
+            if access.portal_app_definition(code).get('coming_soon'):
+                self.assertEqual(self.request_current_access(code).status_code,400)
+                self.assertEqual(AccountAccessRequest.query.filter_by(user_id=self.user.id,app_code=code).count(),0)
+            else:
+                self.assertEqual(self.request_current_access(code).status_code,302)
+                self.assertEqual(AccountAccessRequest.query.filter_by(user_id=self.user.id,app_code=code,state='pending').count(),1)
+                self.assert_in_current_request_queue(code)
             self.assertFalse(access.user_has_app_access(self.user,code))
-            self.assertIn(grant,_portal_app_access_requests(app_code=code,status='pending').all())
+            self.assertEqual(grant.status,'approved')
+            self.assertFalse(grant.is_active)
 
     def test_node_revocations_deny_regular_lightweight_and_batched_resolution(self):
         for node in NeoNode.query.all():
@@ -285,11 +328,12 @@ class AuthorizationRevocationTest(unittest.TestCase):
         role.role='watcher';role.is_active=False;db.session.commit();g.pop('_login_user',None)
         for suffix in ('/edit','/roles',''):
             response=self.client.get(f'/portal/manage/users/{self.user.id}'+suffix)
-            self.assertEqual(response.status_code,200)
-            self.assertIn(b'Disabled',response.data)
-            if suffix:
-                select=document(response).one('select',name=f'node_{role.node_id}')
-                self.assertIn('selected',select.one('option',value='disabled').attrs)
+            self.assertEqual(response.status_code,302)
+            self.assertIn(f'/accounts/people/{self.user.id}',response.location)
+        page=self.client.get(f'/accounts/people/{self.user.id}?tab=access')
+        self.assertEqual(page.status_code,200)
+        select=document(page).one('select',**{'aria-label':role.node.name+' role'})
+        self.assertIn('selected',select.one('option',value='disabled').attrs)
         response=self.client.post(f'/portal/manage/users/{self.user.id}/roles',data={f'node_{role.node_id}':'disabled'})
         self.assertEqual(response.status_code,302);db.session.refresh(role);self.assertFalse(role.is_active)
         response=self.client.post(f'/portal/manage/users/{self.user.id}/roles',data={f'node_{role.node_id}':'watcher'})
@@ -317,8 +361,11 @@ class AuthorizationRevocationTest(unittest.TestCase):
         grant.status='approved';grant.role='watcher';grant.is_active=False;db.session.commit()
         response=self.client.post('/portal/request-access',data={'app_code':'neostaffing','role':'grandmaster',
             'gateway_id':'999999','node_id':'999999','status':'approved','is_active':'1'})
-        self.assertEqual(response.status_code,302);db.session.refresh(grant)
-        self.assertEqual((grant.status,grant.role),('pending','watcher'))
+        self.assertEqual(response.status_code,303);db.session.refresh(grant)
+        self.assertEqual((grant.status,grant.role,grant.is_active),('approved','watcher',False))
+        self.assertEqual(self.request_current_access('neostaffing',role='grandmaster',gateway_id='999999',node_id='999999',status='approved',is_active='1').status_code,302)
+        self.assertEqual((grant.status,grant.role,grant.is_active),('approved','watcher',False))
+        self.assertEqual(AccountAccessRequest.query.filter_by(user_id=self.user.id,app_code='neostaffing',state='pending').count(),1)
         self.assertFalse(access.user_has_app_access(self.user,'neostaffing'))
         total=PortalAppAccess.query.count()
         self.client.post('/portal/request-access',data={'app_code':'unregistered','role':'grandmaster'})

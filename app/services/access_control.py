@@ -324,7 +324,9 @@ def prime_lightweight_live_request_scope(
     if operation is not None and operation.gateway_id == gateway.id:
         set_committed_value(operation, "gateway", gateway)
 
-    if app_access is None:
+    from app.services.account_scope_runtime import scoped_active
+    explicit=scoped_active()
+    if app_access is None and not explicit:
         app_access = _legacy_neogateway_app_access(user, membership)
 
     resolved_node_role = None
@@ -335,9 +337,9 @@ def prime_lightweight_live_request_scope(
     ):
         if node_role is not None:
             resolved_node_role = node_role.role if node_role.is_active else None
-        elif app_access.role in ROLE_LEVELS:
+        elif not explicit and app_access.role in ROLE_LEVELS:
             resolved_node_role = app_access.role
-        else:
+        elif not explicit:
             resolved_node_role = "watcher"
 
     set_request_cached("access.default_gateway", gateway_code, gateway)
@@ -455,7 +457,8 @@ def user_has_gateway_access(user, gateway_code):
     if not _membership_is_approved_active(membership):
         return False
 
-    if _normalize_gateway_code(gateway_code) != _default_gateway_code():
+    from app.services.account_scope_runtime import scoped_active
+    if _normalize_gateway_code(gateway_code) != _default_gateway_code() and not scoped_active():
         return True
 
     return user_has_app_access(user, "neogateway")
@@ -475,7 +478,8 @@ def get_user_node_role(user, gateway_code, node_code):
         membership = get_user_gateway_membership(user, gateway_code)
         if not _membership_is_approved_active(membership):
             return None
-        if gateway_code == _default_gateway_code() and not user_has_app_access(
+        from app.services.account_scope_runtime import scoped_active
+        if (gateway_code == _default_gateway_code() or scoped_active()) and not user_has_app_access(
             user,
             "neogateway",
         ):
@@ -493,6 +497,9 @@ def get_user_node_role(user, gateway_code, node_code):
             return node_role.role if node_role.is_active else None
 
         seed_role = _neogateway_seed_role_for_user(user)
+        from app.services.account_scope_runtime import scoped_active
+        if scoped_active():
+            return None
         if _is_lightweight_live_state_request():
             return seed_role
         seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
@@ -537,6 +544,8 @@ def prime_user_node_roles_for_request(user, gateway_code, node_codes):
         is MISSING
     )
     if unresolved_codes:
+        from app.services.account_scope_runtime import scoped_active
+        explicit=scoped_active()
         for node_code in unresolved_codes:
             set_request_cached("access.active_node", node_code, None)
             set_request_cached(
@@ -583,7 +592,7 @@ def prime_user_node_roles_for_request(user, gateway_code, node_codes):
         for gateway, membership, app_access, node, node_role in rows:
             if membership is not None:
                 set_committed_value(membership, "gateway", gateway)
-            if app_access is None:
+            if app_access is None and not explicit:
                 app_access = _legacy_neogateway_app_access(user, membership)
 
             resolved_role = None
@@ -595,9 +604,9 @@ def prime_user_node_roles_for_request(user, gateway_code, node_codes):
             ):
                 if node_role is not None:
                     resolved_role = node_role.role if node_role.is_active else None
-                elif app_access.role in ROLE_LEVELS:
+                elif not explicit and app_access.role in ROLE_LEVELS:
                     resolved_role = app_access.role
-                else:
+                elif not explicit:
                     resolved_role = "watcher"
 
             set_request_cached("access.default_gateway", gateway_code, gateway)
@@ -680,6 +689,9 @@ def backfill_default_gateway_node_roles(user, role="grandmaster"):
 
 
 def seed_gateway_node_roles(membership, role="watcher", overwrite_existing=False):
+    from app.services.account_scope_runtime import scoped_active
+    if scoped_active():
+        return  # Approval is not an implicit grant to every current/future node.
     if not membership:
         raise ValueError("Gateway membership request was not found.")
     if role not in ROLE_LEVELS:
@@ -769,6 +781,9 @@ def get_user_app_access(user, app_code):
         if access or normalized != "neogateway":
             return access
 
+        from app.services.account_scope_runtime import scoped_active
+        if scoped_active():
+            return None
         if _is_lightweight_live_state_request():
             membership = get_user_gateway_membership(user, _default_gateway_code())
             return _legacy_neogateway_app_access(user, membership)

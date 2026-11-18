@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"{% if request.endpoint == 'neosektor.driver_routing' and request.args.get('tv') == '1' %} id="sektor-tv"{% endif %}>
 {% from "_neo_brand.html" import neo_brand, neo_brand_name %}
-{% set is_accounts_workspace = request.blueprint == 'auth' and (request.path.startswith('/accounts') or request.endpoint == 'auth.my_account') %}
+{% set is_accounts_workspace = scoped_workspace|default(false) or (request.blueprint == 'auth' and (request.path.startswith('/accounts') or request.endpoint == 'auth.my_account')) %}
 {% if is_accounts_workspace %}{% set uses_mobile_chrome = false %}{% set show_mobile_bottom_nav = false %}{% endif %}
 {% set is_sektor_dashboard = request.endpoint == 'neosektor.index' %}
 {% set uses_shared_mobile_drawer = uses_operational_shell or is_rfd_hub_page or is_portal_page or is_neostaffing_page %}
