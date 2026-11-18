@@ -98,6 +98,12 @@ def link(gateway_id,item,page_key):
 
 def drain(gateway_id):
     if not jobs.memory_allows_work():return 0
+    # A quiet wake must not acquire/write the shared memory lease. Re-query
+    # after claiming it below; this hint never authorizes or owns source work.
+    due=Task.query.filter_by(gateway_id=gateway_id,kind='xchange_page',version=auto.VERSION).filter(
+        Task.status.in_(('pending','retry')),Task.retry_at<=auto.naive(auto.now())).with_entities(Task.id).first()
+    if due is None:
+        db.session.rollback();return 0
     batch=jobs.task(gateway_id,'worker','memory-budget','frost-worker-v1');batch_id=batch.id
     token=jobs.claim(batch,at=auto.naive(auto.now()))
     if not token:return 0

@@ -19,6 +19,8 @@ class _Meter:
         # One sequential owned transport operation; no global registry/timer.
         self.requests = self.puts = self.gets = self.heads = self.lists = 0
         self.out_bytes = self.in_bytes = self.responses = self.failures = 0
+        self.head_misses = self.transfer_failures = 0
+        self.http_errors = 0
         self.unknown_out = self.unknown_in = self.decoded_lengths = 0
         self.emitted = False
         self.first_request_utc = None
@@ -53,8 +55,14 @@ class _Meter:
     def after_call(self, http_response, model=None, **_kwargs):
         try:
             self.responses += 1
-            self.failures += http_response.status_code >= 400
+            self.http_errors += http_response.status_code >= 400
             operation = getattr(model, 'name', '')
+            # An immutable-object existence probe normally misses before PUT.
+            # Retain raw HTTP-error accounting separately from actual failures.
+            missing = operation == 'HeadObject' and http_response.status_code == 404
+            self.head_misses += missing
+            self.transfer_failures += http_response.status_code >= 400 and not missing
+            self.failures += http_response.status_code >= 400 and not missing
             # HEAD Content-Length describes the object, not a received body.
             length = 0 if operation == 'HeadObject' else _length(http_response.headers.get('content-length'))
             if length is None:
@@ -93,6 +101,7 @@ def emit(client, component):
               f'puts={meter.puts} gets={meter.gets} heads={meter.heads} lists={meter.lists} '
               f'declared_out_body_bytes={meter.out_bytes} declared_in_body_bytes={meter.in_bytes} '
               f'responses={meter.responses} failures={meter.failures} unknown_out_lengths={meter.unknown_out} '
+              f'http_error_responses={meter.http_errors} expected_head_misses={meter.head_misses} transfer_failures={meter.transfer_failures} '
               f'unknown_in_lengths={meter.unknown_in} decoded_out_lengths={meter.decoded_lengths}',
               file=sys.stderr, flush=True)
     except Exception:

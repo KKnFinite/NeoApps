@@ -7,12 +7,15 @@ not a reservation against memory that an arriving request may allocate.
 """
 import threading
 import time
+import gc
+import sys
 from pathlib import Path
 from contextvars import ContextVar
 from contextlib import contextmanager
 from functools import wraps
 
 from flask import current_app, g, has_app_context, has_request_context, request
+from app.services.memory_diagnostics import memory_diagnostics
 
 
 class Deferred(RuntimeError):
@@ -24,6 +27,24 @@ class Deferred(RuntimeError):
 
 MAX_WAIT_SECONDS = 20.0
 _cooperation = ContextVar('frost_cooperative_capture', default=None)
+
+
+@memory_diagnostics('frost_idle_reclamation')
+def reclaim_memory():
+    """Collect closed graphs and return unused glibc pages on an idle worker.
+
+    This never changes an admission threshold or frees a live allocation. No
+    allocator settings are changed. Unsupported platforms safely retain GC.
+    Avoid heap trimming while a foreground request is active or recovering.
+    """
+    gc.collect()
+    if sys.platform!='linux' or has_request_context() or reason():return False
+    try:
+        import ctypes
+        trim=ctypes.CDLL(None).malloc_trim
+        trim.argtypes=[ctypes.c_size_t];trim.restype=ctypes.c_int
+        return bool(trim(0))
+    except Exception:return False  # Optional reclamation must never change a capture outcome.
 
 
 @contextmanager

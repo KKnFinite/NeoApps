@@ -191,6 +191,20 @@ def drain(gateway_id):
     if not jobs.memory_allows_work():return 0
     gateway = db.session.get(Gateway, gateway_id)
     if not gateway or gateway.code != 'RFD':return 0
+    # Read-only due-work hints, scoped to this gateway. All canonical reads,
+    # locking and source ownership checks still run after the shared claim.
+    discovery=Task.query.with_entities(Task.summary).filter_by(gateway_id=gateway_id,
+        kind='departure_control',identity='discovery',version=VERSION).one_or_none()
+    after=(discovery[0] or {}).get('last_mission_id',0) if discovery else 0
+    has_missions=Mission.query.with_entities(Mission.id).filter(Mission.id>after,
+        Mission.gateway_code=='RFD',Mission.mission_type=='departure').first()
+    has_delivery=Task.query.with_entities(Task.id).filter_by(gateway_id=gateway_id,version=VERSION).filter(
+        Task.kind.in_(('departure_revision','departure_link')),Task.status.in_(('pending','retry')),
+        Task.retry_at<=datetime.utcnow()).first()
+    has_outcomes=Task.query.with_entities(Task.id).filter_by(gateway_id=gateway_id,
+        kind='xchange_outcome',version=auto.VERSION).first()
+    if not any((has_missions,has_delivery,has_outcomes)):
+        db.session.rollback();return 0
     batch = jobs.task(gateway_id, 'worker', 'memory-budget', 'frost-worker-v1')
     batch_id = batch.id; token = jobs.claim(batch)
     if not token:return 0
@@ -200,9 +214,10 @@ def drain(gateway_id):
         missions = Mission.query.filter(Mission.id>after, Mission.gateway_code=='RFD',
             Mission.mission_type=='departure').order_by(Mission.id).limit(50).all()
         for mission in missions:stage(db.session.connection(), mission, historical=True)
-        cursor.summary = dict(last_mission_id=missions[-1].id if missions else after,
-            discovery_complete=bool((cursor.summary or {}).get('discovery_complete') or len(missions)<50),
-            last_reconciliation_utc=auto.stamp(auto.now()))
+        if missions or not (cursor.summary or {}).get('discovery_complete'):
+            cursor.summary = dict(last_mission_id=missions[-1].id if missions else after,
+                discovery_complete=bool((cursor.summary or {}).get('discovery_complete') or len(missions)<50),
+                last_reconciliation_utc=auto.stamp(auto.now()))
         db.session.commit()
         receipt = Task.query.filter_by(gateway_id=gateway_id, version=VERSION).filter(
             Task.kind.in_(('departure_revision','departure_link')),
@@ -226,7 +241,8 @@ def drain(gateway_id):
         outcomes=Task.query.filter_by(gateway_id=gateway_id,kind='xchange_outcome',version=auto.VERSION).filter(
             Task.id>after).order_by(Task.id).limit(50).all()
         for outcome in outcomes:correlate(gateway_id,outcome)
-        cursor.summary=dict(last_outcome_id=outcomes[-1].id if len(outcomes)==50 else 0)
+        progress=dict(last_outcome_id=outcomes[-1].id if len(outcomes)==50 else 0)
+        if cursor.summary!=progress:cursor.summary=progress
         db.session.commit()
         return len(missions)+bool(receipt)
     finally:jobs.finish(batch_id,token,status='ready',retry_at=datetime.utcnow())

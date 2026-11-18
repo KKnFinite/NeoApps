@@ -16,6 +16,7 @@ from urllib.error import HTTPError
 from app.services import frost_forecast as clock, frost_weather as weather, frost_vault as vault
 from app.services.frost_resources import Deferred
 from app.services.frost_resources import deadline_error
+from app.services.memory_diagnostics import memory_diagnostics
 
 VERSION='krfd-hrrr-light-v1'
 VARIABLES=(('2m_above_ground','TMP','K'),('2m_above_ground','DPT','K'),
@@ -30,6 +31,7 @@ POINT=dict(x_index=1130,y_index=677,latitude=42.20308995815746,longitude=-89.099
 MAX_SOURCE=5*1024**2
 MAX_DECODED=9*1024**2
 RESERVE=32*1024**2
+EXCLUDED_VARIABLES={'HGT':'Cloud ceiling datum unresolved; excluded from frozen native features.'}
 
 
 def memory_available():
@@ -160,11 +162,12 @@ class Source:
         return raw,receipt
 
 
-def read_point(client,cycle,hours):
+def read_point(client,cycle,hours,*,exclude_unused=False):
     import json
     base='https://hrrrzarr.s3.amazonaws.com/'+cycle.strftime('sfc/%Y%m%d/%Y%m%d_%Hz_fcst.zarr/')
     series={};times=None;missing=[]
     for level,name,unit in VARIABLES:
+        if exclude_unused and name in EXCLUDED_VARIABLES:continue
         root=base+level+'/'+name
         try:meta=json.loads(client.get(root+'/.zmetadata')[0])['metadata']
         except HTTPError as error:
@@ -202,10 +205,12 @@ def read_point(client,cycle,hours):
         series[name]=[value if math.isfinite(value) and value!=definition.get('fill_value') else None for value in data]
     point=dict(schema=VERSION,cycle_at_utc=cycle.isoformat(),station=weather.STATION,point=POINT,
         forecast_hours=hours,series=series,missing=missing,source_receipts=sorted(client.receipts,key=lambda r:(r['method'],r['url'])))
+    if exclude_unused:point['excluded_variables']=dict(EXCLUDED_VARIABLES)
     point['fingerprint']=vault.digest(vault.canonical(point))
     return point
 
 
+@memory_diagnostics('frost_hrrr_acquisition')
 def collect(client,cutoff):
     # The derivative archive may lag NOAA dissemination. Probe exactly two
     # adjacent recent runs, never scan history or use a different provider.
@@ -233,7 +238,7 @@ def collect(client,cutoff):
             check=getattr(client,'guard',None)
             return check() if check else True
         def get(self,url):return preflight[1] if url==preflight[0] else client.get(url)
-    point=read_point(Reader(),cycle,hours)
+    point=read_point(Reader(),cycle,hours,exclude_unused=True)
     if not point['series'].get('TMP') or not point['series'].get('DPT') or all(v is None for v in point['series']['TMP']) or all(v is None for v in point['series']['DPT']):
         raise ValueError('HRRR core temperature/dew point unavailable; no native scoring inputs.')
     forecasts=[dict(station=weather.STATION,cycle_at_utc=cycle.isoformat(),issued_at_utc=None,

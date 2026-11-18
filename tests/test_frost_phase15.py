@@ -152,6 +152,8 @@ class DepartureTest(unittest.TestCase):
     def test_late_xchange_uses_original_spray_not_departure_or_import_time(self):
         from app.services import frost_xchange_links as links
         from app.services.frost_weather import STATION
+        from tests.frost_schedule_fixture import configure
+        configure(self.f.gateway)  # Capture requires an explicit configured Sort window.
         self.actual();capture_at=self.at.replace(tzinfo=timezone.utc)-timedelta(hours=1,minutes=40)
         for kind,identity,version in [('worker','memory-budget','frost-worker-v1'),
                 ('auto_capture',auto.identity(capture_at),auto.VERSION)]:

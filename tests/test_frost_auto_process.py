@@ -10,6 +10,7 @@ from flask import Flask
 from app.extensions import db
 from app.models import FrostHistoryTask as Task
 from app.services import frost_auto as auto
+import app.neonodes.neosubzero  # Spawned processes must initialize routes before service fixtures.
 from tests import test_neosubzero_ucc_postgres as pg
 from tests.test_frost_vault import MemoryR2
 
@@ -62,7 +63,10 @@ def capture_process(uri,schema,gateway_id,entered,release,results,heartbeat=Fals
 
 @unittest.skipUnless(pg.URI,'Requires disposable loopback PostgreSQL')
 class AutoProcessTest(unittest.TestCase):
-    setUp=pg.UccPostgresTest.setUp
+    def setUp(self):
+        pg.UccPostgresTest.setUp(self)
+        from tests.frost_schedule_fixture import configure
+        configure(self.fixture.gateway)
     drop_schema=pg.UccPostgresTest.drop_schema
 
     def test_two_processes_one_capture_and_existing_timer_without_browser(self):

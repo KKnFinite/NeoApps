@@ -19,7 +19,7 @@ from app.models import FrostHistoryTask as Task, Gateway
 from app.services import frost_history as jobs, frost_vault as vault
 from app.services import frost_forecast as clock, frost_forecast_native as native
 from app.services import frost_research, frost_model as model, frost_analysis as analysis
-from app.services.memory_diagnostics import memory_diagnostics
+from app.services.memory_diagnostics import memory_diagnostics, observe_process_memory
 from app.services import frost_resources as priority
 from app.services.frost_schedule import Schedule
 
@@ -74,9 +74,20 @@ def fetch(url, maximum):
     return raw,dict(url=url,retrieved_at_utc=stamp(now()),sha256=vault.digest(raw),bytes=len(raw))
 
 
+@memory_diagnostics('frost_weather_acquisition')
 def acquire():
     from app.services.frost_inference import normalize_metars
     from app.services.frost_weather import STATION
+    # HRRR has the strictest admission requirement. Do not download other
+    # weather or construct an SDK client for an attempt that cannot start it.
+    if has_app_context() and current_app.config.get('FROST_AUTO_HRRR',True) and getattr(g,'frost_capture_gateway',None):
+        from app.services import frost_hrrr_point as hrrr
+        priority.checkpoint()
+        if not hrrr.memory_available():priority.reclaim_memory()
+        if not hrrr.memory_available():
+            budget=jobs.memory_budget()
+            raise priority.Deferred('HRRR deferred: hard memory guard plus 32 MiB transfer reserve.',
+                details=dict(resource='memory',usage_bytes=budget['usage'],limit_bytes=budget['limit']))
     sources=[]
     def get(url,maximum):
         raw,receipt=fetch(url,maximum)
@@ -108,7 +119,7 @@ def acquire():
             nonlocal reclaimed
             priority.checkpoint()
             if not hrrr.memory_available() and not reclaimed:
-                gc.collect();reclaimed=True  # One reclamation, never relax admission.
+                priority.reclaim_memory();reclaimed=True  # One reclamation, never relax admission.
             budget=jobs.memory_budget()
             if budget['usage'] is not None:
                 resources['container_sample_peak_bytes']=max(resources.get('container_sample_peak_bytes',0),budget['usage'])
@@ -183,6 +194,7 @@ def register_research(gateway_id,actor_id,raw):
     return row,True
 
 
+@memory_diagnostics('frost_frozen_scoring')
 def predictions(gateway_id,source):
     cutoff=clock.instant(source['cutoff_at_utc']);result=[];vectors={}
     history_complete=not analysis.features(stamp(cutoff),source['observations'])['incomplete_window']
@@ -239,6 +251,7 @@ def record_gap(ctrl,current,schedule):
 
 @memory_diagnostics('frost_auto_capture')
 @priority.cooperative_capture
+@vault.capture_transport
 def tick(gateway_id):
     """One small slot/delivery per heartbeat, serialized across real processes."""
     gateway=db.session.get(Gateway,gateway_id)
@@ -248,6 +261,12 @@ def tick(gateway_id):
         Task.status.in_(('staged','archive_retry')),Task.retry_at<=naive(at)).order_by(Task.identity).first()
     # Committed evidence may be delivered after hours; new acquisition may not.
     if row is None and not schedule.eligible(at):db.session.rollback();return 0
+    if row is None:
+        hint=Task.query.with_entities(Task.status,Task.retry_at).filter_by(gateway_id=gateway_id,
+            kind='auto_capture',identity=identity(current),version=VERSION).one_or_none()
+        if hint and (hint.status in ('ready','failed','missed') or hint.retry_at>naive(at)):
+            db.session.rollback();return 0
+    # Hints never own work: canonical slot/lease checks are repeated below.
     ctrl=control(gateway_id);db.session.commit()
     batch=jobs.task(gateway_id,'worker','memory-budget','frost-worker-v1');batch_id=batch.id
     token=jobs.claim(batch,at=naive(now()))
@@ -278,7 +297,7 @@ def tick(gateway_id):
             # Pools are closed by their owners; reclaim unreachable cyclic
             # graphs before deciding whether this due slot must suspend. The
             # exact same container threshold/headroom check still decides.
-            gc.collect()
+            priority.reclaim_memory()
         if resource_reason or not jobs.memory_allows_work():
             why=resource_reason or '75% / 128 MiB headroom protection'
             ctrl.summary=dict(ctrl.summary or {},last_attempt_utc=stamp(now()),resource_suspended_at_utc=stamp(now()),resource_reason=why)
@@ -303,7 +322,7 @@ def tick(gateway_id):
                 try:
                     # Reclaim closed SDK cycles before HRRR's stricter reserve
                     # admission; the exact memory thresholds remain unchanged.
-                    gc.collect()
+                    priority.reclaim_memory()
                     with vault.transport_scope():
                         source=acquire()
                         if slot(now())!=current or not schedule.eligible(now()):
@@ -313,9 +332,8 @@ def tick(gateway_id):
                             raise ValueError('Scoring window expired; no historical prediction is permitted.')
                         source.setdefault('native_resources',{}).update(priority.wait_metrics())
                 finally:
-                    # SDK graphs can be cyclic even after their pools close.
-                    # One client for raw sources + all eight models, then reclaim
-                    # before opening the small snapshot-delivery transport.
+                    # Preserve one owned client through staging/delivery; the
+                    # outer capture scope closes and reclaims it on every exit.
                     gc.collect()
                 payload=dict(schema_version=VERSION,gateway_id=gateway_id,slot_utc=stamp(current),
                     station=source['station'],captured_at_utc=stamp(now()),committed_at_utc=None,
@@ -332,6 +350,7 @@ def tick(gateway_id):
                     scored_hours=sorted({p['hours'] for p in scores if p['state']=='SCORED'}),scored=sum(p['state']=='SCORED' for p in scores),
                     unavailable=sum(p['state']!='SCORED' for p in scores),models=len(scores))
                 locked.input_hash=vault.digest(vault.canonical(payload));locked.status='staged';db.session.commit()
+                del source,scores,payload,locked  # Do not retain a duplicate decoded snapshot during delivery.
             row=db.session.get(Task,identifier);payload=unpack(row.summary['staged'])
             if vault.digest(vault.canonical(payload))!=row.input_hash:raise ValueError('Committed capture checksum mismatch.')
             if payload['committed_at_utc'] is None:
@@ -350,7 +369,7 @@ def tick(gateway_id):
                 db.session.commit()
                 if delivery_reason:raise priority.Deferred(delivery_reason)
                 raise RuntimeError('Private delivery deferred for memory safety; committed evidence retained.')
-            with vault.transport_scope():
+            with vault.transport_scope(),observe_process_memory('frost_snapshot_archive'):
                 capture_identity,digest=row.identity,row.input_hash
                 summary={k:v for k,v in row.summary.items() if k!='staged'}
                 db.session.rollback()
@@ -386,11 +405,13 @@ def tick(gateway_id):
 
 
 def status(gateway_id):
+    from sqlalchemy import case, and_
     gateway=db.session.get(Gateway,gateway_id);is_enabled=bool(gateway and enabled(gateway))
     ctrl=Task.query.filter_by(gateway_id=gateway_id,kind='auto_control',identity='collector',version=VERSION).one_or_none()
     summary=ctrl.summary if ctrl else {}
-    counts=dict(db.session.query(Task.status,func.count(Task.id)).filter(Task.gateway_id==gateway_id,
-        Task.kind=='auto_capture',Task.version==VERSION).group_by(Task.status).all())
+    state=case((and_(*expired_capture_conditions(now())),'missed'),else_=Task.status)
+    counts=dict(db.session.query(state,func.count(Task.id)).filter(Task.gateway_id==gateway_id,
+        Task.kind=='auto_capture',Task.version==VERSION).group_by(state).all())
     totals=db.session.query(func.coalesce(func.sum(Task.summary['scored'].as_integer()),0),
         func.coalesce(func.sum(Task.summary['unavailable'].as_integer()),0)).filter(Task.gateway_id==gateway_id,
         Task.kind=='auto_capture',Task.version==VERSION,Task.status=='ready').one()
@@ -418,7 +439,8 @@ def status(gateway_id):
         last_fully_scored=summary.get('last_fully_scored_utc') or next((r['captured_at'] for r in recent if r['scored']==r['models']),None),
         last_attempt=summary.get('last_attempt_utc'),last_success=summary.get('last_success_utc'),last_archive=last,last_scored=summary.get('last_scored_utc'),
         next_capture=stamp(next_capture) if next_capture else None,archived=counts.get('ready',0),failed=counts.get('failed',0),
-        missed=int(missed_gaps or 0)+counts.get('missed',0),pending=sum(n for key,n in counts.items() if key not in ('ready','failed','missed')),
+        missed=int(missed_gaps or 0)+counts.get('missed',0),
+        pending=sum(n for key,n in counts.items() if key not in ('ready','failed','missed')),
         scored=int(totals[0]),unavailable=int(totals[1]),resource_suspended=bool(resource_reason),
         resource_reason=resource_reason,recent=recent,
         source_quality='; '.join(summary.get('source_errors',[])) or f"Latest capture: {summary.get('nws_horizons',0)} issued NWS target horizons retained",
@@ -436,12 +458,33 @@ def recent_captures(gateway_id):
     matches=dict(db.session.query(Task.summary['capture_id'].as_integer(),func.count(Task.id)).filter(
         Task.gateway_id==gateway_id,Task.kind=='auto_match',Task.version==VERSION,Task.status=='active',
         Task.summary['capture_id'].as_integer().in_(identifiers)).group_by(Task.summary['capture_id'].as_integer()).all()) if identifiers else {}
-    return [dict(id=r.id,slot=r.identity,state=r.status,scored=(r.summary or {}).get('scored',0),
+    return [dict(id=r.id,slot=r.identity,state=capture_state(r),scored=(r.summary or {}).get('scored',0),
         **capture_states(r),
         unavailable=(r.summary or {}).get('unavailable',0),verified=(r.summary or {}).get('archive_verified_at_utc'),
         deferrals=(r.summary or {}).get('resource_deferrals',0),error=r.last_error,
         resource_details=(r.summary or {}).get('last_resource_details'),
         quality=(r.summary or {}).get('source_errors',[]),matches=matches.get(r.id,0)) for r in rows]
+
+
+def expired_capture_conditions(at):
+    """Uncommitted old slots cannot acquire weather, even outside Sort hours.
+
+    This read-only projection never expires a live lease or committed archive
+    retry. The next eligible worker retains the existing durable bookkeeping.
+    """
+    from sqlalchemy import or_
+    return (Task.status.in_(('pending','retry')),Task.identity<identity(at),
+        Task.summary['captured_at_utc'].as_string().is_(None),
+        Task.summary['staged'].as_string().is_(None),
+        or_(Task.lease_token.is_(None),Task.retry_at<=naive(at)))
+
+
+def capture_state(row):
+    summary=row.summary or {}
+    if (row.status in ('pending','retry') and row.identity<identity(now())
+            and not summary.get('captured_at_utc') and not summary.get('staged')
+            and not (row.lease_token and row.retry_at>naive(now()))):return 'missed'
+    return row.status
 
 
 def capture_states(row):
@@ -451,7 +494,7 @@ def capture_states(row):
     if scored==expected:prediction=f'SCORED {scored}/{expected} — EXPERIMENTAL'
     elif scored:prediction=f'PARTIAL {scored}/{expected} — EXPERIMENTAL'
     elif captured:prediction=f'UNAVAILABLE 0/{expected}'
-    elif row.status in ('missed','failed'):prediction=row.status.upper()+f' · 0/{expected}'
+    elif capture_state(row) in ('missed','failed'):prediction=capture_state(row).upper()+f' · 0/{expected}'
     elif row.lease_token and row.retry_at>naive(now()):prediction='IN PROGRESS · NOT YET SCORED'
     else:prediction='PENDING · NOT YET SCORED'
     return dict(models=expected,captured_at=captured,

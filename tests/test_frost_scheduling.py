@@ -133,6 +133,7 @@ class AcquisitionSafetyTest(unittest.TestCase):
         app=Flask(__name__)
         with app.app_context(),patch.object(auto,'fetch',side_effect=[
                 (json.dumps(metar).encode(),dict(retrieved_at_utc=at.isoformat())),TimeoutError()]),\
+                patch.object(hrrr,'memory_available',return_value=True),\
                 patch.object(hrrr,'collect',side_effect=priority.Deferred('HRRR memory reserve')):
             g.frost_capture_gateway=1
             with self.assertRaisesRegex(priority.Deferred,'HRRR memory reserve'):auto.acquire()

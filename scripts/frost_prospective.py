@@ -361,7 +361,10 @@ def verify_auto_hrrr(root,source,cutoff):
             if len(raw)!=r['bytes'] or len(raw)>light.MAX_SOURCE or vault.digest(raw)!=r['sha256'] or clock.instant(r['retrieved_at_utc'])>cutoff:raise ValueError('HRRR source byte/time mismatch.')
             self.receipts.append(r);return raw,r
     cycle=clock.instant(point['cycle_at_utc'])
-    if light.read_point(Cache(),cycle,point['forecast_hours'])!=point:raise ValueError('HRRR point differs from original sources.')
+    excluded=point.get('excluded_variables')
+    if excluded is not None and excluded!=light.EXCLUDED_VARIABLES:raise ValueError('Unapproved HRRR source exclusion.')
+    if light.read_point(Cache(),cycle,point['forecast_hours'],exclude_unused=excluded is not None)!=point:
+        raise ValueError('HRRR point differs from original sources.')
     for f in source['native_forecasts']:
         h=int((clock.instant(f['valid_at_utc'])-cycle).total_seconds()/3600)
         url='https://noaa-hrrr-bdp-pds.s3.amazonaws.com/'+cycle.strftime('hrrr.%Y%m%d/conus/hrrr.t%Hz.wrfsfcf')+f'{h:02d}.grib2'

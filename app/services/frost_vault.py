@@ -28,16 +28,39 @@ def transport_scope():
     Context-local scope cannot leak a client across threads or credential sets.
     """
     if _transport_scope.get() is not None:
-        yield
+        yield _transport_scope.get()
         return
     # A paused/idle batch must not construct an SDK client at all.
     scope={'config':None,'client':None}
     token=_transport_scope.set(scope)
     try:
-        yield
+        yield scope
     finally:
         _transport_scope.reset(token)
         _close_client(scope['client'])
+        scope['client']=None
+
+
+def capture_transport(function):
+    """One lazy, context-local client for a capture and its durable delivery.
+
+    Never share credentials/pools between jobs. Empty/deferred work constructs
+    no client and incurs no extra collection; used SDK graphs are reclaimed on
+    every exit, including failed acquisition or a staged archive retry.
+    """
+    @wraps(function)
+    def owned(*args, **kwargs):
+        if _transport_scope.get() is not None:return function(*args, **kwargs)
+        used=False
+        try:
+            with transport_scope() as scope:
+                try:return function(*args, **kwargs)
+                finally:used=scope['client'] is not None
+        finally:
+            if used:
+                from app.services.frost_resources import reclaim_memory
+                reclaim_memory()
+    return owned
 
 
 def _close_client(client):
