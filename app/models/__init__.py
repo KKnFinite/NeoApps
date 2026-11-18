@@ -159,6 +159,7 @@ from app.models.sort_timeline_settings import (
 )
 from app.models.user import User
 from app.models.account_security_event import AccountSecurityEvent
+from app.models.account_foundation import AccountScopedRole, AccountAccessRequest, AccountAccessDecision
 from app.models.user_token import UserToken
 
 __all__ = [
@@ -167,6 +168,9 @@ __all__ = [
     "NeoScorpionVendorAudit", "NeoScorpionInventoryReading", "NeoScorpionTopOffEvent",
     "User",
     "AccountSecurityEvent",
+    "AccountScopedRole",
+    "AccountAccessRequest",
+    "AccountAccessDecision",
     "AuthRateLimitState",
     "UserToken",
     "FlightApiReviewItem",
