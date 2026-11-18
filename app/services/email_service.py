@@ -53,6 +53,16 @@ def send_access_approved(user, gateway):
     )
 
 
+def send_neoapps_signup_invitation(email):
+    signup_url = _absolute_url("/create-account?account_type=fuel_driver")
+    return _send_transactional_email(to_email=email, to_name=email,
+        subject="NeoApps signup invitation", html_content=(
+            "<p>You are invited to request a NeoApps account.</p>"
+            f'<p><a href="{escape(signup_url)}">Create your NeoApps account</a></p>'
+            "<p>Fuel Truck Drivers need a UPS ID, email verification and administrator approval. This invitation grants no access.</p>"),
+        text_content=f"Request a NeoApps account: {signup_url}\nFuel Truck Drivers need a UPS ID, email verification and administrator approval. This invitation grants no access.")
+
+
 def send_password_reset(user, token):
     reset_url = _absolute_url(f"/reset-password/{token}")
     account_name = "NeoApps Portal"

@@ -1,0 +1,9 @@
+{% extends 'neonodes/neoscorpion/vendor_base.html' %}
+{% block title %}Vendor Supervisor | NeoScorpion{% endblock %}
+{% block sign_out %}{% include 'neonodes/neoscorpion/_vendor_sign_out.html' %}{% endblock %}
+{% block content %}<h2>SUPERVISOR VIEW</h2><div data-vendor-access><div data-vendor-live>
+<h3>{{ supervisor.company }}</h3><p>{{ supervisor.sort_label }} · READ ONLY</p>
+{% for driver in supervisor.rows %}<section><h3>{{ driver.name }}</h3><p>{{ driver.status|upper }} · {{ 'TRUCK ' ~ driver.truck if driver.truck else 'NO APPROVED TRUCK' }}</p>
+{% for mission in driver.missions %}<p>{{ mission.tail or '—' }} · {{ mission.flight }} · {{ mission.parking or '—' }} · {{ mission.destination }} · {{ mission.etd[11:16] ~ ' UTC' if mission.etd else 'ETD unavailable' }}</p>{% else %}<p>No current assignments.</p>{% endfor %}</section>{% else %}<p>No eligible company drivers in this Sort.</p>{% endfor %}
+</div></div><div data-vendor-refresh data-login-url="{{ url_for('auth.login') }}" data-workspace-url="{{ url_for('scorpion_vendor.my_truck') }}" data-revision='{{ fingerprint|tojson }}' data-revision-url="{{ url_for('scorpion_vendor.supervisor_revision') }}"></div>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='js/neoscorpion_vendor.js',v=config.STATIC_ASSET_VERSION) }}" defer></script>{% endblock %}

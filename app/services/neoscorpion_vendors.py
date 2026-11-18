@@ -17,6 +17,7 @@ VENDOR_ENDPOINTS = {
     'scorpion_vendor.reset_password', 'scorpion_vendor.change_password', 'scorpion_vendor.invitation',
     'scorpion_vendor.account', 'scorpion_vendor.my_truck', 'scorpion_vendor.live',
     'scorpion_vendor.revision', 'scorpion_vendor.driver_fuel_reading',
+    'scorpion_vendor.supervisor', 'scorpion_vendor.supervisor_revision',
 }
 
 
@@ -59,6 +60,9 @@ def expire_user_requests(gateway, operation, actor, user_id, reason):
 def require_approved(account, operation):
     if account is None:
         raise PermissionError('Verified vendor account required.')
+    from app.services.fuel_driver_accounts import supervisor_membership
+    if supervisor_membership(account):
+        raise PermissionError('Vendor Supervisor accounts are read-only and cannot perform driver actions.')
     # A request may wait on the sort lock after its authentication guard ran.
     # Never authorize that mutation from pre-lock identity-map snapshots.
     account = NeoScorpionVendorAccount.query.filter_by(user_id=account.user_id).populate_existing().one_or_none()
@@ -92,6 +96,22 @@ def vendor_request_boundary():
     }:
         return None
     abort(403)
+
+
+def require_claim_eligible(account, operation):
+    if account is None:
+        raise PermissionError('An enabled Fuel Truck Driver account is required.')
+    account = NeoScorpionVendorAccount.query.filter_by(user_id=account.user_id).populate_existing().one_or_none()
+    user = User.query.filter_by(id=account.user_id).populate_existing().one() if account else None
+    from app.services.fuel_driver_accounts import supervisor_membership
+    if (not account or not account.enabled or not user.is_active or not user.email_verified_at
+            or not account.gateway.is_active or operation.gateway_id != account.gateway_id or operation.archived_at_utc
+            or supervisor_membership(account)):
+        raise PermissionError('An enabled, verified Fuel Truck Driver account is required.')
+    night = db.session.get(NeoScorpionVendorNight, (operation.id, user.id))
+    if night and night.status in {'denied', 'revoked'}:
+        raise PermissionError('Dispatcher approval was denied or revoked for this Sort.')
+    return account
 
 
 def invite(gateway, actor, email, name):
@@ -169,6 +189,9 @@ def set_participation(gateway, operation, actor, user_id, status, expected_versi
         raise ValueError('Select a registered, verified, enabled vendor at this gateway.')
     if status not in {'approved', 'denied', 'revoked'}:
         raise ValueError('Invalid participation decision.')
+    from app.services.fuel_driver_accounts import supervisor_membership
+    if status == 'approved' and supervisor_membership(account):
+        raise ValueError('Vendor Supervisor access is read-only; driver participation cannot be approved.')
     night = db.session.get(NeoScorpionVendorNight, (operation.id, account.user_id))
     if str(night.version if night else 0) != str(expected_version):
         raise ValueError('Approval changed. Refresh first.')
@@ -197,7 +220,7 @@ def disconnect(gateway, operation, actor, *, user_id=None, truck_id=None):
 
 def request_claim(account, operation, truck_id, gallons=None):
     operation, state = lock_nightly_asset_scope_for_mutation(operation)
-    current_operation(account.gateway, operation.id); require_approved(account, operation)
+    current_operation(account.gateway, operation.id); require_claim_eligible(account, operation)
     truck = NeoScorpionFuelTruck.query.filter_by(id=int(truck_id), gateway_id=account.gateway_id,
         is_active=True, is_out_of_service=False).one_or_none()
     if not truck:
@@ -223,7 +246,7 @@ def request_claim(account, operation, truck_id, gallons=None):
     return row
 
 
-def decide_claim(gateway, operation, actor, request_id, approve, expected_version, *, override=False):
+def decide_claim(gateway, operation, actor, request_id, approve, expected_version, *, override=False, expected_night_version=None):
     dispatcher(gateway, actor)
     operation, state = lock_nightly_asset_scope_for_mutation(operation)
     current_operation(gateway, operation.id)
@@ -232,7 +255,14 @@ def decide_claim(gateway, operation, actor, request_id, approve, expected_versio
     if not row or row.status != 'pending' or str(row.version) != str(expected_version):
         raise ValueError('This request changed or was already decided.')
     account = db.session.get(NeoScorpionVendorAccount, row.user_id)
-    require_approved(account, operation)
+    require_claim_eligible(account, operation)
+    night = db.session.get(NeoScorpionVendorNight, (operation.id, account.user_id))
+    if approve and (not night or night.status != 'approved'):
+        if expected_night_version is None:
+            raise ValueError('Review the current Sort approval version before approving this pending claim.')
+        set_participation(gateway, operation, actor, account.user_id, 'approved', expected_night_version)
+    if approve:
+        require_approved(account, operation)
     if approve:
         from app.services.neoscorpion_assets import select_nightly_truck
         from app.services.neoscorpion_drivers import change_driver

@@ -1,4 +1,4 @@
-"""Unified NeoApps account classification for Scorpion truck drivers.
+"""Unified NeoApps account classification for Scorpion fuel truck drivers.
 
 This changes access, never user identity or historical work. All transitions
 must occur in an administrator-authorized database transaction.
@@ -58,7 +58,7 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
       normal staff/app/node approval before full NeoApps access is granted.
     """
     if account_type not in {"vendor", "full"}:
-        raise ValueError("Choose FULL NEO ACCOUNT or TRUCK DRIVER.")
+        raise ValueError("Choose FULL NEO ACCOUNT or FUEL TRUCK DRIVER.")
     if actor is None or user is None or actor.id == user.id:
         raise ValueError("An administrator cannot change their own account type.")
     # Match the nightly driver mutation lock order (Sort first, then
@@ -105,7 +105,7 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
             NeoScorpionSortFueler.sort_date_operation_id.in_(current_ids), NeoScorpionSortFueler.user_id == user.id,
         ).first():
             raise ValueError(
-                "Remove this user from Nightly Fuelers before converting to Truck Driver."
+                "Remove this user from Nightly Fuelers before converting to Fuel Truck Driver."
             )
         if NeoScorpionFuelAssignment.query.filter(
             NeoScorpionFuelAssignment.sort_date_operation_id.in_(current_ids),
@@ -113,7 +113,7 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
             NeoScorpionFuelAssignment.review_status != "complete",
         ).first():
             raise ValueError(
-                "Complete or reassign unfinished fueling work before converting to Truck Driver."
+                "Complete or reassign unfinished fueling work before converting to Fuel Truck Driver."
             )
 
     now = datetime.utcnow()
@@ -152,7 +152,7 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
         membership.denied_by_user_id = None
         membership.denied_at = None
         membership.denial_notes = None
-        membership.approval_notes = "Restricted NeoScorpion Truck Driver account."
+        membership.approval_notes = "Restricted NeoScorpion Fuel Truck Driver account."
         user.role = "watcher"
         user.is_management = False
         user.management_level = None
@@ -164,6 +164,16 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
         vendors.audit(gateway, actor, "account_converted_vendor", subject=user,
                       identity_preserved=True, staff_grants_revoked=True)
     else:
+        # A later conversion back to a restricted account must not resurrect
+        # an earlier company's Supervisor capability without a new decision.
+        from app.models import FuelVendorMembership, AccountSecurityEvent
+        affiliation = FuelVendorMembership.query.filter_by(user_id=user.id, ended_at=None).with_for_update().first()
+        if affiliation:
+            affiliation.ended_at = now
+            db.session.add(AccountSecurityEvent(actor_user_id=actor.id, subject_user_id=user.id,
+                action="fuel_vendor_membership_closed_by_conversion", details={
+                    "before_membership": affiliation.id, "after_membership": None,
+                    "reason": "Restricted account converted to full NeoApps account."}))
         if operation is not None and not operation.archived_at_utc:
             vendors.disconnect(gateway, operation, actor, user_id=user.id)
             vendors.expire_user_requests(gateway, operation, actor, user.id,

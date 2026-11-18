@@ -605,7 +605,7 @@ def update_portal_app_access(access_id):
     try:
         if action == "approve_driver":
             _change_driver_account_type(get_current_gateway(), access.user, "vendor")
-            flash("Restricted Truck Driver account approved.", "info")
+            flash("Restricted Fuel Truck Driver account approved.", "info")
         elif action in {"approve", "approve_without_verification"}:
             _lock_staff_account(access.user)
             db.session.refresh(access)
@@ -828,7 +828,7 @@ def change_user_account_type(user_id):
         changed = _change_driver_account_type(get_current_gateway(), target_user, account_type)
         db.session.commit()
         flash(("Account converted. " + (
-            "Truck Driver access is restricted and each Sort still requires dispatcher approval."
+            "Fuel Truck Driver access is restricted and each Sort still requires dispatcher approval."
             if account_type == "vendor" else
             "Full NeoApps access is now pending normal app and node role approval."
         )) if changed else "Account is already that type.", "info")
@@ -891,7 +891,7 @@ def user_roles(user_id):
         return redirect(url_for("auth.account_profile", user_id=user_id, tab="access"))
     target_user = User.query.get_or_404(user_id)
     if target_user.scorpion_vendor:
-        flash("Convert this Truck Driver to FULL NEO ACCOUNT before granting NeoNode roles.", "error")
+        flash("Convert this Fuel Truck Driver to FULL NEO ACCOUNT before granting NeoNode roles.", "error")
         return redirect(url_for("auth.user_detail", user_id=target_user.id))
     gateway = get_current_gateway()
     membership = _current_gateway_membership_for_user(target_user, gateway)
@@ -936,9 +936,9 @@ def update_user_gateway_membership(user_id):
     try:
         if action == "approve" and request.form.get("account_type", "").strip() == "vendor":
             if _email_verification_bypass_requested():
-                raise ValueError("Truck drivers must verify their NeoApps email before approval.")
+                raise ValueError("Fuel Truck Drivers must verify their NeoApps email before approval.")
             _change_driver_account_type(gateway, target_user, "vendor")
-            flash("Restricted Truck Driver account approved.", "info")
+            flash("Restricted Fuel Truck Driver account approved.", "info")
             db.session.commit()
             return redirect(url_for("auth.user_detail", user_id=target_user.id))
         target_user = _lock_staff_account(target_user)
@@ -1257,8 +1257,11 @@ def _approve_portal_app_access(
     from app.services.accounts_workspace import require_available_app, close_open_attempt
     if access:
         require_available_app(access.app_code)
+        from app.services.fuel_driver_accounts import requested_driver
+        if requested_driver(access.user):
+            raise ValueError("Verify the UPS ID and approve this request as a restricted Fuel Truck Driver account.")
     if access and access.user.scorpion_vendor:
-        raise ValueError("Convert this Truck Driver to FULL NEO ACCOUNT before granting app access.")
+        raise ValueError("Convert this Fuel Truck Driver to FULL NEO ACCOUNT before granting app access.")
     if not access:
         raise ValueError("App access request was not found.")
     if role not in ROLE_CHOICES:
@@ -1323,6 +1326,7 @@ def _account_form_from_request():
         "work_area": request.form.get("work_area", ""),
         "access_reason": request.form.get("access_reason", ""),
         "app_codes": _requested_portal_apps_from_form() if request.method == "POST" else ["neogateway"],
+        "account_type": request.form.get("account_type", request.args.get("account_type", "full")),
     }
 
 
@@ -1332,6 +1336,14 @@ def _build_user_from_account_form(form):
     first_name = form["first_name"].strip()
     last_name = form["last_name"].strip()
     employee_id = form["employee_id"].strip() or None
+    from app.services.fuel_driver_accounts import ups_id
+    account_type = form.get("account_type", "full")
+    if account_type not in {"full", "fuel_driver"}:
+        raise ValueError("Choose Full NeoApps or Fuel Truck Driver.")
+    if account_type == "fuel_driver":
+        employee_id = ups_id(employee_id)
+        if form["app_codes"] != ["neogateway"]:
+            raise ValueError("Fuel Truck Driver requests use restricted NeoGateway access only.")
     password = request.form.get("password", "")
     confirm_password = request.form.get("confirm_password", "")
 
@@ -1384,6 +1396,9 @@ def _build_user_from_account_form(form):
     )
     db.session.add(user)
     db.session.flush()
+    if account_type == "fuel_driver":
+        from app.models import FuelDriverIdentity
+        db.session.add(FuelDriverIdentity(user_id=user.id, requested_driver=True))
     return user
 
 
@@ -1397,6 +1412,13 @@ def _raise_for_duplicate_identity(
         if generic_registration_conflict:
             raise ValueError(GENERIC_REGISTRATION_CONFLICT_RESPONSE)
         raise ValueError(message)
+
+    if employee_id:
+        from app.services.fuel_driver_accounts import guard_identity_unique
+        try:
+            guard_identity_unique(employee_id, user_id)
+        except ValueError:
+            raise_conflict("That UPS / employee ID is already assigned to another account.")
 
     if User.query.filter(func.lower(User.email) == email.lower()).first():
         existing = User.query.filter(func.lower(User.email) == email.lower()).first()
@@ -1881,7 +1903,7 @@ def _neogateway_seed_role_for_membership(user, membership):
 
 def _apply_node_role_form(target_user, membership):
     if target_user.scorpion_vendor:
-        raise ValueError("Truck Driver accounts cannot receive NeoNode roles.")
+        raise ValueError("Fuel Truck Driver accounts cannot receive NeoNode roles.")
     if not _membership_is_approved_active(membership):
         raise ValueError("User must have approved RFD gateway access before assigning node roles.")
 
@@ -2126,7 +2148,7 @@ def _restore_approved_membership_operational_state(membership):
     if not _membership_is_approved_active(membership):
         return
     if membership.user.scorpion_vendor:
-        raise ValueError("Truck Driver accounts cannot receive full NeoApps access.")
+        raise ValueError("Fuel Truck Driver accounts cannot receive full NeoApps access.")
     if not membership.gateway or membership.gateway.code != get_current_gateway().code:
         return
 
@@ -2145,36 +2167,58 @@ def _change_driver_account_type(gateway, target_user, account_type):
         raise ValueError("You cannot convert your own account.")
     if target_user.role == "grandmaster":
         raise ValueError("A protected platform Grandmaster cannot be converted through ordinary account controls.")
+    if account_type == "vendor":
+        from app.services.fuel_driver_accounts import ups_id, identity_verified, requested_driver
+        ups_id(target_user.employee_id)
+        if requested_driver(target_user) and not identity_verified(target_user):
+            raise ValueError("An administrator must verify this Fuel Truck Driver applicant's UPS ID before approval.")
     def authorize(locked_target):
         lock_administration()
         if not user_can(USER_MANAGEMENT_EDIT_PERMISSION):
             raise ValueError("User Management authority changed.")
         if locked_target.role == "grandmaster":
             raise ValueError("A protected platform Grandmaster cannot be converted through ordinary account controls.")
+        if account_type == "vendor":
+            from app.services.fuel_driver_accounts import ups_id, identity_verified, requested_driver
+            ups_id(locked_target.employee_id)
+            if requested_driver(locked_target) and not identity_verified(locked_target):
+                raise ValueError("Verify the Fuel Truck Driver UPS ID before approval.")
         if "review_token" in request.form:
             from app.services.accounts_workspace import verify_review
             verify_review(locked_target, request.form.get("review_token", ""))
     from app.services.neoscorpion_account_types import convert_account
-    return convert_account(gateway, current_user, target_user, account_type,
+    changed = convert_account(gateway, current_user, target_user, account_type,
                            can_change_role=lambda role: platform_grandmaster(current_user) and role in ROLE_CHOICES,
                            authorize=authorize)
+    if changed:
+        from app.models import FuelDriverIdentity, AccountAccessRequest
+        from app.services.accounts_workspace import close_open_attempt
+        identity = db.session.get(FuelDriverIdentity, target_user.id)
+        if identity:
+            identity.requested_driver = False
+            identity.version += 1
+        if account_type == 'vendor':
+            for attempt in AccountAccessRequest.query.filter_by(user_id=target_user.id, state='pending').all():
+                close_open_attempt(target_user, attempt.app_code, 'approved' if attempt.app_code == 'neogateway' else 'withdrawn',
+                    'Approved as a restricted Fuel Truck Driver; no full application access granted.')
+    return changed
 
 
 def _lock_staff_account(user):
     from app.services.neoscorpion_account_types import lock_account_grants
     user = lock_account_grants(user)
     if user.scorpion_vendor:
-        raise ValueError("Convert this Truck Driver to FULL NEO ACCOUNT before changing staff access.")
+        raise ValueError("Convert this Fuel Truck Driver to FULL NEO ACCOUNT before changing staff access.")
     return user
 
 
 def _approve_account_request(membership, notes, seed_role="watcher",
                              node_role_values=None, bypass_email_verification=False):
-    """One approval point for full NeoApps or restricted Truck Driver."""
+    """One approval point for full NeoApps or restricted Fuel Truck Driver."""
     account_type = (request.form.get("account_type") or "full").strip()
     if account_type == "vendor":
         if bypass_email_verification:
-            raise ValueError("Truck drivers must verify their NeoApps email before approval.")
+            raise ValueError("Fuel Truck Drivers must verify their NeoApps email before approval.")
         _change_driver_account_type(membership.gateway, membership.user, "vendor")
         return
     if account_type != "full":
@@ -2195,8 +2239,11 @@ def _approve_membership(
 ):
     if not membership:
         raise ValueError("Gateway membership request was not found.")
+    from app.services.fuel_driver_accounts import requested_driver
+    if requested_driver(membership.user):
+        raise ValueError("Approve this request as a restricted Fuel Truck Driver, not full application access.")
     if membership.user.scorpion_vendor:
-        raise ValueError("Truck Driver accounts cannot receive full NeoApps access.")
+        raise ValueError("Fuel Truck Driver accounts cannot receive full NeoApps access.")
     if seed_role not in ROLE_CHOICES:
         raise ValueError("Unsupported node role selected.")
     prior_app = PortalAppAccess.query.filter_by(user_id=membership.user_id, app_code="neogateway").first()

@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.auth import bp
 from app.auth import routes as legacy
 from app.extensions import db
-from app.models import AccountAccessDecision, AccountAccessRequest, AccountSecurityEvent, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User
+from app.models import AccountAccessDecision, AccountAccessRequest, AccountSecurityEvent, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User, FuelDriverIdentity, FuelVendorCompany
 from app.models.user import MANAGEMENT_LEVELS
 from app.services.account_foundation import AccountConflict
 from app.services.account_security import guard_node_change, lock_administration, platform_grandmaster, record_security_change
@@ -142,6 +142,7 @@ def _profile(user_id, status=200, error=None):
     app_rows = legacy._portal_app_access_rows(target)
     attempts = AccountAccessRequest.query.filter_by(user_id=target.id).order_by(AccountAccessRequest.id.desc()).limit(40).all()
     events = AccountSecurityEvent.query.filter_by(subject_user_id=target.id).order_by(AccountSecurityEvent.id.desc()).limit(40).all()
+    from app.services.fuel_driver_accounts import current_membership, identity_verified
     tab = request.args.get("tab", "identity")
     if tab not in {"identity", "access", "security", "history"}:
         tab = "identity"
@@ -153,6 +154,8 @@ def _profile(user_id, status=200, error=None):
         can_edit_user=user_can(legacy.USER_MANAGEMENT_EDIT_PERMISSION),
         can_edit_access=user_can(legacy.PORTAL_MANAGEMENT_EDIT_PERMISSION),
         can_resend=user_can(legacy.EMAIL_VERIFICATION_RESEND_PERMISSION),
+        driver_identity=db.session.get(FuelDriverIdentity, target.id), ups_verified=identity_verified(target),
+        vendor_membership=current_membership(target.id), vendor_companies=FuelVendorCompany.query.filter_by(gateway_id=gateway.id, is_active=True).order_by(FuelVendorCompany.name).all(),
         can_commission_grandmaster=may_commission(current_user, target), error=error, **_tabs("people")), status
 
 

@@ -70,7 +70,7 @@
         }
         const page = await fetch(location.href, options);
         if (page.redirected || page.status === 403) {
-            showDenied('Operational access changed. Return to Truck Driver for your status.');
+            showDenied('Operational access changed. Return to Fuel Truck Driver for your status.');
             if (page.redirected) window.location.replace(root.dataset.loginUrl);
             else if (root.dataset.workspaceUrl) window.location.replace(root.dataset.workspaceUrl);
             return;
@@ -79,7 +79,7 @@
         const doc = new DOMParser().parseFromString(await page.text(), 'text/html');
         if (!doc.querySelector('[data-vendor-live]')) {
             if (root.dataset.workspaceUrl) {
-                showDenied('Operational access changed. Return to Truck Driver for your status.');
+                showDenied('Operational access changed. Return to Fuel Truck Driver for your status.');
                 window.location.replace(root.dataset.workspaceUrl);
             }
             return;
@@ -87,7 +87,7 @@
         const missions = access.querySelector(missionsSelector);
         const nextMissions = doc.querySelector(missionsSelector);
         if (missions && !nextMissions) {
-            showDenied('Operational access changed. Return to Truck Driver for your status.');
+            showDenied('Operational access changed. Return to Fuel Truck Driver for your status.');
             window.location.replace(root.dataset.workspaceUrl);
             return;
         }

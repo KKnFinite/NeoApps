@@ -5,9 +5,9 @@
         <select name="account_type" aria-label="Account type">
             <option value="full">FULL NEO ACCOUNT</option>
             {% if can_assign_driver|default(false) %}
-            <option value="vendor">TRUCK DRIVER</option>
+            <option value="vendor">FUEL TRUCK DRIVER</option>
             {% endif %}
         </select>
     </label>
-    <small class="muted">Truck Driver uses the same NeoApps email and password. No Portal or NeoNode access; Dispatch must approve each Sort separately.</small>
+    <small class="muted">Fuel Truck Driver uses the same NeoApps email and password. No Portal or NeoNode access; Dispatch must approve each Sort separately.</small>
 </fieldset>

@@ -1299,7 +1299,7 @@ PERMISSION_RULE_ITEMS = (
             "view": "neoscorpion.fueling_board.view",
         },
     ),
-    ("scorpion", "neoscorpion.truck_driver", "Truck Driver", "Current-sort truck driver selection and read-only work.",
+    ("scorpion", "neoscorpion.truck_driver", "Fuel Truck Driver", "Current-sort fuel truck driver selection and read-only work.",
      {"view": "neoscorpion.truck_driver.view", "edit": "neoscorpion.truck_driver.edit"}),
     (
         "scorpion",

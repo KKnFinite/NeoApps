@@ -1,5 +1,5 @@
 <section class="neoscorpion-panel neoscorpion-board-panel" data-fueling-board-panel>
-    <div class="neoscorpion-panel-head"><span>TRUCK DRIVER · {{ operation.sort_name|upper if operation else 'NO CURRENT SORT' }}</span><strong data-selected-driver-truck>{{ 'TRUCK ' ~ selected_driver_truck.truck_number if selected_driver_truck else 'SELECT YOUR TRUCK' }}</strong></div>
+    <div class="neoscorpion-panel-head"><span>FUEL TRUCK DRIVER · {{ operation.sort_name|upper if operation else 'NO CURRENT SORT' }}</span><strong data-selected-driver-truck>{{ 'TRUCK ' ~ selected_driver_truck.truck_number if selected_driver_truck else 'SELECT YOUR TRUCK' }}</strong></div>
     <div data-board-list class="neoscorpion-driver-groups">
         <section data-board-work-key="driver-controls" data-driver-controls class="neoscorpion-driver-controls">
         {% if operation %}
@@ -16,7 +16,7 @@
                 </select></label>
                 <button class="action-button" type="submit">SELECT TRUCK</button><button class="action-button" type="button" data-driver-reset>CANCEL</button><small data-driver-save-status role="status"></small>
             </form>
-        {% else %}<p class="neoscorpion-helper">Truck selection requires Truck Driver edit permission.</p>{% endif %}
+        {% else %}<p class="neoscorpion-helper">Truck selection requires Fuel Truck Driver edit permission.</p>{% endif %}
         {% if can_manage_drivers %}
             <details class="neoscorpion-driver-management"><summary>DISPATCHER · MANAGE DRIVERS</summary>
             <form method="post" action="{{ url_for('neoscorpion.truck_driver_assignment') }}" data-driver-form data-driver-management>

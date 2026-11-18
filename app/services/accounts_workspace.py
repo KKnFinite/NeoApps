@@ -13,7 +13,7 @@ from flask_login import current_user
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.extensions import db
-from app.models import AccountAccessDecision, AccountAccessRequest, AccountSecurityEvent, GatewayMembership, GatewayNodeRole, PortalAppAccess, User
+from app.models import AccountAccessDecision, AccountAccessRequest, AccountSecurityEvent, GatewayMembership, GatewayNodeRole, PortalAppAccess, User, FuelDriverIdentity, FuelVendorMembership, FuelVendorCompany
 from app.models.account_preference import AccountPreference
 from app.services.account_foundation import AccountConflict, atomic_account_change
 from app.services.account_security import lock_administration, record_security_change
@@ -58,7 +58,11 @@ def _snapshot(user_id):
     # Last-login changes do not make an administrator's independent review stale.
     identity = dict(user)
     identity.pop("last_login", None)
-    payload = [identity, [dict(m) for m in memberships], [dict(g) for g in grants], [dict(a) for a in apps], [dict(a) for a in attempts], dict(pref) if pref else None]
+    driver = db.session.execute(FuelDriverIdentity.__table__.select().where(FuelDriverIdentity.user_id == user_id)).mappings().first()
+    affiliations = db.session.execute(FuelVendorMembership.__table__.select().where(FuelVendorMembership.user_id == user_id).order_by(FuelVendorMembership.id)).mappings().all()
+    companies = db.session.execute(FuelVendorCompany.__table__.select().where(FuelVendorCompany.id.in_([m['company_id'] for m in affiliations])).order_by(FuelVendorCompany.id)).mappings().all()
+    payload = [identity, [dict(m) for m in memberships], [dict(g) for g in grants], [dict(a) for a in apps], [dict(a) for a in attempts], dict(pref) if pref else None,
+        dict(driver) if driver else None, [dict(m) for m in affiliations], [dict(c) for c in companies]]
     return sha256(json.dumps(payload, default=str, sort_keys=True).encode()).hexdigest()
 
 

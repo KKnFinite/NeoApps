@@ -2,6 +2,7 @@
 {% block content %}
 <section class="aa-workspace">
 {% include "auth/accounts/_nav.html" %}
+{% if current_user.role == 'grandmaster' %}<details class="aa-section"><summary>Send NeoApps Signup Invitation</summary><form class="aa-scope-form" method="post" action="{{ url_for('auth.fuel_driver_signup_invitation') }}">{{ csrf_field() }}<label><span>Email</span><input name="email" type="email" maxlength="255" required></label><button class="aa-button secondary" type="submit">Send NeoApps Signup Invitation</button></form><p class="aa-muted">Shared signup only. No account, password or access is created.</p></details>{% endif %}
 <form class="aa-filters" method="get">
   <label class="aa-search"><span>Search requests</span><input type="search" name="q" value="{{ search }}" maxlength="160" placeholder="Name or email"></label>
   <label><span>Review status</span><select name="status">{% for value in ['pending','approved','denied','all'] %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>

@@ -3,14 +3,14 @@
 <div class="scorpion-asset-claims" data-assets-unit="claims">
 {% if admin.pending %}<strong>PENDING TRUCK CLAIMS · {{ admin.pending|length }}</strong>{% endif %}
 {% for pending in admin.pending %}<div class="scorpion-asset-claim"><strong>TRUCK {{ pending.truck.truck_number }} · {{ pending.user.display_name }}</strong><span>{{ (pending.gallons|string ~ ' initial gal') if pending.gallons is not none else 'Existing inventory unchanged' }}</span>
-<form method="post" action="{{ url_for('scorpion_vendor.manage') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="request_id" value="{{ pending.id }}"><input type="hidden" name="version" value="{{ pending.version }}"><label class="scorpion-assets-check"><input type="checkbox" name="override" value="1">Replace conflicting driver</label><button class="action-button" name="action" value="claim_approve">APPROVE CLAIM</button><button class="action-button" name="action" value="claim_deny">DENY</button><small data-lifecycle-status role="status"></small></form></div>{% endfor %}
+<form method="post" action="{{ url_for('scorpion_vendor.manage') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="request_id" value="{{ pending.id }}"><input type="hidden" name="version" value="{{ pending.version }}"><input type="hidden" name="night_version" value="{{ admin.nights.get(pending.user_id).version if admin.nights.get(pending.user_id) else 0 }}"><label class="scorpion-assets-check"><input type="checkbox" name="override" value="1">Replace conflicting driver</label><button class="action-button" name="action" value="claim_approve">APPROVE FOR SORT</button><button class="action-button" name="action" value="claim_deny">DENY</button><small data-lifecycle-status role="status"></small></form></div>{% endfor %}
 </div>
 {% endif %}
 {% if driver_admin_region|default('all') != 'claims' %}
 <details class="scorpion-asset-accounts" data-assets-disclosure="accounts"><summary>Driver accounts & nightly participation · {{ admin.profiles|length }} accounts</summary>
-<p class="muted">Drivers register through the regular NeoApps Create Account page. Approve them as TRUCK DRIVER in User Management, or convert an existing account there. No separate invitation is required.</p>
-<a class="action-button secondary" href="{{ url_for('auth.users') }}">OPEN USER MANAGEMENT</a>
-<div data-assets-account-list>
+<p class="muted">Drivers register through the regular NeoApps Create Account page. Approve them as FUEL TRUCK DRIVER in User Management, or convert an existing account there. No separate invitation is required.</p>
+<a class="action-button secondary" href="{{ url_for('auth.users') }}">ACCOUNTS &amp; ACCESS</a>
+<details><summary>Send NeoApps Signup Invitation</summary><form method="post" action="{{ url_for('scorpion_vendor.manage') }}">{{ csrf_field() }}<input type="hidden" name="action" value="signup_invite"><label>Email<input name="email" type="email" required maxlength="255"></label><button class="action-button" type="submit">Send NeoApps Signup Invitation</button></form></details><div data-assets-account-list>
 {% for profile in admin.profiles %}
     {% with night=admin.nights.get(profile.user_id), operation_id=operation.id if operation else none %}
     {% include 'neonodes/neoscorpion/_asset_driver_account.html' %}

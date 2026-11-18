@@ -60,7 +60,7 @@ def change_driver(gateway, operation, actor, truck_id, driver_id, *, dispatcher=
             require_approved(vendor, operation)
         elif not eligible_nightly_fueler_users(gateway, permission_key=DRIVER_EDIT,
                 active_users=User.query.filter_by(id=driver_id,is_active=True).all()):
-            raise ValueError("Choose an active driver with Truck Driver selection access in this gateway.")
+            raise ValueError("Choose an active driver with Fuel Truck Driver selection access in this gateway.")
     target = NeoScorpionTruckDriver.query.filter_by(sort_date_operation_id=operation.id,
         fuel_truck_id=truck_id).with_for_update().populate_existing().first()
     previous = target.driver_user_id if target else None

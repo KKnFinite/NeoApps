@@ -97,7 +97,7 @@ def operational(account):
 
 @bp.errorhandler(PermissionError)
 def denied(error):
-    if request.endpoint == 'scorpion_vendor.revision' or request.form.get('dispatch_assets_workspace') == '1':
+    if request.endpoint in {'scorpion_vendor.revision','scorpion_vendor.supervisor_revision'} or request.form.get('dispatch_assets_workspace') == '1':
         return jsonify(ok=False,error=str(error)),403
     profile = vendors.vendor_account(current_user)
     if profile:
@@ -149,13 +149,28 @@ def my_truck_context(account, operation):
     return context
 
 
+def waiting_context(account, operation, status):
+    from app.services.fuel_driver_accounts import supervisor_membership
+    is_supervisor = bool(supervisor_membership(account))
+    claim = NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,
+        user_id=account.user_id, kind='claim').order_by(NeoScorpionVendorRequest.id.desc()).first() if operation else None
+    trucks = NeoScorpionFuelTruck.query.filter_by(gateway_id=account.gateway_id, is_active=True,
+        is_out_of_service=False).order_by(NeoScorpionFuelTruck.truck_number).all() if operation and not is_supervisor and status not in {'DISPATCHER APPROVAL DENIED','DISPATCHER APPROVAL REVOKED'} else []
+    selections = {s.fuel_truck_id:s for s in NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()} if operation else {}
+    trucks = [t for t in trucks if t.id not in selections or selections[t.id].status == 'available']
+    fingerprint = dict(status=status, operation_id=operation.id if operation else None,
+        claim=(claim.id,claim.status,claim.version) if claim else None, trucks=[t.id for t in trucks], supervisor=is_supervisor)
+    return dict(waiting_operation=operation, waiting_status=status, available_trucks=trucks,
+        latest_claim=claim, is_supervisor=is_supervisor, waiting_fingerprint=fingerprint)
+
+
 @bp.route('/my-truck', methods=['GET','POST'])
 @vendor_only
 def my_truck(account):
     if request.method == 'POST':
         try:
-            operation = operational(account)
             if request.form.get('action') == 'disconnect':
+                operation = operational(account)
                 operation,state=lock_nightly_asset_scope_for_mutation(operation)
                 vendors.current_operation(account.gateway, operation.id)
                 vendors.require_approved(account, operation)
@@ -164,14 +179,20 @@ def my_truck(account):
                 vendors.audit(account.gateway,current_user,'driver_disconnected',operation=operation,subject=current_user)
                 record_nightly_operational_change(state,operation.id)
             else:
+                if not request.form.get('operation_id'):
+                    raise ValueError('Select the current Sort before requesting a truck.')
+                operation = vendors.current_operation(account.gateway, request.form.get('operation_id'))
                 vendors.request_claim(account,operation,request.form.get('truck_id'),request.form.get('gallons'))
             db.session.commit()
         except (ValueError,TypeError,IntegrityError) as exc:
             db.session.rollback(); flash(str(exc) if isinstance(exc,ValueError) else 'Request changed. Refresh.','error')
         return redirect(url_for('scorpion_vendor.my_truck'))
     operation, waiting_status = driver_access(account)
+    from app.services.fuel_driver_accounts import supervisor_membership
+    if supervisor_membership(account):
+        waiting_status = 'VENDOR SUPERVISOR · READ ONLY'
     if waiting_status:
-        return render_template('neonodes/neoscorpion/vendor_truck.html', waiting_status=waiting_status)
+        return render_template('neonodes/neoscorpion/vendor_truck.html', account=account, **waiting_context(account, operation, waiting_status))
     vendors.require_approved(account, operation)
     fingerprint = vendor_fingerprint(account, operation, include_sort_missions=True)
     context = my_truck_context(account, operation)
@@ -202,14 +223,14 @@ def require_connected_truck(account, operation):
 
 def require_same_operation(current, expected):
     if not current or current.id != expected.id:
-        raise PermissionError('The active sort changed or ended. Return to Truck Driver for your status.')
+        raise PermissionError('The active sort changed or ended. Return to Fuel Truck Driver for your status.')
 
 
 def vendor_fingerprint(account, operation, *, include_sort_missions=False):
     from app.services.neoscorpion import fuel_assignments_live_revision
     fingerprint = fuel_assignments_live_revision(account.gateway)
     if fingerprint['operation_id'] != operation.id:
-        raise PermissionError('The active sort changed or ended. Return to Truck Driver for your status.')
+        raise PermissionError('The active sort changed or ended. Return to Fuel Truck Driver for your status.')
     if include_sort_missions:
         fingerprint['sort_missions_revision'] = (
             sort_missions_revision(operation) if connected_truck(account, operation) else None
@@ -233,13 +254,30 @@ def live(account):
 @vendor_only
 def revision(account):
     if request.args.get('waiting') == '1':
-        _, status = driver_access(account)
-        return jsonify(status=status)
+        operation, status = driver_access(account)
+        from app.services.fuel_driver_accounts import supervisor_membership
+        if supervisor_membership(account):
+            status = 'VENDOR SUPERVISOR · READ ONLY'
+        return jsonify(waiting_context(account, operation, status)['waiting_fingerprint'])
     operation = operational(account)
     if request.args.get('view') == 'live':
         require_connected_truck(account, operation)
         return jsonify(vendor_fingerprint(account, operation))
     return jsonify(vendor_fingerprint(account, operation, include_sort_missions=True))
+
+
+@bp.get('/supervisor')
+@vendor_only
+def supervisor(account):
+    from app.services.fuel_driver_accounts import supervisor_context
+    return render_template('neonodes/neoscorpion/vendor_supervisor.html', **supervisor_context(account))
+
+
+@bp.get('/supervisor/revision')
+@vendor_only
+def supervisor_revision(account):
+    from app.services.fuel_driver_accounts import supervisor_context
+    return jsonify(supervisor_context(account)['fingerprint'])
 
 
 @bp.post('/fuel-reading')
@@ -302,6 +340,12 @@ def manage():
     if request.method=='POST':
         action = request.form.get('action')
         try:
+            if action == 'signup_invite':
+                from app.services.fuel_driver_invitations import send_signup_invitation
+                from app.services.auth_rate_limits import client_ip_for_request
+                sent = send_signup_invitation(request.form.get('email'), client_ip_for_request(request), gateway)
+                flash('NeoApps signup invitation sent.' if sent else 'Invitation delivery could not be confirmed. No account was created.', 'info' if sent else 'error')
+                return redirect(url_for('scorpion_vendor.manage'))
             if action not in {'invite','resend','disable','enable'}:
                 operation=vendors.current_operation(gateway,request.form.get('operation_id'))
             if action in {'invite','resend'}:
@@ -310,7 +354,7 @@ def manage():
                 vendors.set_participation(gateway,operation,current_user,request.form.get('user_id'),action,request.form.get('version'))
             elif action in {'claim_approve','claim_deny'}:
                 vendors.decide_claim(gateway,operation,current_user,request.form.get('request_id'),action=='claim_approve',
-                    request.form.get('version'),override=request.form.get('override')=='1')
+                    request.form.get('version'),override=request.form.get('override')=='1', expected_night_version=request.form.get('night_version'))
             elif action in {'disable','enable'}:
                 state=None
                 if operation:

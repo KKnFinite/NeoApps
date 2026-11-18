@@ -312,7 +312,7 @@ NEOSCORPION_MENU = (
     NeoScorpionMenuItem("Dashboard", "neoscorpion.index", "neoscorpion.dashboard.view", "dashboard"),
     NeoScorpionMenuItem("Fuel Dispatch", "neoscorpion.fuel_dispatch", "neoscorpion.fuel_dispatch.view", "dispatch"),
     NeoScorpionMenuItem("Fueling Board", "neoscorpion.fueling_board", "neoscorpion.fueling_board.view", "fueling-board"),
-    NeoScorpionMenuItem("Truck Driver", "neoscorpion.truck_driver", "neoscorpion.truck_driver.view", "truck-driver"),
+    NeoScorpionMenuItem("Fuel Truck Driver", "neoscorpion.truck_driver", "neoscorpion.truck_driver.view", "truck-driver"),
     NeoScorpionMenuItem(
         "Truck Manager",
         "neoscorpion.truck_manager",
@@ -973,7 +973,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     operational_name = operational_fueler_name(user, fueler_nicknames(gateway, [user]))
     from app.services.neoscorpion_assets import fueler_on_break
     on_break = fueler_on_break(operation, user.id)
-    # Truck Driver uses -1 when no truck is claimed. No physical row can match
+    # Fuel Truck Driver uses -1 when no truck is claimed. No physical row can match
     # this sentinel: retain fresh operation/configuration/revision metadata,
     # without building fleet evidence merely to discard every row afterward.
     if not operation or truck_id == -1:

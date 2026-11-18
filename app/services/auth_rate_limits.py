@@ -128,6 +128,14 @@ def record_password_reset_request(client_ip, identifier):
 
 
 def reserve_registration_attempt(client_ip, identifier):
+    return _reserve_account_attempt(REGISTRATION_ACTION, client_ip, identifier)
+
+
+def reserve_signup_invitation(client_ip, identifier):
+    return _reserve_account_attempt("signup_invitation", client_ip, identifier)
+
+
+def _reserve_account_attempt(action, client_ip, identifier):
     """Atomically admit an attempt, returning seconds to retry (zero if allowed).
 
     Commit the short reservation transaction BEFORE hashing, provisioning or
@@ -153,10 +161,10 @@ def reserve_registration_attempt(client_ip, identifier):
 
     states = []
     for subject_type, subject_value, maximum in subjects:
-        state = _get_state(REGISTRATION_ACTION, subject_type, subject_value,
+        state = _get_state(action, subject_type, subject_value,
                            lock=True, refresh=True)
         if state is None:
-            state = _create_state(REGISTRATION_ACTION, subject_type, subject_value, now)
+            state = _create_state(action, subject_type, subject_value, now)
         if now - state.window_started_at >= window:
             state.window_started_at = now
             state.attempt_count = 0

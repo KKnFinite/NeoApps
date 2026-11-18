@@ -1,13 +1,20 @@
 {% extends 'neonodes/neoscorpion/vendor_base.html' %}
 {% block sign_out %}{% include 'neonodes/neoscorpion/_vendor_sign_out.html' %}{% endblock %}
 {% block content %}
-<h2>Truck Driver</h2>
+<h2>Fuel Truck Driver</h2>
 <div data-vendor-access>
 {% if driver_error %}
 <p role="alert">{{ driver_error }}</p>
-<a href="{{ url_for('scorpion_vendor.my_truck') }}">Back to Truck Driver</a>
+<a href="{{ url_for('scorpion_vendor.my_truck') }}">Back to Fuel Truck Driver</a>
 {% elif waiting_status %}
 <p role="status">{{ waiting_status }}</p>
+{% if is_supervisor %}<a href="{{ url_for('scorpion_vendor.supervisor') }}">SUPERVISOR VIEW</a>{% endif %}
+{% if waiting_operation and not is_supervisor %}
+<section><h3>{{ account.gateway.code if account is defined else waiting_operation.gateway_code }} · {{ waiting_operation.sort_name|upper }} · {{ waiting_operation.sort_date }}</h3>
+<p>Read-only until Dispatcher approval. A pending request does not connect a truck or change inventory.</p>
+{% if latest_claim %}<p role="status">CLAIM · TRUCK {{ latest_claim.truck.truck_number }} · {{ latest_claim.status|upper }}</p>{% endif %}
+{% if available_trucks %}<form method="post">{{ csrf_field() }}<label>Current Sort<select name="operation_id" required><option value="{{ waiting_operation.id }}">{{ waiting_operation.sort_name }} · {{ waiting_operation.sort_date }}</option></select></label><label>Request truck<select name="truck_id" required>{% for truck in available_trucks %}<option value="{{ truck.id }}">{{ truck.truck_number }}</option>{% endfor %}</select></label><label>Initial gallons (only if not configured)<input name="gallons" inputmode="numeric"></label><button>REQUEST TRUCK</button></form>{% endif %}</section>
+{% endif %}
 {% else %}
 <div data-vendor-live>
 <h3>{{ 'TRUCK ' ~ selected_driver_truck.truck_number if selected_driver_truck else 'NO APPROVED TRUCK' }}</h3>
@@ -32,7 +39,7 @@
      data-login-url="{{ url_for('auth.login') }}"
      data-workspace-url="{{ url_for('scorpion_vendor.my_truck') }}"
      {% if waiting_status %}
-     data-waiting="true" data-revision='{{ {"status": waiting_status}|tojson }}'
+     data-waiting="true" data-revision='{{ waiting_fingerprint|tojson }}'
      data-revision-url="{{ url_for('scorpion_vendor.revision', waiting=1) }}"
      {% else %}
      data-revision='{{ fingerprint|tojson }}'
@@ -40,4 +47,4 @@
      {% endif %}></div>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/neoscorpion_vendor.js', v='20261116-sort-missions') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/neoscorpion_vendor.js', v=config.STATIC_ASSET_VERSION) }}" defer></script>{% endblock %}

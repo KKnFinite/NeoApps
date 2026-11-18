@@ -330,7 +330,8 @@ class VendorWorkflowTest(TestCase):
         self.assertIn(b'AWAITING DISPATCHER APPROVAL', waiting.data)
         self.assertNotIn(b'name="truck_id"', waiting.data)
         self.assertEqual(self.client.get(f'{DRIVER}/revision?waiting=1').json,
-                         {'status': 'AWAITING DISPATCHER APPROVAL'})
+                         {'status': 'AWAITING DISPATCHER APPROVAL', 'operation_id': self.operation.id,
+                          'claim': None, 'trucks': [], 'supervisor': False})
         self.assertEqual(self.client.get(f'{DRIVER}/revision').status_code, 403)
         with patch.object(service, 'current_sort_operation', return_value=None):
             closed = self.client.get(f'{DRIVER}/my-truck')
@@ -382,7 +383,7 @@ class VendorWorkflowTest(TestCase):
             'scorpion_vendor.change_password','scorpion_vendor.forgot_password','scorpion_vendor.reset_password',
             'scorpion_vendor.account','scorpion_vendor.my_truck','scorpion_vendor.live',
             'scorpion_vendor.revision','scorpion_vendor.fuel_reading','scorpion_vendor.driver_fuel_reading',
-            'scorpion_vendor.invitation'}
+            'scorpion_vendor.invitation','scorpion_vendor.supervisor','scorpion_vendor.supervisor_revision'}
         checked=0
         for rule in self.fixture.app.url_map.iter_rules():
             if rule.endpoint in allowed:continue

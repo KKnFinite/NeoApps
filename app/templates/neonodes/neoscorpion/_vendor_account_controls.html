@@ -7,7 +7,7 @@
     {% if night and night.status == 'approved' %}
     <button class="action-button" name="action" value="revoked">REVOKE</button>
     {% else %}
-    <button class="action-button" name="action" value="approved">APPROVE TONIGHT</button>
+    <button class="action-button" name="action" value="approved">APPROVE FOR SORT</button>
     {% if not night or night.status == 'pending' %}
     <button class="action-button" name="action" value="denied">DENY</button>
     {% endif %}

@@ -46,13 +46,13 @@
 
     <section class="panel-subsection">
         <h2>NEOAPPS ACCOUNT TYPE</h2>
-        <p><strong>{{ "RESTRICTED TRUCK DRIVER" if target_user.scorpion_vendor else "FULL NEOAPPS" }}</strong></p>
+        <p><strong>{{ "RESTRICTED FUEL TRUCK DRIVER" if target_user.scorpion_vendor else "FULL NEOAPPS" }}</strong></p>
         {% if can_edit_user and target_user.id != current_user.id %}
-        <p class="muted">{{ "Full NeoApps conversion requires renewed role approval; historical driver work is preserved." if target_user.scorpion_vendor else "Truck Driver conversion revokes general app/node access and requires separate Dispatcher approval for each Sort." }}</p>
+        <p class="muted">{{ "Full NeoApps conversion requires renewed role approval; historical driver work is preserved." if target_user.scorpion_vendor else "Fuel Truck Driver conversion revokes general app/node access and requires separate Dispatcher approval for each Sort." }}</p>
         <form class="operation-form" method="post" action="{{ url_for('auth.change_user_account_type', user_id=target_user.id) }}"
               data-confirm-message="Change this person's account type and revoke their current access?">
             <input type="hidden" name="account_type" value="{{ 'full' if target_user.scorpion_vendor else 'vendor' }}">
-            <button class="action-button" type="submit">{{ 'CONVERT TO FULL NEO ACCOUNT' if target_user.scorpion_vendor else 'CONVERT TO TRUCK DRIVER' }}</button>
+            <button class="action-button" type="submit">{{ 'CONVERT TO FULL NEO ACCOUNT' if target_user.scorpion_vendor else 'CONVERT TO FUEL TRUCK DRIVER' }}</button>
         </form>
         {% endif %}
     </section>
