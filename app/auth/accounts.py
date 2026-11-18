@@ -17,7 +17,7 @@ from app.services.account_security import guard_node_change, lock_administration
 from app.services.access_control import get_current_gateway
 from app.services.auth_session_security import rotate_user_session_version
 from app.services.accounts_workspace import (CRYOCHECK_URL, authorized_applications, available_applications,
-    close_open_attempt, lock_self, new_attempt, preference, require_available_app, review_token, save_preferences, verify_review)
+    application_decision_reason, close_open_attempt, lock_self, new_attempt, preference, require_available_app, review_token, save_preferences, verify_review)
 from app.services.grandmaster_commissioning import may_commission
 from app.services.permission_rules import user_can
 from app.services.request_cache import clear_request_cache
@@ -186,9 +186,7 @@ def account_action(user_id, action):
             require_available_app(code)
             access = PortalAppAccess.query.filter_by(user_id=target.id, app_code=code).with_for_update().first()
             outcome = request.form.get("outcome", "")
-            reason = request.form.get("reason", "").strip()
-            if not 3 <= len(reason) <= 2000:
-                raise ValueError("Enter a decision reason of 3–2000 characters.")
+            reason = application_decision_reason(outcome, request.form.get("reason", ""))
             pending = AccountAccessRequest.query.filter_by(user_id=target.id, app_code=code, state="pending").first()
             if current_user.id == target.id:
                 raise ValueError("You cannot decide your own application access.")

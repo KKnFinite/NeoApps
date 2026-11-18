@@ -141,6 +141,16 @@ def new_attempt(user, code, reason, key=None, *, registration=False):
     return attempt
 
 
+def application_decision_reason(outcome, reason):
+    """Approval/denial explanations are optional; revocation keeps its guard."""
+    reason = str(reason or "").strip()
+    if len(reason) > 2000:
+        raise ValueError("Decision reason must be at most 2000 characters.")
+    if outcome not in {"approved", "denied"} and len(reason) < 3:
+        raise ValueError("Enter a decision reason of 3–2000 characters.")
+    return reason
+
+
 def close_open_attempt(user, code, outcome, reason):
     """Legacy and new writers close the same open attempt once, in their transaction."""
     attempt = AccountAccessRequest.query.filter_by(user_id=user.id, app_code=code, state="pending").with_for_update().first()

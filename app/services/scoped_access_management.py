@@ -125,12 +125,12 @@ def set_role(user_id,scope,selected,token,reason):
 def decide_application(user_id,scope,selected,outcome,token,reason):
     require_active();actor=lock_administration();require_active()
     if scope.kind!='application':raise ValueError('An application scope is required.')
-    from app.services.accounts_workspace import require_available_app,close_open_attempt
+    from app.services.accounts_workspace import require_available_app,close_open_attempt,application_decision_reason
     require_available_app(scope.app_code)
     target=_target(user_id)
     verify_review(target,token)
     if target.id==actor.id or not target.is_active or target.scorpion_vendor:raise ValueError('Review another active full account.')
-    if not 3<=len(str(reason or '').strip())<=2000:raise ValueError('A decision reason is required.')
+    reason=application_decision_reason(outcome,reason)
     access=existing_role(target,scope)
     role_guard(actor,target,scope,access,selected,granting=outcome=='approved')
     from app.models import AccountAccessRequest

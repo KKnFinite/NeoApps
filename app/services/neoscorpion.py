@@ -3839,9 +3839,10 @@ def start_follow_up_fuel_cycle(
     queued=outstanding(assignment.id,lock=True)
     if queued is not None and queued.id != pending_uplift_id:
         raise ValueError("Resolve the saved pending uplift before starting another fuel cycle.")
-    if assignment.fuel_on_board_at_utc is not None:
-        raise ValueError("Fuel On Board assignments cannot start a physical follow-up cycle.")
-    if assignment.completed_at_utc is None:
+    from_fob = assignment.fuel_on_board_at_utc is not None
+    if from_fob and cycle_type != "uplift":
+        raise ValueError("Fuel On Board assignments support UPLIFT, not physical DEFUEL follow-up.")
+    if not from_fob and assignment.completed_at_utc is None:
         raise ValueError("Complete the current physical fuel cycle before starting another.")
     if assignment.review_status != "complete" or mission.fuel_status != "complete":
         raise ValueError("REVIEW REQUIRED: completion state is inconsistent.")
@@ -3863,10 +3864,31 @@ def start_follow_up_fuel_cycle(
         )
         .all()
     )
-    if not prior_events:
+    if not prior_events and not from_fob:
         raise ValueError("A completed physical fuel event is required first.")
 
     fuel_work_state = _locked_fuel_work_state_for_tail(assignment, tail_number)
+    fob_actual_by_tank = None
+    if from_fob:
+        # Explicit no-transfer completion is evidence of measured fuel, never a
+        # delivered-fuel event. Recheck that evidence under the existing locks.
+        layout = tank_layout_for_tail(tail_number)
+        fob_tanks = {tank.tank_code: tank for tank in _locked_tank_states(fuel_work_state)}
+        if (fuel_work_state is None or not layout
+                or _effective_confirmed_tail(assignment, mission) != tail_number
+                or assignment.assigned_truck_id is not None
+                or assignment.transfer_fuel_gallons not in (None, 0)
+                or any(getattr(fuel_work_state, name) is not None for name in (
+                    'on_at_utc', 'confirmed_on_at_utc', 'manual_on_at_utc', 'off_at_utc',
+                    'truck_segment_started_at_utc', 'ended_early_at_utc'))
+                or fuel_work_state.physical_transfer_review
+                or fuel_work_state.apu_running is None
+                or not _apu_source_is_valid(fuel_work_state, layout)
+                or any(code not in fob_tanks or fob_tanks[code].actual_lbs is None for code, _ in layout)):
+            raise ValueError("REVIEW REQUIRED: verified FOB measurements for the current aircraft are required.")
+        # The original target may have subsequently increased; the saved FOB
+        # receipt and actual measurements remain the source, not an estimate.
+        fob_actual_by_tank = {code: fob_tanks[code].actual_lbs for code, _ in layout}
     rollback_tail_state = NeoScorpionTailFuelState.query.filter_by(
         sort_date_operation_id=operation.id, tail_number=tail_number,
     ).with_for_update().first()
@@ -3904,9 +3926,12 @@ def start_follow_up_fuel_cycle(
             )
 
     prior_actual_by_tank = {}
-    measured = _latest_trusted_completed_tail_measurement(operation, tail_number)
-    if measured:
-        prior_actual_by_tank = measured["actual_by_tank"]
+    if from_fob:
+        prior_actual_by_tank = fob_actual_by_tank
+    else:
+        measured = _latest_trusted_completed_tail_measurement(operation, tail_number)
+        if measured:
+            prior_actual_by_tank = measured["actual_by_tank"]
     tail_fuel_state = (
         NeoScorpionTailFuelState.query.filter_by(
             sort_date_operation_id=operation.id,
@@ -3932,7 +3957,7 @@ def start_follow_up_fuel_cycle(
         db.session.add(tail_fuel_state)
 
     history = _freeze_cycle_display(
-        operation, assignment, mission, _assignment_cycle_type(assignment).upper(),
+        operation, assignment, mission, "FOB" if from_fob else _assignment_cycle_type(assignment).upper(),
         events=prior_events,
     )
     assignment.ready_for_fuel_at_utc = None
@@ -3958,6 +3983,8 @@ def start_follow_up_fuel_cycle(
     assignment.transfer_fuel_gallons = None
     assignment.completed_at_utc = None
     assignment.completed_by_user_id = None
+    assignment.fuel_on_board_at_utc = None
+    assignment.fuel_on_board_by_user_id = None
     assignment.review_status = "assigned"
     assignment.operational_status = "active"
     assignment.hold_reason = None
@@ -3999,6 +4026,12 @@ def start_follow_up_fuel_cycle(
     # This is a newly allocated cycle, with no participants yet. Preserve its
     # empty ledger so inherited Remaining is not mistaken for Fueler work.
     fuel_work_state.performance_context = {'participation': {'version':1,'verified':True,'fueler_ids':[],'truck_ids':[]}}
+    if from_fob:
+        source_work_id = rollback["work"]["id"]
+        fuel_work_state.performance_context['baseline'] = {'source': 'verified_fob', 'work_id': source_work_id}
+        _new_fuel_audit(operation, assignment, user, 'segment_transfer', 'fob_uplift_baseline',
+            source_work_id, fuel_work_state.id, 'Dispatcher started UPLIFT from verified no-transfer FOB.',
+            fuel_work_state=fuel_work_state, now_utc=now_utc)
     fuel_work_state.apu_running = None
     fuel_work_state.apu_confirmed_at_utc = None
     fuel_work_state.apu_allowance_lbs = None
@@ -7059,9 +7092,7 @@ def _fuel_rows(
                 "administratively_complete": administratively_complete,
                 "follow_up_available": bool(
                     assignment
-                    and normal_completion_complete
-                    and not fuel_on_board_complete
-                    and has_prior_fueling_events
+                    and ((normal_completion_complete and has_prior_fueling_events) or fuel_on_board_complete)
                     and tail_number
                 ),
                 "normal_completion_ready": normal_completion_ready,

@@ -2199,19 +2199,19 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
             else:
                 second_reason = ''
             row['second_truck_reason'] = second_reason
-            if row.get('fuel_on_board_complete'):
-                follow_reason = 'FOB does not establish a physical fueling event.'
-            elif row.get('pending_uplift'):
+            if row.get('pending_uplift'):
                 follow_reason = 'Resolve the saved truck / uplift plan first.'
-            elif not row.get('normal_completion_complete'):
+            elif not (row.get('normal_completion_complete') or row.get('fuel_on_board_complete')):
                 follow_reason = 'Dispatcher COMPLETE required.'
-            elif not row.get('has_prior_fueling_events'):
+            elif not row.get('has_prior_fueling_events') and not row.get('fuel_on_board_complete'):
                 follow_reason = 'A completed physical fueling event is required.'
             elif not row.get('follow_up_available') or row['assignment'].review_status != 'complete' or row['mission'].fuel_status != 'complete':
                 follow_reason = 'Review the completed cycle and confirmed aircraft.'
             else:
                 follow_reason = ''
             row['follow_up_reason'] = follow_reason
+            row['defuel_follow_up_reason'] = ('FOB does not establish a physical fueling event.'
+                if row.get('fuel_on_board_complete') else follow_reason)
         return {**context, 'asset_driver_admin':driver_admin, 'dispatch_preferences':preferences, 'vendor_pending_by_truck':pending,
             "rows": sorted(rows, key=lambda row: _dispatch_presentation_key(row, preferences['secondary_sort'], preferences['arrived_first'])), **roster}
 
