@@ -141,7 +141,7 @@ def checkpoint():
     budget = _cooperation.get()
     while True:
         if budget and budget['valid'] and not budget['valid']():
-            raise Deferred('FROST hourly acquisition window closed; never backfill predictions.')
+            raise Deferred('FROST acquisition window closed; never backfill predictions.')
         why = reason()
         if not why:return
         if not budget or budget['remaining'] <= 0 or has_request_context():

@@ -1,4 +1,5 @@
-"""Read-only FROST hours from canonical Sort windows and gateway weekdays."""
+"""Two FROST cycles from canonical Sort windows and gateway weekdays."""
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -8,6 +9,20 @@ from app.models import GatewaySortMatrix, SortTimelineSortSetting, SortTimelineS
 from app.services.gateway_matrix import gateway_timezone
 
 UTC = timezone.utc
+
+
+def cycle_identity(at):
+    at=at.astimezone(UTC)
+    fraction=f'.{at.microsecond:06d}' if at.microsecond else ''
+    return at.strftime('%Y%m%dT%H%M%S')+fraction+'Z'
+
+
+@dataclass(frozen=True)
+class Cycle:
+    start: datetime
+    deadline: datetime
+    sort_start: datetime
+    sort_end: datetime
 
 
 class Schedule:
@@ -55,32 +70,50 @@ class Schedule:
             for start, end in self.windows(date))
 
     def next_capture(self, at):
-        """Next hourly UTC slot or configured opening; no day/time constants."""
+        """Next opening/midpoint; midpoint uses actual elapsed time across DST."""
         if not self.zone or not self.rows:
             return None
         day = at.astimezone(self.zone).date()
-        next_hour = at.astimezone(UTC).replace(minute=0, second=0, microsecond=0)+timedelta(hours=1)
-        candidates = []
-        for offset in range(-1, 8):
-            for start, end in self.windows(day+timedelta(days=offset)):
-                candidate = max(start, next_hour) if start <= at else start
-                if at < candidate < end:
-                    candidates.append(candidate)
+        candidates = [cycle.start for offset in range(-1,8)
+            for cycle in self.cycles(day+timedelta(days=offset)) if at<cycle.start]
         return min(candidates) if candidates else None
 
+    def cycles(self, day):
+        # Coincident cycles share the same weather/model computation. No
+        # duplicate scoring simply because two configured windows overlap.
+        values={}
+        for start,end in self.windows(day):
+            if end<=start:continue
+            middle=start+(end-start)/2
+            for due,following in ((start,middle),(middle,end)):
+                cycle=Cycle(due,min(due+timedelta(hours=1),following),start,end)
+                previous=values.get(due)
+                values[due]=Cycle(due,max(previous.deadline,cycle.deadline),
+                    min(previous.sort_start,start),max(previous.sort_end,end)) if previous else cycle
+        return tuple(values[key] for key in sorted(values))
+
+    def sort_cycles(self, at):
+        if not self.zone or not self.rows:return ()
+        day=at.astimezone(self.zone).date()
+        return tuple(cycle for date in (day-timedelta(days=1),day)
+            for cycle in self.cycles(date)
+            if cycle.sort_start<=at<cycle.sort_end)
+
+    def capture_cycles(self, at):
+        return tuple(cycle for cycle in self.sort_cycles(at) if cycle.start<=at<cycle.deadline)
+
+    def current_cycle(self, at):
+        return max((cycle for cycle in self.sort_cycles(at) if cycle.start<=at),
+            key=lambda cycle:cycle.start,default=None)
+
     def missed(self, prior, current):
-        """Count eligible UTC slots, never report closed days as missing captures."""
+        """Count scheduled cycles only, never intermediate hours/closed days."""
+        if not self.zone or not self.rows:return 0
         first = prior.astimezone(self.zone).date()-timedelta(days=1)
         last = current.astimezone(self.zone).date()
         day = first
         intervals = set()
         while day <= last:
-            for start, end in self.windows(day):
-                hour = max(prior+timedelta(hours=1), start)
-                if hour.minute or hour.second or hour.microsecond:
-                    hour = hour.replace(minute=0, second=0, microsecond=0)+timedelta(hours=1)
-                while hour < min(end, current):
-                    intervals.add(hour)
-                    hour += timedelta(hours=1)
+            intervals.update(cycle.start for cycle in self.cycles(day) if prior<cycle.start<current)
             day += timedelta(days=1)
         return len(intervals)

@@ -1,4 +1,4 @@
-"""Hourly private KRFD evidence on the existing delivery heartbeat.
+"""Twice-per-Sort private KRFD evidence on the existing delivery heartbeat.
 
 No scripts, training libraries, scientific arrays or new worker.
 FrostHistoryTask is a receipt/index, not a second operational activity database.
@@ -21,7 +21,7 @@ from app.services import frost_forecast as clock, frost_forecast_native as nativ
 from app.services import frost_research, frost_model as model, frost_analysis as analysis
 from app.services.memory_diagnostics import memory_diagnostics, observe_process_memory
 from app.services import frost_resources as priority
-from app.services.frost_schedule import Schedule
+from app.services.frost_schedule import Schedule, cycle_identity
 
 VERSION='frost-auto-v1'
 MAX_SNAPSHOT=1024*1024
@@ -33,7 +33,7 @@ def now():return datetime.now(UTC)
 def naive(at):return at.astimezone(UTC).replace(tzinfo=None)
 def stamp(at):return at.astimezone(UTC).isoformat()
 def slot(at):return at.astimezone(UTC).replace(minute=0,second=0,microsecond=0)
-def identity(at):return slot(at).strftime('%Y%m%dT%H0000Z')
+def identity(at):return cycle_identity(at)
 
 
 def enabled(gateway):
@@ -136,7 +136,7 @@ def acquire():
                 return dict(receipt,source_key=retained[receipt['sha256']])
             evidence=dict(schema=hrrr.VERSION,sha256=receipt['sha256'],raw_base64=base64.b64encode(raw).decode())
             # Content-addressed originals remain independently durable. The
-            # hourly snapshot holds compact references, never all tile bodies.
+            # cycle snapshot holds compact references, never all tile bodies.
             key=vault.put_json('weather',g.frost_capture_gateway,
                 'hrrr-source-'+receipt['sha256'],evidence)
             retained[receipt['sha256']]=key
@@ -241,8 +241,9 @@ def record_gap(ctrl,current,schedule):
     if previous:
         prior=clock.instant(previous);missed=schedule.missed(prior,current)
         if missed>0:
-            gap=jobs.task(ctrl.gateway_id,'auto_gap',identity(prior+timedelta(hours=1)),VERSION)
-            gap.status='missed';gap.summary=dict(from_utc=stamp(prior+timedelta(hours=1)),to_utc=stamp(current),intervals=missed,
+            gap=jobs.task(ctrl.gateway_id,'auto_gap',identity(prior)+'-'+identity(current),VERSION)
+            gap.status='missed';gap.summary=dict(from_utc=stamp(prior),to_utc=stamp(current),intervals=missed,
+                schedule='sort-opening-midpoint-v1',
                 reason='No heartbeat capture during service downtime/suspension; never reconstruct pre-event predictions.')
     ctrl.summary=dict(ctrl.summary or {},last_slot=stamp(current),
         started_at_utc=(ctrl.summary or {}).get('started_at_utc') or stamp(current))
@@ -256,16 +257,17 @@ def tick(gateway_id):
     """One small slot/delivery per heartbeat, serialized across real processes."""
     gateway=db.session.get(Gateway,gateway_id)
     if not gateway or not enabled(gateway):return 0
-    at=now();current=slot(at);schedule=Schedule.load(gateway)
+    at=now();schedule=Schedule.load(gateway);cycle=None;current=None
     row=Task.query.filter_by(gateway_id=gateway_id,kind='auto_capture',version=VERSION).filter(
         Task.status.in_(('staged','archive_retry')),Task.retry_at<=naive(at)).order_by(Task.identity).first()
     # Committed evidence may be delivered after hours; new acquisition may not.
-    if row is None and not schedule.eligible(at):db.session.rollback();return 0
     if row is None:
-        hint=Task.query.with_entities(Task.status,Task.retry_at).filter_by(gateway_id=gateway_id,
-            kind='auto_capture',identity=identity(current),version=VERSION).one_or_none()
-        if hint and (hint.status in ('ready','failed','missed') or hint.retry_at>naive(at)):
-            db.session.rollback();return 0
+        for candidate in schedule.capture_cycles(at):
+            hint=Task.query.with_entities(Task.status,Task.retry_at).filter_by(gateway_id=gateway_id,
+                kind='auto_capture',identity=identity(candidate.start),version=VERSION).one_or_none()
+            if hint and (hint.status in ('ready','failed','missed') or hint.retry_at>naive(at)):continue
+            cycle=candidate;current=cycle.start;break
+        if cycle is None:db.session.rollback();return 0
     # Hints never own work: canonical slot/lease checks are repeated below.
     ctrl=control(gateway_id);db.session.commit()
     batch=jobs.task(gateway_id,'worker','memory-budget','frost-worker-v1');batch_id=batch.id
@@ -273,21 +275,23 @@ def tick(gateway_id):
     if not token:return 0
     try:
         ctrl=Task.query.filter_by(id=ctrl.id).with_for_update().one()
-        if schedule.eligible(at):record_gap(ctrl,current,schedule)
+        if cycle is not None:record_gap(ctrl,current,schedule)
         Task.query.filter(Task.gateway_id==gateway_id,Task.kind=='auto_capture',Task.version==VERSION,
-            Task.identity<identity(current),Task.status.in_(('pending','retry')),
-            Task.retry_at<=naive(now())).update(dict(status='missed',lease_token=None,
+            *expired_capture_conditions(now())).update(dict(status='missed',lease_token=None,
                 last_error='Slot expired without a committed capture; no historical reconstruction.'),synchronize_session=False)
         # Retry already committed evidence first. Never reacquire/backdate it.
         row=Task.query.filter_by(gateway_id=gateway_id,kind='auto_capture',version=VERSION).filter(
             Task.status.in_(('staged','archive_retry')),Task.retry_at<=naive(now())).order_by(Task.identity).first()
         if row is None:
-            if not schedule.eligible(now()):db.session.rollback();return 0
+            if cycle is None or not cycle.start<=now()<cycle.deadline:db.session.rollback();return 0
             row=jobs.task(gateway_id,'auto_capture',identity(current),VERSION)
+            if row.status not in ('ready','failed','missed') and not (row.summary or {}).get('staged'):
+                row.summary=dict(row.summary or {},schedule='sort-opening-midpoint-v1',
+                    capture_deadline_at_utc=stamp(cycle.deadline))
         db.session.commit()
         if row.status in ('ready','failed','missed') or row.retry_at>naive(now()):db.session.rollback();return 0
         if not (row.summary or {}).get('staged'):
-            priority.limit_to_window(lambda:slot(now())==current and schedule.eligible(now()))
+            priority.limit_to_window(lambda:cycle.start<=now()<cycle.deadline)
         db.session.rollback()  # No read transaction while yielding to foreground work.
         try:
             priority.checkpoint();resource_reason=None
@@ -325,10 +329,10 @@ def tick(gateway_id):
                     priority.reclaim_memory()
                     with vault.transport_scope():
                         source=acquire()
-                        if slot(now())!=current or not schedule.eligible(now()):
+                        if not cycle.start<=now()<cycle.deadline:
                             raise ValueError('Capture window expired; no historical prediction is permitted.')
                         scores=predictions(gateway_id,source)
-                        if slot(now())!=current or not schedule.eligible(now()):
+                        if not cycle.start<=now()<cycle.deadline:
                             raise ValueError('Scoring window expired; no historical prediction is permitted.')
                         source.setdefault('native_resources',{}).update(priority.wait_metrics())
                 finally:
@@ -341,7 +345,8 @@ def tick(gateway_id):
                     approved=False,operationally_validated=False,physical_frost_probability=False)
                 locked=Task.query.filter_by(id=identifier).with_for_update().one()
                 if locked.lease_token!=lease:db.session.rollback();return 0
-                locked.summary=dict(resource_deferrals=(locked.summary or {}).get('resource_deferrals',0),
+                locked.summary=dict(schedule='sort-opening-midpoint-v1',capture_deadline_at_utc=stamp(cycle.deadline),
+                    resource_deferrals=(locked.summary or {}).get('resource_deferrals',0),
                     last_resource_reason=(locked.summary or {}).get('last_resource_reason'),
                     staged=pack(payload),captured_at_utc=payload['captured_at_utc'],
                     committed_at_utc=payload['committed_at_utc'],cutoff_at_utc=source['cutoff_at_utc'],
@@ -420,12 +425,13 @@ def status(gateway_id):
     missed_gaps=db.session.query(func.coalesce(func.sum(Task.summary['intervals'].as_integer()),0)).filter(
         Task.gateway_id==gateway_id,Task.kind=='auto_gap',Task.version==VERSION).scalar()
     recent=recent_captures(gateway_id)
-    current_capture=next((r for r in recent if r['slot']==identity(now())),None)
     schedule=Schedule.load(gateway);scheduled=bool(is_enabled and schedule.eligible(now()))
+    cycle=schedule.current_cycle(now())
+    current_capture=next((r for r in recent if cycle and r['slot']==identity(cycle.start)),None)
     next_capture=schedule.next_capture(now()) if is_enabled else None
     resource_reason=(current_capture['error'] if current_capture and not current_capture['in_progress'] and
         current_capture['state'] in ('pending','retry','archive_retry') else None) or summary.get('resource_reason')
-    last=summary.get('last_archive_utc');active=bool(scheduled and last and not resource_reason and now()-clock.instant(last)<timedelta(hours=2))
+    last=summary.get('last_archive_utc');active=bool(scheduled and current_capture and current_capture['captured_at'] and not resource_reason)
     prediction_state=current_capture['prediction_state'] if current_capture else 'NOT YET SCORED'
     weather_state=current_capture['weather_state'] if current_capture else 'NOT CAPTURED'
     archive_state=current_capture['archive_state'] if current_capture else 'NOT ARCHIVED'
@@ -435,7 +441,13 @@ def status(gateway_id):
     matched_captures=db.session.query(func.count(func.distinct(Task.summary['capture_id'].as_integer()))).filter(
         Task.gateway_id==gateway_id,Task.kind=='auto_match',Task.version==VERSION,Task.status=='active').scalar()
     outcome_query=Task.query.filter_by(gateway_id=gateway_id,kind='xchange_outcome',version=VERSION)
-    return dict(enabled=is_enabled,active=active,state=state,
+    current_rows={r['slot']:r for r in recent}
+    cycles=schedule.sort_cycles(now()) if is_enabled else ()
+    coverage=dict(expected=len(cycles),due=sum(c.start<=now() for c in cycles),
+        captured=sum(bool(current_rows.get(identity(c.start),{}).get('captured_at')) for c in cycles),
+        fully_scored=sum(current_rows.get(identity(c.start),{}).get('scored')==8 for c in cycles),
+        missed=sum(c.deadline<=now() and (identity(c.start) not in current_rows or current_rows[identity(c.start)]['state']=='missed') for c in cycles))
+    return dict(enabled=is_enabled,active=active,state=state,cycle_coverage=coverage,
         weather_state=weather_state,prediction_state=prediction_state,archive_state=archive_state,
         prediction_ready=bool(current_capture and current_capture['captured_at'] and current_capture['scored']==current_capture['models']),
         last_fully_scored=summary.get('last_fully_scored_utc') or next((r['captured_at'] for r in recent if r['scored']==r['models']),None),
@@ -475,7 +487,9 @@ def expired_capture_conditions(at):
     retry. The next eligible worker retains the existing durable bookkeeping.
     """
     from sqlalchemy import or_
-    return (Task.status.in_(('pending','retry')),Task.identity<identity(at),
+    deadline=Task.summary['capture_deadline_at_utc'].as_string()
+    return (Task.status.in_(('pending','retry')),or_(deadline<=stamp(at),
+        deadline.is_(None) & (Task.identity<identity(slot(at)))),
         Task.summary['captured_at_utc'].as_string().is_(None),
         Task.summary['staged'].as_string().is_(None),
         or_(Task.lease_token.is_(None),Task.retry_at<=naive(at)))
@@ -483,7 +497,9 @@ def expired_capture_conditions(at):
 
 def capture_state(row):
     summary=row.summary or {}
-    if (row.status in ('pending','retry') and row.identity<identity(now())
+    deadline=summary.get('capture_deadline_at_utc')
+    expired=clock.instant(deadline)<=now() if deadline else row.identity<identity(slot(now()))
+    if (row.status in ('pending','retry') and expired
             and not summary.get('captured_at_utc') and not summary.get('staged')
             and not (row.lease_token and row.retry_at>naive(now()))):return 'missed'
     return row.status

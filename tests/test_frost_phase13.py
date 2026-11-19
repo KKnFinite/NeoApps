@@ -30,7 +30,7 @@ class AutoTest(ArchiveAccessTest):
             NEOSCORPION_LEARNING_VAULT_ENDPOINT='https://isolated.invalid',NEOSCORPION_LEARNING_VAULT_ACCESS_KEY_ID='x',
             NEOSCORPION_LEARNING_VAULT_SECRET_ACCESS_KEY='x',FROST_AUTO_COLLECTION=True)
         from tests.frost_schedule_fixture import configure
-        configure(self.f.gateway)  # This fixture explicitly enables every hour.
+        configure(self.f.gateway,at=self.t)  # Explicit Sort opening for this synthetic clock.
         from app.services.frost_weather import STATION
         self.source=dict(station=STATION,cutoff_at_utc=self.t.isoformat(),observations=[],sources=[],nws_forecasts=[],native_forecasts=[])
         self.acquire=patch.object(auto,'acquire',side_effect=lambda:dict(self.source,cutoff_at_utc=self.t.isoformat()))
@@ -44,7 +44,7 @@ class AutoTest(ArchiveAccessTest):
         self.enterContext(patch.object(auto,'frozen_models',return_value=helper.baseline['models']))
         return helper
 
-    def test_hourly_without_sort_or_browser_restart_idempotency_and_unknown(self):
+    def test_two_cycles_without_sort_record_or_browser_restart_idempotency_and_unknown(self):
         # An operational mission/browser is unnecessary; configured hours are required.
         self.assertEqual(self.tick(),1);self.assertEqual(self.tick(),0);self.provider.assert_called_once()
         state=auto.status(self.f.gateway.id)
@@ -52,14 +52,14 @@ class AutoTest(ArchiveAccessTest):
         row=Task.query.filter_by(kind='auto_capture').one();payload=vault.read_json(row.result_key,self.f.gateway.id)
         self.assertTrue(all(p['score'] is None and p['state']=='UNAVAILABLE' for p in payload['predictions']))
         self.assertFalse(payload['approved']);self.assertEqual(FrostModelRelease.query.count(),0)
-        self.t+=timedelta(hours=4);self.assertEqual(self.tick(),1)
-        self.assertEqual(auto.status(self.f.gateway.id)['missed'],3)
+        self.t=auto.Schedule.load(self.f.gateway).next_capture(self.t)+timedelta(minutes=20);self.assertEqual(self.tick(),1)
+        self.assertEqual(auto.status(self.f.gateway.id)['missed'],0)
         self.assertEqual(Task.query.filter_by(kind='auto_capture').count(),2)
 
     def test_resource_suspension_does_not_fetch_or_backdate(self):
         with patch.object(jobs,'memory_allows_work',return_value=False):self.assertEqual(self.tick(),0)
         self.provider.assert_not_called();self.assertTrue(auto.status(self.f.gateway.id)['resource_suspended'])
-        self.t+=timedelta(hours=1);self.assertEqual(self.tick(),1)
+        self.t=auto.Schedule.load(self.f.gateway).next_capture(self.t)+timedelta(minutes=20);self.assertEqual(self.tick(),1)
         self.assertEqual(Task.query.filter_by(kind='auto_capture',status='missed').count(),1)
 
     def test_provider_failures_bounded_retry_and_no_false_archive(self):

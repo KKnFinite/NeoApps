@@ -11,6 +11,7 @@ from app.models import FrostHistoryTask as Task, SortTimelineSortSetting, Gatewa
 from app.services import frost_auto as auto, frost_resources as priority, frost_hrrr_point as hrrr
 from app.services import background_deadlines as deadlines
 from app.services.frost_schedule import Schedule
+import app.neonodes.neosubzero  # Initialize canonical route/service import order.
 from tests import test_frost_phase13 as fixtures
 from tests.frost_schedule_fixture import configure
 
@@ -62,8 +63,8 @@ class FrostSchedulingTest(unittest.TestCase):
         due, _ = deadlines.plan(self.case.t.replace(tzinfo=None))
         self.assertNotIn('auto',due.get(self.gateway.id,set()))
 
-    def test_one_capture_per_hour_and_closed_hours_are_not_missing_predictions(self):
-        self.case.t=datetime(2026,11,6,10,tzinfo=UTC)
+    def test_one_capture_per_cycle_and_closed_hours_are_not_missing_predictions(self):
+        self.case.t=datetime(2026,11,6,7,tzinfo=UTC)
         self.assertEqual(self.case.tick(),1);self.assertEqual(self.case.tick(),0)
         self.case.t=datetime(2026,11,10,3,tzinfo=UTC)
         self.assertEqual(self.case.tick(),1)
@@ -77,19 +78,22 @@ class FrostSchedulingTest(unittest.TestCase):
         first=datetime(2026,11,1,6,tzinfo=UTC);second=first+timedelta(hours=1)
         self.assertTrue(schedule.eligible(first));self.assertTrue(schedule.eligible(second))
         self.assertNotEqual(auto.identity(first),auto.identity(second))
-        self.assertEqual(schedule.next_capture(first),second)
+        midpoint=datetime(2026,11,1,6,30,tzinfo=UTC)
+        self.assertEqual(schedule.next_capture(first),midpoint)
+        self.assertEqual([c.start for c in schedule.capture_cycles(midpoint)],[midpoint])
+        self.assertEqual(schedule.next_capture(midpoint),datetime(2026,11,8,3,tzinfo=UTC))
         with patch('app.services.frost_schedule.gateway_timezone',return_value='UTC'):
             self.assertFalse(Schedule.load(self.gateway).eligible(first))
 
     def test_archive_retry_outside_window_never_reacquires_or_rescores(self):
-        self.case.t=datetime(2026,11,6,10,55,tzinfo=UTC)
+        self.case.t=datetime(2026,11,6,7,55,tzinfo=UTC)
         original=auto.predictions
         with patch.object(auto,'predictions',wraps=original) as predictions:
             with patch.object(auto.vault,'put_json',side_effect=OSError('isolated archive outage')):
                 self.assertEqual(self.case.tick(),0)
             row=Task.query.filter_by(kind='auto_capture').one()
             original_time=row.summary['captured_at_utc']
-            self.case.t+=timedelta(minutes=10)  # Sort is closed now.
+            self.case.t+=timedelta(hours=4)  # Sort is closed now.
             self.assertEqual(self.case.tick(),1)
             self.case.provider.assert_called_once();predictions.assert_called_once()
             self.assertEqual(row.summary['captured_at_utc'],original_time)
@@ -107,7 +111,7 @@ class FrostSchedulingTest(unittest.TestCase):
         self.assertEqual(row.status,'ready');self.assertEqual(row.attempts,1)
 
     def test_inflight_acquisition_crossing_window_never_scores_historical_slot(self):
-        self.case.t=datetime(2026,11,6,10,59,tzinfo=UTC)
+        self.case.t=datetime(2026,11,6,7,59,tzinfo=UTC)
         original=self.case.provider.side_effect
         def late():
             self.case.t+=timedelta(minutes=2)
@@ -122,6 +126,118 @@ class FrostSchedulingTest(unittest.TestCase):
         with patch.object(priority,'checkpoint',side_effect=priority.Deferred('Operational request')):
             with self.assertRaises(priority.Deferred):
                 auto.predictions(self.gateway.id,self.case.source)
+
+    def test_only_opening_and_midpoint_in_eight_hours_no_between_cycle_writes(self):
+        statements=[]
+        def sql(_c,_cursor,statement,*_args):statements.append(statement.split()[0].upper())
+        from app.services import frost_vault as vault
+        with patch.object(auto,'predictions',wraps=auto.predictions) as models:
+            for hour in range(8):
+                self.case.t=datetime(2026,11,4,3+hour,20,tzinfo=UTC)
+                statements.clear();event.listen(db.engine,'before_cursor_execute',sql)
+                try:result=self.case.tick()
+                finally:event.remove(db.engine,'before_cursor_execute',sql)
+                self.assertEqual(result,int(hour in (0,4)))
+                if hour not in (0,4):
+                    self.assertFalse(set(statements)&{'INSERT','UPDATE','DELETE'},statements)
+            self.assertEqual(models.call_count,2)
+        self.assertEqual(self.case.provider.call_count,2)
+        self.assertEqual(self.case.store.writes,2)
+        rows=Task.query.filter_by(kind='auto_capture').order_by(Task.identity).all()
+        self.assertEqual([r.identity for r in rows],['20261104T030000Z','20261104T070000Z'])
+        for row in rows:
+            payload=vault.read_json(row.result_key,self.gateway.id)
+            self.assertEqual(len(payload['predictions']),8)
+            self.assertEqual([p['hours'] for p in payload['predictions']],[0,0,1,1,3,3,6,6])
+        self.case.t=datetime(2026,11,4,10,tzinfo=UTC)
+        coverage=auto.status(self.gateway.id)['cycle_coverage']
+        self.assertEqual(coverage,dict(expected=2,due=2,captured=2,fully_scored=0,missed=0))
+
+    def test_fractional_hour_configuration_and_retry_crosses_clock_hour_safely(self):
+        configure(self.gateway,days=('tuesday',),start=time(21,15),end=time(4,45))
+        schedule=Schedule.load(self.gateway)
+        self.assertEqual(schedule.next_capture(datetime(2026,11,4,3,16,tzinfo=UTC)),datetime(2026,11,4,7,tzinfo=UTC))
+        self.case.t=datetime(2026,11,4,3,59,tzinfo=UTC)
+        original=self.case.provider.side_effect
+        self.case.provider.side_effect=priority.Deferred('Synthetic memory deferral')
+        self.assertEqual(self.case.tick(),0)
+        self.case.t+=timedelta(minutes=2);self.case.provider.side_effect=original
+        self.assertEqual(auto.status(self.gateway.id)['pending'],1)
+        self.assertEqual(self.case.tick(),1)
+        row=Task.query.filter_by(kind='auto_capture').one()
+        self.assertEqual(row.identity,'20261104T031500Z')
+        self.assertEqual(row.summary['capture_deadline_at_utc'],'2026-11-04T04:15:00+00:00')
+        self.assertEqual(schedule.next_capture(datetime(2026,11,4,7,tzinfo=UTC)),datetime(2026,11,11,3,15,tzinfo=UTC))
+
+    def test_midpoint_preserves_seconds_and_never_collides_with_opening(self):
+        configure(self.gateway,days=('tuesday',),start=time(20,10),end=time(3,25))
+        schedule=Schedule.load(self.gateway)
+        opening=datetime(2026,11,4,2,10,tzinfo=UTC);midpoint=datetime(2026,11,4,5,47,30,tzinfo=UTC)
+        self.assertEqual(schedule.next_capture(opening),midpoint)
+        self.assertEqual([c.start for c in schedule.cycles(opening.astimezone(schedule.zone).date())],[opening,midpoint])
+        for at in (opening,midpoint):
+            self.case.t=at+timedelta(minutes=2);self.assertEqual(self.case.tick(),1)
+        self.assertEqual([r.identity for r in Task.query.filter_by(kind='auto_capture').order_by(Task.identity)],
+            ['20261104T021000Z','20261104T054730Z'])
+
+    def test_spring_dst_midpoint_uses_seven_elapsed_hours_and_not_four_clock_hours(self):
+        configure(self.gateway,days=('saturday',),start=time(21),end=time(5))
+        schedule=Schedule.load(self.gateway)
+        opening=datetime(2026,3,8,3,tzinfo=UTC);midpoint=datetime(2026,3,8,6,30,tzinfo=UTC)
+        self.assertEqual(schedule.next_capture(opening),midpoint)
+        cycles=schedule.cycles(opening.astimezone(schedule.zone).date())
+        self.assertEqual([c.start for c in cycles],[opening,midpoint])
+        self.assertEqual(cycles[-1].sort_end,datetime(2026,3,8,10,tzinfo=UTC))
+
+    def test_expired_cycle_is_one_miss_no_new_capture_and_no_idle_writes(self):
+        with patch.object(priority,'reason',return_value='Synthetic active request'):
+            self.assertEqual(self.case.tick(),0)
+        row=Task.query.filter_by(kind='auto_capture').one()
+        self.case.t+=timedelta(hours=1)
+        self.assertEqual(auto.status(self.gateway.id)['recent'][0]['state'],'missed')
+        with patch.object(auto.jobs,'claim',side_effect=AssertionError('No work between cycles')):
+            self.assertEqual(self.case.tick(),0)
+        self.case.t+=timedelta(hours=3)
+        self.assertEqual(self.case.tick(),1)
+        state=auto.status(self.gateway.id)
+        self.assertEqual(state['missed'],1)
+        self.assertEqual(state['cycle_coverage'],dict(expected=2,due=2,captured=1,fully_scored=0,missed=1))
+        self.assertEqual(row.status,'missed')
+        self.assertEqual(Task.query.filter_by(kind='auto_capture').count(),2)
+
+    def test_three_failed_attempts_do_not_restart_until_next_cycle_and_gap_counts_two(self):
+        original=self.case.provider.side_effect
+        self.case.provider.side_effect=TimeoutError('Synthetic provider outage')
+        for _ in range(3):
+            self.assertEqual(self.case.tick(),0);self.case.t+=timedelta(minutes=5)
+        row=Task.query.filter_by(kind='auto_capture').one()
+        self.assertEqual((row.status,row.attempts),('failed',3))
+        self.assertEqual(self.case.tick(),0);self.assertEqual(self.case.provider.call_count,3)
+        self.case.t=datetime(2026,11,4,7,20,tzinfo=UTC);self.case.provider.side_effect=original
+        self.assertEqual(self.case.tick(),1)
+        schedule=Schedule.load(self.gateway)
+        self.assertEqual(schedule.missed(datetime(2026,11,4,7,tzinfo=UTC),datetime(2026,11,6,3,tzinfo=UTC)),2)
+
+    def test_deadline_planner_wakes_for_midpoint_and_not_intermediate_hours(self):
+        self.assertEqual(self.case.tick(),1)
+        self.case.t=datetime(2026,11,4,5,tzinfo=UTC)
+        from flask import g
+        due,_=deadlines.plan(self.case.t.replace(tzinfo=None))
+        self.assertNotIn('auto',due.get(self.gateway.id,set()))
+        self.assertEqual(g.frost_next_capture_at,datetime(2026,11,4,7,tzinfo=UTC))
+        self.case.t=datetime(2026,11,4,7,tzinfo=UTC)
+        due,_=deadlines.plan(self.case.t.replace(tzinfo=None))
+        self.assertIn('auto',due.get(self.gateway.id,set()))
+
+    def test_overlapping_sort_windows_do_not_start_future_sorts_or_duplicate_coincident_cycles(self):
+        from zoneinfo import ZoneInfo
+        schedule=Schedule(ZoneInfo('America/Chicago'),(
+            ('tuesday',time(17),time(1)),('tuesday',time(21),time(5))))
+        early=datetime(2026,11,4,0,tzinfo=UTC)  # 18:00 Tuesday.
+        self.assertEqual(len(schedule.sort_cycles(early)),2)
+        coincident=datetime(2026,11,4,3,tzinfo=UTC)
+        self.assertEqual([c.start for c in schedule.capture_cycles(coincident)],[coincident])
+        self.assertEqual(len(schedule.sort_cycles(datetime(2026,11,4,8,tzinfo=UTC))),2)
 
 
 class AcquisitionSafetyTest(unittest.TestCase):

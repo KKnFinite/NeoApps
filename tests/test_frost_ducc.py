@@ -22,10 +22,10 @@ def capture_payload(gateway_id,cutoff=AT):
             score=.12 if m['kind']=='logistic' else .34) for m in baseline['models']])
 
 
-def store_capture(gateway_id,cutoff=AT,*,compact=True,**changes):
+def store_capture(gateway_id,cutoff=AT,*,compact=True,scheduled_at=None,**changes):
     payload=capture_payload(gateway_id,cutoff);payload.update(changes)
     row=Task(gateway_id=gateway_id,kind='auto_capture',version='frost-auto-v1',
-        identity=cutoff.strftime('%Y%m%dT%H0000Z'),status='ready',
+        identity=(scheduled_at or cutoff.replace(minute=0,second=0,microsecond=0)).strftime('%Y%m%dT%H%M%SZ'),status='ready',
         input_hash=vault.digest(vault.canonical(payload)),result_key='synthetic-archive',
         summary=dict(prediction_display=display.display_summary(payload)) if compact else {})
     db.session.add(row);db.session.commit()
@@ -76,7 +76,7 @@ class DuccDisplayTest(TestCase):
         for p in unavailable['predictions']:p.update(state='UNAVAILABLE',score=None)
         self.assertEqual(display._verified(unavailable,self.gateway.id,now,baseline)[1],{})
         self.assertEqual(display.project(self.gateway,now=now)[1],{})
-        store_capture(self.gateway.id,AT-timedelta(hours=7))
+        store_capture(self.gateway.id,AT-timedelta(hours=8))
         self.assertEqual(display.project(self.gateway,now=now)[1],{})
         foreign=Gateway(code='FOREIGN',name='Foreign',is_active=True);db.session.add(foreign);db.session.commit()
         store_capture(foreign.id)
@@ -142,6 +142,16 @@ class DuccDisplayTest(TestCase):
             self.assertEqual(off['revision'],weather.neosubzero_weather_revision(gateway=self.gateway,now=now))
             self.assertNotEqual(on['revision'],off['revision'])
             self.assertNotIn('frost_predictions',off['future_forecast'][0]['hours'][0])
+
+    def test_non_hour_cycle_and_delayed_capture_keep_actual_h6_forecast_visible(self):
+        self.activate()
+        cutoff=AT.replace(minute=10)+timedelta(hours=1)
+        # Scheduled opening and actual capture are distinct facts.
+        store_capture(self.gateway.id,cutoff,scheduled_at=AT.replace(minute=15))
+        now=AT+timedelta(hours=6,minutes=40)
+        _,hours=display.project(self.gateway,now=now)
+        target=(cutoff+timedelta(hours=6)).replace(minute=0)
+        self.assertEqual(hours[target]['text'],'FROST 12% / 34%')
 
 class AutoCaptureProjectionTest(TestCase):
     def test_auto_capture_commits_projection_without_extra_scoring_or_rewriting_archive(self):

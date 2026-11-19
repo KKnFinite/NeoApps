@@ -31,7 +31,8 @@ class MemoryEfficiencyTest(unittest.TestCase):
         self.assertEqual(sum(counts[k] for k in ('INSERT','UPDATE','DELETE')), 0, counts)
 
     def test_not_due_hour_retries_without_worker_claim_or_download(self):
-        row=auto.jobs.task(self.gateway_id,'auto_capture',auto.identity(self.case.t),auto.VERSION)
+        cycle=auto.Schedule.load(self.case.f.gateway).current_cycle(self.case.t)
+        row=auto.jobs.task(self.gateway_id,'auto_capture',auto.identity(cycle.start),auto.VERSION)
         row.status='retry'; row.retry_at=auto.naive(self.case.t+timedelta(minutes=1))
         db.session.commit()
         with patch.object(auto.jobs,'claim',side_effect=AssertionError('No premature lease')):

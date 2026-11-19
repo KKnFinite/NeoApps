@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from flask import current_app
 from app.models import FrostHistoryTask as Task
 from app.services import frost_intelligence, frost_research, frost_forecast as clock
+from app.services.frost_schedule import cycle_identity
 
 UTC=timezone.utc
 
@@ -31,10 +32,12 @@ def _index(gateway,at):
     policy=frost_intelligence.read(gateway.id)
     rows=[]
     if policy['operational_predictions'] and gateway.code.upper()=='RFD':
-        since=(at-timedelta(hours=6)).strftime('%Y%m%dT%H0000Z')
+        # Six-hour lead plus the bounded capture retry allowance. A midpoint
+        # at :30 may legitimately finish in the next clock hour.
+        since=(at-timedelta(hours=7)).strftime('%Y%m%dT%H0000Z')
         rows=Task.query.with_entities(Task.id,Task.gateway_id,Task.input_hash,Task.result_key,Task.summary).filter_by(
             gateway_id=gateway.id,kind='auto_capture',version='frost-auto-v1',status='ready').filter(
-            Task.identity>=since,Task.identity<=at.strftime('%Y%m%dT%H0000Z')).order_by(Task.id.desc()).limit(16).all()
+            Task.identity>=since,Task.identity<=cycle_identity(at)).order_by(Task.id.desc()).limit(16).all()
     signature=[policy['revision'],policy['operational_predictions'],at.strftime('%Y%m%d%H'),[(r.id,r.input_hash) for r in rows]]
     return hashlib.sha256(json.dumps(signature,separators=(',',':')).encode()).hexdigest(),rows
 

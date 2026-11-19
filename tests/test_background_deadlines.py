@@ -1,7 +1,7 @@
 """Real SQL/services under deterministic clocks; no provider or production I/O."""
 from collections import Counter
 from contextlib import ExitStack
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
 import heapq
 import unittest
 from unittest.mock import patch
@@ -33,14 +33,14 @@ class DeadlineTest(unittest.TestCase):
             NEOSCORPION_LEARNING_VAULT_ENDPOINT='https://isolated.invalid', NEOSCORPION_LEARNING_VAULT_ACCESS_KEY_ID='x',
             NEOSCORPION_LEARNING_VAULT_SECRET_ACCESS_KEY='x', FROST_AUTO_COLLECTION=True)
         self.gateway_id = self.fixture.gateway.id
-        from tests.frost_schedule_fixture import configure
-        configure(self.fixture.gateway)  # Explicit all-hour schedule for clock/receipt tests.
         db.session.delete(self.fixture.operation)
         self.actor = User(username='deadline-fixture', password_hash='no-login-fixture')
         db.session.add(self.actor)
         db.session.commit()
         self.actor_id = self.actor.id
         self.at = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(hours=2)
+        from tests.frost_schedule_fixture import configure
+        configure(self.fixture.gateway,at=self.at)  # Explicit opening/midpoint Sort for this clock.
         self.store, self.captures = MemoryR2(), []
         stack = self.enterContext(ExitStack())
         stack.enter_context(patch.object(scheduling, 'utcnow', side_effect=lambda: self.naive()))
@@ -168,9 +168,9 @@ class DeadlineTest(unittest.TestCase):
         self.assertEqual(result['sql'].get('INSERT',0), 0)
         self.assertEqual(result['sql'].get('commits',0), 0)
 
-    def test_hour_boundary_capture_is_exact_and_not_dependent_on_sort_or_browser(self):
-        self.at += timedelta(minutes=30)
+    def test_midpoint_capture_is_exact_and_not_dependent_on_sort_record_or_browser(self):
         self.seed_capture()
+        self.at += timedelta(hours=3,minutes=30)
         result = self.simulate()
         self.assertEqual(result['captures'], [1800])
         self.assertGreater(result['longest_database_free_seconds'], 300)
@@ -261,12 +261,12 @@ class DeadlineTest(unittest.TestCase):
         self.assertEqual(worker.deadline,self.naive()+timedelta(seconds=30))
         self.assertFalse(db.session.registry.has())
 
-    def test_three_hour_otherwise_idle_period_preserves_every_hour_boundary(self):
+    def test_three_hour_otherwise_idle_period_does_not_score_between_cycles(self):
         self.at+=timedelta(minutes=30)
         self.seed_capture()
         result=self.simulate(seconds=10800)
-        self.assertEqual(result['captures'],[1800,5400,9000])
-        self.assertEqual(Task.query.filter_by(kind='auto_capture',status='ready').count(),4)
+        self.assertEqual(result['captures'],[])
+        self.assertEqual(Task.query.filter_by(kind='auto_capture',status='ready').count(),1)
         self.assertGreaterEqual(result['longest_database_free_seconds'],600)
 
     def test_subzero_delivery_uses_receipt_retry_without_unnecessary_history_scan(self):
@@ -306,11 +306,11 @@ class DeadlineTest(unittest.TestCase):
     def test_forward_clock_gap_is_recorded_without_replaying_old_predictions(self):
         self.seed_capture()
         worker=self.start_worker()
-        self.at+=timedelta(hours=3)
+        self.at+=timedelta(hours=24)
         worker.wake(worker.generation)
         self.assertEqual(len(self.captures),1)
         self.assertEqual(self.captures[0],self.at)
-        self.assertEqual(Task.query.filter_by(kind='auto_gap',status='missed').one().summary['intervals'],2)
+        self.assertEqual(Task.query.filter_by(kind='auto_gap',status='missed').one().summary['intervals'],1)
         self.assertEqual(Task.query.filter_by(kind='auto_capture',status='ready').count(),2)
 
     def test_page_reads_and_wake_notifications_never_acquire_a_database_connection(self):
@@ -393,12 +393,15 @@ class DeadlineTest(unittest.TestCase):
             query.assert_not_called()
         self.assertFalse(worker.arm_failed)
 
-    def test_dst_fall_back_does_not_duplicate_utc_hour_slots(self):
-        self.at=datetime(2027,11,7,5,30,tzinfo=timezone.utc)
+    def test_dst_fall_back_runs_elapsed_midpoint_once_without_repeated_hour_scoring(self):
+        from tests.frost_schedule_fixture import configure
+        configure(self.fixture.gateway,days=('saturday',),start=time(21),end=time(5))
+        self.at=datetime(2027,11,7,2,tzinfo=timezone.utc)
         self.seed_capture()
+        self.at=datetime(2027,11,7,5,30,tzinfo=timezone.utc)
         result=self.simulate(seconds=10800)
-        self.assertEqual(result['captures'],[1800,5400,9000])
-        self.assertEqual(Task.query.filter_by(kind='auto_capture',status='ready').count(),4)
+        self.assertEqual(result['captures'],[3600])
+        self.assertEqual(Task.query.filter_by(kind='auto_capture',status='ready').count(),2)
 
     def test_platform_health_checks_remain_database_free(self):
         statements=[]

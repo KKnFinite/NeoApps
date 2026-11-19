@@ -1,10 +1,16 @@
-"""Explicit database schedules for isolated hourly-capture contract tests."""
-from datetime import time
+"""Explicit database Sort schedules for isolated capture contract tests."""
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from app.extensions import db
 from app.models import GatewaySortMatrix, SortTimelineSettings, SortTimelineSortSetting
 
 
-def configure(gateway, *, days=None, start=time(0), end=time(0)):
+def configure(gateway, *, days=None, start=None, end=None, at=None):
+    if start is None and end is None:
+        from app.services.gateway_matrix import gateway_timezone
+        opening=(at or datetime.now(timezone.utc)).astimezone(ZoneInfo(gateway_timezone(gateway))).replace(minute=0,second=0,microsecond=0)
+        start=opening.time().replace(tzinfo=None)
+        end=(opening+timedelta(hours=8)).time().replace(tzinfo=None)
     days = days if days is not None else ('monday','tuesday','wednesday','thursday','friday','saturday','sunday')
     settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
     if settings is None:

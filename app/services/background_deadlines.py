@@ -119,13 +119,13 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
         if current_app.config.get('FROST_AUTO_COLLECTION', True) is True:
             schedule=auto.Schedule.load(db.session.get(Gateway,gateway_id))
             aware=at.replace(tzinfo=timezone.utc)
-            if schedule.eligible(aware):
+            for cycle in schedule.capture_cycles(aware):
                 row = db.session.execute(select(Task.status, Task.retry_at).where(Task.gateway_id == gateway_id,
                     Task.kind == 'auto_capture', Task.version == auto.VERSION,
-                    Task.identity == auto.identity(aware))).first()
+                    Task.identity == auto.identity(cycle.start))).first()
                 if row is None:
                     research('auto', at)
-                elif row.status in ('pending', 'retry', 'staged', 'archive_retry'):
+                elif row.status in ('pending', 'retry', 'staged', 'archive_retry') and row.retry_at<cycle.deadline.replace(tzinfo=None):
                     research('auto', row.retry_at)
             next_capture=schedule.next_capture(aware)
             if next_capture and (next_frost_capture is None or next_capture < next_frost_capture):
