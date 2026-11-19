@@ -32,17 +32,34 @@ class RegistrationRateLimitsBrowserTest(unittest.TestCase):
                                 response = page.goto(fixture.origin + '/create-account')
                                 self.assertEqual(response.status, 200)
                                 self.assertIn('content-security-policy', response.headers)
-                                self.assertTrue(page.locator('input[name=csrf_token]').input_value())
+                                tokens = page.locator('[data-account-registration] input[name=csrf_token]').evaluate_all('(inputs) => inputs.map(input => input.value)')
+                                self.assertTrue(tokens)
+                                self.assertTrue(all(tokens))
+                                self.assertEqual(len(set(tokens)), 1)
                                 values = dict(first_name='Retain employee draft', last_name='Fixture',
-                                    employee_id=f'BROWSER-{engine}-{attempt}', supervisor_name='Test Supervisor',
+                                    employee_id=f'{(1000000 if engine == "chromium" else 2000000) + attempt:07d}', supervisor_name='Test Supervisor',
                                     email=email, work_area='Ramp', access_reason='Isolated onboarding test',
                                     password='violet river lantern', confirm_password='violet river lantern')
                                 for name, value in values.items():
                                     page.locator(f'[name={name}]').fill(value)
                                 page.locator('[name=app_codes][value=neostaffing]').check()
+                                if attempt == 1 and expected == 200:
+                                    identity = page.locator('[name=employee_id]')
+                                    for account_type in ('full', 'fuel_driver'):
+                                        page.locator('[name=account_type]').select_option(account_type)
+                                        for value in ('', '123456', '12345678', '123456789', '12345678901', 'CRN12345678', '１２３４５６７'):
+                                            identity.fill(value)
+                                            self.assertFalse(identity.evaluate('(input) => input.checkValidity()'))
+                                            self.assertIn('7 or 10 digits', identity.evaluate('(input) => input.validationMessage'))
+                                        identity.fill(' 0001234567 ')
+                                        expect(identity).to_have_value('0001234567')
+                                        self.assertTrue(identity.evaluate('(input) => input.checkValidity()'))
+                                    page.locator('[name=account_type]').select_option('full')
+                                    identity.fill(values['employee_id'])
+                                    page.locator('[name=app_codes][value=neostaffing]').check()
                                 with page.expect_response(lambda r: r.request.method == 'POST' and
                                         r.url == fixture.origin + '/create-account') as saved:
-                                    page.get_by_role('button', name='Request Access', exact=True).click()
+                                    page.get_by_role('button', name='Create account & request access', exact=True).click()
                                 self.assertEqual(saved.value.status, expected)
                                 if expected == 200:
                                     expect(page.get_by_role('heading', name='Verify Your Email', exact=True)).to_be_visible()

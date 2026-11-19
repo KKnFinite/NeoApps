@@ -1,5 +1,6 @@
 from datetime import datetime
 from functools import wraps
+import re
 from types import SimpleNamespace
 
 from flask import Response, abort, current_app, flash, redirect, render_template, request, session, url_for
@@ -1341,13 +1342,13 @@ def _build_user_from_account_form(form):
     username = email
     first_name = form["first_name"].strip()
     last_name = form["last_name"].strip()
-    employee_id = form["employee_id"].strip() or None
-    from app.services.fuel_driver_accounts import ups_id
+    employee_id = form["employee_id"].strip()
+    if not re.fullmatch(r"(?:[0-9]{7}|[0-9]{10})", employee_id):
+        raise ValueError("Employee / UPS ID is required. Enter exactly 7 or 10 digits (1234567 or 1234567890), numbers only.")
     account_type = form.get("account_type", "full")
     if account_type not in {"full", "fuel_driver"}:
         raise ValueError("Choose Full NeoApps or Fuel Truck Driver.")
     if account_type == "fuel_driver":
-        employee_id = ups_id(employee_id)
         if form["app_codes"] != ["neogateway"]:
             raise ValueError("Fuel Truck Driver requests use restricted NeoGateway access only.")
     password = request.form.get("password", "")
@@ -1367,7 +1368,6 @@ def _build_user_from_account_form(form):
     from app.services.accounts_workspace import require_available_app
     for app_code in form["app_codes"]:
         require_available_app(app_code)
-    import re
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or len(email) > 80:
         raise ValueError("Enter a valid email address (80 characters maximum).")
     for key, limit in (("first_name", 80), ("last_name", 80), ("employee_id", 80), ("supervisor_name", 160), ("work_area", 160), ("access_reason", 2000)):

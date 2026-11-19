@@ -72,7 +72,7 @@ class RegistrationRateLimitsPostgresTest(unittest.TestCase):
     def post(self, email=None, ip='198.51.100.10'):
         with self.app.test_client() as client:
             return client.post('/create-account', data=fixtures.AuthAccountFlowsTest._account_form(
-                self, email=email or self.email, employee_id='EMP-' + uuid4().hex),
+                self, email=email or self.email, employee_id=f'{uuid4().int % 10000000000:010d}'),
                 environ_base={'REMOTE_ADDR': ip}).status_code
 
     def race(self, count, action):

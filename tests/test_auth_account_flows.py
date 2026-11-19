@@ -312,7 +312,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             ("password123!", "password123!", b"commonly compromised"),
             ("neogateway passphrase", "neogateway passphrase", b"NeoApps or NeoGateway"),
             ("safe-new@example.com-password", "safe-new@example.com-password", b"account information"),
-            ("safe-E12345-passphrase", "safe-E12345-passphrase", b"account information"),
+            ("safe-1234567-passphrase", "safe-1234567-passphrase", b"account information"),
         )
 
         for password, confirm_password, message in rejected_cases:
@@ -331,7 +331,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             "/create-account",
             data=self._account_form(
                 email="passphrase@example.com",
-                employee_id="PASS12",
+                employee_id="7654321",
                 password="violet river lantern",
                 confirm_password="violet river lantern",
             ),
@@ -345,7 +345,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             "/create-account",
             data=self._account_form(
                 email="minimum@example.com",
-                employee_id="MIN12",
+                employee_id="7654322",
                 password="twelvechars!",
                 confirm_password="twelvechars!",
             ),
@@ -355,14 +355,15 @@ class AuthAccountFlowsTest(unittest.TestCase):
     def test_account_registration_conflicts_use_one_generic_response(self):
         self._user("existing_email", email="existing@example.com")
         employee_conflict = self._user("existing_employee")
+        employee_conflict.employee_id = "7654320"
         self._user("legacy@example.com", email="legacy-account@example.com")
         db.session.commit()
 
         scenarios = (
-            ("existing@example.com", "NEW-EMPLOYEE"),
+            ("existing@example.com", "7654323"),
             ("new@example.com", employee_conflict.employee_id),
             ("existing@example.com", employee_conflict.employee_id),
-            ("legacy@example.com", "ANOTHER-EMPLOYEE"),
+            ("legacy@example.com", "7654324"),
         )
         generic_message = (
             b"An account may already exist with the information provided. "
@@ -2368,7 +2369,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         with self.client.session_transaction() as browser:
             self.assertNotIn(AUTH_SESSION_VERSION_SESSION_KEY, browser)
 
-    def test_regular_registration_accepts_vendor_without_employee_id(self):
+    def test_regular_registration_requires_employee_id_even_for_vendor_work_area(self):
         data = self._account_form(
             email="contractor@example.com", employee_id="",
             work_area="Contractor Truck Driver", access_reason="Fuel truck driving",
@@ -2376,16 +2377,15 @@ class AuthAccountFlowsTest(unittest.TestCase):
         data["app_codes"] = "neogateway"
         with patch("app.auth.routes.email_service.send_email_verification", return_value={"sent": True}):
             registered = self.client.post("/create-account", data=data)
-        self.assertEqual(registered.status_code, 200)
-        user = User.query.filter_by(email="contractor@example.com").one()
-        self.assertIsNone(user.employee_id if user.employee_id is None else user.employee_id or None)
-        self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).one().status, "pending")
+        self.assertEqual(registered.status_code, 400)
+        self.assertIn(b"Employee / UPS ID is required", registered.data)
+        self.assertIsNone(User.query.filter_by(email="contractor@example.com").first())
 
     def _account_form(self, **overrides):
         values = {
             "first_name": "New",
             "last_name": "User",
-            "employee_id": "E12345",
+            "employee_id": "1234567",
             "supervisor_name": "Boss Person",
             "email": "new@example.com",
             "work_area": "Ramp",

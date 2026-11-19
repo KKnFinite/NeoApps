@@ -24,7 +24,7 @@ class RegistrationRateLimitsTest(unittest.TestCase):
 
     tearDown = fixtures.AuthAccountFlowsTest.tearDown
 
-    def post(self, email='employee@example.test', employee='EMP-001', ip='198.51.100.10', **overrides):
+    def post(self, email='employee@example.test', employee='1234567', ip='198.51.100.10', **overrides):
         return self.client.post('/create-account', data=self._account_form(
             email=email, employee_id=employee, **overrides), environ_base={'REMOTE_ADDR': ip})
 
@@ -33,7 +33,7 @@ class RegistrationRateLimitsTest(unittest.TestCase):
 
     def test_normal_registration_and_shared_workplace_keep_access_pending(self):
         for number in range(8):
-            result = self.post(email=f'employee{number}@example.test', employee=f'EMP-{number}')
+            result = self.post(email=f'employee{number}@example.test', employee=f'{number:07d}')
             self.assertEqual(result.status_code, 200)
         self.assertEqual(self.send.call_count, 8)
         self.assertEqual(User.query.count(), 8)
@@ -161,7 +161,7 @@ class RegistrationRateLimitsTest(unittest.TestCase):
     def test_existing_email_and_other_identity_conflicts_remain_generic(self):
         self.assertEqual(self.post().status_code, 200)
         self.send.reset_mock()
-        same_email = self.post(email=' EMPLOYEE@EXAMPLE.TEST ', employee='DIFFERENT')
+        same_email = self.post(email=' EMPLOYEE@EXAMPLE.TEST ', employee='7654321')
         same_employee = self.post(email='other@example.test')
         message = b'An account may already exist with the information provided.'
         for result in (same_email, same_employee):

@@ -63,7 +63,8 @@ class AccountsWorkspaceBrowserTest(TestCase):
                                 prefix = f"{engine}-{width}"
                                 email = prefix+"@example.test"
                                 page.goto(origin+"/create-account")
-                                for key,value in dict(first_name=prefix, last_name="Applicant", email=email, employee_id=prefix,
+                                employee_id = f'{(1000000 if engine == "chromium" else 2000000) + width:07d}'
+                                for key,value in dict(first_name=prefix, last_name="Applicant", email=email, employee_id=employee_id,
                                     supervisor_name="Fixture manager", work_area="Ramp", access_reason="Staffing and gateway responsibilities", password=PASSWORD, confirm_password=PASSWORD).items():
                                     page.locator(f'[name="{key}"]').fill(value)
                                 page.locator('[name="app_codes"][value="neostaffing"]').check()

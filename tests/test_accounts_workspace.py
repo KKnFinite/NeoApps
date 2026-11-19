@@ -254,7 +254,7 @@ class AccountsWorkspaceTest(TestCase):
         self.assertEqual(AccountSecurityEvent.query.count(), count)
 
     def test_registration_multiple_apps_no_roles_and_atomic_history(self):
-        form = dict(first_name="New", last_name="Applicant", email="new-applicant@example.test", employee_id="NEW-01",
+        form = dict(first_name="New", last_name="Applicant", email="new-applicant@example.test", employee_id="1234567",
             supervisor_name="Synthetic Supervisor", work_area="Ramp", access_reason="Operational staffing duties",
             app_codes=["neogateway", "neostaffing"], password=PASSWORD, confirm_password=PASSWORD, role="grandmaster")
         with patch("app.auth.routes.email_service.send_email_verification", return_value={"sent": False}):
@@ -265,7 +265,7 @@ class AccountsWorkspaceTest(TestCase):
         self.assertIsNone(user.email_verified_at)
         self.assertEqual(AccountAccessRequest.query.filter_by(user_id=user.id, state="pending").count(), 2)
         self.assertEqual(PortalAppAccess.query.filter_by(user_id=user.id, status="pending").count(), 2)
-        bad = {**form, "email": "forged-neobid@example.test", "employee_id": "NEW-02", "app_codes": ["neogateway", "neobid"]}
+        bad = {**form, "email": "forged-neobid@example.test", "employee_id": "1234568", "app_codes": ["neogateway", "neobid"]}
         self.assertEqual(self.client.post("/create-account", data=bad).status_code, 400)
         self.assertIsNone(User.query.filter_by(email=bad["email"]).first())
 
