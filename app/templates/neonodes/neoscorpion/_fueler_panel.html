@@ -4,6 +4,7 @@
             <span>{{ operational_fueler_name }} · My Fuel Assignments</span>
             <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }}{% else %}No current sort{% endif %}</strong>
         </div>
+        {% if view_as and effective_edit is not none %}<p class="neoscorpion-helper">Account access · {{ 'Fueler view and edit' if effective_edit else 'Fueler view only' }}</p>{% endif %}
         {% if not operation %}
         <p class="neoscorpion-empty">No current SortDateOperation is available for fueler assignments.</p>
         {% elif not rows %}

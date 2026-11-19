@@ -1,18 +1,28 @@
-{% extends "base.html" %}
+{% extends "neonodes/neoscorpion/vendor_base.html" if view_as else "base.html" %}
 
 {% block title %}Fueler | NeoScorpion{% endblock %}
+
+{% block extra_head %}
+    {% for stylesheet in view_as_stylesheets if stylesheet not in ('css/14-neoscorpion.css', 'css/26-neoscorpion.css') %}
+    <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION) }}">
+    {% endfor %}
+    <script src="{{ url_for('static', filename='js/live_updates.js', v='20261111-poll-v2') }}"></script>
+{% endblock %}
 
 {% block content %}
 <section
     class="neoscorpion-shell neoscorpion-screen neoscorpion-fueler-screen"
     aria-label="NeoScorpion Fueler"
     data-fuel-assignments-live
-    data-revision-url="{{ url_for('neoscorpion.fuel_assignments_revision') }}"
-    data-panel-url="{{ url_for('neoscorpion.fuel_assignments_live_panel') }}"
+    data-revision-url="{{ view_as_revision_url if view_as else url_for('neoscorpion.fuel_assignments_revision') }}"
+    data-panel-url="{{ view_as_panel_url if view_as else url_for('neoscorpion.fuel_assignments_live_panel') }}"
+    {% if view_as %}data-view-as data-view-as-exit="{{ url_for('auth.view_as_index') }}"
+    {% else %}
     data-acknowledge-update-url="{{ url_for('neoscorpion.fuel_assignments_acknowledge_update') }}"
+    {% endif %}
     data-operation-id="{{ operation.id if operation else '' }}"
     data-revision="{{ fuel_assignments_revision }}"
-    data-current-user-id="{{ current_user.id }}"
+    data-current-user-id="{{ view_as_storage_scope if view_as else current_user.id }}"
     data-refresh-interval-ms="{{ fuel_assignments_refresh.effective_interval_ms }}"
     data-refresh-source="{{ fuel_assignments_refresh.source }}"
 >
@@ -22,7 +32,7 @@
         {% endwith %}
         <h1>Fueler</h1>
     </header>
-    {% include "neonodes/neoscorpion/_menu.html" %}
+    {% if not view_as %}{% include "neonodes/neoscorpion/_menu.html" %}{% endif %}
 
     {% include "neonodes/neoscorpion/_fueler_panel.html" %}
 
@@ -30,5 +40,5 @@
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_header.js', scorpion='20261102-fuel-header-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_planning.js', v=config.STATIC_ASSET_VERSION, scorpion='20261021-shared-fuel-screen-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_data.js', v=config.STATIC_ASSET_VERSION, scorpion='20261021-direct-entry-v1') }}"></script>
-<script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_live.js', v='20261106-break-notes-v1', scorpion='20261016-multi-truck-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_live.js', v='20261119-view-as-v1', scorpion='20261016-multi-truck-v1') }}"></script>
 {% endblock %}

@@ -132,9 +132,9 @@ def account(account):
     return redirect(url_for('scorpion_vendor.my_truck'))
 
 
-def my_truck_context(account, operation):
+def my_truck_context(account, operation, user):
     from app.services.neoscorpion_drivers import driver_context
-    context = driver_context(account.gateway,current_user)
+    context = driver_context(account.gateway,user)
     require_same_operation(context['operation'], operation)
     claims = NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,
         user_id=account.user_id, kind='claim')
@@ -151,9 +151,9 @@ def my_truck_context(account, operation):
 
 def waiting_context(account, operation, status):
     from app.services.fuel_driver_accounts import supervisor_membership
-    is_supervisor = bool(supervisor_membership(account))
+    is_supervisor = account.user_id is not None and bool(supervisor_membership(account))
     claim = NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,
-        user_id=account.user_id, kind='claim').order_by(NeoScorpionVendorRequest.id.desc()).first() if operation else None
+        user_id=account.user_id, kind='claim').order_by(NeoScorpionVendorRequest.id.desc()).first() if operation and account.user_id is not None else None
     trucks = NeoScorpionFuelTruck.query.filter_by(gateway_id=account.gateway_id, is_active=True,
         is_out_of_service=False).order_by(NeoScorpionFuelTruck.truck_number).all() if operation and not is_supervisor and status not in {'DISPATCHER APPROVAL DENIED','DISPATCHER APPROVAL REVOKED'} else []
     selections = {s.fuel_truck_id:s for s in NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()} if operation else {}
@@ -162,6 +162,25 @@ def waiting_context(account, operation, status):
         claim=(claim.id,claim.status,claim.version) if claim else None, trucks=[t.id for t in trucks], supervisor=is_supervisor)
     return dict(waiting_operation=operation, waiting_status=status, available_trucks=trucks,
         latest_claim=claim, is_supervisor=is_supervisor, waiting_fingerprint=fingerprint)
+
+
+def driver_screen_context(account, user):
+    """Render Driver waiting or approved data for an already authorized account."""
+    operation, waiting_status = driver_access(account)
+    from app.services.fuel_driver_accounts import supervisor_membership
+    if supervisor_membership(account):
+        waiting_status = 'VENDOR SUPERVISOR · READ ONLY'
+    if waiting_status:
+        return dict(account=account, **waiting_context(account, operation, waiting_status))
+    vendors.require_approved(account, operation)
+    fingerprint = vendor_fingerprint(account, operation, include_sort_missions=True)
+    context = my_truck_context(account, operation, user)
+    if fingerprint['sort_missions_revision'] is not None and context['selection'] is not None:
+        from app.services.neoscorpion import fuel_dispatch_context
+        dispatch = fuel_dispatch_context(account.gateway, include_spear=False, display_nicknames=False)
+        require_same_operation(dispatch['operation'], operation)
+        context['sort_missions'] = group_missions(dispatch['rows'])
+    return dict(context, fingerprint=fingerprint)
 
 
 @bp.route('/my-truck', methods=['GET','POST'])
@@ -187,22 +206,7 @@ def my_truck(account):
         except (ValueError,TypeError,IntegrityError) as exc:
             db.session.rollback(); flash(str(exc) if isinstance(exc,ValueError) else 'Request changed. Refresh.','error')
         return redirect(url_for('scorpion_vendor.my_truck'))
-    operation, waiting_status = driver_access(account)
-    from app.services.fuel_driver_accounts import supervisor_membership
-    if supervisor_membership(account):
-        waiting_status = 'VENDOR SUPERVISOR · READ ONLY'
-    if waiting_status:
-        return render_template('neonodes/neoscorpion/vendor_truck.html', account=account, **waiting_context(account, operation, waiting_status))
-    vendors.require_approved(account, operation)
-    fingerprint = vendor_fingerprint(account, operation, include_sort_missions=True)
-    context = my_truck_context(account, operation)
-    if fingerprint['sort_missions_revision'] is not None and context['selection'] is not None:
-        from app.services.neoscorpion import fuel_dispatch_context
-        dispatch = fuel_dispatch_context(account.gateway, include_spear=False, display_nicknames=False)
-        require_same_operation(dispatch['operation'], operation)
-        context['sort_missions'] = group_missions(dispatch['rows'])
-    return render_template('neonodes/neoscorpion/vendor_truck.html', fingerprint=fingerprint,
-        **context)
+    return render_template('neonodes/neoscorpion/vendor_truck.html', **driver_screen_context(account, current_user))
 
 
 def connected_truck(account, operation):
@@ -227,8 +231,10 @@ def require_same_operation(current, expected):
 
 
 def vendor_fingerprint(account, operation, *, include_sort_missions=False):
-    from app.services.neoscorpion import fuel_assignments_live_revision
-    fingerprint = fuel_assignments_live_revision(account.gateway)
+    from app.services.neoscorpion import neoscorpion_live_revision
+    from app.services.neoscorpion_assets import fueler_on_break
+    fingerprint = neoscorpion_live_revision(account.gateway)
+    fingerprint['fueler_on_break'] = fueler_on_break(fingerprint['operation_id'], account.user_id)
     if fingerprint['operation_id'] != operation.id:
         raise PermissionError('The active sort changed or ended. Return to Fuel Truck Driver for your status.')
     if include_sort_missions:

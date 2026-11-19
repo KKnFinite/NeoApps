@@ -33,11 +33,14 @@ def account_pagination_context():
 
 
 def _tabs(active):
+    from app.services.account_types import administrator
     choices = [("people", "People", "auth.accounts_people", legacy.USER_MANAGEMENT_VIEW_PERMISSION),
                ("requests", "Requests", "auth.accounts_requests", legacy.ACCESS_REQUESTS_VIEW_PERMISSION)]
     rows = [(key, label, url_for(endpoint)) for key, label, endpoint, permission in choices if user_can(permission)]
     if platform_grandmaster(current_user):
         rows.append(("security", "Security & Permissions", url_for("auth.accounts_security")))
+    if administrator(current_user):
+        rows.append(("view-as", "View As", url_for("auth.view_as_index")))
     return dict(workspace_tabs=rows, active_tab=active, browser_tab_title="Accounts & Access | NeoApps",
         can_search_people=user_can(legacy.USER_MANAGEMENT_VIEW_PERMISSION))
 

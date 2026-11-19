@@ -11,6 +11,7 @@
     const revisionUrl = root.dataset.revisionUrl;
     const panelUrl = root.dataset.panelUrl;
     const acknowledgeUrl = root.dataset.acknowledgeUpdateUrl;
+    const preview = root.dataset.viewAs !== undefined;
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
     let tailNotesRevision = 0;
@@ -22,6 +23,14 @@
     let controller = null;
     let stateGeneration = 0;
     let panelDigest = '';
+
+    const exitRevokedPreview = response => {
+        if (!preview || !(response.redirected || response.status === 401 || response.status === 403)) return false;
+        root.querySelector('[data-fuel-assignments-panel]')?.remove();
+        controller?.destroy();
+        window.location.replace(root.dataset.viewAsExit);
+        return true;
+    };
 
     const storageKey = (suffix, scopedOperationId = operationId) => (
         `neoscorpion:fuel-assignments:${suffix}:${currentUserId}:${scopedOperationId}`
@@ -228,6 +237,7 @@
                 credentials: "same-origin",
                 headers: {"Accept": "application/json", "X-Neo-Panel-Digest": panelDigest},
             });
+            if (exitRevokedPreview(response)) return false;
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true) {
                 throw new Error(payload.error || "Fuel Assignments live panel is unavailable.");
@@ -266,6 +276,7 @@
             credentials: "same-origin",
             headers: {"Accept": "application/json"},
         }, pollIntervalMs, operationId);
+        if (exitRevokedPreview(response)) return;
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.ok !== true) {
             throw new Error("Fuel Assignments live status is unavailable.");

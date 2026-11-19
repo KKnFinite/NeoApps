@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="aa-workspace">
+    {% include 'auth/accounts/_nav.html' %}
+    <section class="aa-section">
+        <h2>View As · {{ gateway.code }}</h2>
+        <p>Open a read-only role preview or choose an account to see its current access and work.</p>
+        {% for key, label, subjects in interfaces %}
+        <form class="aa-scope-form" method="get" action="{{ url_for('auth.view_as_screen', key=key) }}">
+            <label><span>{{ label }}</span>
+                <select name="user"><option value="">Preview by role</option>
+                    {% for subject in subjects %}<option value="{{ subject.id }}">{{ subject.display_name }} · Account {{ subject.id }}</option>{% endfor %}
+                </select>
+            </label>
+            <button class="aa-button secondary" type="submit">Open {{ label }} preview</button>
+        </form>
+        {% endfor %}
+    </section>
+</section>
+{% endblock %}

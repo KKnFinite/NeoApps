@@ -221,21 +221,25 @@ def set_company_active(company_id, active, expected_version, reference, password
 
 def supervisor_context(account):
     """Gateway-scoped read-only operations; never a Dispatch/Fueler context."""
+    return supervisor_gateway_context(require_supervisor(account).gateway)
+
+
+def supervisor_gateway_context(gateway):
+    """Same Supervisor projection after the caller has authorized the gateway."""
     from sqlalchemy import or_
     from app.models import NeoScorpionFuelTruck, NeoScorpionFuelAssignment, NeoScorpionFuelWorkState, SortDateMission, SortDateParkingAssignment
     from app.services.neoscorpion import current_sort_operation
-    require_supervisor(account)
-    operation = current_sort_operation(account.gateway)
+    operation = current_sort_operation(gateway)
     rows = []
     if operation and not operation.archived_at_utc:
         accounts = NeoScorpionVendorAccount.query.filter(
-            NeoScorpionVendorAccount.gateway_id == account.gateway_id, NeoScorpionVendorAccount.enabled.is_(True)).all()
+            NeoScorpionVendorAccount.gateway_id == gateway.id, NeoScorpionVendorAccount.enabled.is_(True)).all()
         people = {a.user_id: a.user for a in accounts if a.user.is_active and a.user.email_verified_at and identity_verified(a.user) and not supervisor_membership(a)}
         connections = {r.driver_user_id: r for r in NeoScorpionTruckDriver.query.filter(
             NeoScorpionTruckDriver.sort_date_operation_id == operation.id, NeoScorpionTruckDriver.driver_user_id.in_(list(people))).all()}
         trucks = {t.id: t for t in NeoScorpionFuelTruck.query.filter(
             NeoScorpionFuelTruck.id.in_([r.fuel_truck_id for r in connections.values()]),
-            NeoScorpionFuelTruck.gateway_id == account.gateway_id).all()}
+            NeoScorpionFuelTruck.gateway_id == gateway.id).all()}
         nights = {n.user_id: n for n in NeoScorpionVendorNight.query.filter(
             NeoScorpionVendorNight.sort_date_operation_id == operation.id, NeoScorpionVendorNight.user_id.in_(list(people))).all()}
         for user_id, user in people.items():
@@ -252,7 +256,7 @@ def supervisor_context(account):
                         NeoScorpionFuelWorkState, NeoScorpionFuelWorkState.id == NeoScorpionFuelAssignment.active_work_state_id).outerjoin(
                         SortDateParkingAssignment, (SortDateParkingAssignment.sort_date_operation_id == operation.id)
                         & (SortDateParkingAssignment.tail_number == SortDateMission.assigned_tail_number)).filter(
-                        SortDateMission.sort_date_operation_id == operation.id, SortDateMission.gateway_code == account.gateway.code,
+                        SortDateMission.sort_date_operation_id == operation.id, SortDateMission.gateway_code == gateway.code,
                         NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
                         NeoScorpionFuelAssignment.review_status != "complete",
                         or_(NeoScorpionFuelAssignment.assigned_truck_id == truck.id, NeoScorpionFuelWorkState.physical_truck_id == truck.id)
@@ -263,7 +267,7 @@ def supervisor_context(account):
             rows.append(dict(user_id=user_id, name=user.display_name, status=night.status if night else "pending",
                 truck=truck.truck_number if truck else None, missions=missions))
         rows.sort(key=lambda r: (r["name"].lower(), r["user_id"]))
-    payload = dict(gateway=account.gateway.code, operation_id=operation.id if operation and not operation.archived_at_utc else None,
+    payload = dict(gateway=gateway.code, operation_id=operation.id if operation and not operation.archived_at_utc else None,
         sort_label=f"{operation.sort_name} {operation.sort_date}" if operation and not operation.archived_at_utc else "NO ACTIVE SORT", rows=rows)
     revision = sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
     return dict(supervisor=payload, fingerprint={"supervisor_revision": revision, "operation_id": payload["operation_id"]})

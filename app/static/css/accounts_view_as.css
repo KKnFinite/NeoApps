@@ -1,0 +1,10 @@
+.view-as-banner {
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:.5rem 1rem; margin:0 0 1rem; padding:.65rem .9rem;
+    background:#233851; color:#f1f7ff; border:1px solid #729ac3; border-radius:5px;
+    font:500 .9rem/1.35 system-ui,sans-serif;
+}
+.view-as-banner strong { display:block; font-size:.8rem; letter-spacing:.06em; }
+.view-as-banner a { color:#f1f7ff; padding:.45rem .65rem; border:1px solid #a7bed6; border-radius:4px; }
+.view-as-banner a:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.view-as-fueler .neoscorpion-shell { width:100%; margin-inline:auto; }

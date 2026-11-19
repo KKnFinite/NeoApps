@@ -44,8 +44,8 @@
         if (response.status === 403) {
             const error = await response.json().catch(() => ({}));
             showDenied(error.error || 'Operational access revoked.');
-            if (root.dataset.workspaceUrl) {
-                window.location.replace(root.dataset.workspaceUrl);
+            if (root.dataset.previewExit || root.dataset.workspaceUrl) {
+                window.location.replace(root.dataset.previewExit || root.dataset.workspaceUrl);
             }
             return;
         }
@@ -72,7 +72,7 @@
         if (page.redirected || page.status === 403) {
             showDenied('Operational access changed. Return to Fuel Truck Driver for your status.');
             if (page.redirected) window.location.replace(root.dataset.loginUrl);
-            else if (root.dataset.workspaceUrl) window.location.replace(root.dataset.workspaceUrl);
+            else if (root.dataset.previewExit || root.dataset.workspaceUrl) window.location.replace(root.dataset.previewExit || root.dataset.workspaceUrl);
             return;
         }
         if (!page.ok) return;

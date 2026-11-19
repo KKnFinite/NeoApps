@@ -33,6 +33,7 @@
                 <div class="neoscorpion-assignment-update" data-assignment-update-notice role="status">
                     <strong>ASSIGNMENT UPDATED</strong>
                     <span>{{ row.assignment_update_message or "Dispatcher updated this assignment." }}</span>
+                    {% if not view_as %}
                     <button
                         class="action-button"
                         type="button"
@@ -41,6 +42,7 @@
                         data-update-version="{{ row.assignment_update_version }}"
                     >ACKNOWLEDGE CHANGES</button>
                     <small data-acknowledge-status aria-live="polite"></small>
+                    {% endif %}
                 </div>
                 {% endif %}
                 <header class="scorpion-fueler-mission">
@@ -269,5 +271,7 @@
                     <small data-fueler-submission-status role="status" aria-live="polite">{% if row.fueler_submitted %}SUBMITTED · READY FOR DISPATCHER COMPLETE{% else %}{{ row.fueler_completion_reason }}{% endif %}</small>
                     <small data-fuel-action-feedback role="status" aria-live="polite"></small>
                 </form>
+                {% elif view_as and row.fueler_submitted %}
+                <p class="neoscorpion-helper">SUBMITTED · READY FOR DISPATCHER COMPLETE</p>
                 {% endif %}
             </article>

@@ -660,6 +660,14 @@ def register_security_headers(app):
                 _content_security_policy(nonce),
             )
 
+        if getattr(g, 'view_as_screen', False):
+            # This additional policy intersects the usual CSP. Preview scripts
+            # can fetch only preview routes. A scheme-less host source uses the
+            # document's scheme even when TLS terminates at a reverse proxy.
+            response.headers.add('Content-Security-Policy',
+                f"form-action 'none'; frame-ancestors 'none'; connect-src {request.host}/accounts/view-as/")
+            response.headers['Referrer-Policy'] = 'same-origin'
+
         if _should_apply_hsts(app):
             response.headers.setdefault(
                 "Strict-Transport-Security",
