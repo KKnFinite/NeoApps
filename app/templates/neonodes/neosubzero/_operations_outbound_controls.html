@@ -1,7 +1,7 @@
 {% from 'neonodes/neosubzero/_departure_deice.html' import mutation_identity, treatment_form, spray_reason, spray_position_forms, inspection_form with context %}
 
-{% macro action(row, key, label, confirm='') -%}
-<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if confirm %} data-subzero-confirm="{{ confirm }}"{% endif %}>
+{% macro action(row, key, label, confirm='', mobile_only=false) -%}
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if mobile_only %} class="ops-mobile-inspection"{% endif %}{% if confirm %} data-subzero-confirm="{{ confirm }}"{% endif %}>
     {{ mutation_identity(row, board, row.ramp) }}<button name="action" value="{{ key }}">{{ label }}</button>
 </form>
 {%- endmacro %}
@@ -60,9 +60,7 @@
 {% endif %}
 {% if row.event %}
 <section class="ops-outbound-treatment" aria-label="Treatment">
-    {% if not row.has_actual_spray and event_status not in ('finished','cleared') %}
-        {{ spray_reason(row, editable, board, row.ramp, show_observation=false) }}
-    {% else %}<p class="ops-reason-recorded">Reason for Application · <strong>{{ row.reason_for_application }}</strong></p>{% endif %}
+    <div data-ops-reason-detail></div>
     {% if show_treatment and event_status not in ('negative','not_sprayed','finished','cleared') %}
         {{ treatment_form(row, editable, board, row.ramp, compact=true) }}
     {% endif %}
@@ -72,7 +70,7 @@
 {% elif editable and not row.has_actual_spray and event_status not in ('finished','cleared','negative','not_sprayed') %}
 <div class="ops-quick-observations">
     {{ action(row, 'frost_present', 'FROST PRESENT', 'Record your direct observation that frost is present on this physical aircraft?') }}
-    {{ action(row, 'nervous_captain', 'NERVOUS CAPTAIN', 'Confirm that you observed no frost and the captain requested treatment.') }}
+    {{ action(row, 'nervous_captain', 'NERVOUS CAPTAIN', 'Confirm that you observed no frost and the captain requested treatment.', mobile_only=true) }}
 </div>
 {% endif %}
 <details class="ops-inline-notes" data-ops-disclosure="notes">
@@ -98,8 +96,11 @@
     <a href="{{ url_for('neosubzero.deice_log') }}">DEICE LOG</a>
 </details>
 {% endif %}
+{% if row.frost_inspection and row.frost_inspection.last %}
+<p class="ops-desktop-inspection-history">{{ row.frost_inspection.last.physical_label }} · {{ row.frost_inspection.last_time }}</p>
+{% endif %}
 {% if corrections and row.frost_inspection %}
-<details class="ops-optional-inspection" data-ops-disclosure="inspection">
+<details class="ops-optional-inspection ops-mobile-inspection" data-ops-disclosure="inspection">
     <summary>PHYSICAL INSPECTION · OPTIONAL</summary>
     {{ inspection_form(row, board) }}
     {% if row.frost_inspection.last %}

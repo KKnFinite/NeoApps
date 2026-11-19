@@ -1,6 +1,6 @@
 {% from 'neonodes/neosubzero/_operations_inline.html' import inline_feedback, collapse_button %}
 {% from 'neonodes/neosubzero/_operations_outbound_controls.html' import workspace, quick_actions with context %}
-{% from 'neonodes/neosubzero/_departure_deice.html' import treatment_form with context %}
+{% from 'neonodes/neosubzero/_departure_deice.html' import treatment_form, spray_reason with context %}
 <details class="ops-mission" data-ops-accordion{% if selected and row.mission_id == selected.mission_id %} open data-ops-initial-open{% endif %}>
     <summary class="ops-mission-summary" aria-label="{{ row.flight }} {{ row.tail }}">
         <span class="ops-mission-line">
@@ -11,6 +11,7 @@
             <span class="ops-chevron" aria-hidden="true"></span>
         </span>
         {{ quick_actions(row) }}
+        <button type="button" class="ops-ramp-chevron" data-ops-ramp-chevron aria-label="Details for {{ row.flight }} {{ row.tail }}" aria-expanded="{{ 'true' if selected and row.mission_id == selected.mission_id else 'false' }}"></button>
     </summary>
     <div class="ops-pretreat-inline ops-mobile-workspace ops-mission-workspace" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
         {{ inline_feedback() }}
@@ -18,6 +19,15 @@
             <button type="button" class="ops-outbound-identity ops-identity" data-ops-expand-details aria-expanded="{{ 'true' if selected and row.mission_id == selected.mission_id else 'false' }}"><strong>{{ row.tail }}</strong><span>{{ row.flight }}</span></button>
             <div class="ops-outbound-location ops-location"><strong>{{ row.parking }}</strong><span>ETD {{ row.etd }} · {{ row.destination }}</span>{% if row.final_start %}<strong class="ops-pilot-start">PILOT START {{ row.final_start }}</strong>{% endif %}</div>
             <div class="ops-outbound-status ops-status"><strong>{{ row.visual_label }}</strong>{{ quick_actions(row) }}</div>
+            <div class="ops-outbound-reason" data-ops-reason-home>
+                {% if row.event and not row.identity_conflict %}
+                <div data-ops-row-reason>
+                    {% if not row.has_actual_spray and row.event.status not in ('finished','cleared') %}
+                        {{ spray_reason(row, can_edit and row.mobile_open, board, row.ramp, show_observation=false) }}
+                    {% else %}<p class="ops-reason-recorded">Reason for Application · <strong>{{ row.reason_for_application }}</strong></p>{% endif %}
+                </div>
+                {% endif %}
+            </div>
             {% if row.event and not row.identity_conflict %}
                 {{ treatment_form(row, can_edit and row.mobile_open and row.event.status not in ('negative','not_sprayed','finished','cleared'), board, row.ramp, compact=true, dispatch_row=true) }}
             {% else %}<span class="ops-outbound-no-treatment">—</span>{% endif %}

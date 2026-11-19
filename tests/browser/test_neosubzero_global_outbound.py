@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import TestCase
 from playwright.sync_api import expect
 from app.extensions import db
-from app.models import SortDateOperation,SortDateMission,SortDateParkingAssignment,User,NeoSubZeroDepartureDeiceEvent
+from app.models import SortDateOperation, SortDateParkingAssignment, NeoSubZeroAuditEntry, NeoSubZeroDepartureDeiceEvent
 from tests.browser import test_neosubzero_operations as fixtures
 from tests import test_neosubzero_ucc as factories
 
@@ -49,12 +49,36 @@ class GlobalOutboundBrowserTest(TestCase):
                             field.fill(value)
                             acknowledged(old,lambda:field.press('Tab'))
 
+                    def inspect_frost(mid):
+                        mission = row(mid)
+                        frost = mission.get_by_role('button', name='FROST PRESENT', exact=True)
+                        expect(frost).to_be_visible()
+                        for field in ('frost_result', 'inspection_location', 'inspected_local', 'inspection_notes'):
+                            self.assertEqual(mission.locator(f'[name="{field}"]:visible').count(), 0)
+                        self.assertEqual(mission.locator('button[value="nervous_captain"]:visible').count(), 0)
+                        old = mission.locator('[data-ops-inline]').element_handle()
+                        acknowledged(old, frost.click)
+                        expect(mission.get_by_text('FROST PRESENT · RECORDED', exact=True)).to_be_visible()
+                        with case.app.app_context():
+                            self.assertEqual(NeoSubZeroAuditEntry.query.filter_by(mission_id=mid, action='departure_frost_present').count(), 1)
+
                     # Every parked aircraft may CONFIGURE; actual START remains exclusive.
                     for mid in mids:
                         quick(mid,'initial_contact');quick(mid,'toggle_configured')
                         expect(row(mid)).to_have_attribute('data-status','configured')
                     quick(mids[-1],'toggle_configured');quick(mids[-1],'reset')
                     expect(row(mids[0])).to_have_attribute('data-status','configured')
+                    active = row(mids[0])
+                    reason = active.locator('.ops-outbound-primary [name="reason_for_application"]')
+                    reason_form = reason.evaluate_handle('el => el.form').as_element()
+                    acknowledged(reason_form, lambda: reason.select_option('Nervous Captain'))
+                    expect(reason).to_have_value('Nervous Captain')
+                    with case.app.app_context():
+                        event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mids[0]).one()
+                        self.assertEqual(event.reason_for_application, 'Nervous Captain')
+                    active.locator('[data-ops-expand-details]').click()
+                    inspect_frost(mids[0])
+                    active.locator('[data-ops-expand-details]').click()
                     for index,(mid,plan) in enumerate(zip(mids,('one_type_i','two_type_i','type_i_type_iv'))):
                         print(engine,plan,flush=True)
                         change(mid,'treatment_plan',plan)
@@ -64,7 +88,13 @@ class GlobalOutboundBrowserTest(TestCase):
                             page.set_viewport_size({'width':width,'height':900})
                             self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
                             primary=row(mid).locator('.ops-outbound-primary')
-                            expect(primary).to_be_visible();self.assertLess(primary.bounding_box()['height'],160)
+                            expect(primary).to_be_visible();self.assertLess(primary.bounding_box()['height'],95)
+                            cells = ['.ops-outbound-identity', '.ops-outbound-location', '.ops-outbound-status', '.ops-outbound-plan', '.ops-outbound-reason', '[data-subzero-pass="1"]']
+                            if index: cells.append('[data-subzero-pass="2"]')
+                            boxes = [primary.locator(cell).bounding_box() for cell in cells]
+                            self.assertEqual([b['x'] for b in boxes], sorted(b['x'] for b in boxes))
+                            self.assertLess(max(b['y'] for b in boxes), min(b['y'] + b['height'] for b in boxes))
+                            self.assertTrue(all(a['x'] + a['width'] <= b['x'] + 1 for a, b in zip(boxes, boxes[1:])))
                             field=primary.locator('[name="pass1_start"]');expect(field).to_be_editable()
                         if index==2:
                             row(mid).scroll_into_view_if_needed()
@@ -91,10 +121,20 @@ class GlobalOutboundBrowserTest(TestCase):
 
                     # Same mission, same controls, column view and phone; no extra windows.
                     page.set_viewport_size({'width':1366,'height':900});case.layout(page,'visual')
-                    target=row(mids[-1]);target.locator('.ops-mission-summary').click()
+                    target=row(mids[-1]);chevron=target.locator('[data-ops-ramp-chevron]')
+                    expect(chevron).to_have_attribute('aria-expanded','false')
+                    box, card = chevron.bounding_box(), target.bounding_box()
+                    self.assertLess(box['y']-card['y'],10)
+                    self.assertLess(card['x']+card['width']-box['x']-box['width'],10)
+                    chevron.press('Enter')
+                    expect(chevron).to_have_attribute('aria-expanded','true')
                     expect(target.locator('[data-ops-inline]')).to_be_visible()
                     expect(target.locator('.ops-inline-loading')).to_have_count(0)
                     quick(mids[-1],'initial_contact')
+                    inspect_frost(mids[-1])
+                    chevron.click();expect(target.locator('[data-ops-inline]')).to_be_hidden()
+                    chevron.click();expect(target.locator('[data-ops-inline]')).to_be_visible()
+                    expect(target.locator('[name="reason_for_application"]:visible')).to_have_count(1)
                     change(mids[-1],'treatment_plan','type_i_type_iv')
                     page.set_viewport_size({'width':390,'height':844})
                     expect(target.locator('[data-ops-inline]')).to_be_visible()

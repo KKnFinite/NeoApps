@@ -245,6 +245,15 @@
             if (extra) {
                 extra.open = !desktopInline() || row.dataset.missionId === selected || !!extra.querySelector(dirtyForm);
                 row.querySelector('[data-ops-expand-details]')?.setAttribute('aria-expanded',String(extra.open));
+                const home = row.querySelector('[data-ops-reason-home]');
+                const reason = row.querySelector('[data-ops-row-reason]');
+                const reasonSlot = desktopInline() ? home : extra.querySelector('[data-ops-reason-detail]') || home;
+                if (reason && reason.parentElement !== reasonSlot) reasonSlot.append(reason);
+                const card = accordion(row);
+                const summary = card.querySelector(':scope > summary');
+                if (visual) summary.tabIndex = -1;
+                else summary.removeAttribute('tabindex');
+                summary.querySelector('[data-ops-ramp-chevron]')?.setAttribute('aria-expanded', String(card.open));
             }
         });
         const override = root.dataset.rampOverride;
@@ -342,6 +351,9 @@
                     const freshExtra = replacement.querySelector('.ops-outbound-extra');
                     if (freshExtra?.querySelector('.ops-inline-loading') && currentExtra &&
                         (currentExtra.contains(active) || currentExtra.querySelector(dirtyForm))) {
+                        // Reconcile the reason like any other form instead of duplicating it in retained details.
+                        const reason = currentExtra.querySelector('[data-ops-row-reason]');
+                        if (reason) current.querySelector('[data-ops-reason-home]').append(reason);
                         freshExtra.replaceWith(currentExtra);
                     }
                     const freshForms = [...replacement.querySelectorAll('form')];
@@ -514,8 +526,12 @@
             const extra = card.querySelector('.ops-outbound-extra');
             if (extra) extra.open = false;
             if (selected === mission) selected = null;
-            (desktopInline() ? card.querySelector('[data-ops-expand-details]') : card.querySelector('summary')).focus({preventScroll:true});
+            const focus = desktopInline() ? '[data-ops-expand-details]' :
+                !media.matches && root.dataset.layout === 'visual' ? '[data-ops-ramp-chevron]' : 'summary';
+            card.querySelector(focus)?.focus({preventScroll:true});
         }
+        if (!isPretreat) root.querySelectorAll('[data-ops-ramp-chevron]').forEach(button =>
+            button.setAttribute('aria-expanded', String(button.closest('[data-ops-accordion]').open)));
         history.replaceState(null,'',currentUrl(selected));
         if (!open) ++epoch;
         if (open && (!isPretreat || card.querySelector('.ops-inline-loading'))) {
@@ -524,6 +540,14 @@
         }
     };
     root.addEventListener('click', async event => {
+        const chevron = event.target.closest('[data-ops-ramp-chevron]');
+        if (chevron) {
+            event.preventDefault();
+            if (busy || preferenceBusy) return;
+            const card = chevron.closest('[data-ops-accordion]');
+            await openAccordion(card, !card.open);
+            return;
+        }
         const expand = event.target.closest('[data-ops-expand-details]');
         if (expand) {
             event.preventDefault();
@@ -555,6 +579,7 @@
         if (control && (!isPretreat || media.matches) && !event.target.closest('button:not([data-ops-collapse-inline]),input,select,textarea,a')) {
             event.preventDefault();
             if (busy || preferenceBusy) return;
+            if (!isPretreat && !media.matches && root.dataset.layout === 'visual' && control.matches('summary')) return;
             const card = control.closest('[data-ops-accordion]');
             await openAccordion(card, !card.open);
             return;
