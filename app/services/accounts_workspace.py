@@ -76,6 +76,9 @@ def review_token(target):
 
 
 def verify_review(target, token):
+    from app.services.account_deletion import receipt
+    if receipt(target.id):
+        raise AccountConflict("This account was deleted. Its historical identity is read-only.")
     try:
         value = URLSafeTimedSerializer(current_app.secret_key, salt="accounts-workspace-v1").loads(token, max_age=1200)
     except (BadSignature, SignatureExpired, TypeError):

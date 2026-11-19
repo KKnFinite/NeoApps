@@ -38,7 +38,8 @@ def _tabs(active):
     rows = [(key, label, url_for(endpoint)) for key, label, endpoint, permission in choices if user_can(permission)]
     if platform_grandmaster(current_user):
         rows.append(("security", "Security & Permissions", url_for("auth.accounts_security")))
-    return dict(workspace_tabs=rows, active_tab=active, browser_tab_title="Accounts & Access | NeoApps")
+    return dict(workspace_tabs=rows, active_tab=active, browser_tab_title="Accounts & Access | NeoApps",
+        can_search_people=user_can(legacy.USER_MANAGEMENT_VIEW_PERMISSION))
 
 
 def _page():
@@ -56,7 +57,8 @@ def _decisions(attempts):
 @bp.get("/accounts")
 @legacy.portal_permission_required(legacy.USER_MANAGEMENT_VIEW_PERMISSION)
 def accounts_people():
-    query = User.query
+    from app.services.account_deletion import visible_accounts
+    query = User.query.filter(visible_accounts())
     search = request.args.get("q", "").strip()[:160]
     state = request.args.get("status", "all")
     kind = request.args.get("type", "all")
@@ -108,10 +110,11 @@ def accounts_requests():
             ~exists().where(PortalAppAccess.user_id == GatewayMembership.user_id, PortalAppAccess.app_code == "neogateway"),
             ~exists().where(AccountAccessRequest.user_id == GatewayMembership.user_id, AccountAccessRequest.app_code == "neogateway", AccountAccessRequest.state == "pending"))
     source = union_all(attempts, old, memberships).subquery()
-    query = db.session.query(source, User).join(User, User.id == source.c.user_id).filter(
+    from app.services.account_deletion import visible_accounts
+    query = db.session.query(source, User).join(User, User.id == source.c.user_id).filter(visible_accounts(),
         source.c.app_code.in_(codes), ~User.scorpion_vendor.has())
     pending_counts = dict(db.session.query(source.c.app_code, func.count()).join(User, User.id == source.c.user_id).filter(
-        source.c.app_code.in_(codes), source.c.state == "pending", ~User.scorpion_vendor.has()).group_by(source.c.app_code).all())
+        source.c.app_code.in_(codes), source.c.state == "pending", ~User.scorpion_vendor.has(),visible_accounts()).group_by(source.c.app_code).all())
     search = request.args.get("q", "").strip()[:160]
     if search:
         pattern = "%" + search.replace("%", "\\%").replace("_", "\\_") + "%"
@@ -137,6 +140,8 @@ def accounts_security():
 
 def _profile(user_id, status=200, error=None):
     target = db.get_or_404(User, user_id)
+    from app.services.account_deletion import receipt, can_delete
+    deletion=receipt(target.id)
     gateway = get_current_gateway()
     membership = GatewayMembership.query.filter_by(user_id=target.id, gateway_id=gateway.id).first()
     app_rows = legacy._portal_app_access_rows(target)
@@ -151,12 +156,34 @@ def _profile(user_id, status=200, error=None):
         attempts=attempts, decisions=_decisions(attempts), events=events, profile_tab=tab, review=review_token(target),
         form=legacy._user_edit_form_from_request(target),
         management_level_choices=MANAGEMENT_LEVELS, role_choices=legacy.ROLE_CHOICES,
-        can_edit_user=user_can(legacy.USER_MANAGEMENT_EDIT_PERMISSION),
-        can_edit_access=user_can(legacy.PORTAL_MANAGEMENT_EDIT_PERMISSION),
-        can_resend=user_can(legacy.EMAIL_VERIFICATION_RESEND_PERMISSION),
+        can_edit_user=not deletion and user_can(legacy.USER_MANAGEMENT_EDIT_PERMISSION),
+        can_edit_access=not deletion and user_can(legacy.PORTAL_MANAGEMENT_EDIT_PERMISSION),
+        can_resend=not deletion and user_can(legacy.EMAIL_VERIFICATION_RESEND_PERMISSION),
         driver_identity=db.session.get(FuelDriverIdentity, target.id), ups_verified=identity_verified(target),
         vendor_membership=current_membership(target.id), vendor_companies=FuelVendorCompany.query.filter_by(gateway_id=gateway.id, is_active=True).order_by(FuelVendorCompany.name).all(),
-        can_commission_grandmaster=may_commission(current_user, target), error=error, **_tabs("people")), status
+        can_commission_grandmaster=not deletion and may_commission(current_user, target),
+        can_delete_account=can_delete(current_user), deletion=deletion, error=error, **_tabs("people")), status
+
+
+@bp.post("/accounts/people/<int:user_id>/delete")
+@login_required
+def delete_account(user_id):
+    from app.services.account_deletion import delete_account as remove, can_delete
+    if not can_delete(current_user):
+        abort(403)
+    db.get_or_404(User,user_id)
+    try:
+        target=remove(user_id,request.form.get('review_token',''),
+            request.form.get('confirm_delete'),request.form.get('confirmed_user_id',''))
+        db.session.commit()
+    except PermissionError:
+        db.session.rollback();abort(403)
+    except (ValueError,SQLAlchemyError) as error:
+        db.session.rollback()
+        message=str(error) if isinstance(error,ValueError) else 'Account deletion failed. No changes saved.'
+        return _profile(user_id,409 if isinstance(error,AccountConflict) else 400 if isinstance(error,ValueError) else 500,error=message)
+    flash(f'Account {target.id} deleted. Login and access revoked; historical records preserved.','success')
+    return redirect(url_for('auth.accounts_people'))
 
 
 @bp.get("/accounts/people/<int:user_id>")

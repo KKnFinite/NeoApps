@@ -3,11 +3,11 @@
 <section class="aa-workspace">
 {% include "auth/accounts/_nav.html" %}
 <form class="aa-filters" method="get">
-  <label class="aa-search"><span>Search people</span><input name="q" value="{{ search }}" placeholder="Name, email or employee ID" maxlength="160" type="search"></label>
+  <input type="hidden" name="q" value="{{ search }}">
   <label><span>Status</span><select name="status">{% for value,label in [('all','All statuses'),('active','Active'),('inactive','Inactive'),('unverified','Email unverified')] %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
   <label><span>Account type</span><select name="type">{% for value,label in [('all','All accounts'),('full','Full NeoApps'),('vendor','Fuel Truck Driver')] %}<option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
   <label><span>Application</span><select name="app"><option value="">All applications</option>{% for app in applications %}<option value="{{ app.code }}" {% if selected_app == app.code %}selected{% endif %}>{{ app.name }}</option>{% endfor %}</select></label>
-  <button class="aa-button" type="submit">Search</button>
+  <button class="aa-button" type="submit">Filter</button>
 </form>
 <div class="aa-directory" aria-label="People">
 {% for person in people %}

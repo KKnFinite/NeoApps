@@ -2,7 +2,8 @@
 {% block content %}
 <section class="aa-workspace">
 {% include "auth/accounts/_nav.html" %}
-<header class="aa-profile-heading"><div><a class="aa-eyebrow" href="{{ url_for('auth.accounts_people') }}">PEOPLE / ACCOUNT {{ target_user.id }}</a><h2>{{ target_user.display_name }}</h2><p>{{ target_user.email }} · {{ 'Fuel Truck Driver' if target_user.scorpion_vendor else 'Full NeoApps' }}</p></div><span class="aa-state">{{ 'Active' if target_user.is_active else 'Inactive' }}</span></header>
+{% if error %}<p class="aa-inline-error" role="alert">{{ error }}</p>{% endif %}
+<header class="aa-profile-heading"><div><a class="aa-eyebrow" href="{{ url_for('auth.accounts_people') }}">PEOPLE / ACCOUNT {{ target_user.id }}</a><h2>{{ target_user.display_name }}</h2><p>{{ target_user.email }} · {{ 'Fuel Truck Driver' if target_user.scorpion_vendor else 'Full NeoApps' }}</p></div><span class="aa-state">{{ 'Deleted' if deletion else 'Active' if target_user.is_active else 'Inactive' }}</span></header>
 <nav class="aa-tabs" aria-label="Account profile">{% for tab,label in [('identity','Identity'),('access','Access & Roles'),('security','Security'),('history','History')] %}<a href="{{ url_for('auth.account_profile', user_id=target_user.id, tab=tab) }}" {% if tab == profile_tab %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
 {% if profile_tab == 'identity' %}
 <section class="aa-section"><h3>Identity</h3><p class="aa-muted">NeoApps account {{ target_user.id }} · {{ target_user.role|role_label }} on the platform</p>
@@ -36,10 +37,21 @@
 <div class="aa-actions">{% if can_resend and target_user.email and not target_user.email_verified_at %}<form method="post" action="{{ url_for('auth.resend_user_verification_email', user_id=target_user.id) }}">{{ csrf_field() }}<button class="aa-button secondary" type="submit">Resend verification</button></form>{% endif %}{% if can_edit_user and target_user.id != current_user.id %}<a class="aa-button secondary" href="{{ url_for('auth.emergency_reset_user_password', user_id=target_user.id) }}">Password recovery</a>{% endif %}{% if can_commission_grandmaster %}<a class="aa-button" href="{{ url_for('auth.commission_platform_grandmaster', user_id=target_user.id) }}">PROMOTE TO NEOAPPS GRANDMASTER</a>{% endif %}</div>
 </section>
 {% if can_edit_user and target_user.id != current_user.id and target_user.role != 'grandmaster' %}<details class="aa-section aa-danger-zone"><summary>Change account type</summary><p>This revokes general access. Operational history and identity are retained; active work can block conversion.</p><form method="post" action="{{ url_for('auth.change_user_account_type', user_id=target_user.id) }}" data-confirm-message="Change this account type and revoke its current access?">{{ csrf_field() }}<input type="hidden" name="review_token" value="{{ review }}"><input type="hidden" name="account_type" value="{{ 'full' if target_user.scorpion_vendor else 'vendor' }}"><button class="aa-button danger" type="submit">{{ 'Convert to full NeoApps account' if target_user.scorpion_vendor else 'Convert to Fuel Truck Driver' }}</button></form></details>{% endif %}
+{% if can_delete_account %}
+<section class="aa-section aa-danger-zone"><h3>Delete account</h3>
+{% if deletion %}<p>Deleted {{ deletion.created_at.strftime('%Y-%m-%d %H:%M') }} UTC. Historical identity and records are retained; login and access cannot be restored here.</p>
+{% elif target_user.id == current_user.id or target_user.role == 'grandmaster' %}<p>{{ 'You cannot delete your own account.' if target_user.id == current_user.id else 'Protected NeoApps Grandmaster accounts cannot be deleted.' }}</p><button class="aa-button danger" type="button" disabled>DELETE ACCOUNT</button>
+{% else %}<p>Deletes login and access and removes this account from People. Historical records retain its identity. Active operational responsibilities must be resolved first.</p>
+<form class="aa-form" method="post" action="{{ url_for('auth.delete_account',user_id=target_user.id,tab='security') }}" data-confirm-message="Delete this account and permanently revoke its login and access? Historical records will be retained.">
+{{ csrf_field() }}<input type="hidden" name="review_token" value="{{ review }}">
+<label><span>Confirm NeoApps account number {{ target_user.id }}</span><input name="confirmed_user_id" inputmode="numeric" pattern="[0-9]+" required autocomplete="off"></label>
+<label class="aa-check"><input name="confirm_delete" value="yes" type="checkbox" required><span>I confirm deletion of {{ target_user.display_name }} (account {{ target_user.id }}).</span></label>
+<button class="aa-button danger" type="submit">DELETE ACCOUNT</button></form>{% endif %}</section>
+{% endif %}
 {% else %}
 <section class="aa-section"><h3>Request history</h3><p class="aa-muted">Latest 40 attempts and security events. Older records retain their original history; missing legacy history is not reconstructed.</p>{% for attempt in attempts %}<div class="aa-history"><strong>{{ attempt.app_code }} · {{ attempt.state|title }}</strong><small>Attempt {{ attempt.id }} · {{ attempt.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</small><p>{{ attempt.reason }}</p>{% if decisions.get(attempt.id) %}<p class="aa-muted">{{ decisions[attempt.id].outcome|title }} by account {{ decisions[attempt.id].actor }} · {{ decisions[attempt.id].at.strftime("%Y-%m-%d %H:%M") }} UTC</p><p>{{ decisions[attempt.id].reason }}</p>{% endif %}</div>{% else %}<p>No recorded request attempts.</p>{% endfor %}</section>
 <section class="aa-section"><h3>Security history</h3>{% for event in events %}<div class="aa-history"><strong>{{ event.action|replace('_',' ')|title }}</strong><small>Audit {{ event.id }} · Actor {{ event.actor_user_id }} · {{ event.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</small>{% if event.details.reason %}<p>{{ event.details.reason }}</p>{% endif %}</div>{% else %}<p>No recorded security events.</p>{% endfor %}</section>
 {% endif %}
-{% include 'auth/accounts/_fuel_driver.html' %}
+{% if not deletion %}{% include 'auth/accounts/_fuel_driver.html' %}{% endif %}
 </section>
 {% endblock %}

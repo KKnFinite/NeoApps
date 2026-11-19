@@ -5,3 +5,10 @@
 <nav class="aa-tabs" aria-label="Accounts & Access">
 {% for key, label, href in workspace_tabs %}<a href="{{ href }}" {% if active_tab == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
 </nav>
+{% if can_search_people %}
+<form class="aa-filters" method="get" action="{{ url_for('auth.accounts_people') }}" role="search" aria-label="People search">
+  <label class="aa-search"><span>Search people</span><input name="q" value="{{ search if request.endpoint == 'auth.accounts_people' else '' }}" placeholder="Name, email or Employee / UPS ID" maxlength="160" type="search"></label>
+  {% if request.endpoint == 'auth.accounts_people' %}{% for key in ['status','type','app'] %}{% if request.args.get(key) %}<input type="hidden" name="{{ key }}" value="{{ request.args[key] }}">{% endif %}{% endfor %}{% endif %}
+  <button class="aa-button" type="submit">Search</button>
+</form>
+{% endif %}

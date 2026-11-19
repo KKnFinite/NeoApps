@@ -2218,6 +2218,9 @@ def _change_driver_account_type(gateway, target_user, account_type):
 def _lock_staff_account(user):
     from app.services.neoscorpion_account_types import lock_account_grants
     user = lock_account_grants(user)
+    from app.services.account_deletion import receipt
+    if receipt(user.id):
+        raise ValueError("This account was deleted. Its historical identity is read-only.")
     if user.scorpion_vendor:
         raise ValueError("Convert this Fuel Truck Driver to FULL NEO ACCOUNT before changing staff access.")
     return user
