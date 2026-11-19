@@ -1,13 +1,40 @@
-{# One permission-filtered navigation source serves desktop and mobile. #}
-{% set nav_state = namespace(in_secondary=false, active_more=false) %}
+{# One permission-aware navigation tree for desktop and mobile.
+   Keep real destinations until the new Overview / Staffing Board exist. #}
+{% macro nav_link(item) -%}
+<a class="{{ staffing_nav_class|default('') }}{% if item.active and staffing_nav_class|default('') %} is-active{% endif %}" data-staffing-nav href="{{ url_for(item.endpoint) }}"{% if staffing_nav_role|default('') %} role="{{ staffing_nav_role }}"{% endif %}{% if item.active %} aria-current="page"{% endif %}>
+    {% if staffing_nav_class|default('') %}<span class="operational-side-link-icon" aria-hidden="true">{{ item.label[0] }}</span><span class="operational-side-link-label">{% endif %}
+    {{ item.label }}
+    {% if item.badge and neostaffing_nav[item.badge] %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav[item.badge] }} {{ 'actionable requests' if item.badge == 'actionable_requests' else 'unread notifications' }}">{{ neostaffing_nav[item.badge] }}</strong>{% endif %}
+    {% if staffing_nav_class|default('') %}</span>{% endif %}
+</a>
+{%- endmacro %}
+{% set nav_state = namespace(ready_more=[], development=[]) %}
+{% set primary_endpoints = [
+  'neostaffing.attendance', 'neostaffing.shift_flow',
+  'neostaffing.people', 'neostaffing.org_chart', 'neostaffing.reports'
+] %}
 {% for item in staffing_screen_items %}
-    {% if item.under_construction %}{% set nav_state.in_secondary = true %}{% endif %}
-    {% if nav_state.in_secondary and item.active %}{% set nav_state.active_more = true %}{% endif %}
+    {% if item.endpoint not in primary_endpoints %}
+        {% if item.under_construction %}
+            {% set nav_state.development = nav_state.development + [item] %}
+        {% else %}
+            {% set nav_state.ready_more = nav_state.ready_more + [item] %}
+        {% endif %}
+    {% endif %}
 {% endfor %}
-{% set nav_state.in_secondary = false %}
-{% for item in staffing_screen_items %}
-{% if item.under_construction and not nav_state.in_secondary %}
-<details class="neostaffing-nav-more" data-neostaffing-nav-more{% if nav_state.active_more %} open{% endif %}>
+<span class="staffing-nav-section" role="separator">OPERATIONS</span>
+{% for endpoint in primary_endpoints[:2] %}
+    {% for item in staffing_screen_items if item.endpoint == endpoint %}{{ nav_link(item) }}{% endfor %}
+{% endfor %}
+<span class="staffing-nav-section" role="separator">WORKFORCE</span>
+{% for endpoint in primary_endpoints[2:4] %}
+    {% for item in staffing_screen_items if item.endpoint == endpoint %}{{ nav_link(item) }}{% endfor %}
+{% endfor %}
+<span class="staffing-nav-section" role="separator">REPORTING</span>
+{% for item in staffing_screen_items if item.endpoint == 'neostaffing.reports' %}{{ nav_link(item) }}{% endfor %}
+{% if nav_state.ready_more or nav_state.development %}
+{% set more_active = ((nav_state.ready_more + nav_state.development)|selectattr('active')|list|length) > 0 %}
+<details class="neostaffing-nav-more" data-neostaffing-nav-more{% if more_active %} open{% endif %}>
     <summary class="neostaffing-nav-more-trigger" aria-label="More Tools">
         {% if staffing_nav_class|default('') %}<span class="operational-side-link-icon" aria-hidden="true">···</span><span class="operational-side-link-label">{% endif %}
         More Tools
@@ -15,17 +42,14 @@
         <span class="neostaffing-nav-more-chevron" aria-hidden="true">⌄</span>
     </summary>
     <div class="neostaffing-nav-more-links">
-        <span class="staffing-nav-section" role="separator">UNDER CONSTRUCTION</span>
-{% set nav_state.in_secondary = true %}
-{% endif %}
-<a class="{{ staffing_nav_class|default('') }}{% if item.active and staffing_nav_class|default('') %} is-active{% endif %}" data-staffing-nav href="{{ url_for(item.endpoint) }}"{% if staffing_nav_role|default('') %} role="{{ staffing_nav_role }}"{% endif %}{% if item.active %} aria-current="page"{% endif %}>
-    {% if staffing_nav_class|default('') %}<span class="operational-side-link-icon" aria-hidden="true">{{ item.label[0] }}</span><span class="operational-side-link-label">{% endif %}
-    {{ item.label }}
-    {% if item.badge and neostaffing_nav[item.badge] %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav[item.badge] }} {{ 'actionable requests' if item.badge == 'actionable_requests' else 'unread notifications' }}">{{ neostaffing_nav[item.badge] }}</strong>{% endif %}
-    {% if staffing_nav_class|default('') %}</span>{% endif %}
-</a>
-{% endfor %}
-{% if nav_state.in_secondary %}
+        {% if nav_state.ready_more %}
+        <span class="staffing-nav-section" role="separator">OTHER TOOLS</span>
+        {% for item in nav_state.ready_more %}{{ nav_link(item) }}{% endfor %}
+        {% endif %}
+        {% if nav_state.development %}
+        <span class="staffing-nav-section" role="separator">IN DEVELOPMENT</span>
+        {% for item in nav_state.development %}{{ nav_link(item) }}{% endfor %}
+        {% endif %}
     </div>
 </details>
 {% endif %}

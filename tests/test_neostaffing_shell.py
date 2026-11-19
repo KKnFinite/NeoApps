@@ -133,9 +133,9 @@ class StaffingShellTest(unittest.TestCase):
         return re.findall(r'<a\b[^>]*data-staffing-nav[^>]*href="([^"]+)"',html)
 
     def test_navigation_exact_order_desktop_split_and_mobile_links(self):
-        endpoints=['people','org_chart','attendance','reports','shift_flow','settings',
-                   'staffing_groups','change_requests','staffing_notifications','bulk_change',
-                   'employee_records','employee_recovery','timecards','accountability','vacation_selection']
+        endpoints=['attendance','shift_flow','people','org_chart','reports','settings',
+                   'employee_recovery','staffing_groups','change_requests','staffing_notifications',
+                   'bulk_change','employee_records','timecards','accountability','vacation_selection']
         with self.app.test_request_context():
             expected=[url_for('neostaffing.'+endpoint) for endpoint in endpoints]
         desktop=self.navigation()
@@ -143,9 +143,9 @@ class StaffingShellTest(unittest.TestCase):
         mobile=self.navigation(desktop=False)
         self.assertEqual(self.nav_links(mobile),expected)
         for html in (desktop,mobile):
-            self.assertEqual(html.count('UNDER CONSTRUCTION'),1)
-            self.assertLess(html.index(f'href="{expected[5]}"'),html.index('UNDER CONSTRUCTION'))
-            self.assertLess(html.index('UNDER CONSTRUCTION'),html.index(f'href="{expected[6]}"'))
+            self.assertEqual(html.count('IN DEVELOPMENT'),1)
+            self.assertLess(html.index(f'href="{expected[6]}"'),html.index('IN DEVELOPMENT'))
+            self.assertLess(html.index('IN DEVELOPMENT'),html.index(f'href="{expected[7]}"'))
             self.assertNotIn('>Home<',html)
             self.assertNotIn('aria-disabled',html)
             self.assertIn('aria-label="3 actionable requests">3</strong>',html)
@@ -180,29 +180,29 @@ class StaffingShellTest(unittest.TestCase):
         html=self.client.get('/neostaffing/people').get_data(as_text=True)
         rail=html.split('data-operational-sidebar ',1)[1].split('</aside>',1)[0]
         mobile=html.split('id="neo-mobile-drawer"',1)[1].split('</aside>',1)[0]
-        self.assertEqual(rail.count('UNDER CONSTRUCTION'),1)
-        self.assertEqual(mobile.count('UNDER CONSTRUCTION'),1)
+        self.assertEqual(rail.count('IN DEVELOPMENT'),1)
+        self.assertEqual(mobile.count('IN DEVELOPMENT'),1)
         self.assertEqual(self.nav_links(rail),self.nav_links(mobile))
 
     def test_construction_heading_stays_single_after_live_employee_recovery_link(self):
         for desktop in (True, False):
             html = self.navigation(desktop=desktop)
-            self.assertEqual(html.count('UNDER CONSTRUCTION'), 1)
+            self.assertEqual(html.count('IN DEVELOPMENT'), 1)
             with self.app.test_request_context():
                 recovery = url_for('neostaffing.employee_recovery')
                 timecards = url_for('neostaffing.timecards')
-            self.assertLess(html.index('UNDER CONSTRUCTION'), html.index(f'href="{recovery}"'))
-            self.assertLess(html.index(f'href="{recovery}"'), html.index(f'href="{timecards}"'))
-            self.assertEqual(html.count('staffing-nav-section'), 1)
+            self.assertLess(html.index(f'href="{recovery}"'), html.index('IN DEVELOPMENT'))
+            self.assertLess(html.index('IN DEVELOPMENT'), html.index(f'href="{timecards}"'))
+            self.assertEqual(html.count('staffing-nav-section'), 5)
 
     def test_secondary_navigation_is_collapsible_and_active_page_expands(self):
         for desktop in (True, False):
             html = self.navigation(desktop=desktop)
             self.assertEqual(html.count('data-neostaffing-nav-more'), 1)
             self.assertIn('More Tools', html)
-            self.assertEqual(html.count('UNDER CONSTRUCTION'), 1)
+            self.assertEqual(html.count('IN DEVELOPMENT'), 1)
             self.assertLess(html.index('<details class="neostaffing-nav-more"'),
-                            html.index('UNDER CONSTRUCTION'))
+                            html.index('IN DEVELOPMENT'))
             self.assertIn('</details>', html)
             secondary = self.navigation(desktop=desktop, endpoint='neostaffing.timecards')
             self.assertIn('data-neostaffing-nav-more open', secondary)
@@ -215,5 +215,5 @@ class StaffingShellTest(unittest.TestCase):
                 'neostaffing.vacation_selection.view','neostaffing.people.edit'}
         for desktop in (True,False):
             html=self.navigation(desktop=desktop,denied=denied)
-            self.assertNotIn('UNDER CONSTRUCTION',html)
+            self.assertNotIn('IN DEVELOPMENT',html)
             self.assertEqual(len(self.nav_links(html)),3)
