@@ -11,12 +11,12 @@
             <span class="ops-chevron" aria-hidden="true"></span>
         </span>
         {{ quick_actions(row) }}
-        <button type="button" class="ops-ramp-chevron" data-ops-ramp-chevron aria-label="Details for {{ row.flight }} {{ row.tail }}" aria-expanded="{{ 'true' if selected and row.mission_id == selected.mission_id else 'false' }}"></button>
+        <button type="button" class="ops-disclosure-chevron ops-ramp-chevron" data-ops-ramp-chevron aria-label="Details for {{ row.flight }} {{ row.tail }}" aria-expanded="{{ 'true' if selected and row.mission_id == selected.mission_id else 'false' }}"></button>
     </summary>
     <div class="ops-pretreat-inline ops-mobile-workspace ops-mission-workspace" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
         {{ inline_feedback() }}
         <div class="ops-outbound-primary">
-            <button type="button" class="ops-outbound-identity ops-identity" data-ops-expand-details aria-expanded="{{ 'true' if selected and row.mission_id == selected.mission_id else 'false' }}"><strong>{{ row.tail }}</strong><span>{{ row.flight }}</span></button>
+            <span class="ops-outbound-identity ops-identity"><strong>{{ row.tail }}</strong><span>{{ row.flight }}</span></span>
             <div class="ops-outbound-location ops-location"><strong>{{ row.parking }}</strong><span>ETD {{ row.etd }} · {{ row.destination }}</span>{% if row.final_start %}<strong class="ops-pilot-start">PILOT START {{ row.final_start }}</strong>{% endif %}</div>
             <div class="ops-outbound-status ops-status"><strong>{{ row.visual_label }}</strong>{{ quick_actions(row) }}</div>
             <div class="ops-outbound-reason" data-ops-reason-home>
@@ -24,7 +24,7 @@
                 <div data-ops-row-reason>
                     {% if not row.has_actual_spray and row.event.status not in ('finished','cleared') %}
                         {{ spray_reason(row, can_edit and row.mobile_open, board, row.ramp, show_observation=false) }}
-                    {% else %}<p class="ops-reason-recorded">Reason for Application · <strong>{{ row.reason_for_application }}</strong></p>{% endif %}
+                    {% else %}<p class="ops-reason-recorded"><strong>{{ row.reason_for_application }}</strong></p>{% endif %}
                 </div>
                 {% endif %}
             </div>
@@ -32,6 +32,7 @@
                 {{ treatment_form(row, can_edit and row.mobile_open and row.event.status not in ('negative','not_sprayed','finished','cleared'), board, row.ramp, compact=true, dispatch_row=true) }}
             {% else %}<span class="ops-outbound-no-treatment">—</span>{% endif %}
         </div>
+        <button type="button" class="ops-disclosure-chevron ops-list-chevron" data-ops-expand-details aria-label="Details for {{ row.flight }} {{ row.tail }}" aria-expanded="{{ 'true' if selected and row.mission_id == selected.mission_id else 'false' }}"></button>
         <details class="ops-outbound-extra" data-ops-disclosure="mission-details"{% if selected and row.mission_id == selected.mission_id %} open{% endif %}>
         <summary>DETAILS</summary>
         {% if row.mission_id in mobile_missions %}{{ workspace(row, inline=true, show_treatment=false) }}

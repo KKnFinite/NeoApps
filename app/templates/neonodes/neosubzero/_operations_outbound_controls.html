@@ -1,7 +1,7 @@
 {% from 'neonodes/neosubzero/_departure_deice.html' import mutation_identity, treatment_form, spray_reason, spray_position_forms, inspection_form with context %}
 
-{% macro action(row, key, label, confirm='', mobile_only=false) -%}
-<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if mobile_only %} class="ops-mobile-inspection"{% endif %}{% if confirm %} data-subzero-confirm="{{ confirm }}"{% endif %}>
+{% macro action(row, key, label, confirm='') -%}
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if confirm %} data-subzero-confirm="{{ confirm }}"{% endif %}>
     {{ mutation_identity(row, board, row.ramp) }}<button name="action" value="{{ key }}">{{ label }}</button>
 </form>
 {%- endmacro %}
@@ -24,7 +24,7 @@
 {% if can_edit and not row.identity_conflict and row.mobile_open %}
     {% for key,label in row.quick_actions %}
     {% if key != 'radio' and (key != 'reset' or user_can('neosubzero.coordinator.edit')) %}
-    <form hidden id="ops-{{ row.mission_id }}-{{ key }}" method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if key == 'reset' %} data-subzero-confirm="Reset this unstarted departure request? Recorded spray evidence is protected."{% endif %}>
+    <form hidden id="ops-{{ row.mission_id }}-{{ key }}" method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
         {{ mutation_identity(row, board, row.ramp) }}<input type="hidden" name="action" value="{{ key }}">
     </form>
     {% endif %}
@@ -70,7 +70,7 @@
 {% elif editable and not row.has_actual_spray and event_status not in ('finished','cleared','negative','not_sprayed') %}
 <div class="ops-quick-observations">
     {{ action(row, 'frost_present', 'FROST PRESENT', 'Record your direct observation that frost is present on this physical aircraft?') }}
-    {{ action(row, 'nervous_captain', 'NERVOUS CAPTAIN', 'Confirm that you observed no frost and the captain requested treatment.', mobile_only=true) }}
+    {{ action(row, 'nervous_captain', 'NERVOUS CAPTAIN', 'Confirm that you observed no frost and the captain requested treatment.') }}
 </div>
 {% endif %}
 <details class="ops-inline-notes" data-ops-disclosure="notes">

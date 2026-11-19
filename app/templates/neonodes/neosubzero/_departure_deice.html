@@ -304,6 +304,7 @@
 
 {% macro treatment_form(row, can_edit, board, selected_ramp='', compact=false, correction=false, dispatch_row=false) %}
 {% set locked = not can_edit or row.event.status == 'cleared' or correction %}
+{% set default_surface = 'wings_tail' if dispatch_row and not locked else '' %}
 <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" class="neosubzero-deice-form{{ ' ops-outbound-pass-form' if dispatch_row else '' }}" data-subzero-deice-form data-locked="{{ 'true' if locked else 'false' }}"{% if dispatch_row and can_edit and not locked %} data-ops-outbound-autosave{% endif %}>
     {{ mutation_identity(row, board, selected_ramp) }}
     <input type="hidden" name="action" value="save_treatment">
@@ -315,11 +316,11 @@
     </label>
     <fieldset class="neosubzero-deice-pass type-i" data-subzero-pass="1" {% if not row.plan %}hidden{% endif %}>
         <legend>PASS 1 · TYPE I</legend>
-        {{ pass_controls(row, 1, locked) }}
+        {{ pass_controls(row, 1, locked, default_surface) }}
     </fieldset>
     <fieldset class="neosubzero-deice-pass {{ 'type-iv' if row.pass_types|length > 1 and row.pass_types[1] == 'Type IV' else 'type-i' }}" data-subzero-pass="2" {% if row.pass_types|length < 2 %}hidden{% endif %}>
         <legend data-subzero-pass2-type>PASS 2 · {{ row.pass_types[1] if row.pass_types|length > 1 else 'TYPE I' }}</legend>
-        {{ pass_controls(row, 2, locked) }}
+        {{ pass_controls(row, 2, locked, default_surface) }}
     </fieldset>
     {% if can_edit and row.event.status in ('finished','cleared') %}<label{% if correction %} data-ops-correction-field hidden{% endif %}>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
     {% if can_edit %}
@@ -329,8 +330,8 @@
 </form>
 {% endmacro %}
 
-{% macro pass_controls(row, pass_number, locked) %}
-{% set surface = row.pass1_surface if pass_number == 1 else row.pass2_surface %}
+{% macro pass_controls(row, pass_number, locked, default_surface='') %}
+{% set surface = (row.pass1_surface if pass_number == 1 else row.pass2_surface) or default_surface %}
 {% set start = row.pass1_start if pass_number == 1 else row.pass2_start %}
 {% set end = row.pass1_end if pass_number == 1 else row.pass2_end %}
 <label>Surface Area

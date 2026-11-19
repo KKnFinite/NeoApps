@@ -515,8 +515,10 @@
         if (open) {
             root.querySelectorAll('[data-ops-accordion][open]').forEach(other => {
                 if (other !== card && !other.querySelector(dirtyForm)) {
-                    if (desktopInline()) other.querySelector('.ops-outbound-extra')?.removeAttribute('open');
-                    else other.open = false;
+                    if (desktopInline()) {
+                        other.querySelector('.ops-outbound-extra')?.removeAttribute('open');
+                        other.querySelector('[data-ops-expand-details]')?.setAttribute('aria-expanded','false');
+                    } else other.open = false;
                 }
             });
             card.open = true;
@@ -551,6 +553,7 @@
         const expand = event.target.closest('[data-ops-expand-details]');
         if (expand) {
             event.preventDefault();
+            if (busy || preferenceBusy) return;
             const card = expand.closest('[data-ops-accordion]');
             const extra = card.querySelector('.ops-outbound-extra');
             if (extra.open) {
