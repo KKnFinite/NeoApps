@@ -4,8 +4,10 @@ from datetime import datetime, timedelta, timezone
 from unittest import TestCase
 from unittest.mock import patch
 
+import app.neonodes.neosubzero  # Canonical route/service import order for standalone runs.
+
 from app.extensions import db
-from app.models import FrostHistoryTask as Task, Gateway
+from app.models import FrostHistoryTask as Task, Gateway, SortDateOperation
 from app.services import frost_ducc as display, frost_research, frost_vault as vault
 from tests import test_frost_intelligence as fixtures
 
@@ -152,6 +154,55 @@ class DuccDisplayTest(TestCase):
         _,hours=display.project(self.gateway,now=now)
         target=(cutoff+timedelta(hours=6)).replace(minute=0)
         self.assertEqual(hours[target]['text'],'FROST 12% / 34%')
+
+    def test_configured_forecast_and_live_refresh_need_no_operational_sort_record(self):
+        from datetime import time
+        from sqlalchemy import event
+        from app.services import neosubzero_weather as weather
+        from tests.frost_schedule_fixture import configure
+        self.activate()
+        configure(self.gateway,days=('wednesday',),start=time(21),end=time(5))
+        store_capture(self.gateway.id)
+        periods=[]
+        for i in range(8):
+            start=AT.replace(minute=0)+timedelta(hours=i)
+            periods.append(dict(startTime=start.isoformat(),endTime=(start+timedelta(hours=1)).isoformat(),
+                temperature=30,temperatureUnit='F',shortForecast='Clear'))
+        snapshot=dict(metar=dict(value=[],stale=False),forecast=dict(value=dict(hourly=dict(properties=dict(periods=periods))),stale=False))
+        self.assertEqual(SortDateOperation.query.count(),0)
+        statements=[]
+        def observed(_c,_cursor,sql,*_):statements.append(sql.split()[0].upper())
+        event.listen(db.engine,'before_cursor_execute',observed)
+        try:
+            with patch.object(weather,'_weather_snapshot',return_value=snapshot):
+                for now in (AT+timedelta(minutes=1),AT+timedelta(hours=4)):
+                    value=weather.neosubzero_weather_context(self.gateway,None,now=now)
+                    self.assertIsNotNone(value['current_sort'])
+                    self.assertEqual(value['current_sort']['sort_date'],AT.date()-timedelta(days=1))
+                    self.assertTrue(any(h.get('frost_predictions') for h in value['current_sort']['hours']))
+                from app.neonodes.neosubzero import routes
+                with patch.object(routes,'neosubzero_weather_context',return_value=value):
+                    response=self.client.get('/neosubzero/ucc?fragment=1')
+                    self.assertEqual(response.status_code,200)
+                    self.assertIn('data-frost-predictions',response.text)
+                revision=self.client.get('/neosubzero/ucc/revision')
+                self.assertEqual(revision.status_code,200)
+                self.assertTrue(revision.json['refresh']['auto_refresh_enabled'])
+        finally:event.remove(db.engine,'before_cursor_execute',observed)
+        self.assertFalse(set(statements)&{'INSERT','UPDATE','DELETE'},statements)
+        self.assertEqual(SortDateOperation.query.count(),0)
+
+    def test_weather_only_refresh_preserves_screen_off_and_callout_refresh_policy(self):
+        self.activate()
+        from app.services.live_screen_refresh import save_live_screen_refresh_override
+        from app.neonodes.neosubzero import routes
+        save_live_screen_refresh_override(self.gateway,'neosubzero.ucc','0');db.session.commit()
+        status=routes._deice_staffing_refresh(self.gateway,None,weather_only=True)
+        self.assertFalse(status['auto_refresh_enabled'])
+        self.assertEqual(status['reason'],'disabled')
+        with patch.object(routes,'subzero_refresh_status',return_value=dict(auto_refresh_enabled=False,reason='no_current_sort')) as existing:
+            self.assertFalse(routes._deice_staffing_refresh(self.gateway,None)['auto_refresh_enabled'])
+            existing.assert_called_once()
 
 class AutoCaptureProjectionTest(TestCase):
     def test_auto_capture_commits_projection_without_extra_scoring_or_rewriting_archive(self):

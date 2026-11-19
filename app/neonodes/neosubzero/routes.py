@@ -396,7 +396,7 @@ def ucc():
             operation,
             weather_revision=weather["revision"],
         ),
-        refresh_status=_deice_staffing_refresh(gateway, operation),
+        refresh_status=_deice_staffing_refresh(gateway, operation, weather_only=True),
         tv_default_interval_ms=live_screen_definition(UCC_TV_REFRESH_KEY).default_interval_seconds * 1000,
         weather=weather,
         weather_animations_enabled=neosubzero_weather_animations_enabled(
@@ -490,7 +490,7 @@ def ucc_revision_endpoint():
             "refresh": (
                 live_screen_refresh_status(gateway, UCC_TV_REFRESH_KEY)
                 if request.args.get("view") == "tv"
-                else _deice_staffing_refresh(gateway, operation)
+                else _deice_staffing_refresh(gateway, operation, weather_only=True)
             ),
         }
     )
@@ -887,7 +887,11 @@ def _deice_planning_operation(gateway, *, initialize=False):
     return night_staffing_operation(gateway, initialize=initialize)
 
 
-def _deice_staffing_refresh(gateway, operation):
+def _deice_staffing_refresh(gateway, operation, *, weather_only=False):
+    if operation is None and weather_only:
+        # DUCC weather/research scores refresh independently of flight records.
+        # The existing screen-level OFF setting and cadence remain authoritative.
+        return live_screen_refresh_status(gateway, UCC_REFRESH_KEY)
     status = subzero_refresh_status(gateway, operation, UCC_REFRESH_KEY)
     if operation and status.get("reason") in {"before_ops_window", "outside_ops_window", "no_current_sort"}:
         status.update(auto_refresh_enabled=True, reason="staffing_planning",

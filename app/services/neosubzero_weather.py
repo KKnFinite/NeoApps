@@ -64,11 +64,18 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
     current = parse_aviation_weather_metar(snapshot["metar"].get("value"))
     forecast = snapshot["forecast"].get("value")
     local_now = current_gateway_local_datetime(gateway, now=now)
-    start_date = operation.sort_date if operation is not None else local_now.date()
+    forecast_scope = operation
+    if forecast_scope is None:
+        from app.services.operation_lifecycle import manual_current_sort_creation_status
+        planned = manual_current_sort_creation_status(gateway, local_now=local_now)
+        if planned['scheduled']:
+            # Weather needs the configured window, never a persisted operation.
+            forecast_scope = SimpleNamespace(sort_date=planned['sort_date'],sort_name=planned['sort_name'])
+    start_date = forecast_scope.sort_date if forecast_scope is not None else local_now.date()
     forecast_end = start_date + timedelta(days=FORECAST_CALENDAR_DAYS)
     forecast_cards = _forecast_cards(
         gateway,
-        operation,
+        forecast_scope,
         forecast,
         now=local_now,
         upcoming_limit=TV_UPCOMING_SORT_COUNT,
@@ -97,17 +104,17 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
             (
                 card
                 for card in management_cards
-                if card["sort_date"] == operation.sort_date
+                if card["sort_date"] == forecast_scope.sort_date
             ),
             None,
         )
-        if operation is not None
+        if forecast_scope is not None
         else None
     )
     future_forecast = tuple(
         card
         for card in management_cards
-        if operation is None or card["sort_date"] != operation.sort_date
+        if forecast_scope is None or card["sort_date"] != forecast_scope.sort_date
     )
     return {
         "station": KRFD_ICAO,
