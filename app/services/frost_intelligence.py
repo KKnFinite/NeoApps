@@ -55,8 +55,9 @@ def save(gateway_id, values, expected_revision, *, confirm_operational=False):
         raise ValueError('Supply all three FROST settings as true or false.')
     if values['operational_predictions'] and not before['operational_predictions']:
         if confirm_operational is not True:
-            raise ValueError('Explicitly confirm activation of operational predictions and alerts.')
-        raise ValueError(operational_prerequisite(gateway_id))
+            raise ValueError('Explicitly confirm displaying historical-model predictions in DUCC.')
+        # This opt-in controls display only. Operational inference/automatic
+        # decisions retain their independent scientific approval gate below.
     changed = {key: dict(previous=before[key], new=values[key]) for key in KEYS if before[key] != values[key]}
     if not changed:
         return before

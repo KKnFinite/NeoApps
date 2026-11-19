@@ -111,17 +111,24 @@ class IntelligenceTest(TestCase):
             self.assertEqual(self.post(automatic_retraining=True).status_code, 403)
         self.assertEqual(AccountSecurityEvent.query.count(), 0)
 
-    def test_operational_activation_requires_confirmation_and_compatible_approval_atomically(self):
+    def test_display_activation_requires_confirmation_and_never_approves_operational_inference(self):
         self.owner()
         response = self.post(automatic_retraining=True, operational_predictions=True)
         self.assertEqual(response.status_code, 409)
         self.assertIn('confirm', response.json['error'])
-        response = self.client.post(self.path, json=dict(expected_revision=0, confirm_operational=True,
-            **{key:True for key in intelligence.KEYS}))
-        self.assertEqual(response.status_code, 409)
-        self.assertIn('compatible', response.json['error'])
         self.assertTrue(all(intelligence.read(self.gateway.id)[key] is False for key in intelligence.KEYS))
         self.assertEqual(AccountSecurityEvent.query.count(), 0)
+        response = self.client.post(self.path, json=dict(expected_revision=0, confirm_operational=True,
+            learn_from_live_operations=False,automatic_retraining=False,operational_predictions=True))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(intelligence.read(self.gateway.id)['operational_predictions'])
+        self.assertFalse(intelligence.read(self.gateway.id)['learn_from_live_operations'])
+        self.assertFalse(intelligence.read(self.gateway.id)['automatic_retraining'])
+        self.assertFalse(frost_inference.predict(self.gateway.id,operational=True)['enabled'])
+        self.assertEqual(AccountSecurityEvent.query.count(), 1)
+        self.assertEqual(self.post(revision=1).status_code,200)
+        self.assertFalse(intelligence.read(self.gateway.id)['operational_predictions'])
+        self.assertEqual(AccountSecurityEvent.query.count(),2)
         with patch('app.services.frost_model_registry.current_release', return_value=SimpleNamespace(artifact_id=9)):
             self.assertIn('research-only', intelligence.operational_prerequisite(self.gateway.id))
 

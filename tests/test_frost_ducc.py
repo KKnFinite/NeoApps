@@ -1,0 +1,155 @@
+"""Committed historical-model display only; synthetic captures, no inference."""
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from unittest import TestCase
+from unittest.mock import patch
+
+from app.extensions import db
+from app.models import FrostHistoryTask as Task, Gateway
+from app.services import frost_ducc as display, frost_research, frost_vault as vault
+from tests import test_frost_intelligence as fixtures
+
+UTC=timezone.utc
+AT=datetime(2026,11,19,3,20,tzinfo=UTC)
+
+
+def capture_payload(gateway_id,cutoff=AT):
+    baseline=frost_research.prospective_summary()
+    return dict(schema_version='frost-auto-v1',gateway_id=gateway_id,baseline=baseline['baseline'],
+        source=dict(cutoff_at_utc=cutoff.isoformat()),committed_at_utc=(cutoff+timedelta(seconds=1)).isoformat(),
+        predictions=[dict(model_version=m['model_version'],model_sha256=m['sha256'],hours=m['hours'],
+            target_at_utc=(cutoff+timedelta(hours=m['hours'])).isoformat(),state='SCORED',
+            score=.12 if m['kind']=='logistic' else .34) for m in baseline['models']])
+
+
+def store_capture(gateway_id,cutoff=AT,*,compact=True,**changes):
+    payload=capture_payload(gateway_id,cutoff);payload.update(changes)
+    row=Task(gateway_id=gateway_id,kind='auto_capture',version='frost-auto-v1',
+        identity=cutoff.strftime('%Y%m%dT%H0000Z'),status='ready',
+        input_hash=vault.digest(vault.canonical(payload)),result_key='synthetic-archive',
+        summary=dict(prediction_display=display.display_summary(payload)) if compact else {})
+    db.session.add(row);db.session.commit()
+    return row,payload
+
+
+class DuccDisplayTest(TestCase):
+    setUp=fixtures.IntelligenceTest.setUp
+    tearDown=fixtures.IntelligenceTest.tearDown
+    login=fixtures.IntelligenceTest.login
+    owner=fixtures.IntelligenceTest.owner
+    post=fixtures.IntelligenceTest.post
+    path=fixtures.IntelligenceTest.path
+
+    def activate(self):
+        self.owner()
+        response=self.client.post(self.path,json=dict(expected_revision=0,confirm_operational=True,
+            learn_from_live_operations=False,automatic_retraining=False,operational_predictions=True))
+        self.assertEqual(response.status_code,200)
+
+    def test_off_on_off_is_fresh_read_only_and_no_acquisition_or_scoring(self):
+        self.activate();row,_=store_capture(self.gateway.id)
+        with patch.object(vault,'read_json',side_effect=AssertionError('Compact reads require no R2')):
+            before=Task.query.count()
+            version,hours=display.project(self.gateway,now=AT+timedelta(minutes=1))
+            self.assertEqual(len(hours),4)
+            self.assertTrue(all(v['text']=='FROST 12% / 34%' for v in hours.values()))
+            self.assertEqual(version,display.revision(self.gateway,now=AT+timedelta(minutes=1)))
+            self.assertEqual(Task.query.count(),before)
+            self.assertFalse(db.session.dirty)
+            self.assertEqual(self.post(revision=1).status_code,200)
+            off,hidden=display.project(self.gateway,now=AT+timedelta(minutes=1))
+            self.assertFalse(hidden);self.assertNotEqual(off,version)
+
+    def test_missing_unavailable_stale_foreign_or_corrupt_evidence_never_becomes_a_score(self):
+        self.activate();baseline=frost_research.prospective_summary();valid=display.display_summary(capture_payload(self.gateway.id))
+        now=AT+timedelta(minutes=1)
+        for key,value in [('gateway_id',999),('baseline','a'*64),('committed_at_utc',(now+timedelta(hours=1)).isoformat()),
+                ('cutoff_at_utc',(AT-timedelta(days=1)).isoformat()),('predictions',[])]:
+            with self.subTest(key=key):
+                bad=dict(valid,**{key:value});self.assertIsNone(display._verified(bad,self.gateway.id,now,baseline))
+        for key,value in [('state','GUESSED'),('score',float('nan')),('score',1.01),('score',True),
+                ('model_sha256','b'*64),('model_version','foreign'),('hours',4),('target_at_utc',(AT+timedelta(hours=1)).isoformat())]:
+            with self.subTest(key=key,value=value):
+                bad=deepcopy(valid);bad['predictions'][1][key]=value
+                self.assertIsNone(display._verified(bad,self.gateway.id,now,baseline))
+        unavailable=deepcopy(valid)
+        for p in unavailable['predictions']:p.update(state='UNAVAILABLE',score=None)
+        self.assertEqual(display._verified(unavailable,self.gateway.id,now,baseline)[1],{})
+        self.assertEqual(display.project(self.gateway,now=now)[1],{})
+        store_capture(self.gateway.id,AT-timedelta(hours=7))
+        self.assertEqual(display.project(self.gateway,now=now)[1],{})
+        foreign=Gateway(code='FOREIGN',name='Foreign',is_active=True);db.session.add(foreign);db.session.commit()
+        store_capture(foreign.id)
+        self.assertEqual(display.project(self.gateway,now=now)[1],{})
+
+    def test_newest_real_capture_wins_with_partial_unavailability_no_model_mixing(self):
+        self.activate();store_capture(self.gateway.id,AT-timedelta(hours=1))
+        payload=capture_payload(self.gateway.id)
+        payload['predictions'][1].update(state='UNAVAILABLE',score=None)
+        store_capture(self.gateway.id,predictions=payload['predictions'])
+        _,hours=display.project(self.gateway,now=AT+timedelta(minutes=1))
+        self.assertEqual(hours[AT.replace(minute=0)]['text'],'FROST 12% / —')
+        self.assertIn('H0 logistic 12%',hours[AT.replace(minute=0)]['accessible'])
+
+    def test_legacy_archive_is_verified_once_bounded_and_not_read_by_revision_or_off(self):
+        self.activate();row,payload=store_capture(self.gateway.id,compact=False)
+        with patch.object(vault,'read_json',return_value=payload) as archive, \
+                patch('app.services.frost_history.memory_allows_work',return_value=True):
+            now=AT+timedelta(minutes=1)
+            display.revision(self.gateway,now=now);archive.assert_not_called()
+            self.assertEqual(len(display.project(self.gateway,now=now)[1]),4)
+            self.assertEqual(len(display.project(self.gateway,now=now)[1]),4)
+            archive.assert_called_once()
+            self.assertEqual(self.post(revision=1).status_code,200)
+            self.assertEqual(display.project(self.gateway,now=now)[1],{})
+            archive.assert_called_once()
+
+    def test_legacy_failures_and_memory_deferrals_remain_unavailable_without_retry_storm(self):
+        self.activate();row,payload=store_capture(self.gateway.id,compact=False)
+        with patch.object(vault,'read_json',return_value=dict(payload,baseline='c'*64)) as archive, \
+                patch('app.services.frost_history.memory_allows_work',return_value=True):
+            for _ in range(2):self.assertEqual(display.project(self.gateway,now=AT+timedelta(minutes=1))[1],{})
+            archive.assert_called_once()
+        self.app.extensions.pop('frost_ducc_legacy',None)
+        with patch.object(vault,'read_json',side_effect=AssertionError('Memory guard')), \
+                patch('app.services.frost_history.memory_allows_work',return_value=False):
+            self.assertEqual(display.project(self.gateway,now=AT+timedelta(minutes=1))[1],{})
+
+    def test_decorates_matching_forecast_hour_without_altering_weather_or_unrelated_hours(self):
+        self.activate();store_capture(self.gateway.id)
+        version,hours=display.project(self.gateway,now=AT+timedelta(minutes=1))
+        cards=[dict(hours=[dict(start=AT.replace(minute=0),condition='Clear',temperature='30°F'),
+            dict(start=AT+timedelta(hours=2),condition='Snow',temperature='29°F')])]
+        display.decorate(cards,hours)
+        self.assertEqual(cards[0]['hours'][0]['condition'],'Clear')
+        self.assertEqual(cards[0]['hours'][0]['frost_predictions']['text'],'FROST 12% / 34%')
+        self.assertNotIn('frost_predictions',cards[0]['hours'][1])
+        self.assertNotEqual(version,display.revision(self.gateway,now=AT+timedelta(hours=1)))
+
+    def test_real_weather_context_and_lightweight_revision_agree_when_toggle_changes(self):
+        from app.services import neosubzero_weather as weather
+        self.activate();store_capture(self.gateway.id)
+        snapshot=dict(metar=dict(value=[],stale=False),forecast=dict(value={},stale=False))
+        cards=[dict(sort_date=AT.date(),hours=[dict(start=AT.replace(minute=0),condition='Clear')])]
+        now=AT+timedelta(minutes=1)
+        with patch.object(weather,'_weather_snapshot',return_value=snapshot), \
+                patch.object(weather,'_forecast_cards',side_effect=lambda *a,**k:deepcopy(cards)):
+            on=weather.neosubzero_weather_context(self.gateway,now=now)
+            self.assertEqual(on['revision'],weather.neosubzero_weather_revision(gateway=self.gateway,now=now))
+            self.assertIn('frost_predictions',on['future_forecast'][0]['hours'][0])
+            self.assertEqual(self.post(revision=1).status_code,200)
+            off=weather.neosubzero_weather_context(self.gateway,now=now)
+            self.assertEqual(off['revision'],weather.neosubzero_weather_revision(gateway=self.gateway,now=now))
+            self.assertNotEqual(on['revision'],off['revision'])
+            self.assertNotIn('frost_predictions',off['future_forecast'][0]['hours'][0])
+
+class AutoCaptureProjectionTest(TestCase):
+    def test_auto_capture_commits_projection_without_extra_scoring_or_rewriting_archive(self):
+        from tests.test_frost_phase13 import AutoTest
+        case=AutoTest();case.setUp();self.addCleanup(case.doCleanups)
+        self.assertEqual(case.tick(),1)
+        row=Task.query.filter_by(kind='auto_capture').one()
+        payload=vault.read_json(row.result_key,case.f.gateway.id)
+        self.assertEqual(row.summary['prediction_display'],display.display_summary(payload))
+        self.assertEqual(len(row.summary['prediction_display']['predictions']),8)
+        self.assertEqual(case.tick(),0);case.provider.assert_called_once()

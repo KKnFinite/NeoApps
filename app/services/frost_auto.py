@@ -372,6 +372,8 @@ def tick(gateway_id):
             with vault.transport_scope(),observe_process_memory('frost_snapshot_archive'):
                 capture_identity,digest=row.identity,row.input_hash
                 summary={k:v for k,v in row.summary.items() if k!='staged'}
+                from app.services.frost_ducc import display_summary
+                summary['prediction_display']=display_summary(payload)
                 db.session.rollback()
                 key=vault.put_json('weather',gateway_id,'auto-'+capture_identity,payload)
                 if vault.digest(vault.canonical(vault.read_json(key,gateway_id,max_bytes=MAX_SNAPSHOT)))!=digest:raise ValueError('Capture read-back checksum mismatch.')

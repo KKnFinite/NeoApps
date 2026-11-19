@@ -480,7 +480,7 @@ def ucc_revision_endpoint():
     revision = neosubzero_ucc_revision(
         gateway,
         operation,
-        weather_revision=neosubzero_weather_revision(),
+        weather_revision=neosubzero_weather_revision(gateway=gateway),
     )
     response = jsonify(
         {
@@ -1218,7 +1218,6 @@ def settings():
         frost_intelligence=frost_intelligence.read(gateway.id),
         frost_intelligence_fields=zip(frost_intelligence.KEYS, frost_intelligence.LABELS),
         can_edit_frost_intelligence=frost_intelligence.can_edit(current_user),
-        frost_operational_prerequisite=frost_intelligence.operational_prerequisite(gateway.id),
     )
 
 

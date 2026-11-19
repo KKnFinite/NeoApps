@@ -73,6 +73,9 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
         now=local_now,
         upcoming_limit=TV_UPCOMING_SORT_COUNT,
     )
+    from app.services import frost_ducc
+    frost_revision,predictions=frost_ducc.project(gateway,now=now)
+    frost_ducc.decorate(forecast_cards,predictions)
     # The management view retains its original date horizon and provider-error state.
     management_cards = (
         tuple(card for card in forecast_cards if card["sort_date"] < forecast_end)
@@ -117,7 +120,7 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
             if card.get("upcoming_on_tv") and (not isinstance(forecast, dict) or card["sort_date"] >= forecast_end)
         ),
         "forecast_status": forecast_status,
-        "revision": _weather_revision(snapshot),
+        "revision": hashlib.sha256((_weather_revision(snapshot)+frost_revision).encode()).hexdigest(),
         "sources": {
             "current": "AviationWeather.gov",
             "forecast": "NOAA / National Weather Service",
@@ -125,9 +128,12 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
     }
 
 
-def neosubzero_weather_revision(*, now=None):
+def neosubzero_weather_revision(*, gateway=None, now=None):
     """Refresh cached provider state and return its stable content revision."""
-    return _weather_revision(_weather_snapshot(now=now))
+    base=_weather_revision(_weather_snapshot(now=now))
+    if gateway is None:return base
+    from app.services.frost_ducc import revision
+    return hashlib.sha256((base+revision(gateway,now=now)).encode()).hexdigest()
 
 
 def clear_neosubzero_weather_cache():

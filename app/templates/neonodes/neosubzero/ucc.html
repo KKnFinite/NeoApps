@@ -73,7 +73,7 @@
             <article>
                 <time>{{ hour.time }}</time>
                 <div class="neosubzero-weather-hour-priority">
-                    <span><small>PRECIPITATION</small><b>{{ hour.probability }}</b><em>{{ hour.condition }}</em></span>
+                    <span><small>PRECIPITATION</small><b>{{ hour.probability }}</b><em>{{ hour.condition }}{% if hour.get('frost_predictions') %} · <span data-frost-predictions aria-label="{{ hour.frost_predictions.accessible }}">{{ hour.frost_predictions.text }}</span>{% endif %}</em></span>
                     <span><small>TEMPERATURE</small><b>{{ hour.temperature }}</b></span>
                 </div>
                 <div class="neosubzero-weather-hour-secondary">

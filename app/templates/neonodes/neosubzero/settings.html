@@ -22,9 +22,8 @@
                 <small aria-hidden="true"></small>
             </label>
             {% endfor %}
-            <p class="frost-note">{{ frost_operational_prerequisite }}</p>
             {% if can_edit_frost_intelligence %}
-            <label class="frost-confirm"><input type="checkbox" name="confirm_operational">I confirm activation of independently validated operational predictions and alerts.</label>
+            <label class="frost-confirm"><input type="checkbox" name="confirm_operational">I confirm displaying historical-model predictions in DUCC.</label>
             <button type="submit">SAVE FROST INTELLIGENCE</button>
             {% else %}<p>Only authorized NeoApps platform Grandmasters may change these settings.</p>{% endif %}
         </form>
