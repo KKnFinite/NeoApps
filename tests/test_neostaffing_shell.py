@@ -195,6 +195,20 @@ class StaffingShellTest(unittest.TestCase):
             self.assertLess(html.index(f'href="{recovery}"'), html.index(f'href="{timecards}"'))
             self.assertEqual(html.count('staffing-nav-section'), 1)
 
+    def test_secondary_navigation_is_collapsible_and_active_page_expands(self):
+        for desktop in (True, False):
+            html = self.navigation(desktop=desktop)
+            self.assertEqual(html.count('data-neostaffing-nav-more'), 1)
+            self.assertIn('>More Tools', html)
+            self.assertEqual(html.count('UNDER CONSTRUCTION'), 1)
+            self.assertLess(html.index('<details class="neostaffing-nav-more"'),
+                            html.index('UNDER CONSTRUCTION'))
+            self.assertIn('</details>', html)
+            secondary = self.navigation(desktop=desktop, endpoint='neostaffing.timecards')
+            self.assertIn('data-neostaffing-nav-more open', secondary)
+            primary = self.navigation(desktop=desktop, endpoint='neostaffing.attendance')
+            self.assertNotIn('data-neostaffing-nav-more open', primary)
+
     def test_construction_heading_disappears_when_all_eight_links_denied(self):
         denied={'neostaffing.staffing_groups.view', 'neostaffing.change_requests.view',
                 'neostaffing.bulk_change.use', 'neostaffing.people.view',

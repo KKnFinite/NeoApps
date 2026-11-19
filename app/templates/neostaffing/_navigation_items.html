@@ -1,8 +1,22 @@
-{% set nav_sections = namespace(construction_header_shown=false) %}
+{# One permission-filtered navigation source serves desktop and mobile. #}
+{% set nav_state = namespace(in_secondary=false, active_more=false) %}
 {% for item in staffing_screen_items %}
-{% if item.under_construction and not nav_sections.construction_header_shown %}
-<span class="staffing-nav-section" role="separator">UNDER CONSTRUCTION</span>
-{% set nav_sections.construction_header_shown = true %}
+    {% if item.under_construction %}{% set nav_state.in_secondary = true %}{% endif %}
+    {% if nav_state.in_secondary and item.active %}{% set nav_state.active_more = true %}{% endif %}
+{% endfor %}
+{% set nav_state.in_secondary = false %}
+{% for item in staffing_screen_items %}
+{% if item.under_construction and not nav_state.in_secondary %}
+<details class="neostaffing-nav-more" data-neostaffing-nav-more{% if nav_state.active_more %} open{% endif %}>
+    <summary class="neostaffing-nav-more-trigger" aria-label="More Tools">
+        {% if staffing_nav_class|default('') %}<span class="operational-side-link-icon" aria-hidden="true">···</span><span class="operational-side-link-label">{% endif %}
+        More Tools
+        {% if staffing_nav_class|default('') %}</span>{% endif %}
+        <span class="neostaffing-nav-more-chevron" aria-hidden="true">⌄</span>
+    </summary>
+    <div class="neostaffing-nav-more-links">
+        <span class="staffing-nav-section" role="separator">UNDER CONSTRUCTION</span>
+{% set nav_state.in_secondary = true %}
 {% endif %}
 <a class="{{ staffing_nav_class|default('') }}{% if item.active and staffing_nav_class|default('') %} is-active{% endif %}" data-staffing-nav href="{{ url_for(item.endpoint) }}"{% if staffing_nav_role|default('') %} role="{{ staffing_nav_role }}"{% endif %}{% if item.active %} aria-current="page"{% endif %}>
     {% if staffing_nav_class|default('') %}<span class="operational-side-link-icon" aria-hidden="true">{{ item.label[0] }}</span><span class="operational-side-link-label">{% endif %}
@@ -11,3 +25,7 @@
     {% if staffing_nav_class|default('') %}</span>{% endif %}
 </a>
 {% endfor %}
+{% if nav_state.in_secondary %}
+    </div>
+</details>
+{% endif %}

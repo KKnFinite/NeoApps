@@ -138,6 +138,7 @@
     {% endif %}
     {% if is_neostaffing_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20261106-sidebar-scroll-v1', attendance='20261110-autosave-v1' if request.endpoint == 'neostaffing.attendance' else none) }}">
+    <script defer src="{{ url_for('static', filename='js/neostaffing_nav_more.js', v='20261119-phase1') }}"></script>
     <script defer src="{{ url_for('static', filename='js/neostaffing_filters.js', v='20261001-report-state') }}"></script>
     <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION, csrf='20261031-renewal-v1', seniority='20261104-seasonal-v1') }}"></script>
     {% if request.endpoint == 'neostaffing.reports' %}

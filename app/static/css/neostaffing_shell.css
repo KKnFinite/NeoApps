@@ -136,3 +136,36 @@ body.blueprint-neostaffing .neostaffing-side-filter .neostaffing-org-tree-scroll
     gap:12px;
   }
 }
+
+
+/* Phase 1: native, accessible progressive-disclosure menu for secondary tools.
+   The one shared template serves both desktop and mobile; no link is removed. */
+.blueprint-neostaffing .neostaffing-nav-more { width:100%; min-width:0; }
+.blueprint-neostaffing .neostaffing-nav-more > summary {
+  display:flex; align-items:center; gap:8px; min-height:40px; box-sizing:border-box;
+  padding:7px 9px; border:1px solid #36535a; border-radius:6px;
+  background:#13252b; color:#d3e6e5; cursor:pointer; font-weight:750;
+  list-style:none;
+}
+.blueprint-neostaffing .neostaffing-nav-more > summary::-webkit-details-marker { display:none; }
+.blueprint-neostaffing .neostaffing-nav-more > summary::marker { content:''; }
+.blueprint-neostaffing .neostaffing-nav-more > summary:hover,
+.blueprint-neostaffing .neostaffing-nav-more[open] > summary { border-color:#55bcb6; background:#183330; }
+.blueprint-neostaffing .neostaffing-nav-more > summary:focus-visible { outline:2px solid #75d9ce; outline-offset:2px; }
+.blueprint-neostaffing .neostaffing-nav-more-chevron { margin-left:auto; flex:0 0 auto; font-size:1rem; line-height:1; transition:transform 160ms ease; }
+.blueprint-neostaffing .neostaffing-nav-more[open] .neostaffing-nav-more-chevron { transform:rotate(180deg); }
+.blueprint-neostaffing .neostaffing-nav-more-links { display:grid; gap:4px; min-width:0; padding:6px 0 0 5px; }
+.blueprint-neostaffing .neostaffing-nav-more-links > a { min-width:0; }
+.blueprint-neostaffing .neostaffing-nav-more-links .staffing-nav-section { margin-top:0; }
+@media (min-width:901px) {
+  body.operational-shell-page.operational-sidebar-collapsed .neostaffing-nav-more > summary {
+    justify-content:center; padding:7px 4px;
+  }
+  body.operational-shell-page.operational-sidebar-collapsed .neostaffing-nav-more > summary .operational-side-link-label,
+  body.operational-shell-page.operational-sidebar-collapsed .neostaffing-nav-more-chevron,
+  body.operational-shell-page.operational-sidebar-collapsed .neostaffing-nav-more-links .staffing-nav-section { display:none; }
+  body.operational-shell-page.operational-sidebar-collapsed .neostaffing-nav-more-links { padding-left:0; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .blueprint-neostaffing .neostaffing-nav-more-chevron { transition:none; }
+}
