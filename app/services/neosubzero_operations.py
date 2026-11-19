@@ -85,6 +85,10 @@ def operations_context(gateway, operation, mode):
             types = row['pass_types'] if not row['identity_conflict'] else ()
             surfaces = [row['pass1_surface'], row['pass2_surface']]
             row['visual_state'], row['visual_label'] = departure_presentation(row,tail_states.get(row['tail']))
+            # Departure closes entry to new treatment, while FIN still needs
+            # its own explicit CLEAR and pilot readback in desktop Dispatch.
+            row['desktop_clear'] = (mission.departure_status == 'departed' and row['visual_state'] == 'fin'
+                                    and not row['identity_conflict'] and row['tail'] != '-')
             if row['visual_state'] == 'untreated':
                 row['visual_state'], row['visual_label'] = (
                     ('pretreated', 'PRETREATED') if row.get('pretreat_milestones_complete') else ('untreated', 'NO STATUS'))
@@ -125,7 +129,7 @@ def operations_context(gateway, operation, mode):
 def outbound_quick_actions(row):
     """Presentation eligibility; canonical mutations still enforce all guards."""
     event = row.get('event')
-    if not row.get('mobile_open') or row.get('identity_conflict'):
+    if row.get('identity_conflict') or not (row.get('mobile_open') or row.get('desktop_clear')):
         return (), None
     status = getattr(event, 'status', None)
     if row.get('radio_pending'):

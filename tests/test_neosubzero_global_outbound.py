@@ -96,3 +96,31 @@ class GlobalOutboundTest(TestCase):
                 event_id=event.id,expected_version=old).status_code,409)
             self.assertEqual(self.mutation(mission,'clear').status_code,200)
             self.assertEqual(self.mutation(mission,'radio_complete').status_code,200)
+
+    def test_departure_keeps_finished_clear_and_manual_radio_available(self):
+        from app.services.neosubzero_operations import operations_context
+
+        mission = self.f.alpha
+        self.assertEqual(self.mutation(mission, 'initial_contact').status_code, 200)
+        times = dict(treatment_plan='one_type_i', pass1_surface_area='wings_tail',
+                     pass1_start='22:10', pass1_end='22:15')
+        self.assertEqual(self.mutation(mission, 'save_treatment', **times).status_code, 200)
+        mission.departure_status = 'departed'
+        db.session.commit()
+
+        def read_row():
+            context = operations_context(self.f.gateway, self.f.operation, 'outbound')
+            return next(row for row in context['rows'] if row['mission_id'] == mission.id)
+
+        finished = read_row()
+        self.assertEqual(finished['visual_state'], 'fin')
+        self.assertFalse(finished['mobile_open'])
+        self.assertTrue(finished['desktop_clear'])
+        self.assertEqual(finished['quick_actions'], (('clear', 'CLEAR'),))
+        self.assertEqual(self.mutation(mission, 'clear').status_code, 200)
+        pending = read_row()
+        self.assertTrue(pending['radio_pending'])
+        self.assertIsNone(pending['event'].radio_completed_at_utc)
+        self.assertEqual(self.mutation(mission, 'radio_complete').status_code, 200)
+        self.assertTrue(read_row()['radio_complete'])
+        self.assertEqual(read_row()['pass1_end'], '22:15')

@@ -509,7 +509,7 @@
             } else if (await preferences({ramp})) applyLayout();
         }
     });
-    const openAccordion = async (card, open) => {
+    const openAccordion = async (card, open, savedForm = null) => {
         saveDraft();
         const mission = card.closest('[data-ops-row]').dataset.missionId;
         if (open) {
@@ -537,7 +537,7 @@
         history.replaceState(null,'',currentUrl(selected));
         if (!open) ++epoch;
         if (open && (!isPretreat || card.querySelector('.ops-inline-loading'))) {
-            try { await fetchPage(mission); }
+            try { await fetchPage(mission, savedForm, Boolean(savedForm)); }
             catch (error) { inlineMessage(card.querySelector('[data-ops-inline]'),error.message,true); }
         }
     };
@@ -722,7 +722,8 @@
     root.addEventListener('submit', async event => {
         const form = event.target.closest('form'); if (!form) return;
         event.preventDefault(); if (busy || preferenceBusy) return;
-        if (form.dataset.subzeroConfirm && !window.confirm(form.dataset.subzeroConfirm)) return;
+        const confirmation = form.dataset.subzeroConfirm || (media.matches && form.dataset.subzeroConfirmMobile);
+        if (confirmation && !window.confirm(confirmation)) return;
         const inline = inlineFor(form);
         const autosave = form.matches(autosaveSelector) && !event.submitter;
         if (form.matches(autosaveSelector) && !autosave && !form.elements.correction_reason?.value.trim()) {
@@ -796,7 +797,10 @@
             }
             else notify(quiet ? '' : payload.message);
             if (!reasonSave) unlock();
-            await fetchPage(selected,form,true);
+            if (!isPretreat && !media.matches && root.dataset.layout === 'visual' && row &&
+                ['initial_contact','move_to_planned'].includes(body.get('action'))) {
+                await openAccordion(accordion(row), true, form);
+            } else await fetchPage(selected,form,true);
             if (reasonSave) unlock();
         } catch(error) {
             const message = error.name === 'AbortError' ? 'Save timed out. Your draft is kept. Check current state before retrying; no automatic retry was sent.'

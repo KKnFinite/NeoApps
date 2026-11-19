@@ -4,14 +4,15 @@ from pathlib import Path
 from unittest import TestCase
 from playwright.sync_api import expect
 from app.extensions import db
-from app.models import SortDateOperation, SortDateParkingAssignment, NeoSubZeroAuditEntry, NeoSubZeroDepartureDeiceEvent
+from app.models import (NeoSubZeroAuditEntry, NeoSubZeroDepartureDeiceEvent, SortDateMission,
+                        SortDateOperation, SortDateParkingAssignment)
 from tests.browser import test_neosubzero_operations as fixtures
 from tests import test_neosubzero_ucc as factories
 
 
 class GlobalOutboundBrowserTest(TestCase):
     def test_chromium_webkit_compact_autosave_and_global_lifecycle(self):
-        evidence=Path('instance/browser-evidence/subzero-outbound-ui').resolve();evidence.mkdir(parents=True,exist_ok=True)
+        evidence=Path('instance/browser-evidence/subzero-outbound-lifecycle').resolve();evidence.mkdir(parents=True,exist_ok=True)
         for engine in ('chromium','webkit'):
             with self.subTest(engine=engine):
                 case=fixtures.OperationsBrowserTest();case.setUpClass();browser=None
@@ -25,6 +26,7 @@ class GlobalOutboundBrowserTest(TestCase):
                             mids.append(m.id)
                         db.session.commit()
                     browser=getattr(case.pw,engine).launch();page=browser.new_page(viewport={'width':1366,'height':900},service_workers='block')
+                    page.set_default_timeout(15000)
                     dialogs=[]
                     def accept(dialog):
                         dialogs.append(dialog.message)
@@ -43,6 +45,29 @@ class GlobalOutboundBrowserTest(TestCase):
                     def quick(mid,action):
                         r=row(mid);old=r.locator('[data-ops-inline]').element_handle()
                         acknowledged(old,lambda:r.locator(f'[data-ops-quick-actions] button[value="{action}"]:visible').first.click())
+                    def mark_departed(mid):
+                        with case.app.app_context():
+                            db.session.get(SortDateMission, mid).departure_status = 'departed'
+                            db.session.commit()
+                        page.clock.run_for(5000)
+                        mission = row(mid)
+                        expect(mission).to_have_attribute('data-status','fin')
+                        expect(mission.locator('.ops-desktop button[value="clear"]:visible')).to_be_visible()
+
+                    def complete_radio(mid):
+                        mission = row(mid)
+                        with case.app.app_context():
+                            event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mid, reset_at_utc=None).one()
+                            self.assertIsNone(event.radio_completed_at_utc)
+                        mission.locator('[data-ops-radio]:visible').click()
+                        expect(mission.locator('[data-radio-script]')).to_be_visible()
+                        old = mission.locator('[data-ops-inline]').element_handle()
+                        acknowledged(old,lambda:mission.get_by_role('button',name='RADIO COMPLETE',exact=True).click())
+                        expect(mission).to_have_attribute('data-status','gone')
+                        expect(mission).to_have_css('background-color','rgb(104, 116, 128)')
+                        expect(mission.locator('[data-radio-script]')).to_be_hidden()
+                        expect(mission.locator('xpath=following-sibling::article[not(@data-status="gone")]')).to_have_count(0)
+
                     def change(mid,name,value):
                         f=row(mid).locator('.ops-outbound-pass-form');old=f.element_handle()
                         field=f.locator(f'[name="{name}"]')
@@ -104,13 +129,15 @@ class GlobalOutboundBrowserTest(TestCase):
                                 self.assertLessEqual(position['height'],28)
                                 plan = planned.locator('[name="treatment_plan"]:visible')
                                 page.mouse.move(10,10)
-                                expect(plan).to_have_css('background-color','rgb(38, 39, 36)')
-                                expect(plan).to_have_css('color','rgb(250, 249, 242)')
+                                expect(plan).to_have_css('background-color','rgb(237, 246, 250)')
+                                expect(plan).to_have_css('color','rgb(20, 47, 65)')
                                 expect(planned.locator('[data-subzero-pass="1"] legend')).to_have_css('color','rgb(255, 179, 97)')
                                 expect(planned.locator('[data-subzero-pass="2"] legend')).to_have_css('color','rgb(119, 229, 161)')
                                 if layout == 'list':
                                     pilot_start = fin.locator('.ops-outbound-location .ops-pilot-start')
                                     self.assertTrue(pilot_start.evaluate('el => el.scrollWidth <= el.clientWidth + 1'))
+                                    expect(fin.locator('select[name="treatment_plan"]:visible')).to_have_css('background-color','rgb(224, 233, 238)')
+                                    expect(fin.locator('.ops-outbound-extra')).to_have_css('display','none')
                                     primary = planned.locator('.ops-outbound-primary')
                                     headers = page.locator('.ops-outbound-columns > span').all()
                                     cells = primary.locator('.ops-outbound-identity,.ops-outbound-location,.ops-outbound-status,.ops-outbound-plan,.ops-outbound-reason,[data-subzero-pass]').all()
@@ -137,8 +164,10 @@ class GlobalOutboundBrowserTest(TestCase):
                         quick(mid,'initial_contact');quick(mid,'toggle_configured')
                         expect(row(mid)).to_have_attribute('data-status','configured')
                     quick(mids[-1],'toggle_configured');quick(mids[-1],'reset')
+                    quick(mids[-1],'set_negative')
+                    expect(row(mids[-1])).to_have_attribute('data-status','negative')
+                    quick(mids[-1],'move_to_planned')
                     self.assertEqual(dialogs,[])
-                    quick(mids[-1],'initial_contact')
                     change(mids[-1],'treatment_plan','type_i_type_iv')
                     expect(row(mids[0])).to_have_attribute('data-status','configured')
                     active = row(mids[0])
@@ -185,6 +214,7 @@ class GlobalOutboundBrowserTest(TestCase):
                         expect(row(mid)).to_have_attribute('data-status','fin')
                         expect(row(mid).locator('.ops-outbound-location')).to_contain_text('PILOT START '+('22:16' if index else '22:10'))
                         if index==2:
+                            mark_departed(mid)
                             desktop_evidence(mid)
                         quick(mid,'clear');expect(row(mid)).to_have_attribute('data-status','radio-pending')
                         expect(row(mid)).to_have_css('background-color','rgb(240, 45, 159)')
@@ -194,11 +224,7 @@ class GlobalOutboundBrowserTest(TestCase):
                         expect(row(mid).locator('[data-radio-script]')).to_be_visible()
                         row(mid).locator('[data-ops-expand-details]').click()
                         expect(row(mid)).to_have_attribute('data-status','radio-pending')
-                        row(mid).locator('[data-ops-radio]:visible').click()
-                        old=row(mid).locator('[data-ops-inline]').element_handle()
-                        acknowledged(old,lambda:row(mid).get_by_role('button',name='RADIO COMPLETE',exact=True).click())
-                        expect(row(mid)).to_have_attribute('data-status','gone')
-                        expect(row(mid)).to_have_css('background-color','rgb(104, 116, 128)')
+                        complete_radio(mid)
                         self.assertFalse(row(mid).locator('.ops-outbound-extra').evaluate('el=>el.open'))
 
                     # Same mission, same controls, column view and phone; no extra windows.
@@ -208,11 +234,22 @@ class GlobalOutboundBrowserTest(TestCase):
                     box, card = chevron.bounding_box(), target.bounding_box()
                     self.assertLess(box['y']-card['y'],10)
                     self.assertLess(card['x']+card['width']-box['x']-box['width'],10)
-                    chevron.press('Enter')
+                    quick(mids[-1],'reset')
+                    quick(mids[-1],'initial_contact')
                     expect(chevron).to_have_attribute('aria-expanded','true')
+                    expect(target.locator('[name="treatment_plan"]:visible')).to_be_visible()
+                    expect(target.locator('[name="reason_for_application"]:visible')).to_be_visible()
+                    expect(target.get_by_role('button',name='FROST PRESENT',exact=True)).to_be_visible()
+                    expect(target.get_by_role('button',name='NERVOUS CAPTAIN',exact=True)).to_be_visible()
+                    with case.app.app_context():
+                        db.session.get(SortDateMission, mids[-1]).destination = 'TST'
+                        db.session.commit()
+                    page.clock.run_for(5000)
+                    expect(target.locator('summary .ops-location')).to_contain_text('TST')
                     expect(target.locator('[data-ops-inline]')).to_be_visible()
+                    expect(page.locator('[data-ops-ramp-chevron][aria-expanded="true"]')).to_have_count(1)
                     expect(target.locator('.ops-inline-loading')).to_have_count(0)
-                    chevron.click();expect(target.locator('[data-ops-inline]')).to_be_hidden()
+                    chevron.press('Enter');expect(target.locator('[data-ops-inline]')).to_be_hidden()
                     chevron.click();expect(target.locator('[data-ops-inline]')).to_be_visible()
                     expect(target.locator('[name="reason_for_application"]:visible')).to_have_count(1)
                     change(mids[-1],'treatment_plan','type_i_type_iv')
@@ -225,7 +262,20 @@ class GlobalOutboundBrowserTest(TestCase):
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
                     target.evaluate('row=>row.scrollIntoView({block:"start"})')
                     page.screenshot(path=str(evidence/f'{engine}-mobile.png'))
+                    page.set_viewport_size({'width':1366,'height':900})
+                    case.ready(page,f'/neosubzero/operations?mode=outbound&mission={mids[-1]}')
+                    expect(page.locator('[data-ops-workspace]')).to_have_attribute('data-layout','visual')
+                    quick(mids[-1],'toggle_configured')
+                    expect(target).to_have_attribute('data-status','configured')
+                    for name, value in [('pass1_start','22:10'),('pass1_end','22:15'),('pass2_start','22:16'),('pass2_end','22:20')]:
+                        change(mids[-1],name,value)
+                    mark_departed(mids[-1])
+                    quick(mids[-1],'clear')
+                    expect(target).to_have_attribute('data-status','radio-pending')
+                    complete_radio(mids[-1])
+                    expect(chevron).to_have_attribute('aria-expanded','false')
                     self.assertEqual(page.get_by_role('dialog').count(),0)
+                    self.assertEqual(dialogs,[])
                     self.assertEqual(errors,[])
                 except Exception:
                     if browser:

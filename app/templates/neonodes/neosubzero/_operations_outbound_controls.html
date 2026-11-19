@@ -1,15 +1,15 @@
 {% from 'neonodes/neosubzero/_departure_deice.html' import mutation_identity, treatment_form, spray_reason, spray_position_forms, inspection_form with context %}
 
-{% macro action(row, key, label, confirm='') -%}
-<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if confirm %} data-subzero-confirm="{{ confirm }}"{% endif %}>
+{% macro action(row, key, label, mobile_confirm='') -%}
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}"{% if mobile_confirm %} data-subzero-confirm-mobile="{{ mobile_confirm }}"{% endif %}>
     {{ mutation_identity(row, board, row.ramp) }}<button name="action" value="{{ key }}">{{ label }}</button>
 </form>
 {%- endmacro %}
 
 {% macro quick_actions(row) %}
-<span class="ops-quick-actions ops-card-actions" data-ops-quick-actions>
+<span class="ops-quick-actions ops-card-actions{{ ' ops-desktop' if row.desktop_clear else '' }}" data-ops-quick-actions>
 {% if row.radio_pending and not row.identity_conflict %}<button type="button" data-ops-radio>RADIO</button>{% endif %}
-{% if can_edit and not row.identity_conflict and row.mobile_open %}
+{% if can_edit and not row.identity_conflict and (row.mobile_open or row.desktop_clear) %}
     {% for key,label in row.quick_actions %}
     {% if key != 'radio' and (key != 'reset' or user_can('neosubzero.coordinator.edit')) %}
         <button type="submit" form="ops-{{ row.mission_id }}-{{ key }}" name="action" value="{{ key }}">{{ label }}</button>
@@ -21,7 +21,7 @@
 {% endmacro %}
 
 {% macro quick_forms(row) %}
-{% if can_edit and not row.identity_conflict and row.mobile_open %}
+{% if can_edit and not row.identity_conflict and (row.mobile_open or row.desktop_clear) %}
     {% for key,label in row.quick_actions %}
     {% if key != 'radio' and (key != 'reset' or user_can('neosubzero.coordinator.edit')) %}
     <form hidden id="ops-{{ row.mission_id }}-{{ key }}" method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">

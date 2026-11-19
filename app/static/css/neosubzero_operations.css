@@ -424,49 +424,70 @@
 .neosubzero-operations[data-mode="outbound"] {
     --ops-control-bg:#262724;
     --ops-control-hover:#353630;
+    --ops-control-hover-border:#e2dfd3;
     --ops-control-ink:#faf9f2;
     --ops-control-border:#a4a297;
+    --ops-control-focus:#fff0be;
+    --ops-control-focus-edge:#191b17;
+    --ops-control-muted-bg:#30302c;
+    --ops-control-muted-ink:#dddacf;
+    --ops-control-placeholder:#c4c1b5;
+    --ops-control-arrow:#d9d6c9;
+    --ops-control-scheme:dark;
 }
 .neosubzero-operations[data-mode="outbound"] :is(.ops-mission-summary,.ops-mission-workspace) :is(select,textarea,input:not([type="hidden"],[type="checkbox"]),button),
 .neosubzero-operations[data-mode="outbound"] .ops-toolbar select {
-    color-scheme:dark; color:var(--ops-control-ink); background:var(--ops-control-bg);
+    color-scheme:var(--ops-control-scheme); color:var(--ops-control-ink); background:var(--ops-control-bg);
     border:1px solid var(--ops-control-border); border-radius:5px;
 }
 .neosubzero-operations[data-mode="outbound"] .ops-mission :is(select,textarea,input,button):not(:disabled,[readonly]):hover {
-    background:var(--ops-control-hover); border-color:#e2dfd3;
+    background:var(--ops-control-hover); border-color:var(--ops-control-hover-border);
 }
 .neosubzero-operations[data-mode="outbound"] .ops-mission :is(select,textarea,input,button):focus-visible {
-    outline:2px solid #fff0be; outline-offset:1px; box-shadow:0 0 0 1px #191b17;
+    outline:2px solid var(--ops-control-focus); outline-offset:1px; box-shadow:0 0 0 1px var(--ops-control-focus-edge);
 }
 .neosubzero-operations[data-mode="outbound"] .ops-mission-workspace :is(select:disabled,input[readonly],textarea[readonly]) {
-    color:#dddacf; background:#30302c; opacity:1;
+    color:var(--ops-control-muted-ink); background:var(--ops-control-muted-bg); opacity:1;
 }
-.neosubzero-operations[data-mode="outbound"] .ops-mission-workspace input::placeholder { color:#c4c1b5; opacity:1; }
+.neosubzero-operations[data-mode="outbound"] .ops-mission-workspace input::placeholder { color:var(--ops-control-placeholder); opacity:1; }
 /* The operational shell gives every select an important default palette. */
 .neosubzero-operations[data-mode="outbound"] select {
+    color-scheme:var(--ops-control-scheme);
     background-color:var(--ops-control-bg) !important;
     color:var(--ops-control-ink) !important;
     border-color:var(--ops-control-border) !important;
 }
 .neosubzero-operations[data-mode="outbound"] select:not([multiple]) {
     padding-inline-end:19px;
-    background-image:linear-gradient(45deg,transparent 50%,#d9d6c9 50%),linear-gradient(135deg,#d9d6c9 50%,transparent 50%) !important;
+    background-image:linear-gradient(45deg,transparent 50%,var(--ops-control-arrow) 50%),linear-gradient(135deg,var(--ops-control-arrow) 50%,transparent 50%) !important;
     background-position:calc(100% - 10px) center,calc(100% - 6px) center !important;
     background-size:4px 4px !important;
 }
 .neosubzero-operations[data-mode="outbound"] select:enabled:hover {
     background-color:var(--ops-control-hover) !important;
-    border-color:#e2dfd3 !important;
+    border-color:var(--ops-control-hover-border) !important;
 }
-.neosubzero-operations[data-mode="outbound"] select:focus-visible { border-color:#fff0be !important; }
+.neosubzero-operations[data-mode="outbound"] select:focus-visible { border-color:var(--ops-control-focus) !important; }
 .neosubzero-operations[data-mode="outbound"] select:disabled {
-    background-color:#30302c !important; color:#dddacf !important; opacity:1;
+    background-color:var(--ops-control-muted-bg) !important; color:var(--ops-control-muted-ink) !important; opacity:1;
 }
 .neosubzero-operations[data-mode="outbound"] select :is(option,optgroup) { color:var(--ops-control-ink); background:var(--ops-control-bg); }
 .neosubzero-operations[data-mode="outbound"] .ops-mission .neosubzero-spray-reason label { color:inherit; }
 @media (min-width:901px) {
     .neosubzero-operations[data-mode="outbound"] {
-        --ops-outbound-tracks:minmax(82px,.73fr) minmax(110px,.9fr) minmax(0,2.12fr) minmax(0,.96fr) minmax(0,1.3fr) repeat(2,minmax(0,1.78fr));
+        --ops-control-bg:#edf6fa;
+        --ops-control-hover:#d9edf6;
+        --ops-control-hover-border:#48768d;
+        --ops-control-ink:#142f41;
+        --ops-control-border:#658596;
+        --ops-control-focus:#132f46;
+        --ops-control-focus-edge:#f8fdff;
+        --ops-control-muted-bg:#e0e9ee;
+        --ops-control-muted-ink:#284b60;
+        --ops-control-placeholder:#47687c;
+        --ops-control-arrow:#315a70;
+        --ops-control-scheme:light;
+        --ops-outbound-tracks:minmax(94px,.76fr) minmax(120px,.98fr) minmax(0,2.20fr) minmax(0,.98fr) minmax(0,1.25fr) repeat(2,minmax(0,1.78fr));
         --ops-outbound-spacing:7px;
         --ops-outbound-field-height:30px;
     }
@@ -480,15 +501,16 @@
         align-items:center; column-gap:var(--ops-outbound-spacing);
     }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-columns { padding:4px 38px 4px 9px; color:#cfdbde; font:700 .7rem/1.2 var(--font-sans); }
-    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-mission-workspace { padding:5px 37px 5px 8px; border-top:0; gap:4px; }
+    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-mission-workspace { padding:4px 37px 4px 8px; border-top:0; gap:4px; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-primary > :is(.ops-outbound-identity,.ops-outbound-location,.ops-outbound-status) { display:grid; }
-    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-identity strong { font-size:1rem; }
+    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-identity strong { font-size:1.12rem; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-identity span,
-    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-location { font-size:.68rem; }
-    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-location .ops-pilot-start { font-size:.66rem; white-space:normal; }
+    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-location { font-size:.77rem; }
+    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-location strong { font-size:.8rem; }
+    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-location .ops-pilot-start { font-size:.72rem; white-space:normal; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-status { grid-column:3; grid-row:1; gap:3px; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-status .ops-quick-actions { margin:0; gap:3px; }
-    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-status button { padding:2px 4px; min-height:22px; font-size:.62rem; white-space:nowrap; }
+    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-status button { padding:2px 3px; min-height:22px; font-size:.62rem; white-space:nowrap; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-pass-form { display:contents; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] :is(.ops-outbound-plan,.ops-outbound-no-treatment) { grid-column:4; grid-row:1; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-reason { display:block; min-width:0; grid-column:5; grid-row:1; }
@@ -508,12 +530,14 @@
         padding:3px 5px; font:500 .75rem/1.2 var(--font-sans);
     }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-primary select { padding-inline-end:17px; }
-    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-primary [data-subzero-pass] select { font-size:.69rem; padding-inline-start:4px; }
+    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-primary [data-subzero-pass] select { font-size:clamp(.64rem,.78vw,.73rem); padding-inline-start:3px; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-primary [data-clock-time] { padding-inline:1px; text-align:center; font-size:.72rem; font-variant-numeric:tabular-nums; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-pass-form [data-subzero-deice-stamp] { display:none; }
     .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-pass-form label > span { display:block; }
-    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-extra > summary { display:none; }
-    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-extra[open] { border-top:1px solid currentColor; padding-top:4px; }
+    .neosubzero-operations[data-mode="outbound"] .ops-outbound-extra:not([open]),
+    .neosubzero-operations[data-mode="outbound"] .ops-outbound-extra:not(:has(> :not(summary,.ops-inline-loading,.ops-collapse,[hidden]))),
+    .neosubzero-operations[data-mode="outbound"] .ops-outbound-extra > :is(summary,.ops-inline-loading) { display:none; }
+    .neosubzero-operations[data-mode="outbound"][data-layout="list"] .ops-outbound-extra[open] { border-top:1px solid color-mix(in srgb,currentColor 35%,transparent); padding-top:4px; }
     .neosubzero-operations[data-mode="outbound"][data-layout="visual"] .ops-mission-summary { position:relative; cursor:default; }
     .neosubzero-operations[data-mode="outbound"] .ops-mission-workspace .ops-collapse { display:none; }
     .neosubzero-operations[data-mode="outbound"][data-layout="visual"] .ops-mission-line .ops-identity { padding-inline-end:28px; }
@@ -561,6 +585,7 @@
 .neosubzero-operations[data-layout="visual"] .ops-mission-workspace .neosubzero-deice-pass { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .neosubzero-operations[data-layout="visual"] .ops-mission-workspace .neosubzero-deice-pass label:first-of-type { grid-column:1 / -1; }
 @media (max-width:900px) {
+    .neosubzero-operations[data-mode="outbound"] .ops-card-actions.ops-desktop { display:none; }
     .neosubzero-operations .ops-mission-line { grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) 9px; gap:4px 7px; }
     .neosubzero-operations .ops-mission-line .ops-identity { grid-column:1; }
     .neosubzero-operations .ops-mission-line .ops-location { grid-column:2; grid-row:1 / span 2; }
