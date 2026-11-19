@@ -888,7 +888,7 @@ def _deice_planning_operation(gateway, *, initialize=False):
 
 
 def _deice_staffing_refresh(gateway, operation, *, weather_only=False):
-    if operation is None and weather_only:
+    if weather_only:
         # DUCC weather/research scores refresh independently of flight records.
         # The existing screen-level OFF setting and cadence remain authoritative.
         return live_screen_refresh_status(gateway, UCC_REFRESH_KEY)

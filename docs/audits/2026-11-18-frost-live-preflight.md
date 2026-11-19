@@ -26,8 +26,12 @@ training, setting changes or archive write probes were performed.
    no-current-Sort stop condition. DUCC now projects only the configured weather
    date/window using MotherBrain's existing read-only calendar resolver, including
    the preceding night after midnight. A transient weather namespace is never
-   persisted as an operation. Empty DUCC uses its existing screen refresh setting
-   independently of flight records, respecting configured OFF and cadence. Other
+   persisted as an operation. DUCC uses its existing screen refresh setting
+   independently of flight records, respecting configured OFF and cadence. Live
+   verification additionally found tonight's existing planning row classified as
+   `historical_sort` before activation. That operational classification must not
+   stop weather refresh either; it remains unchanged and is no longer used as a
+   DUCC weather polling gate. Other
    staffing/callout refresh behavior is unchanged. No DUCC template/CSS/JS changes.
 5. **PASS — resources and archive readiness.** At 02:10 UTC the measured container
    held 234.25 MiB of its 512 MiB limit: 277.75 MiB free and 117.75 MiB below the
@@ -42,9 +46,9 @@ training, setting changes or archive write probes were performed.
 ## Minimal correction verification
 
 - Original no-operation regression failed with `current_sort is None` before fix.
-- 18 focused Python cases passed: committed-score projection, configured overnight
+- 19 focused Python cases passed: committed-score projection, configured overnight
   weather without an operation, no INSERT/UPDATE/DELETE on reads, existing weather,
-  empty ramp geometry and explicit screen-OFF/callout-policy preservation.
+  empty ramp geometry, historical-planning records and explicit screen-OFF/callout-policy preservation.
 - Chromium and WebKit: actual five-second configured polling; a read-only user
   opens DUCC with zero SortDateOperation rows; a synthetic committed capture arrives;
   all four horizon pairs appear without reload and operation count remains zero.

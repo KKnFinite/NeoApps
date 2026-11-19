@@ -204,6 +204,18 @@ class DuccDisplayTest(TestCase):
             self.assertFalse(routes._deice_staffing_refresh(self.gateway,None)['auto_refresh_enabled'])
             existing.assert_called_once()
 
+    def test_weather_refresh_ignores_historical_planning_record_without_activating_it(self):
+        self.activate()
+        from types import SimpleNamespace
+        from app.neonodes.neosubzero import routes
+        operation=SimpleNamespace(id=94,is_manual_current=False)
+        with patch.object(routes,'subzero_refresh_status',return_value=dict(auto_refresh_enabled=False,reason='historical_sort')) as operational:
+            status=routes._deice_staffing_refresh(self.gateway,operation,weather_only=True)
+            self.assertTrue(status['auto_refresh_enabled'])
+            operational.assert_not_called()
+            self.assertFalse(operation.is_manual_current)
+            self.assertFalse(routes._deice_staffing_refresh(self.gateway,operation)['auto_refresh_enabled'])
+
 class AutoCaptureProjectionTest(TestCase):
     def test_auto_capture_commits_projection_without_extra_scoring_or_rewriting_archive(self):
         from tests.test_frost_phase13 import AutoTest
