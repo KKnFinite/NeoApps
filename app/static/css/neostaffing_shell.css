@@ -158,6 +158,9 @@ body.blueprint-neostaffing .neostaffing-side-filter .neostaffing-org-tree-scroll
 .blueprint-neostaffing .neostaffing-nav-more-links > a { min-width:0; }
 .blueprint-neostaffing .neostaffing-nav-more-links .staffing-nav-section { margin-top:0; }
 @media (min-width:901px) {
+  body.operational-shell-page.operational-sidebar-collapsed .motherbrain-desktop-side-menu > .staffing-nav-section {
+    display:none;
+  }
   body.operational-shell-page.operational-sidebar-collapsed .neostaffing-nav-more > summary {
     justify-content:center; padding:7px 4px;
   }
