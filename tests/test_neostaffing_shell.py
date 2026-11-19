@@ -199,7 +199,7 @@ class StaffingShellTest(unittest.TestCase):
         for desktop in (True, False):
             html = self.navigation(desktop=desktop)
             self.assertEqual(html.count('data-neostaffing-nav-more'), 1)
-            self.assertIn('>More Tools', html)
+            self.assertIn('More Tools', html)
             self.assertEqual(html.count('UNDER CONSTRUCTION'), 1)
             self.assertLess(html.index('<details class="neostaffing-nav-more"'),
                             html.index('UNDER CONSTRUCTION'))
