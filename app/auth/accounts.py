@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.auth import bp
 from app.auth import routes as legacy
 from app.extensions import db
-from app.models import AccountAccessDecision, AccountAccessRequest, AccountSecurityEvent, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User, FuelDriverIdentity, FuelVendorCompany
+from app.models import AccountAccessDecision, AccountAccessRequest, AccountSecurityEvent, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User, FuelDriverIdentity, FuelVendorMembership
 from app.models.user import MANAGEMENT_LEVELS
 from app.services.account_foundation import AccountConflict
 from app.services.account_security import guard_node_change, lock_administration, platform_grandmaster, record_security_change
@@ -73,8 +73,13 @@ def accounts_people():
         query = query.filter(User.is_active.is_(False))
     elif state == "unverified":
         query = query.filter(User.email_verified_at.is_(None))
-    if kind in {"vendor", "full"}:
-        query = query.filter(User.scorpion_vendor.has() if kind == "vendor" else ~User.scorpion_vendor.has())
+    from app.services.account_types import TYPES
+    supervisor = exists().where(FuelDriverIdentity.user_id==User.id, FuelDriverIdentity.account_type=='vendor_supervisor')
+    legacy_supervisor = exists().where(FuelVendorMembership.user_id==User.id, FuelVendorMembership.ended_at.is_(None), FuelVendorMembership.is_supervisor.is_(True)) & ~exists().where(FuelDriverIdentity.user_id==User.id, FuelDriverIdentity.account_type.is_not(None))
+    if kind in {'vendor','full','fuel_driver','vendor_supervisor'}:
+        query=query.filter(~User.scorpion_vendor.has() if kind=='full' else User.scorpion_vendor.has())
+        if kind=='vendor_supervisor':query=query.filter(supervisor | legacy_supervisor)
+        elif kind=='fuel_driver':query=query.filter(~(supervisor | legacy_supervisor))
     if app in {a["code"] for a in available_applications()}:
         query = query.filter(User.portal_app_accesses.any(app_code=app, status="approved", is_active=True))
     page = query.order_by(User.last_name.asc(), User.first_name.asc(), User.id.asc()).paginate(page=_page(), per_page=25, error_out=False)
@@ -82,7 +87,11 @@ def accounts_people():
     grants = {}
     for access in PortalAppAccess.query.filter(PortalAppAccess.user_id.in_([u.id for u in users])).all():
         grants.setdefault(access.user_id, []).append(access)
-    return render_template("auth/accounts/people.html", page=page, people=users, grants=grants,
+    ids=[u.id for u in users]
+    identities={r.user_id:r.account_type for r in FuelDriverIdentity.query.filter(FuelDriverIdentity.user_id.in_(ids)).all()}
+    legacy_supervisors={r.user_id for r in FuelVendorMembership.query.filter(FuelVendorMembership.user_id.in_(ids),FuelVendorMembership.ended_at.is_(None),FuelVendorMembership.is_supervisor.is_(True)).all()}
+    types={u.id:('vendor_supervisor' if identities.get(u.id)=='vendor_supervisor' or identities.get(u.id) is None and u.id in legacy_supervisors else 'fuel_driver') if u.scorpion_vendor else 'full' for u in users}
+    return render_template("auth/accounts/people.html", page=page, people=users, grants=grants,account_types=types,account_type_labels=TYPES,
         search=search, selected_status=state, selected_type=kind, selected_app=app,
         applications=available_applications(), **_tabs("people"))
 
@@ -142,12 +151,14 @@ def _profile(user_id, status=200, error=None):
     target = db.get_or_404(User, user_id)
     from app.services.account_deletion import receipt, can_delete
     deletion=receipt(target.id)
+    from app.services.account_types import administrator,current_type,requested_type,TYPES
+    kind=current_type(target)
     gateway = get_current_gateway()
     membership = GatewayMembership.query.filter_by(user_id=target.id, gateway_id=gateway.id).first()
     app_rows = legacy._portal_app_access_rows(target)
     attempts = AccountAccessRequest.query.filter_by(user_id=target.id).order_by(AccountAccessRequest.id.desc()).limit(40).all()
     events = AccountSecurityEvent.query.filter_by(subject_user_id=target.id).order_by(AccountSecurityEvent.id.desc()).limit(40).all()
-    from app.services.fuel_driver_accounts import current_membership, identity_verified
+    from app.services.fuel_driver_accounts import identity_verified
     tab = request.args.get("tab", "identity")
     if tab not in {"identity", "access", "security", "history"}:
         tab = "identity"
@@ -160,9 +171,39 @@ def _profile(user_id, status=200, error=None):
         can_edit_access=not deletion and user_can(legacy.PORTAL_MANAGEMENT_EDIT_PERMISSION),
         can_resend=not deletion and user_can(legacy.EMAIL_VERIFICATION_RESEND_PERMISSION),
         driver_identity=db.session.get(FuelDriverIdentity, target.id), ups_verified=identity_verified(target),
-        vendor_membership=current_membership(target.id), vendor_companies=FuelVendorCompany.query.filter_by(gateway_id=gateway.id, is_active=True).order_by(FuelVendorCompany.name).all(),
         can_commission_grandmaster=not deletion and may_commission(current_user, target),
-        can_delete_account=can_delete(current_user), deletion=deletion, error=error, **_tabs("people")), status
+        can_delete_account=can_delete(current_user), deletion=deletion, error=error,
+        account_type_labels=TYPES,current_account_type=kind,
+        selected_account_type=requested_type(target) if driver_identity_pending(target) else kind,
+        can_decide_account_type=not deletion and administrator(current_user) and current_user.id!=target.id and target.role!='grandmaster',
+        **_tabs("people")), status
+
+
+def driver_identity_pending(target):
+    row=db.session.get(FuelDriverIdentity,target.id)
+    return bool(row and row.requested_driver)
+
+
+@bp.post('/accounts/people/<int:user_id>/account-type')
+@login_required
+def account_type_decision(user_id):
+    from app.services.account_types import administrator,decide
+    if not administrator(current_user):abort(403)
+    db.get_or_404(User,user_id)
+    try:
+        decide(user_id,request.form.get('review_token',''),request.form.get('account_type'),request.form.get('outcome'),
+            request.form.get('employee_id'),request.form.get('identity_confirmed'),request.form.get('staffing_person_id'),
+            request.form.getlist('app_codes'),{app['code']:request.form.get('role_'+app['code'],'watcher') for app in available_applications()},
+            request.form.get('reason',''))
+        db.session.commit()
+    except PermissionError:
+        db.session.rollback();abort(403)
+    except (ValueError,SQLAlchemyError) as error:
+        db.session.rollback()
+        return _profile(user_id,409 if isinstance(error,AccountConflict) else 400 if isinstance(error,ValueError) else 503,
+            error=str(error) if isinstance(error,ValueError) else 'No changes saved. Please retry.')
+    flash('Account decision saved. Identity and operational history preserved.','success')
+    return redirect(url_for('auth.account_profile',user_id=user_id,tab='access'))
 
 
 @bp.post("/accounts/people/<int:user_id>/delete")

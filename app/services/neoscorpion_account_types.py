@@ -57,15 +57,16 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
     * full: remove vendor-mode marker, revoke nightly activity and require
       normal staff/app/node approval before full NeoApps access is granted.
     """
-    if account_type not in {"vendor", "full"}:
-        raise ValueError("Choose FULL NEO ACCOUNT or FUEL TRUCK DRIVER.")
+    account_type = 'fuel_driver' if account_type == 'vendor' else account_type
+    if account_type not in {"fuel_driver", "vendor_supervisor", "full"}:
+        raise ValueError("Choose Full NeoApps, Fuel Truck Driver or Vendor Supervisor.")
     if actor is None or user is None or actor.id == user.id:
         raise ValueError("An administrator cannot change their own account type.")
     # Match the nightly driver mutation lock order (Sort first, then
     # vendor/identity rows) so conversion cannot deadlock against a live claim.
     from app.services.neoscorpion import current_sort_operation
     from app.services.neoscorpion_assets import lock_nightly_asset_scope_for_mutation, record_nightly_operational_change
-    scopes = Gateway.query.filter_by(is_active=True).all() if account_type == "vendor" else [gateway]
+    scopes = Gateway.query.filter_by(is_active=True).all() if account_type != "full" else [gateway]
 
     def active_operations():
         candidates = [current_sort_operation(scope) for scope in scopes]
@@ -91,14 +92,16 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
     if profile is not None and profile.gateway_id != gateway.id:
         raise ValueError("Existing driver account belongs to a different gateway.")
 
-    if account_type == "vendor" and profile is not None:
+    from app.services.fuel_driver_accounts import supervisor_membership
+    prior_type = ('vendor_supervisor' if supervisor_membership(profile) else 'fuel_driver') if profile else 'full'
+    if account_type != "full" and profile is not None and prior_type == account_type:
         if not profile.enabled:
             raise ValueError("Driver account is disabled; enable it in Nightly Trucks.")
         return False
     if account_type == "full" and profile is None:
         return False
 
-    if account_type == "vendor":
+    if account_type != "full":
         _guard_last_grandmaster(user)
         from app.services.account_scope_runtime import revoke_gateway_ranks
         revoke_gateway_ranks(user.id,'Account converted to restricted Fuel Truck Driver.',actor=actor)
@@ -117,6 +120,13 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
             raise ValueError(
                 "Complete or reassign unfinished fueling work before converting to Fuel Truck Driver."
             )
+        if profile and prior_type != account_type:
+            from app.models import NeoScorpionTruckDriver, NeoScorpionVendorRequest
+            if (NeoScorpionTruckDriver.query.filter(NeoScorpionTruckDriver.sort_date_operation_id.in_(current_ids),
+                    NeoScorpionTruckDriver.driver_user_id==user.id).first()
+                or NeoScorpionVendorRequest.query.filter(NeoScorpionVendorRequest.sort_date_operation_id.in_(current_ids),
+                    NeoScorpionVendorRequest.user_id==user.id,NeoScorpionVendorRequest.status=='pending').first()):
+                raise ValueError('Dispatcher must release active truck claims and pending work before changing restricted account type.')
 
     now = datetime.utcnow()
     memberships = GatewayMembership.query.filter_by(user_id=user.id).populate_existing().all()
@@ -132,7 +142,7 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
     nodes = GatewayNodeRole.query.join(GatewayMembership).filter(
         GatewayMembership.user_id == user.id).populate_existing().all()
 
-    if account_type == "vendor":
+    if account_type != "full":
         roles = {user.role} | {grant.role for grant in (*apps, *nodes) if grant.is_active}
         if can_change_role and any(not can_change_role(role) for role in roles):
             raise ValueError("You cannot convert a user with a role equal to or higher than your own role.")
@@ -158,13 +168,16 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
         user.role = "watcher"
         user.is_management = False
         user.management_level = None
-        profile = NeoScorpionVendorAccount(
-            user_id=user.id, gateway_id=gateway.id, invited_by_user_id=actor.id,
-            enabled=True,
-        )
-        db.session.add(profile)
+        if profile is None:
+            profile = NeoScorpionVendorAccount(user_id=user.id, gateway_id=gateway.id, invited_by_user_id=actor.id,enabled=True)
+            db.session.add(profile)
+        for op, revision in locked:
+            night=db.session.get(NeoScorpionVendorNight,(op.id,user.id))
+            if night and night.status in {'pending','approved'}:
+                night.status='revoked';night.version+=1;night.changed_by_user_id=actor.id;night.updated_at=now
+                record_nightly_operational_change(revision,op.id)
         vendors.audit(gateway, actor, "account_converted_vendor", subject=user,
-                      identity_preserved=True, staff_grants_revoked=True)
+                      identity_preserved=True, staff_grants_revoked=True,account_type=account_type,previous_account_type=prior_type)
     else:
         # A later conversion back to a restricted account must not resurrect
         # an earlier company's Supervisor capability without a new decision.
@@ -225,6 +238,14 @@ def convert_account(gateway, actor, user, account_type, *, can_change_role=None,
 
     # Existing browser sessions cannot continue with privileges cached from
     # the previous account classification.
+    from app.models import FuelDriverIdentity
+    identity=db.session.get(FuelDriverIdentity,user.id)
+    if identity is None:
+        identity=FuelDriverIdentity(user_id=user.id)
+        db.session.add(identity)
+    else:identity.version+=1
+    identity.account_type=account_type
+    identity.requested_driver=False
     rotate_user_session_version(user)
     db.session.flush()
     db.session.expire(user, ["scorpion_vendor"])

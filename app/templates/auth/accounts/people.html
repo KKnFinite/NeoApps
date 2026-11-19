@@ -5,7 +5,7 @@
 <form class="aa-filters" method="get">
   <input type="hidden" name="q" value="{{ search }}">
   <label><span>Status</span><select name="status">{% for value,label in [('all','All statuses'),('active','Active'),('inactive','Inactive'),('unverified','Email unverified')] %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-  <label><span>Account type</span><select name="type">{% for value,label in [('all','All accounts'),('full','Full NeoApps'),('vendor','Fuel Truck Driver')] %}<option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label><span>Account type</span><select name="type">{% for value,label in [('all','All accounts'),('full','Full NeoApps'),('vendor','Restricted accounts'),('fuel_driver','Fuel Truck Driver'),('vendor_supervisor','Vendor Supervisor')] %}<option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
   <label><span>Application</span><select name="app"><option value="">All applications</option>{% for app in applications %}<option value="{{ app.code }}" {% if selected_app == app.code %}selected{% endif %}>{{ app.name }}</option>{% endfor %}</select></label>
   <button class="aa-button" type="submit">Filter</button>
 </form>
@@ -14,7 +14,7 @@
 <a class="aa-person" href="{{ url_for('auth.account_profile', user_id=person.id) }}">
   <span class="aa-avatar" aria-hidden="true">{{ (person.first_name or person.display_name)[:1]|upper }}</span>
   <span class="aa-person-name"><strong>{{ person.display_name }}</strong><small>{{ person.email or 'No email' }}</small></span>
-  <span><span>{{ 'Fuel Truck Driver' if person.scorpion_vendor else 'Full NeoApps' }}</span><small>Account {{ person.id }}{% if person.employee_id %} · {{ person.employee_id }}{% endif %}</small></span>
+  <span><span>{{ account_type_labels[account_types[person.id]] }}</span><small>Account {{ person.id }}{% if person.employee_id %} · {{ person.employee_id }}{% endif %}</small></span>
   <span class="aa-access-summary">{% for access in grants.get(person.id, []) if access.status == 'approved' and access.is_active %}<span>{{ access.app_code|replace('neogateway','NeoGateway')|replace('neostaffing','NeoStaffing')|replace('neobid','NeoBid · existing') }}</span>{% else %}<small>No approved applications</small>{% endfor %}</span>
   <span class="aa-state {{ 'ok' if person.is_active else '' }}">{{ 'Active' if person.is_active else 'Inactive' }}{% if not person.email_verified_at %}<small>Email unverified</small>{% endif %}</span>
 </a>

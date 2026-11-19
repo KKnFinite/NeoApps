@@ -1,4 +1,4 @@
-"""Pending claims, physical work preservation and company-scoped read models."""
+"""Pending claims, physical work preservation and gateway-scoped read models."""
 from datetime import datetime
 from unittest import TestCase
 from unittest.mock import patch
@@ -88,7 +88,7 @@ class FuelDriverSortAccessTest(TestCase):
             db.session.commit()
         return driver,supervisor,company
 
-    def test_supervisor_company_projection_and_no_driver_mutations(self):
+    def test_supervisor_gateway_projection_and_no_driver_mutations(self):
         # Fixture password is set explicitly through the normal password service.
         from app.services.password_policy import set_user_password
         set_user_password(self.dispatcher,'DriverPassword!1');db.session.commit()
@@ -104,7 +104,7 @@ class FuelDriverSortAccessTest(TestCase):
             with self.assertRaisesRegex(ValueError,'release current driver participation'):
                 accounts.assign_company(driver.id,review_token(driver),company.id,True,'Synthetic unsafe active supervisor change','DriverPassword!1',driver.id)
         self.assertFalse(accounts.current_membership(driver.id).is_supervisor)
-        # A verified second company cannot leak through a caller-supplied ID.
+        # Company filters cannot narrow or expand the server-authorized gateway scope.
         with self.fixture.app.test_request_context():
             login_user(self.dispatcher)
             other=accounts.create_company(self.gateway.id,'Company B','Synthetic second company');db.session.commit()
@@ -114,7 +114,17 @@ class FuelDriverSortAccessTest(TestCase):
             login_user(self.dispatcher)
             accounts.verify_ups_id(other_user.id,review_token(other_user),'OTHER-01','Synthetic other driver verification');db.session.commit()
             accounts.assign_company(other_user.id,review_token(other_user),other.id,False,'Synthetic other company affiliation','DriverPassword!1',other_user.id);db.session.commit()
-        self.assertEqual([r['user_id'] for r in accounts.supervisor_context(account)['supervisor']['rows']],[driver.id])
+        self.assertEqual({r['user_id'] for r in accounts.supervisor_context(account)['supervisor']['rows']},{driver.id,other_user.id})
+        from app.models import Gateway
+        foreign_gateway=Gateway(code='ALT',name='Synthetic other gateway',is_active=True)
+        db.session.add(foreign_gateway);db.session.flush()
+        from tests.test_account_security_phase1 import fixture_user
+        foreign_user=fixture_user('foreign-gateway-driver')
+        db.session.add(NeoScorpionVendorAccount(user_id=foreign_user.id,gateway_id=foreign_gateway.id,enabled=True,invited_by_user_id=self.dispatcher.id));db.session.commit()
+        with self.fixture.app.test_request_context():
+            login_user(self.dispatcher)
+            accounts.verify_ups_id(foreign_user.id,review_token(foreign_user),'OTHER-GATEWAY','Synthetic cross gateway verification');db.session.commit()
+        self.assertNotIn(foreign_user.id,{r['user_id'] for r in accounts.supervisor_context(account)['supervisor']['rows']})
         with self.assertRaises(PermissionError): vendors.request_claim(account,self.operation,self.truck.id)
         db.session.rollback()
         from flask import g
@@ -123,9 +133,28 @@ class FuelDriverSortAccessTest(TestCase):
         g.pop('_login_user',None)
         self.client.post('/login',data={'email':supervisor.email,'password':'VendorPassword123!'})
         self.assertEqual(self.client.get(DRIVER+'/supervisor').status_code,200)
-        self.assertNotIn(b'Foreign Company Driver',self.client.get(DRIVER+f'/supervisor?company_id={other.id}').data)
+        self.assertIn(b'Foreign Company Driver',self.client.get(DRIVER+f'/supervisor?company_id={other.id}').data)
         self.assertEqual(self.client.get(DRIVER+'/supervisor/revision').status_code,200)
         self.assertEqual(self.client.post(DRIVER+'/fuel-reading',data={'operation_id':self.operation.id}).status_code,403)
         company.is_active=False;db.session.commit()
-        self.assertEqual(self.client.get(DRIVER+'/supervisor/revision').status_code,403)
+        self.assertEqual(self.client.get(DRIVER+'/supervisor/revision').status_code,200)
+        db.session.get(NeoScorpionVendorAccount,supervisor.id).enabled=False;db.session.commit()
+        response=self.client.get(DRIVER+'/supervisor/revision')
+        self.assertEqual(response.status_code,302)
+        self.assertIn('/login',response.location)
         with self.assertRaises(PermissionError): vendors.require_approved(account,self.operation)
+
+    def test_unified_conversion_blocks_connected_driver_without_altering_active_operations(self):
+        from app.services.account_types import decide,current_type
+        self.prepare();driver,account=self.connect()
+        self.dispatcher.role='grandmaster';self.dispatcher.email_verified_at=datetime.utcnow();db.session.commit()
+        with self.fixture.app.test_request_context():
+            login_user(self.dispatcher)
+            accounts.verify_ups_id(driver.id,review_token(driver),'1234567','Synthetic verified driver identity');db.session.commit()
+            before=(NeoScorpionTruckDriver.query.filter_by(driver_user_id=driver.id).one().fuel_truck_id,
+                self.selection.current_gallons,NeoScorpionFuelingEvent.query.count())
+            with self.assertRaisesRegex(ValueError,'release active truck claims'):
+                decide(driver.id,review_token(driver),'vendor_supervisor','approved','1234567','yes',None,[],{},'')
+            self.assertEqual(current_type(driver),'fuel_driver')
+            self.assertEqual(before,(NeoScorpionTruckDriver.query.filter_by(driver_user_id=driver.id).one().fuel_truck_id,
+                self.selection.current_gallons,NeoScorpionFuelingEvent.query.count()))

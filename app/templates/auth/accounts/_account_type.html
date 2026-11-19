@@ -1,0 +1,16 @@
+{% if can_decide_account_type %}
+<section class="aa-section"><h3>Account type &amp; approval</h3>
+<p class="aa-muted">Current: {{ account_type_labels[current_account_type] }}{% if driver_identity and driver_identity.requested_driver %} · Requested: {{ account_type_labels.get(driver_identity.account_type,'Fuel Truck Driver') }}{% endif %}</p>
+<form class="aa-form" method="post" action="{{ url_for('auth.account_type_decision',user_id=target_user.id,tab='access') }}" data-account-approval>
+{{ csrf_field() }}<input type="hidden" name="review_token" value="{{ review }}">
+<div class="aa-grid"><label><span>Account type</span><select name="account_type">{% for code,label in account_type_labels.items() %}<option value="{{ code }}" {% if code==selected_account_type %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label><span>Employee / UPS ID</span><input name="employee_id" value="{{ target_user.employee_id or '' }}" data-original="{{ target_user.employee_id or '' }}" inputmode="numeric" maxlength="80"></label></div>
+<label class="aa-check"><input name="identity_confirmed" type="checkbox" value="yes"><span>I verified this employee's identity and Employee / UPS ID.</span></label>
+<label><span>Linked NeoStaffing Person ID, only if identity matching requires confirmation</span><input name="staffing_person_id" inputmode="numeric"></label>
+<div data-account-applications {% if selected_account_type!='full' %}hidden{% endif %}>
+{% for row in app_access_rows if not row.app.coming_soon %}{% set access=row.access %}<div class="aa-inline"><label class="aa-check"><input type="checkbox" name="app_codes" value="{{ row.app.code }}" {% if access and access.is_active and access.status in ['approved','pending'] %}checked{% endif %}><span>{{ row.app.name }}</span></label><select name="role_{{ row.app.code }}" aria-label="{{ row.app.name }} role">{% for role in role_choices %}<option value="{{ role }}" {% if role==(access.role if access else 'watcher') %}selected{% endif %}>{{ role|role_label }}</option>{% endfor %}</select></div>{% endfor %}</div>
+<label><span>Decision reason (optional)</span><input name="reason" maxlength="2000"></label>
+<div class="aa-actions"><button class="aa-button" name="outcome" value="approved" type="submit">Approve / save account</button>{% if attempts|selectattr('state','equalto','pending')|list or app_access_rows|selectattr('access')|map(attribute='access')|selectattr('status','equalto','pending')|list %}<button class="aa-button secondary" name="outcome" value="denied" type="submit" formnovalidate>Deny request</button>{% endif %}</div>
+<p class="aa-muted">Full NeoApps receives only the selected application roles. Drivers still require Dispatcher approval each Sort. Supervisors have gateway-scoped read-only visibility and cannot perform driver actions.</p>
+</form></section>
+{% endif %}

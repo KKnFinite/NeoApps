@@ -279,7 +279,8 @@ def login():
 def _authenticated_landing_endpoint(user):
     """Choose only an accessible canonical landing page, never a supplied URL."""
     if user.scorpion_vendor:
-        return "scorpion_vendor.my_truck"
+        from app.services.fuel_driver_accounts import supervisor_membership
+        return "scorpion_vendor.supervisor" if supervisor_membership(user.scorpion_vendor) else "scorpion_vendor.my_truck"
     from app.services.accounts_workspace import authorized_applications, preference
 
     apps = authorized_applications(user)
@@ -1346,11 +1347,11 @@ def _build_user_from_account_form(form):
     if not re.fullmatch(r"(?:[0-9]{7}|[0-9]{10})", employee_id):
         raise ValueError("Employee / UPS ID is required. Enter exactly 7 or 10 digits (1234567 or 1234567890), numbers only.")
     account_type = form.get("account_type", "full")
-    if account_type not in {"full", "fuel_driver"}:
-        raise ValueError("Choose Full NeoApps or Fuel Truck Driver.")
-    if account_type == "fuel_driver":
+    if account_type not in {"full", "fuel_driver", "vendor_supervisor"}:
+        raise ValueError("Choose Full NeoApps, Fuel Truck Driver or Vendor Supervisor.")
+    if account_type != "full":
         if form["app_codes"] != ["neogateway"]:
-            raise ValueError("Fuel Truck Driver requests use restricted NeoGateway access only.")
+            raise ValueError("Restricted account requests use NeoGateway access only.")
     password = request.form.get("password", "")
     confirm_password = request.form.get("confirm_password", "")
 
@@ -1402,9 +1403,10 @@ def _build_user_from_account_form(form):
     )
     db.session.add(user)
     db.session.flush()
-    if account_type == "fuel_driver":
-        from app.models import FuelDriverIdentity
-        db.session.add(FuelDriverIdentity(user_id=user.id, requested_driver=True))
+    from app.models import FuelDriverIdentity, AccountSecurityEvent
+    db.session.add(FuelDriverIdentity(user_id=user.id, requested_driver=account_type != "full", account_type=account_type))
+    db.session.add(AccountSecurityEvent(actor_user_id=user.id,subject_user_id=user.id,
+        action='account_type_requested',details=dict(account_type=account_type,applications=form['app_codes'],origin='registration')))
     return user
 
 

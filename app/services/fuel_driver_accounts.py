@@ -59,21 +59,26 @@ def current_membership(user_id):
 
 
 def supervisor_membership(account):
+    if not account:
+        return None
+    identity = FuelDriverIdentity.query.filter_by(user_id=account.user_id).populate_existing().first()
+    if identity and identity.account_type:
+        return account if identity.account_type == 'vendor_supervisor' else None
+    # Compatibility with an administrator's existing Supervisor grant. No
+    # company verification, active-company or company-ownership authorization.
     member = current_membership(account.user_id)
     return member if member and member.is_supervisor else None
 
 
 def require_supervisor(account):
-    # Fresh on every HTML/API read, including revocation and company deactivation.
+    # Fresh on every HTML/API read, including capability and account revocation.
     account = NeoScorpionVendorAccount.query.filter_by(user_id=account.user_id).populate_existing().one_or_none()
     user = User.query.filter_by(id=account.user_id).populate_existing().one() if account else None
-    member = current_membership(user.id) if user else None
-    company = FuelVendorCompany.query.filter_by(id=member.company_id).populate_existing().first() if member else None
+    supervisor = supervisor_membership(account) if user else None
     if not (account and account.enabled and user.is_active and user.email_verified_at and identity_verified(user)
-            and member and member.is_supervisor and company and company.is_active and company.verified_at
-            and company.gateway_id == account.gateway_id and account.gateway.is_active):
-        raise PermissionError("Verified Vendor Supervisor access for this company is required.")
-    return member, company
+            and supervisor and account.gateway.is_active):
+        raise PermissionError("An enabled, verified Vendor Supervisor account is required.")
+    return account
 
 
 def _platform_actor():
@@ -215,19 +220,17 @@ def set_company_active(company_id, active, expected_version, reference, password
 
 
 def supervisor_context(account):
-    """Minimized current-company projection; never a full Dispatch/Fueler context."""
+    """Gateway-scoped read-only operations; never a Dispatch/Fueler context."""
     from sqlalchemy import or_
     from app.models import NeoScorpionFuelTruck, NeoScorpionFuelAssignment, NeoScorpionFuelWorkState, SortDateMission, SortDateParkingAssignment
     from app.services.neoscorpion import current_sort_operation
-    member, company = require_supervisor(account)
+    require_supervisor(account)
     operation = current_sort_operation(account.gateway)
     rows = []
     if operation and not operation.archived_at_utc:
-        members = FuelVendorMembership.query.filter_by(company_id=company.id, ended_at=None, is_supervisor=False).all()
-        ids = [m.user_id for m in members]
-        accounts = NeoScorpionVendorAccount.query.filter(NeoScorpionVendorAccount.user_id.in_(ids),
+        accounts = NeoScorpionVendorAccount.query.filter(
             NeoScorpionVendorAccount.gateway_id == account.gateway_id, NeoScorpionVendorAccount.enabled.is_(True)).all()
-        people = {a.user_id: a.user for a in accounts if a.user.is_active and a.user.email_verified_at and identity_verified(a.user)}
+        people = {a.user_id: a.user for a in accounts if a.user.is_active and a.user.email_verified_at and identity_verified(a.user) and not supervisor_membership(a)}
         connections = {r.driver_user_id: r for r in NeoScorpionTruckDriver.query.filter(
             NeoScorpionTruckDriver.sort_date_operation_id == operation.id, NeoScorpionTruckDriver.driver_user_id.in_(list(people))).all()}
         trucks = {t.id: t for t in NeoScorpionFuelTruck.query.filter(
@@ -260,8 +263,7 @@ def supervisor_context(account):
             rows.append(dict(user_id=user_id, name=user.display_name, status=night.status if night else "pending",
                 truck=truck.truck_number if truck else None, missions=missions))
         rows.sort(key=lambda r: (r["name"].lower(), r["user_id"]))
-    payload = dict(company_id=company.id, company=company.name, membership_id=member.id,
-        company_version=company.version, operation_id=operation.id if operation and not operation.archived_at_utc else None,
+    payload = dict(gateway=account.gateway.code, operation_id=operation.id if operation and not operation.archived_at_utc else None,
         sort_label=f"{operation.sort_name} {operation.sort_date}" if operation and not operation.archived_at_utc else "NO ACTIVE SORT", rows=rows)
     revision = sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
     return dict(supervisor=payload, fingerprint={"supervisor_revision": revision, "operation_id": payload["operation_id"]})

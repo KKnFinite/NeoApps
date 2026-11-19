@@ -6,12 +6,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.auth import bp
 from app.auth.accounts import _tabs
 from app.extensions import db
-from app.models import FuelVendorCompany, User
+from app.models import User
 from app.services.access_control import get_current_gateway
 from app.services.account_security import platform_grandmaster
 from app.services.account_foundation import AccountConflict
 from app.services.auth_rate_limits import client_ip_for_request, login_is_limited, record_login_failure
-from app.services.fuel_driver_accounts import verify_ups_id, assign_company, create_company, set_company_active
+from app.services.fuel_driver_accounts import verify_ups_id
 from app.services.grandmaster_commissioning import ReauthenticationFailed
 
 
@@ -59,41 +59,16 @@ def fuel_driver_identity(user_id):
 @login_required
 def fuel_driver_company(user_id):
     _guard()
-    _step_up_limit()
-    target = db.get_or_404(User, user_id)
-    try:
-        raw_company = request.form.get("company_id", "").strip()
-        if raw_company and (not raw_company.isascii() or not raw_company.isdecimal() or int(raw_company) < 1):
-            raise ValueError("Select a valid verified company, or explicitly choose no company.")
-        assign_company(user_id, request.form.get("review_token", ""), int(raw_company) if raw_company else None,
-            request.form.get("is_supervisor") == "1", request.form.get("verification_reference"),
-            request.form.get("current_password", ""), request.form.get("confirmed_user_id"))
-        db.session.commit()
-    except (ValueError, SQLAlchemyError) as error:
-        return _failure(error, target)
-    flash("Verified company access updated. Existing sessions were invalidated.", "info")
-    return redirect(url_for("auth.account_profile", user_id=user_id, tab="access"))
+    return 'Company-based capability changes have retired. Use Accounts & Access account type approval.',410
 
 
 @bp.route("/accounts/vendor-companies", methods=["GET", "POST"])
 @login_required
 def fuel_vendor_companies():
     _guard()
-    gateway = get_current_gateway()
-    if request.method == "POST":
-        try:
-            if request.form.get("action") == "status":
-                _step_up_limit()
-                set_company_active(request.form.get("company_id",type=int), request.form.get("active") == "1",
-                    request.form.get("version"), request.form.get("verification_reference"), request.form.get("current_password", ""))
-            else:
-                create_company(gateway.id, request.form.get("name"), request.form.get("verification_reference"))
-            db.session.commit()
-        except (ValueError, SQLAlchemyError) as error:
-            return _failure(error)
-        flash("Verified company record saved.", "info")
-        return redirect(url_for("auth.fuel_vendor_companies"))
-    return render_template("auth/accounts/vendor_companies.html", companies=FuelVendorCompany.query.filter_by(gateway_id=gateway.id).order_by(FuelVendorCompany.name).all(), gateway=gateway, **_tabs("security"))
+    if request.method == 'POST':
+        return 'Company administration has retired. Use Accounts & Access account type approval.',410
+    return redirect(url_for('auth.accounts_security'))
 
 
 @bp.post("/accounts/signup-invitation")

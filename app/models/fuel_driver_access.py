@@ -8,6 +8,9 @@ class FuelDriverIdentity(db.Model):
     __tablename__ = "fuel_driver_identities"
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
     requested_driver = db.Column(db.Boolean, nullable=False, default=False)
+    # Latest requested/approved type; original requests remain immutable audits.
+    # NULL preserves legacy capability until an administrator explicitly edits it.
+    account_type = db.Column(db.String(24), nullable=True)
     verified_ups_id = db.Column(db.String(80))
     verified_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     verified_at = db.Column(db.DateTime)

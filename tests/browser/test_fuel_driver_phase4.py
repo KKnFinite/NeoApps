@@ -11,7 +11,7 @@ from werkzeug.serving import make_server
 from flask_login import login_user
 from app import create_app
 from app.extensions import db
-from app.models import User, Gateway, SortDateOperation, SortDateMission, NeoScorpionFuelAssignment, NeoScorpionFuelTruck, NeoScorpionSortTruck, NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionTruckDriver, NeoScorpionFuelingEvent, FuelVendorCompany
+from app.models import User, Gateway, SortDateOperation, SortDateMission, NeoScorpionFuelAssignment, NeoScorpionFuelTruck, NeoScorpionSortTruck, NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionTruckDriver, NeoScorpionFuelingEvent, FuelDriverIdentity
 from app.services import fuel_driver_accounts as accounts
 from app.services.accounts_workspace import review_token
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -59,29 +59,32 @@ class FuelDriverPhase4BrowserTest(TestCase):
                                 prefix=f'{engine}-{width}';email=prefix+'@example.test'
                                 context=browser.new_context(viewport={'width':width,'height':900 if width==1280 else 844})
                                 page=context.new_page();page.set_default_timeout(12000);errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
-                                page.goto(origin+'/create-account?account_type=fuel_driver')
+                                page.goto(origin+'/create-account?account_type=vendor_supervisor')
+                                page.locator('[name=account_type]').select_option('vendor_supervisor')
                                 self.assertTrue(page.locator('[name=employee_id]').evaluate('(el)=>el.required'))
-                                for key,value in dict(first_name=prefix,last_name='Driver',email=email,employee_id='ID-'+prefix,supervisor_name='Manager',work_area='Vendor',access_reason='Synthetic fuel truck duties',password=PASSWORD,confirm_password=PASSWORD).items():page.locator(f'[name={key}]').fill(value)
+                                for key,value in dict(first_name=prefix,last_name='Driver',email=email,employee_id=str(1000000+(0 if engine=='chromium' else 100)+width),supervisor_name='Manager',work_area='Vendor',access_reason='Synthetic fuel truck duties',password=PASSWORD,confirm_password=PASSWORD).items():page.locator(f'[name={key}]').fill(value)
                                 page.get_by_role('button',name='Create account & request access').click();expect(page.get_by_role('heading',name='Verify Your Email',exact=True)).to_be_visible()
                                 page.goto(origin+'/verify-email/'+tokens[email])
                                 with app.app_context():target=User.query.filter_by(email=email).one().id
                                 workspace.AccountsWorkspaceBrowserTest.login(page,origin,'phase4-owner@example.test')
-                                page.goto(origin+f'/accounts/people/{target}')
-                                form=page.locator('form[action$="/fuel-driver-identity"]');form.locator('[name=verification_reference]').fill('Synthetic checked UPS identity')
-                                with page.expect_navigation(wait_until='domcontentloaded'):form.get_by_role('button',name='Verify & save UPS ID').click()
                                 page.goto(origin+f'/accounts/people/{target}?tab=access')
-                                page.once('dialog',lambda d:d.accept())
-                                with page.expect_navigation(wait_until='domcontentloaded'):page.get_by_role('button',name='Approve Fuel Truck Driver account').click()
+                                form=page.locator('[data-account-approval]')
+                                form.locator('[name=account_type]').select_option('fuel_driver')
+                                form.locator('[name=identity_confirmed]').check()
+                                expect(form.locator('[data-account-applications]')).to_be_hidden()
+                                self.assertEqual(page.locator('[name=company_id]').count(),0)
+                                self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
+                                with page.expect_navigation(wait_until='domcontentloaded'):form.get_by_role('button',name='Approve / save account').click()
                                 workspace.AccountsWorkspaceBrowserTest.login(page,origin,email)
                                 expect(page.get_by_text('AWAITING DISPATCHER APPROVAL',exact=True)).to_be_visible()
                                 self.assertEqual(page.get_by_text('N444UP',exact=True).count(),0)
                                 page.locator('[name=truck_id]').select_option(str(truck_id))
                                 with page.expect_navigation(wait_until='domcontentloaded'):page.get_by_role('button',name='REQUEST TRUCK',exact=True).click()
                                 expect(page.get_by_text('CLAIM · TRUCK TEST-44 · PENDING',exact=True)).to_be_visible()
-                                page.screenshot(path=str(evidence/f'pending-{prefix}.png'),full_page=True)
+                                if engine=='chromium':page.screenshot(path=str(evidence/f'pending-{prefix}.png'),full_page=True)
                                 admincontext=browser.new_context(viewport={'width':1280,'height':900});review=admincontext.new_page()
                                 workspace.AccountsWorkspaceBrowserTest.login(review,origin,'phase4-owner@example.test')
-                                self.assertEqual(review.request.post(origin+f'/accounts/people/{target}/vendor-company',data={'company_id':'1'}).status,400)
+                                self.assertEqual(review.request.post(origin+f'/accounts/people/{target}/vendor-company',data={'company_id':'1'}).status,400) # Missing CSRF remains rejected before retired route.
                                 self.assertEqual(review.goto(origin+'/neoscorpion/driver/manage').status,200)
                                 claim=review.locator('article').filter(has=review.locator('[name=request_id]')).filter(has_text=prefix)
                                 with review.expect_navigation(wait_until='domcontentloaded'):claim.get_by_role('button',name='APPROVE FOR SORT',exact=True).click()
@@ -89,32 +92,28 @@ class FuelDriverPhase4BrowserTest(TestCase):
                                 page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
                                 expect(page.get_by_role('heading',name='TRUCK TEST-44',exact=True)).to_be_visible(timeout=15000)
                                 self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
-                                page.screenshot(path=str(evidence/f'approved-{prefix}.png'),full_page=True)
+                                if engine=='chromium':page.screenshot(path=str(evidence/f'approved-{prefix}.png'),full_page=True)
                                 with app.test_request_context():
                                     login_user(db.session.get(User,admin_id))
-                                    company=accounts.create_company(gateway_id,'Company '+prefix,'Synthetic company verification');db.session.commit()
-                                    driver=db.session.get(User,target)
-                                    accounts.assign_company(target,review_token(driver),company.id,False,'Synthetic driver affiliation',PASSWORD,target);db.session.commit()
                                     supervisor=fixture_user('super-'+prefix)
-                                    db.session.add(NeoScorpionVendorAccount(user_id=supervisor.id,gateway_id=gateway_id,enabled=True,invited_by_user_id=admin_id));db.session.commit()
-                                    accounts.verify_ups_id(supervisor.id,review_token(supervisor),'SUP-'+prefix,'Synthetic supervisor identity');db.session.commit()
-                                    accounts.assign_company(supervisor.id,review_token(supervisor),company.id,True,'Synthetic supervisor affiliation',PASSWORD,supervisor.id);db.session.commit()
-                                    supervisor_id=supervisor.id
-                                    company_id=company.id
+                                    supervisor.employee_id=str(2000000+(0 if engine=='chromium' else 100)+width)
+                                    db.session.commit()
+                                    from app.services.account_types import decide
+                                    decide(supervisor.id,review_token(supervisor),'vendor_supervisor','approved',supervisor.employee_id,'yes',None,[],{},'')
+                                    db.session.commit();supervisor_id=supervisor.id
                                 workspace.AccountsWorkspaceBrowserTest.login(page,origin,'super-'+prefix+'@example.test')
-                                page.get_by_role('link',name='SUPERVISOR VIEW',exact=True).click()
                                 expect(page.get_by_role('heading',name='SUPERVISOR VIEW',exact=True)).to_be_visible()
                                 expect(page.get_by_text('N444UP',exact=False)).to_be_visible()
                                 self.assertEqual(page.locator('[name=truck_id]').count(),0)
                                 self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
-                                page.screenshot(path=str(evidence/f'supervisor-{prefix}.png'),full_page=True)
-                                # Revoke with the same canonical service, then check the already-open screen.
-                                with app.test_request_context():
-                                    login_user(db.session.get(User,admin_id))
-                                    company=db.session.get(FuelVendorCompany,company_id)
-                                    accounts.set_company_active(company.id,False,company.version,'Synthetic company revocation',PASSWORD);db.session.commit()
-                                page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
-                                expect(page.get_by_role('link',name='SUPERVISOR VIEW',exact=True)).to_be_visible(timeout=15000)
+                                if engine=='chromium':page.screenshot(path=str(evidence/f'supervisor-{prefix}.png'),full_page=True)
+                                # A canonical subtype decision invalidates the already-open Supervisor session.
+                                review.goto(origin+f'/accounts/people/{supervisor_id}?tab=access')
+                                change=review.locator('[data-account-approval]')
+                                change.locator('[name=account_type]').select_option('fuel_driver')
+                                with review.expect_navigation(wait_until='domcontentloaded'):change.get_by_role('button',name='Approve / save account').click()
+                                page.goto(origin+'/neoscorpion/driver/supervisor')
+                                expect(page.locator('[name=email]')).to_be_visible()
                                 self.assertEqual(page.get_by_text('N444UP',exact=False).count(),0)
                                 self.assertEqual(errors,[])
                                 # Disconnect through canonical Dispatcher service between independent scenarios.

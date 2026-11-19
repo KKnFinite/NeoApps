@@ -90,7 +90,7 @@ class FuelDriverAccountsTest(TestCase):
     def test_ups_correction_no_conversion_history_and_stale_conflict(self):
         self.restricted()
         prior_id=self.target.id
-        token=self.review()
+        token=self.review(tab="access")
         old_version=self.target.auth_session_version
         self.assertEqual(self.verify(token=token).status_code,302)
         self.assertEqual(self.target.employee_id,'000123')
@@ -119,16 +119,26 @@ class FuelDriverAccountsTest(TestCase):
         self.assertEqual(self.target.employee_id,old)
         self.assertEqual(StaffingPerson.query.one().employee_id,old)
 
-    def test_invalid_company_input_never_means_membership_revocation(self):
-        self.restricted();self.verify();company=self.company()
-        self.assertEqual(self.membership(company,False).status_code,302)
-        response=self.action('vendor-company',dict(company_id='malformed',is_supervisor='0',verification_reference='Synthetic malformed company',current_password=PASSWORD,confirmed_user_id=self.target.id))
-        self.assertEqual(response.status_code,400)
-        self.assertEqual(service.current_membership(self.target.id).company_id,company.id)
+    def legacy_supervisor(self):
+        """Controlled compatibility fixture; new approvals never use companies."""
+        account=self.restricted();self.verify();company=self.company()
+        db.session.get(FuelDriverIdentity,self.target.id).account_type=None;db.session.commit()
+        with self.app.test_request_context():
+            login_user(self.admin)
+            service.assign_company(self.target.id,review_token(self.target),company.id,True,
+                'Synthetic legacy supervisor grant',PASSWORD,self.target.id)
+            db.session.commit()
+        return account,company
+
+    def test_retired_company_post_cannot_revoke_or_change_historical_membership(self):
+        account,company=self.legacy_supervisor()
+        prior=service.current_membership(self.target.id).id
+        self.assertEqual(self.action('vendor-company',dict(company_id='malformed',is_supervisor='0')).status_code,410)
+        self.assertEqual(service.current_membership(self.target.id).id,prior)
+        self.assertTrue(service.require_supervisor(account))
 
     def test_conversion_cannot_resurrect_old_supervisor_company_authority(self):
-        self.restricted();self.verify();company=self.company()
-        self.assertEqual(self.membership(company).status_code,302)
+        account,company=self.legacy_supervisor()
         member_id=service.current_membership(self.target.id).id
         url=f'/admin/users/{self.target.id}/account-type'
         for kind in ('full','vendor'):
@@ -140,40 +150,30 @@ class FuelDriverAccountsTest(TestCase):
         with self.assertRaises(PermissionError):service.require_supervisor(db.session.get(NeoScorpionVendorAccount,self.target.id))
         self.assertEqual(AccountSecurityEvent.query.filter_by(subject_user_id=self.target.id,action='fuel_vendor_membership_closed_by_conversion').count(),1)
 
-    def test_company_supervisor_explicit_audit_revocation_and_read_only_gets(self):
-        account=self.restricted()
-        self.assertEqual(self.verify().status_code,302)
-        company=self.company()
-        before=self.target.auth_session_version
-        self.assertEqual(self.membership(company).status_code,302)
-        self.assertGreater(self.target.auth_session_version,before)
-        self.assertTrue(service.require_supervisor(account))
-        self.assertEqual(self.membership(company).status_code,409)
+    def test_legacy_supervisor_compatibility_no_company_dependency_and_read_only_gets(self):
+        account,company=self.legacy_supervisor()
+        company.is_active=False;db.session.commit()
         statements=[]
         def record(_c,_cu,s,*_):
-            if s.lstrip().upper().startswith(('INSERT','UPDATE','DELETE')): statements.append(s)
+            if s.lstrip().upper().startswith(('INSERT','UPDATE','DELETE')):statements.append(s)
         event.listen(db.engine,'before_cursor_execute',record)
         try:
             with patch('app.services.neoscorpion.current_sort_operation',return_value=None):
                 payload=service.supervisor_context(account)
             self.assertEqual(payload['supervisor']['rows'],[])
-        finally: event.remove(db.engine,'before_cursor_execute',record)
+            self.assertEqual(payload['supervisor']['sort_label'],'NO ACTIVE SORT')
+        finally:event.remove(db.engine,'before_cursor_execute',record)
         self.assertEqual(statements,[])
-        self.assertEqual(self.membership(None,False).status_code,302)
-        with self.assertRaises(PermissionError): service.require_supervisor(account)
         self.assertEqual(FuelVendorMembership.query.count(),1)
-        self.assertIsNotNone(FuelVendorMembership.query.one().ended_at)
+        self.assertIsNone(FuelVendorMembership.query.one().ended_at)
 
-    def test_wrong_password_and_company_staleness_roll_back(self):
-        self.restricted();self.verify();company=self.company()
-        data=dict(company_id=company.id,is_supervisor='1',verification_reference='Synthetic attestation',
-            current_password='wrong password',confirmed_user_id=self.target.id)
-        self.assertEqual(self.action('vendor-company',data).status_code,400)
-        self.assertEqual(FuelVendorMembership.query.count(),0)
-        token=self.review(tab='access')
-        company.is_active=False;company.version+=1;db.session.commit()
-        self.assertEqual(self.membership(company,token=token).status_code,400)
-        self.assertEqual(FuelVendorMembership.query.count(),0)
+    def test_retired_company_endpoints_reject_changes_without_mutating_history(self):
+        account,company=self.legacy_supervisor()
+        before=(company.version,self.target.auth_session_version,service.current_membership(self.target.id).id)
+        self.assertEqual(self.client.post('/accounts/vendor-companies',data={'action':'status','company_id':company.id,'active':'0'}).status_code,410)
+        self.assertEqual(self.action('vendor-company',dict(company_id=company.id,current_password='wrong')).status_code,410)
+        self.assertEqual(before,(company.version,self.target.auth_session_version,service.current_membership(self.target.id).id))
+        self.assertTrue(company.is_active)
 
     def test_shared_signup_invitation_creates_no_account_or_access(self):
         self.login(self.admin)
