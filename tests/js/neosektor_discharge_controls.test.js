@@ -15,6 +15,7 @@ function harness(canEdit=true) {
         elements.push(e); return e;
     };
     const cut=node({dischargeCut:''});
+    const stop=node({dischargeStop:''});
     const back=node({dischargeBack:'east'});
     const west=node({dischargeBack:'west'});
     back.control={hidden:false};
@@ -31,7 +32,7 @@ function harness(canEdit=true) {
         const e=node({priorityBay:'Bay '+n}); orderHost.children.push(e);
         Object.defineProperty(e,'nextSibling',{get:()=>orderHost.children[orderHost.children.indexOf(e)+1] || null});
     }
-    let state={routing:{back_pickups:{east:false,west:false},cut_discharge:false,bay_priority_order:orderHost.children.map(e=>e.dataset.priorityBay)},
+    let state={routing:{stop_sign:false,stop_sign_version:0,stop_sign_scope:'1:2026-11-19:night',back_pickups:{east:false,west:false},cut_discharge:false,bay_priority_order:orderHost.children.map(e=>e.dataset.priorityBay)},
         sides:{east:{bays:[{bay_name:'Bay 1',status:'Overflowing',}]},west:{bays:[]}}};
     const root={querySelector:s=>s==='[data-discharge-order]'?orderHost:elements.find(e=>match(e,s)),
         addEventListener:(name,fn)=>{listeners[name]=fn;}};
@@ -42,7 +43,7 @@ function harness(canEdit=true) {
         onError:e=>errors.push(e),send:command=>new Promise((resolve,reject)=>{calls.push(command);pending.push({resolve,reject});})});
     const apply=next=>{state=next;api.apply(next);};
     const finish=async(next,fail=false)=>{apply(next);const p=pending.shift();fail?p.reject(new Error('conflict')):p.resolve();await tick();};
-    return {api,cut,back,west,slider,statusLabel,orderHost,calls,errors,listeners,orderListeners,apply,finish,get state(){return state;}};
+    return {api,cut,stop,back,west,slider,statusLabel,orderHost,calls,errors,listeners,orderListeners,apply,finish,get state(){return state;}};
 }
 
 test('cut pending state survives a poll; acknowledgement reconciles with no global disabling', async()=>{
@@ -148,4 +149,23 @@ test('side Back Pickup ignores bay status, protects pending choice and sends gua
     await h.finish(h.state,true);
     assert.equal(h.back.checked,false);
     assert.equal(h.calls.length,3); // Conflict is reconciled, never replayed.
+});
+
+
+test('STOP uses existing scoped versioned transport, protects pending selection and reconciles conflicts',async()=>{
+    const h=harness();h.stop.checked=true;h.listeners.change({target:h.stop});
+    assert.equal(h.calls.length,1);assert.equal(h.calls[0].action,'stop_sign');
+    assert.equal(h.calls[0].expected_version,0);assert.equal(h.calls[0].expected_scope,h.state.routing.stop_sign_scope);
+    assert.equal(h.stop.disabled,true);assert.equal(h.back.disabled,false);assert.equal(h.cut.disabled,false);
+    h.apply(structuredClone(h.state));assert.equal(h.stop.checked,true);
+    await h.finish({...h.state,routing:{...h.state.routing,stop_sign:true,stop_sign_version:1}});
+    assert.equal(h.stop.checked,true);assert.equal(h.stop.disabled,false);
+    h.stop.checked=false;h.listeners.change({target:h.stop});
+    assert.equal(h.calls[1].expected_version,1);
+    await h.finish({...h.state,routing:{...h.state.routing,stop_sign:true,stop_sign_version:3}},true);
+    assert.equal(h.stop.checked,true);assert.equal(h.stop.disabled,false);
+    assert.deepEqual(h.errors,['conflict']);assert.equal(h.calls.length,2);
+    assert.equal(h.back.checked,false);assert.equal(h.west.checked,false);
+    const readonly=harness(false);readonly.stop.checked=true;readonly.listeners.change({target:readonly.stop});
+    assert.equal(readonly.calls.length,0);assert.equal(readonly.stop.disabled,true);
 });

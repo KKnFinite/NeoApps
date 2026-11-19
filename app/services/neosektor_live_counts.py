@@ -75,7 +75,8 @@ BALLMAT_DETAIL_DEFAULTS = {
     "spotter_mode": 1, "mode_version": 0, "pending_mode": None, "mode_request_version": 0,
     "right_first": 0, "right_second": 0, "right_open": 0,
 }
-DISCHARGE_DEFAULTS = {"back_pickup_mask": 0, "cut_discharge": False, "discharge_auto_fired": False}
+DISCHARGE_DEFAULTS = {"back_pickup_mask": 0, "cut_discharge": False, "discharge_auto_fired": False,
+                      "stop_sign": False, "stop_sign_version": 0}
 # Bits 0–4 are retired per-bay values. Never interpret them as side controls.
 BACK_PICKUP_SIDE_BITS = {"east": 1 << 5, "west": 1 << 6}
 DEFAULT_BAY_PRIORITY_ORDER = ["Bay 5", "Bay 4", "Bay 3", "Bay 2", "Bay 1"]
@@ -476,6 +477,10 @@ class NeoSektorOperationalStateBundle:
         )
         auto_due = self.discharge_due_before or _discharge_auto_due(sort_row, state["waves"], self.resolved_arrived_waves())
         cut = bool(sort_row.cut_discharge or (auto_due and not sort_row.discharge_auto_fired))
+        # Presentation override only; canonical routes, timers and discharge keep running.
+        routing["stop_sign"] = bool(sort_row.stop_sign)
+        routing["stop_sign_version"] = sort_row.stop_sign_version
+        routing["stop_sign_scope"] = f"{self.gateway.id}:{self.sort_date.isoformat()}:{self.sort_name}"
         routing["cut_discharge"] = cut
         routing["discharge_auto_fired"] = bool(sort_row.discharge_auto_fired or auto_due)
         routing["discharge_message"] = "Discharge cut. Report to doors." if cut else ""
@@ -1042,6 +1047,18 @@ def update_discharge_controls(bundle, payload):
         if payload.get("expected_order") != _bay_priority_order(bundle.operational_settings):
             raise BallmatModeConflict("Bay Priority changed. Review the current order.")
         bundle.operational_settings.bay_priority_order = ",".join(str(_bay_number(bay)) for bay in order)
+    elif action == "stop_sign":
+        if type(payload.get("enabled")) is not bool:
+            raise ValueError("Invalid STOP SIGN value.")
+        expected = payload.get("expected_version")
+        scope = f"{bundle.gateway.id}:{bundle.sort_date.isoformat()}:{bundle.sort_name}"
+        if (type(expected) is not int or expected != bundle.sort_state.stop_sign_version
+                or payload.get("expected_scope") != scope):
+            raise BallmatModeConflict("STOP SIGN or current Sort changed. Review the current state.")
+        if payload["enabled"] != bundle.sort_state.stop_sign:
+            _assign_if_changed(bundle.sort_state, "stop_sign", payload["enabled"],
+                               change_tracker=bundle._change_tracker)
+            bundle.sort_state.stop_sign_version += 1
     elif action == "back_pickup":
         side = payload.get("side")
         if not isinstance(side, str) or side not in BACK_PICKUP_SIDE_BITS or type(payload.get("enabled")) is not bool:

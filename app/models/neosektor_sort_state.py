@@ -24,6 +24,8 @@ class NeoSektorSortState(db.Model):
     unloaded_total = db.Column(db.Integer, nullable=False, default=0)
     # Bits 0..4 are retired bay flags; bit 5 EAST, bit 6 WEST. Current sort only.
     back_pickup_mask = db.Column(db.Integer, nullable=False, default=0)
+    stop_sign = db.Column(db.Boolean, nullable=False, default=False)
+    stop_sign_version = db.Column(db.Integer, nullable=False, default=0)
     cut_discharge = db.Column(db.Boolean, nullable=False, default=False)
     discharge_auto_fired = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

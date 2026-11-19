@@ -470,7 +470,7 @@ class DischargeControlsTest(unittest.TestCase):
         self.assertLess(styles.index(mobile), styles.index(controls))
         self.assertNotIn('/static/css/neosektor_driver_routing.css', styles)
         css = Path('app/static/css/neosektor_discharge_controls.css').read_text()
-        self.assertIn('.tunnel-back-pickup-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr))', css)
+        self.assertIn('.tunnel-back-pickup-row { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)', css)
         self.assertIn('min-height:44px', css)
         self.assertNotIn('flex-direction:column', css)
 

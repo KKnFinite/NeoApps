@@ -31,6 +31,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
+        "stop_sign": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "stop_sign_version": "INTEGER NOT NULL DEFAULT 0",
         "cut_discharge": "BOOLEAN NOT NULL DEFAULT FALSE",
         "discharge_auto_fired": "BOOLEAN NOT NULL DEFAULT FALSE",
     },
@@ -358,6 +360,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
+        "stop_sign": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "stop_sign_version": "INTEGER NOT NULL DEFAULT 0",
         "cut_discharge": "BOOLEAN NOT NULL DEFAULT FALSE",
         "discharge_auto_fired": "BOOLEAN NOT NULL DEFAULT FALSE",
     },

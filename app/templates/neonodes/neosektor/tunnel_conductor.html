@@ -305,6 +305,7 @@
             </div>
             <div class="tunnel-back-pickup-row" role="group" aria-label="Back Pickup sides">
                 {% for side_key in ['east', 'west'] %}
+                {% if side_key == 'west' %}<label class="sektor-back-pickup"><input type="checkbox" data-discharge-stop {% if state.routing.stop_sign %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>STOP SIGN</label>{% endif %}
                 <label class="sektor-back-pickup" data-back-pickup-control><input type="checkbox" data-discharge-back="{{ side_key }}" {% if state.routing.back_pickups[side_key] %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>BACK PICKUP {{ side_key|upper }}</label>
                 {% endfor %}
             </div>
@@ -323,7 +324,7 @@
 
 <script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20261101-poll-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neosektor_spotter_modes.js', mode='20260909-v1') }}"></script>
-<script src="{{ url_for('static', filename='js/neosektor_discharge_controls.js', controls='20260915-side-back') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_discharge_controls.js', controls='20261119-stop-sign') }}"></script>
 <script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-tunnel-conductor]");

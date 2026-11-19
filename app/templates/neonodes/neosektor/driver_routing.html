@@ -29,11 +29,13 @@
         <section
             class="driver-wave driver-wave-{{ wave_key }} neosektor-driver-wave-card"
             data-driver-wave="{{ wave_key }}"
+            data-stop-sign="{{ 'true' if state.routing.stop_sign else 'false' }}"
             data-direction="{{ route.direction }}"
             data-display-state="{{ route.display_state }}"
             aria-label="{{ route.wave_label }} route"
         >
             <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
+            {% include "neonodes/neosektor/_driver_stop.html" %}
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
                     {% if route.display_state != "route" %}
@@ -66,11 +68,13 @@
         <section
             class="driver-wave driver-wave-{{ wave_key }} neosektor-driver-wave-card"
             data-driver-wave="{{ wave_key }}"
+            data-stop-sign="{{ 'true' if state.routing.stop_sign else 'false' }}"
             data-direction="{{ route.direction }}"
             data-display-state="{{ route.display_state }}"
             aria-label="{{ route.wave_label }} route"
         >
             <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
+            {% include "neonodes/neosektor/_driver_stop.html" %}
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
                     {% if route.display_state != "route" %}
@@ -126,11 +130,13 @@
         }, Math.max(1000, seconds * 1000));
     };
 
-    const applyRoute = (waveKey, route) => {
+    const applyRoute = (waveKey, route, stopSign) => {
         const panel = root.querySelector(`[data-driver-wave="${waveKey}"]`);
         if (!panel || !route) {
             return;
         }
+        panel.dataset.stopSign = stopSign ? "true" : "false";
+        panel.querySelector("[data-driver-stop]").hidden = !stopSign;
         panel.dataset.direction = route.direction;
         panel.dataset.displayState = route.display_state || "route";
         const target = panel.querySelector("[data-driver-target]");
@@ -180,8 +186,8 @@
     const applyState = (state) => {
         routingWatch?.observe(state.routing_watch);
         const routing = state.routing || {};
-        applyRoute("first", (routing.routes || {}).first);
-        applyRoute("second", (routing.routes || {}).second);
+        applyRoute("first", (routing.routes || {}).first, Boolean(routing.stop_sign));
+        applyRoute("second", (routing.routes || {}).second, Boolean(routing.stop_sign));
         applyBayPriority(routing.bay_priority);
         root.querySelector('[data-driver-discharge-cut]').hidden = !routing.cut_discharge;
     };

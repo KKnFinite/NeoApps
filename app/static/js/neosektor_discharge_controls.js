@@ -10,6 +10,9 @@ window.NeoSektorDischargeControls = {
         const labels = ['Empty', 'Light', 'Moderate', 'Full', 'Overflowing'];
         const order = () => Array.from(orderHost.querySelectorAll('[data-priority-bay]'), b => b.dataset.priorityBay);
         const render = () => {
+            const stop = root.querySelector('[data-discharge-stop]');
+            if (stop && !pending.has('stop')) stop.checked = Boolean(current.routing.stop_sign);
+            if (stop) stop.disabled = !canEdit || pending.has('stop');
             const cut = root.querySelector('[data-discharge-cut]');
             if (cut && !pending.has('cut')) cut.checked = current.routing.cut_discharge;
             if (cut) cut.disabled = !canEdit || pending.has('cut');
@@ -62,6 +65,11 @@ window.NeoSektorDischargeControls = {
         root.addEventListener('change', event => {
             const input = event.target;
             if (!canEdit || input.disabled) return;
+            if (input.matches('[data-discharge-stop]')) void save('stop', {
+                action: 'stop_sign', enabled: input.checked,
+                expected_version: current.routing.stop_sign_version,
+                expected_scope: current.routing.stop_sign_scope,
+            });
             if (input.matches('[data-discharge-cut]')) void save('cut', {
                 action: 'cut', enabled: input.checked, expected_cut: current.routing.cut_discharge,
             });
