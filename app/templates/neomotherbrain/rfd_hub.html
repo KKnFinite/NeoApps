@@ -35,9 +35,14 @@
 
 {% block content %}
 {% set selected_operation_id = gateway_active_sort_operation.id if gateway_active_sort_operation else none %}
-<section class="gateway-command-launcher" aria-label="{{ gateway.code }} NeoGateway operational launcher">
-    <h1 class="gateway-dashboard-heading">NeoGateway</h1>
-    <div class="gateway-dashboard-hero">
+<section class="gateway-command-launcher gateway-v11" data-neogateway-v11 aria-label="{{ gateway.code }} NeoGateway operational launcher">
+    <header class="gateway-v11-masthead">
+        <div class="gateway-v11-masthead-copy">
+            <span class="gateway-v11-eyebrow">NeoApps / Operations</span>
+            <h1 class="gateway-dashboard-heading">NeoGateway</h1>
+            <p class="gateway-v11-intro">Your operational workspaces, all in one place. Select a node to open its authorized tools.</p>
+        </div>
+        <div class="gateway-dashboard-hero">
         <picture>
         <source media="(min-width:901px)" srcset="{{ url_for('static', filename='images/hero/neo_gateway_red_energy_portal_fade.webp', hero='f48f67a8b267') }}" type="image/webp" width="1672" height="941">
         <img src="{{ url_for('static', filename='images/hero/hero_gateway.png') }}"
@@ -45,7 +50,8 @@
              sizes="(max-width:900px) calc(100vw - 24px), 900px"
              width="2172" height="724" alt="NeoGateway" loading="eager" fetchpriority="high">
         </picture>
-    </div>
+        </div>
+    </header>
 
     <section class="gateway-page-mobile-context" aria-label="Current operational context">
         <a class="gateway-context-control" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Current Gateway"><span>Gateway</span><strong>{{ gateway.code }}</strong></a>
@@ -69,7 +75,10 @@
     {% endif %}
 
     <section class="gateway-node-launcher" aria-label="{{ gateway.code }} operational nodes">
-        <header class="gateway-launcher-heading"><h2>Operational Nodes</h2></header>
+        <header class="gateway-launcher-heading">
+            <div><span class="gateway-v11-eyebrow">Workspaces</span><h2>Operational Nodes</h2></div>
+            <p class="gateway-v11-section-description">Node access follows your approved permissions.</p>
+        </header>
         {% if can_enter_motherbrain %}
         <a class="gateway-node-card gateway-node-motherbrain gateway-launch-desktop" href="{{ url_for('neomotherbrain.motherbrain', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.motherbrain') }}" aria-label="Open NeoMotherBrain">
             {{ node_card("motherbrain", "MotherBrain", "Operational Brain", action="Enter", name_tier="long") }}
