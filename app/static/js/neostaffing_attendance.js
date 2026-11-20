@@ -13,7 +13,10 @@
         input => [input.name, input.value]));
     const counts = document.querySelectorAll('[data-attendance-count]');
     const scopeCounts = document.querySelectorAll('[data-attendance-scope-here]');
+    const assigned = document.querySelector('[data-attendance-assigned]');
+    const areaButtons = document.querySelectorAll('[data-attendance-area]');
     const rows = new Map();
+    let selectedArea = '';
     let bulkBusy = false;
     let scopeCountRevision = '';
 
@@ -23,7 +26,7 @@
         const note = element.querySelector('input[name^="note_"]');
         const original = element.querySelector('input[name^="original_"]');
         rows.set(id, {
-            id, element, status, note, original,
+            id, element, status, note, original, area: element.dataset.attendanceWorkArea,
             editable: Boolean(status && !status.disabled),
             saved: {status: element.dataset.attendanceStatus, note: note?.value || '', original: original.value},
             searchText: `${element.dataset.attendanceName} ${element.dataset.attendanceEmployeeId}`.toLowerCase(),
@@ -33,11 +36,13 @@
         });
     }
 
+    const inArea = (row, area) => !area || row.area === area;
+
     function filterRows() {
         const tokens = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
         let count = 0;
         for (const row of rows.values()) {
-            const visible = tokens.every(token => row.searchText.includes(token));
+            const visible = inArea(row, selectedArea) && tokens.every(token => row.searchText.includes(token));
             row.element.hidden = !visible;
             if (visible) count++;
         }
@@ -51,7 +56,14 @@
 
     function updateCounts() {
         const totals = new Map();
-        for (const {saved} of rows.values()) totals.set(saved.status, (totals.get(saved.status) || 0) + 1);
+        let total = 0;
+        for (const row of rows.values()) {
+            if (!inArea(row, selectedArea)) continue;
+            const status = row.saved.status;
+            totals.set(status, (totals.get(status) || 0) + 1);
+            total++;
+        }
+        if (assigned) assigned.textContent = total;
         for (const count of counts) count.textContent = totals.get(count.dataset.attendanceCount) || 0;
     }
 
@@ -161,6 +173,14 @@
     }
 
     search.addEventListener('input', filterRows);
+    for (const button of areaButtons) {
+        button.addEventListener('click', () => {
+            selectedArea = button.dataset.attendanceArea;
+            for (const item of areaButtons) item.setAttribute('aria-pressed', String(item === button));
+            filterRows();
+            updateCounts();
+        });
+    }
     clear.addEventListener('click', () => {
         search.value = '';
         filterRows();
@@ -180,19 +200,21 @@
 
     allHere?.addEventListener('click', async () => {
         if (bulkBusy) return;
+        const bulkArea = selectedArea;
         bulkBusy = true;
         allHere.disabled = true;
         bulkResult.hidden = false;
         bulkResult.textContent = 'Saving…';
         try {
             await Promise.all(Array.from(rows.values(), row => row.request));
-            // Search only controls visibility. Signed candidates cover the entire authorized scope.
-            const candidates = Array.from(rows.values()).filter(row => row.editable && !row.saved.status);
+            // Search only controls visibility. The area at click time scopes both the candidates and POST.
+            const candidates = Array.from(rows.values()).filter(row => inArea(row, bulkArea) && row.editable && !row.saved.status);
             if (!candidates.length) {
                 bulkResult.textContent = 'No unmarked employees in this scope.';
                 return;
             }
             const body = new URLSearchParams(scope);
+            if (bulkArea) body.set('work_area_ids', bulkArea);
             body.set('bulk_status', 'here');
             for (const row of candidates) {
                 body.set(`status_${row.id}`, '');

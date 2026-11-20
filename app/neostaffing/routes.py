@@ -142,6 +142,7 @@ WORKSPACE_FILTERS = {
     "neostaffing.people": ("search", "classification", "employee_status", "active", "assignment_status", "per_page", "leadership_only"),
     "neostaffing.org_chart": ("view",),
     "neostaffing.reports": ("report_type", "classification", "attendance_date", "from_date", "through_date", "search"),
+    "neostaffing.shift_flow": ("phase", "side"),
 }
 
 
@@ -159,7 +160,7 @@ def _workspace_view(template, **context):
     scope = workspace.workspace_scope(current_user)
     return render_template(
         template, staffing_v11=True, workspace_scope=scope,
-        workspace_titles={endpoint: label for label, endpoint, _, _ in WORKSPACES},
+        workspace_titles={endpoint: label for label, endpoint, _, _ in WORKSPACES} | {"neostaffing.shift_flow": "Shift Flow"},
         workspace_filter_keys=WORKSPACE_FILTERS.get(request.endpoint, ()), **context,
     )
 
@@ -201,7 +202,7 @@ def neostaffing_app_required(minimum_role="watcher", permission_key=None):
 @neostaffing_app_required()
 def save_workspace_scope():
     target = request.form.get("endpoint")
-    if target not in {row[1] for row in WORKSPACES} | {"neostaffing.workspace_menu"}:
+    if target not in {row[1] for row in WORKSPACES} | {"neostaffing.workspace_menu", "neostaffing.shift_flow"}:
         target = "neostaffing.index"
     raw = request.form.get("unit_id", "").strip()
     try:
@@ -630,7 +631,7 @@ def shift_flow():
         (row for row in context["rows"] if row["person"].id == selected_person_id), None
     )
     selected_area = selected["assignment"].work_area if selected else None
-    return render_template(
+    return _workspace_view(
         "neostaffing/shift_flow.html",
         shift_flow=context,
         sheet_sync=sheet_sync_status(),

@@ -4,17 +4,24 @@
 {% if attendance.ready %}
 {% set filters = attendance.filters %}
 <div class="v11-metrics">
-    {{ metric('Assigned', attendance.summary.total_roster) }}
+    <div class="v11-metric"><span>Assigned</span><strong data-attendance-assigned>{{ attendance.summary.total_roster }}</strong></div>
     {% for status, label in [('here','HERE'), ('','Unmarked'), ('call_in','Called in')] %}
     <div class="v11-metric{% if status == 'here' %} v11-metric-accent{% endif %}"><span>{{ label }}</span><strong data-attendance-count="{{ status }}">{{ attendance.counts.get(status, 0) if status else attendance.summary.unmarked }}</strong></div>
     {% endfor %}
 </div>
 <div class="v11-attendance-layout" data-attendance-console>
     <aside class="v11-panel v11-attendance-areas" aria-label="HERE by area">
-        <h2>HERE by area</h2>
-        {% for area in attendance.selected_work_areas %}
-        <div><span>{{ area.name }}</span><strong data-attendance-scope-here="{{ area.id }}">{{ attendance.scope_here_counts.get(area.id, '—') }}</strong></div>
-        {% else %}<p>No areas available.</p>{% endfor %}
+        <header>
+            <h2>HERE by area</h2>
+            <button type="button" data-attendance-area="" aria-pressed="true">All Areas</button>
+        </header>
+        <div class="v11-attendance-area-list" role="group" aria-label="Filter daily roster by work area">
+            {% for area in attendance.selected_work_areas %}
+            <button type="button" data-attendance-area="{{ area.id }}" aria-pressed="false">
+                <span>{{ area.name }}</span><strong data-attendance-scope-here="{{ area.id }}">{{ attendance.scope_here_counts.get(area.id, '—') }}</strong>
+            </button>
+            {% else %}<p>No areas available.</p>{% endfor %}
+        </div>
     </aside>
     <section class="v11-panel v11-attendance-roster" data-attendance-roster data-save-url="{{ url_for('neostaffing.attendance_save') }}">
         <input type="hidden" name="sort_date_operation_id" value="{{ attendance.sort_date_operation.id }}">
@@ -31,7 +38,7 @@
             </div>
             <small data-attendance-matches role="status">{{ attendance.total_loaded }} matches</small>
             {% if can_edit_attendance %}
-            <small id="attendance-bulk-help">All Here includes authorized unmarked employees hidden by search.</small>
+            <small id="attendance-bulk-help">All Here marks authorized unmarked employees in the current roster scope, including employees hidden by search.</small>
             <p data-attendance-bulk-result role="status" hidden></p>
             {% endif %}
         </header>
@@ -39,7 +46,7 @@
             <thead role="rowgroup"><tr role="row"><th scope="col">Employee</th><th scope="col">Work Area</th><th scope="col">Attendance</th></tr></thead>
             <tbody role="rowgroup">
                 {% for row in attendance.rows %}
-                <tr role="row" data-attendance-person="{{ row.person.id }}" data-attendance-status="{{ row.status }}" data-attendance-name="{{ row.person.full_name }}" data-attendance-employee-id="{{ row.person.employee_id }}">
+                <tr role="row" data-attendance-person="{{ row.person.id }}" data-attendance-work-area="{{ row.work_area.id if row.work_area else '' }}" data-attendance-status="{{ row.status }}" data-attendance-name="{{ row.person.full_name }}" data-attendance-employee-id="{{ row.person.employee_id }}">
                     <td role="cell"><input type="hidden" name="original_{{ row.person.id }}" value="{{ row.original_snapshot }}"><strong>{{ row.person.full_name }}</strong><small>{{ row.person.employee_id }}</small></td>
                     <td role="cell">{{ row.work_area.name if row.work_area else "Unassigned" }}</td>
                     <td role="cell">
@@ -61,6 +68,6 @@
         </table>
     </section>
 </div>
-<script defer src="{{ url_for('static', filename='js/neostaffing_attendance.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+<script defer src="{{ url_for('static', filename='js/neostaffing_attendance.js', v=config.STATIC_ASSET_VERSION, rev='scope-picker') }}"></script>
 {% else %}<div class="v11-panel" role="status">{{ attendance.message }}</div>{% endif %}
 {% endblock %}

@@ -544,18 +544,18 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(one_scope.status_code, 200)
         menu = document(one_scope).one("nav", **{"aria-label": "Quick actions"})
         self.assertTrue(menu.findall("a", href="/neostaffing/attendance"))
-        scope = document(one_scope).one("select", id="v11-scope")
-        self.assertTrue(scope.findall("option", value=str(work_area.id)))
+        scope = document(one_scope).one("details", id="v11-scope")
+        self.assertTrue(scope.findall("button", name="unit_id", value=str(work_area.id)))
 
         staffing_service.create_leadership_assignment(supervisor, second_work_area)
         db.session.commit()
         multiple = self.client.get("/neostaffing")
 
         self.assertEqual(multiple.status_code, 200)
-        scope = document(multiple).one("select", id="v11-scope")
+        scope = document(multiple).one("details", id="v11-scope")
         self.assertIn("All My Areas", scope.text)
-        self.assertTrue(scope.findall("option", value=str(work_area.id)))
-        self.assertTrue(scope.findall("option", value=str(second_work_area.id)))
+        self.assertTrue(scope.findall("button", name="unit_id", value=str(work_area.id)))
+        self.assertTrue(scope.findall("button", name="unit_id", value=str(second_work_area.id)))
 
     def test_landing_hides_attendance_shortcut_when_management_person_is_missing_for_lower_role(self):
         user = self._user("staffing_missing_person")
@@ -998,10 +998,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         for family in ('staffing', 'seniority', 'attendance'):
             page = self.client.get('/neostaffing/reports?report_type=' + family)
             self.assertEqual(page.status_code, 200)
-            scope = document(page).one("select", id="v11-scope")
-            self.assertTrue(scope.findall("option", value=str(department.id)))
-            self.assertTrue(scope.findall("option", value=str(area.id)))
-            self.assertFalse(scope.findall("option", value=str(other_sort.id)))
+            scope = document(page).one("details", id="v11-scope")
+            self.assertTrue(scope.findall("button", name="unit_id", value=str(department.id)))
+            self.assertTrue(scope.findall("button", name="unit_id", value=str(area.id)))
+            self.assertFalse(scope.findall("button", name="unit_id", value=str(other_sort.id)))
 
     def test_reports_query_budgets_do_not_grow_per_employee(self):
         from sqlalchemy import event
@@ -1845,9 +1845,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(initial.status_code, 200)
         self.assertIn(b'id="v11-scope"', initial.data)
-        scope = document(initial).one("select", id="v11-scope")
+        scope = document(initial).one("details", id="v11-scope")
         for unit in (sort, operation, department, work_area, direct_work_area):
-            self.assertTrue(scope.findall("option", value=str(unit.id)))
+            self.assertTrue(scope.findall("button", name="unit_id", value=str(unit.id)))
         self.assertNotIn(b"Step 1", initial.data)
         self.assertNotIn(b"LOAD ROSTER", initial.data)
         self.assertIn(b'data-people-open-add="management"', initial.data)
@@ -2751,7 +2751,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"AO101", page.data)
         self.assertIn(b'option value="call_in" selected', page.data)
         self.assertIn(b"Assigned", page.data)
-        self.assertIn(b"<strong>2</strong>", page.data)
+        self.assertIn(b"<strong data-attendance-assigned>2</strong>", page.data)
 
     def test_people_single_and_bulk_employee_create_assign_to_selected_work_area(self):
         simulator = self._user("staffing_people_create_simulator")
@@ -3073,7 +3073,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         from tests.presentation_contracts import assert_scripts_parse
         root=assert_scripts_parse(self,page)
-        self.assertTrue(root.findall('select', id='v11-scope'))
+        self.assertTrue(root.findall('details', id='v11-scope'))
         for marker in ('data-people-open-add','data-people-add-drawer','data-people-smart-form'):
             self.assertTrue(root.findall(**{marker:None}),marker)
         for form in root.findall('form',**{'data-people-smart-form':None}):

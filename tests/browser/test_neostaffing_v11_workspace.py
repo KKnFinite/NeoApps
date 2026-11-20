@@ -1,7 +1,7 @@
 """Local synthetic V11 screen evidence and interaction checks."""
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 import unittest
 
 from playwright.sync_api import expect
@@ -103,16 +103,17 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
                         self.assertEqual(response.status, 200, path)
                         self.assertEqual(urlsplit(page.url).path, urlsplit(path).path)
                         page.evaluate("document.fonts.ready")
-                        if label != "04-shift-flow":
-                            expect(page.locator(".v11-app")).to_be_visible()
-                            self.assertTrue(page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
-                            expect(page.locator("[data-mobile-drawer]")).to_have_count(0)
-                            if width < 760:
-                                expect(page.locator(".v11-dock a")).to_have_text(["⌂Home", "✓Attendance", "▤Board", "♙People", "☰Menu"], use_inner_text=False)
+                        expect(page.locator(".v11-app")).to_be_visible()
+                        self.assertTrue(page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
+                        expect(page.locator("[data-mobile-drawer]")).to_have_count(0)
+                        if width < 760:
+                            expect(page.locator(".v11-dock a")).to_have_text(["⌂Home", "✓Attendance", "▤Board", "♙People", "☰Menu"], use_inner_text=False)
                         if label == "02-attendance":
                             expect(page.locator('input[name^="note_"]')).to_have_count(0)
                             expect(page.get_by_role("combobox", name="Attendance for Robin Hayes")).to_have_value("here")
                         if label == "04-shift-flow":
+                            expect(page.locator(".v11-dock" if width < 760 else ".v11-sidebar")
+                                   .get_by_role("link", name="Board" if width < 760 else "Staffing Board")).to_have_attribute("aria-current", "page")
                             expect(page.locator(".shift-ballmat-sides")).to_be_visible()
                             expect(page.locator("[data-final-door-target]:visible")).to_have_count(
                                 {390: 3, 430: 4, 1440: 12}[width])
@@ -146,6 +147,135 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
 
     def test_webkit(self):
         self.capture_workspace("webkit", (390, 1440))
+
+    def test_scope_picker_and_attendance_area_actions(self):
+        evidence = Path("instance/browser-evidence/neostaffing-v11-usability").resolve()
+        evidence.mkdir(parents=True, exist_ok=True)
+        with self.fixture.app.app_context():
+            doors = {unit.name: unit for unit in StaffingUnit.query.filter(
+                StaffingUnit.name.in_(("Door 13", "Door 17"))).all()}
+            door_13, door_17 = (doors[name].id for name in ("Door 13", "Door 17"))
+            people_ids = {}
+            for code, name, door in (("7100001", "Tara", "Door 13"), ("7100002", "Quinn", "Door 13"),
+                                     ("7100003", "Sam", "Door 17")):
+                person = staffing.create_person({
+                    "first_name": name, "last_name": "Test", "employee_id": code, "classification": "part_time",
+                    "seniority_date": "2020-01-01",
+                })
+                staffing.assign_work_area(person, doors[door])
+                people_ids[name] = person.id
+            db.session.commit()
+        for engine, width in (("chromium", 1440), ("webkit", 390)):
+            with self.subTest(engine=engine):
+                mobile = width < 760
+                with getattr(self.fixture.pw, engine).launch() as browser:
+                    context = browser.new_context(viewport={"width": width, "height": 844 if mobile else 940},
+                                                  is_mobile=mobile, has_touch=mobile)
+                    context.route("**/*", lambda route: route.continue_()
+                                  if urlsplit(route.request.url).hostname == "127.0.0.1" else route.abort())
+                    page = context.new_page()
+                    self.fixture().login(page)
+                    page.goto(self.fixture.origin + "/neostaffing")
+                    picker = page.locator("[data-scope-picker]")
+                    summary = picker.locator("summary")
+                    current = picker.locator("[data-scope-current]")
+                    active_level = picker.locator("[data-scope-level]:visible")
+
+                    def drill(name):
+                        active_level.locator("[data-scope-open]").filter(has_text=name).click()
+
+                    expect(current).to_have_text("All My Areas")
+                    summary.click()
+                    expect(active_level.get_by_role("button", name="All My Areas")).to_be_visible()
+                    expect(active_level.get_by_role("button", name="Door 13 Work Area")).to_have_count(0)
+                    drill("Night")
+                    drill("Ramp")
+                    picker.get_by_role("button", name="Back").click()
+                    expect(picker.locator("[data-scope-path]")).to_have_text("Night")
+                    drill("Ramp")
+                    picker.get_by_role("searchbox", name="Search this level").fill("shi")
+                    expect(active_level.locator("[data-scope-open]:visible")).to_have_count(1)
+                    drill("Shift")
+                    expect(active_level.get_by_role("button", name="Door 13 Work Area")).to_be_visible()
+                    if mobile:
+                        self.assertGreaterEqual(picker.get_by_role("button", name="Back").bounding_box()["height"], 44)
+                    self.assertTrue(page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
+                    page.screenshot(path=str(evidence / f"{engine}-{width}-scope-picker.png"))
+                    active_level.get_by_role("button", name="Select Shift").click()
+                    expect(current).to_have_text("Night / Ramp / Shift")
+
+                    nav = page.locator(".v11-dock" if mobile else ".v11-sidebar")
+                    nav.get_by_role("link", name="Attendance").click()
+                    expect(current).to_have_text("Night / Ramp / Shift")
+                    selected = page.locator(f'[data-attendance-area="{door_13}"]')
+                    row13 = page.locator(f'[data-attendance-work-area="{door_13}"]')
+                    row17 = page.locator(f'[data-attendance-work-area="{door_17}"]')
+                    matches = page.locator("[data-attendance-matches]")
+                    url = page.url
+                    for area in page.locator("[data-attendance-area]").all():
+                        area_id = area.get_attribute("data-attendance-area")
+                        area.click()
+                        expect(area).to_have_attribute("aria-pressed", "true")
+                        expect(page.locator('[data-attendance-area][aria-pressed="true"]')).to_have_count(1)
+                        if area_id:
+                            expect(page.locator(f'[data-attendance-person]:visible:not([data-attendance-work-area="{area_id}"])')).to_have_count(0)
+                    selected.click()
+                    expect(selected.locator("strong")).to_have_text("0")
+                    expect(row13.filter(has=page.locator('select option:checked[value=""]'))).to_have_count(2)
+                    expect(row13.filter(visible=True)).to_have_count(2)
+                    expect(row17).to_be_hidden()
+                    expect(matches).to_have_text("2 matches")
+                    self.assertEqual(page.url, url)
+                    page.evaluate("y => window.scrollTo(0, y)", 160 if mobile else 0)
+                    expect(page.locator("[data-attendance-area].is-press-feedback")).to_have_count(0)
+                    page.screenshot(path=str(evidence / f"{engine}-{width}-attendance-quick-filter.png"))
+
+                    search = page.get_by_role("searchbox", name="Search employees")
+                    search.fill("Tara")
+                    expect(matches).to_have_text("1 match")
+                    tara = page.get_by_role("combobox", name="Attendance for Tara Test")
+                    expect(tara).to_have_value("")
+                    tara.select_option("here")
+                    expect(selected.locator("strong")).to_have_text("1")
+                    expect(selected).to_have_attribute("aria-pressed", "true")
+                    tara.select_option("")
+                    expect(selected.locator("strong")).to_have_text("0")
+                    with page.expect_response(lambda response: "/attendance/save" in response.url) as mutation:
+                        page.get_by_role("button", name="All Here", exact=True).click()
+                    self.assertEqual(mutation.value.status, 200)
+                    posted = parse_qs(mutation.value.request.post_data, keep_blank_values=True)
+                    self.assertEqual(posted["work_area_ids"], [str(door_13)])
+                    self.assertEqual({key for key in posted if key.startswith("status_")},
+                                     {f"status_{people_ids[name]}" for name in ("Tara", "Quinn")})
+                    expect(selected.locator("strong")).to_have_text("2")
+                    expect(selected).to_have_attribute("aria-pressed", "true")
+                    search.fill("")
+                    expect(row13.filter(visible=True)).to_have_count(2)
+                    for name in ("Tara", "Quinn"):
+                        status = page.get_by_role("combobox", name=f"Attendance for {name} Test")
+                        expect(status).to_have_value("here")
+                        status.select_option("")
+                    expect(selected.locator("strong")).to_have_text("0")
+                    page.get_by_role("button", name="All Areas", exact=True).click()
+                    expect(row17.get_by_role("combobox")).to_have_value("")
+                    expect(row17).to_be_visible()
+                    expect(current).to_have_text("Night / Ramp / Shift")
+                    nav.get_by_role("link", name="Board" if mobile else "Staffing Board").click()
+                    expect(page).to_have_url(self.fixture.origin + "/neostaffing/shift-flow")
+                    expect(current).to_have_text("Night / Ramp / Shift")
+                    expect(nav.get_by_role("link", name="Board" if mobile else "Staffing Board")).to_have_attribute(
+                        "aria-current", "page")
+                    page.screenshot(path=str(evidence / f"{engine}-{width}-shift-flow-v11-menu.png"))
+                    summary.click()
+                    drill("Night")
+                    drill("Ramp")
+                    drill("Shift")
+                    active_level.get_by_role("button", name="Door 13 Work Area").click()
+                    expect(current).to_have_text("Night / Ramp / Shift / Door 13")
+                    nav.get_by_role("link", name="Attendance").click()
+                    expect(current).to_have_text("Night / Ramp / Shift / Door 13")
+                    expect(row13).to_have_count(2)
+                    expect(row17).to_have_count(0)
 
     def test_historical_reports_show_sealed_placement_and_individual_marks(self):
         prior = self.DAY - timedelta(days=7)

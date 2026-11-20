@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% macro nav_link(label, endpoint, icon="", short="") %}
-<a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>
+<a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint or (request.endpoint == 'neostaffing.shift_flow' and endpoint == 'neostaffing.board') %}aria-current="page"{% endif %}>
     {% if icon %}<span aria-hidden="true">{{ icon }}</span>{% endif %}{{ short or label }}
 </a>
 {% endmacro %}
@@ -23,8 +23,14 @@
 {% macro metric(label, value, detail="", accent=false) %}
 <div class="v11-metric{% if accent %} v11-metric-accent{% endif %}"><span>{{ label }}</span><strong>{{ value }}</strong>{% if detail %}<small>{{ detail }}</small>{% endif %}</div>
 {% endmacro %}
+{% macro scope_choice(unit) %}
+<button {% if unit.id in workspace_scope.picker_branch_ids %}type="button" data-scope-open="{{ unit.id }}"{% else %}type="submit" name="unit_id" value="{{ unit.id }}"{% endif %} data-scope-choice>
+    <span>{{ unit.name }}<small>{{ unit.type_label }}</small></span>
+    {% if unit.id in workspace_scope.picker_branch_ids %}<span aria-hidden="true">›</span>{% endif %}
+</button>
+{% endmacro %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION, rev='scope-picker') }}">
 <div class="v11-app" data-staffing-v11>
     <aside class="v11-sidebar">
         <a class="v11-brand" href="{{ url_for('neostaffing.index') }}"><b aria-hidden="true">N</b><span>NeoStaffing<small>Operations{% if workspace_scope.gateway_code %} / {{ workspace_scope.gateway_code }}{% endif %}</small></span></a>
@@ -55,15 +61,32 @@
                 {% if workspace_scope.operation %}<span class="v11-sort-chip">{{ workspace_scope.operation.sort_date.strftime('%a %b %d') }} · {{ workspace_scope.operation.sort_name|title }} Sort</span>{% endif %}
                 {{ csrf_field() }}<input type="hidden" name="endpoint" value="{{ request.endpoint }}">
                 {% for key in workspace_filter_keys if request.args.get(key) %}<input type="hidden" name="{{ key }}" value="{{ request.args[key] }}">{% endfor %}
-                <label for="v11-scope">Current work area scope</label>
-                <select id="v11-scope" name="unit_id">
-                    <option value="">All My Areas</option>
-                    {% for unit in workspace_scope.options %}
-                    <option value="{{ unit.id }}" {% if workspace_scope.selected and workspace_scope.selected.id == unit.id %}selected{% endif %}>
-                    {{ unit.parent.name ~ ' / ' if unit.parent else '' }}{{ unit.name }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" data-scope-submit>Apply</button>
+                <details id="v11-scope" class="v11-scope-picker" data-scope-picker>
+                    <summary>
+                        <span><small>Current work area scope</small><strong data-scope-current>{{ workspace_scope.selected_path }}</strong></span>
+                        <span aria-hidden="true">⌄</span>
+                    </summary>
+                    <div class="v11-scope-popover">
+                        <div class="v11-scope-picker-nav">
+                            <button type="button" data-scope-back hidden>‹ Back</button>
+                            <strong data-scope-path>All My Areas</strong>
+                        </div>
+                        <input type="search" aria-label="Search this level" placeholder="Search this level" data-scope-search autocomplete="off">
+                        <div class="v11-scope-options">
+                            <div data-scope-level="" data-scope-name="All My Areas">
+                                <button type="submit" name="unit_id" value="">All My Areas</button>
+                                {% for unit in workspace_scope.picker_roots %}{{ scope_choice(unit) }}{% endfor %}
+                            </div>
+                            {% for level in workspace_scope.picker_levels %}
+                            <div data-scope-level="{{ level.id }}" data-scope-parent="{{ level.parent_id or '' }}" data-scope-name="{{ level.path }}" hidden>
+                                <button type="submit" name="unit_id" value="{{ level.id }}">Select {{ level.name }}</button>
+                                {% for unit in level.children %}{{ scope_choice(unit) }}{% endfor %}
+                            </div>
+                            {% endfor %}
+                            <p data-scope-empty role="status" hidden>No choices match this search.</p>
+                        </div>
+                    </div>
+                </details>
             </form>
         </header>
         <div class="v11-page">{% block workspace_content %}{% endblock %}</div>
@@ -73,5 +96,5 @@
         <a href="{{ url_for('neostaffing.workspace_menu') }}" {% if request.endpoint in ('neostaffing.workspace_menu','neostaffing.org_chart','neostaffing.hierarchy','neostaffing.reports') %}{% if request.endpoint == 'neostaffing.workspace_menu' %}aria-current="page"{% else %}class="v11-dock-active"{% endif %}{% endif %}><span aria-hidden="true">☰</span>Menu</a>
     </nav>
 </div>
-<script defer src="{{ url_for('static', filename='js/neostaffing_v11_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+<script defer src="{{ url_for('static', filename='js/neostaffing_v11_shell.js', v=config.STATIC_ASSET_VERSION, rev='scope-picker') }}"></script>
 {% endblock %}

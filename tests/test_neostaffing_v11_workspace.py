@@ -4,6 +4,7 @@ from html import unescape
 import re
 
 import pytest
+from werkzeug.datastructures import MultiDict
 
 from app.extensions import db
 from app.models import (
@@ -29,7 +30,7 @@ def token(response, person_id):
 
 
 def test_scope_follows_sort_identity_and_current_authority(site, monkeypatch):
-    _, _, department, area, outside = site._hierarchy()
+    sort, operation, department, area, outside = site._hierarchy()
     current = site._night_operation()
     # Hold the canonical operation constant while moving the clock over midnight.
     monkeypatch.setattr(staffing, "current_operations_for_gateway", lambda gateway: [current])
@@ -53,21 +54,49 @@ def test_scope_follows_sort_identity_and_current_authority(site, monkeypatch):
     assert denied.status_code == 302
     with site.client.session_transaction() as session:
         assert session["staffing_scope"]["id"] == area.id
-    assert f'value="{area.id}" selected' in site.client.get("/neostaffing").text
+    path = " / ".join(unit.name for unit in (sort, operation, department, area))
+    selected = f"<strong data-scope-current>{path}</strong>"
+    assert selected in site.client.get("/neostaffing").text
     site.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(
         current.sort_date + timedelta(days=1), datetime.min.time(),
     ) + timedelta(hours=1)
-    assert f'value="{area.id}" selected' in site.client.get("/neostaffing").text
+    assert selected in site.client.get("/neostaffing").text
 
     replacement = SortDateOperation(gateway_id=current.gateway_id, gateway_code=current.gateway_code,
                                     sort_date=current.sort_date + timedelta(days=1), sort_name=current.sort_name)
     db.session.add(replacement)
     db.session.commit()
     monkeypatch.setattr(staffing, "current_operations_for_gateway", lambda gateway: [replacement])
-    assert f'value="{area.id}" selected' not in site.client.get("/neostaffing").text
+    assert '<strong data-scope-current>All My Areas</strong>' in site.client.get("/neostaffing").text
     grant.active = False
     db.session.commit()
-    assert f'value="{area.id}"' not in site.client.get("/neostaffing").text
+    assert f'name="unit_id" value="{area.id}"' not in site.client.get("/neostaffing").text
+
+
+def test_attendance_quick_filter_bulk_post_rejects_an_authorized_employee_in_another_area(site):
+    sort, _, _, area, outside = site._hierarchy()
+    operation = site._night_operation()
+    first = site._person("QUICK-IN", area)
+    second = site._person("QUICK-OUT", outside)
+    site._user("quick-filter-manager", "master")
+    db.session.commit()
+    site._login("quick-filter-manager")
+    response = site.client.get("/neostaffing/attendance")
+    assert f'data-attendance-work-area="{area.id}"' in response.text
+    assert f'data-attendance-work-area="{outside.id}"' in response.text
+    form = MultiDict({
+        "sort_date_operation_id": operation.id, "sort_id": sort.id, "work_area_ids": area.id,
+        "bulk_status": "here", f"status_{first.id}": "", f"original_{first.id}": token(response, first.id),
+    })
+    forged = form.copy()
+    forged.add(f"status_{second.id}", "")
+    forged.add(f"original_{second.id}", token(response, second.id))
+    rejected = site.client.post("/neostaffing/attendance/save", data=forged)
+    assert rejected.status_code == 400 and "outside the selected scope" in rejected.json["error"]
+    assert StaffingDailyAttendance.query.count() == 0
+    saved = site.client.post("/neostaffing/attendance/save", data=form)
+    assert saved.status_code == 200 and saved.json["saved"] == 1
+    assert StaffingDailyAttendance.query.one().person_id == first.id
 
 
 def test_status_only_autosave_preserves_notes_and_rejects_stale_edits(site):

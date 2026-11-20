@@ -82,8 +82,24 @@ def workspace_scope(user):
     selected_areas = descendants[selected.id] if selected else areas
     active_areas = selected_areas & descendants.get(sort.id, set()) if sort else set()
     options = [unit for unit in hierarchy["units"] if descendants[unit.id]]
+    picker_groups = defaultdict(list)
+    for unit in options:
+        picker_groups[unit.parent_id].append(unit)
+    picker_levels = [
+        {
+            "id": unit.id,
+            "parent_id": unit.parent_id,
+            "name": unit.name,
+            "path": staffing._daily_attendance_unit_path(unit, hierarchy),
+            "children": picker_groups[unit.id],
+        }
+        for unit in options if unit.id in picker_groups
+    ]
     scope = {
         "selected": selected, "sort": sort, "operation": operation,
+        "selected_path": staffing._daily_attendance_unit_path(selected, hierarchy) if selected else "All My Areas",
+        "picker_roots": picker_groups[None], "picker_levels": picker_levels,
+        "picker_branch_ids": {level["id"] for level in picker_levels},
         "areas": selected_areas, "active_areas": active_areas,
         "options": options, "gateway_code": gateway_code, "authority": authority,
         "operations": operations, "descendants": descendants,
