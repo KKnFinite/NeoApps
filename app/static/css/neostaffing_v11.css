@@ -137,6 +137,12 @@ body:has(.v11-app) > .shell > .content {
     width: 100%; text-align: start; overflow-wrap: anywhere;
 }
 .v11-scope-options button small { display: block; color: var(--v11-muted); }
+.v11-app .v11-scope-options .v11-scope-select {
+    background: #39b8af;
+    border-color: #39b8af;
+    color: #07171b;
+    font-weight: 700;
+}
 .v11-phone-brand, .v11-dock { display: none; }
 .v11-page { display: grid; align-content: start; gap: 16px; padding: 22px 28px 36px; }
 .v11-page:has(> .neostaffing-shift-flow) { grid-template-columns: minmax(0, 1fr); padding-inline: 0; padding-top: 0; }
