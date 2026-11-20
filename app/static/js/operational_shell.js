@@ -40,9 +40,18 @@
     const setBoardView = (enabled) => {
         if (!boardSupported) return;
         enabled = enabled && !mobile.matches;
+        const wasEnabled = body.classList.contains("operational-board-view");
         if (enabled) document.dispatchEvent(new Event("neo:board-enter"));
         body.classList.toggle("operational-board-view", enabled);
         if (boardExit) boardExit.hidden = !enabled;
+        if (wasEnabled !== enabled) {
+            // Many node boards cache measurements of the available content width.
+            // Chrome hiding alone is not enough: rerun their layout measurement.
+            window.requestAnimationFrame(() => {
+                window.dispatchEvent(new Event("resize"));
+                document.dispatchEvent(new CustomEvent("neo:board-layout", { detail: { enabled } }));
+            });
+        }
         boardButtons.forEach((button) => {
             button.setAttribute("aria-expanded", String(enabled));
             const label = button.querySelector("strong") || button;
