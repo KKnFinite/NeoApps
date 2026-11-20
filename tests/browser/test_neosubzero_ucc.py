@@ -13,6 +13,7 @@ from app.models import (Gateway, NeoSubZeroDepartureDeiceEvent, NeoSubZeroSprayR
                         SortDateOperation, SortDateParkingAssignment, StaffingPerson)
 from app.services.neosubzero_staffing import set_staffing_person_qualification, DEICE_QUALIFICATION_KEY
 from app.services.neosubzero_ucc import set_neosubzero_ucc_assignment
+from app.services.live_screen_refresh import save_live_screen_refresh_override
 from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest
 from tests.test_neosubzero_ucc import NeoSubZeroUccTest
 
@@ -26,6 +27,9 @@ class UccBrowserTest(unittest.TestCase):
         with cls.app.app_context():
             fixture = NeoSubZeroUccTest()
             gateway = Gateway.query.filter_by(code="RFD").one()
+            # The parent shell fixture turns polling off. Exercise DUCC through
+            # the same screen-level override read by the board and its revision endpoint.
+            save_live_screen_refresh_override(gateway, "neosubzero.ucc", "5")
             from app.services.parking_rules import ensure_parking_settings
             ensure_parking_settings(gateway).include_throat_default=True
             fixture.operation = SortDateOperation(sort_date=datetime(2026, 10, 22).date(), gateway_id=gateway.id, gateway_code="RFD", sort_name="night")
@@ -69,14 +73,13 @@ class UccBrowserTest(unittest.TestCase):
         cls.weather = patch("app.neonodes.neosubzero.routes.neosubzero_weather_context", return_value=weather)
         cls.weather_data = weather
         cls.weather_revision = patch("app.neonodes.neosubzero.routes.neosubzero_weather_revision", return_value="weather-r1")
-        cls.refresh = patch("app.neonodes.neosubzero.routes.subzero_refresh_status", return_value={"live_screen_refresh_interval_ms":1000})
         cls.weather_revision_mock = cls.weather_revision.start()
-        for item in (cls.current, cls.weather, cls.refresh):
+        for item in (cls.current, cls.weather):
             item.start()
 
     @classmethod
     def tearDownClass(cls):
-        for item in (cls.current, cls.weather, cls.weather_revision, cls.refresh):
+        for item in (cls.current, cls.weather, cls.weather_revision):
             item.stop()
         MobileDrawerBrowserTest.tearDownClass.__func__(cls)
 

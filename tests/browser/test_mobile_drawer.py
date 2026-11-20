@@ -22,7 +22,7 @@ from werkzeug.serving import make_server
 
 from app import create_app
 from app.extensions import db
-from app.models import PortalAppAccess, SortDateMission, SortDateOperation, User
+from app.models import AccountAccessRequest, PortalAppAccess, SortDateMission, SortDateOperation, User
 from app.services.access_control import ensure_default_gateway_and_nodes, backfill_default_gateway_node_roles
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -55,7 +55,8 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             db.create_all()
             ensure_default_gateway_and_nodes()
             ensure_default_permission_rules()
-            for name, role in (("drawer-admin", "grandmaster"), ("drawer-watcher", "watcher")):
+            for name, role in (("drawer-admin", "grandmaster"), ("drawer-watcher", "watcher"),
+                               ("first-login", "watcher")):
                 user = User(username=name, email=name + "@example.test", role=role, email_verified_at=datetime.now(),
                             first_name="Alexandria", last_name="Long Operational Dispatcher Name")
                 set_user_password(user, "BrowserFixture123!")
@@ -67,6 +68,8 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             db.session.commit()
         logging.getLogger("werkzeug").setLevel(logging.ERROR)
         cls.server = make_server("127.0.0.1", 0, cls.app, threaded=True)
+        # Join outstanding fixture requests before disposing SQLite on Windows.
+        cls.server.daemon_threads = False
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
         cls.origin = f"http://127.0.0.1:{cls.server.server_port}"
@@ -76,6 +79,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.pw.stop()
         cls.server.shutdown()
+        cls.server.server_close()
         cls.thread.join(timeout=5)
         with cls.app.app_context():
             db.session.remove()
@@ -88,7 +92,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
         page.locator('input[name="email"]').fill(username + "@example.test")
         page.locator('input[name="password"]').fill("BrowserFixture123!")
         page.locator('button[type="submit"]').first.click()
-        page.wait_for_url(lambda url: "/login" not in url)
+        page.wait_for_url(lambda url: "/login" not in url, wait_until="domcontentloaded")
 
     def ready(self, page, path):
         response = page.goto(self.origin + path)
@@ -348,11 +352,15 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             self.assertIn("operational-sidebar-collapsed", desktop_page.locator("body").get_attribute("class"))
             desktop_page.screenshot(path=str(self.evidence / f"{engine}-desktop-sidebar.png"))
             self.ready(desktop_page, "/neostaffing")
-            # Shared shell now retains mobile navigation in the DOM. Desktop
-            # must hide it, then reveal the same controls at the phone breakpoint.
-            expect(desktop_page.locator("[data-mobile-navigation]")).to_be_hidden()
+            staffing_nav = desktop_page.get_by_role("navigation", name="Mobile Staffing workspaces", include_hidden=True)
+            expect(staffing_nav).to_be_hidden()
             desktop_page.set_viewport_size({"width":390,"height":844})
-            expect(desktop_page.locator(".neo-mobile-bottom")).to_be_visible()
+            expect(staffing_nav).to_be_visible()
+            desktop_page.screenshot(path=str(self.evidence / f"{engine}-staffing-mobile-dock.png"))
+            menu = staffing_nav.get_by_role("link", name="Menu")
+            expect(menu).to_have_attribute("href", "/neostaffing/menu")
+            menu.click()
+            expect(staffing_nav.get_by_role("link", name="Menu")).to_have_attribute("aria-current", "page")
             desktop.close()
             # Restricted real account and server permission filtering.
             context.clear_cookies()
@@ -520,15 +528,24 @@ class MobileDrawerBrowserTest(unittest.TestCase):
         context.route(lambda url:not url.startswith(self.origin),lambda route:route.abort())
         page=context.new_page()
         try:
-            self.login(page,'drawer-watcher')
+            with self.app.app_context():
+                user = User(username="portal-requester", email="portal-requester@example.test",
+                            role="watcher", email_verified_at=datetime.now())
+                set_user_password(user, "BrowserFixture123!")
+                db.session.add(user)
+                db.session.flush()
+                backfill_default_gateway_node_roles(user, role="watcher")
+                user_id = user.id
+                db.session.add(PortalAppAccess(user_id=user_id, app_code="neostaffing",
+                                              status="approved", role="watcher", is_active=True))
+                db.session.commit()
+            self.login(page,'portal-requester')
             self.ready(page,'/portal')
             cards=page.locator('.portal-launch-card')
             self.assertTrue(cards.evaluate_all("es=>es.every(e=>e.tagName==='A'&&!e.querySelector('a,button,input,select'))"))
             page.locator('[data-portal-app="neogateway"]').click(position={'x':5,'y':5})
             page.wait_for_url(self.origin+'/rfd')
             with self.app.app_context():
-                user=User.query.filter_by(username='drawer-watcher').one()
-                user_id=user.id
                 access=PortalAppAccess.query.filter_by(user_id=user_id,app_code='neostaffing').one()
                 access.status='denied'
                 db.session.commit()
@@ -538,22 +555,28 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             self.assertTrue(token)
             denied=context.request.post(self.origin+'/portal/request-access',form={'app_code':'neostaffing'})
             self.assertEqual(denied.status,400)
-            posted=context.request.post(self.origin+'/portal/request-access',form={'app_code':'neostaffing'},headers={'X-CSRFToken':token})
-            self.assertIn(posted.status,(200,302))
+            posted=context.request.post(self.origin+'/portal/request-access',form={'app_code':'neostaffing'},headers={'X-CSRFToken':token},max_redirects=0)
+            self.assertEqual(posted.status,303)
+            self.assertEqual(posted.headers['location'],'/my-account#app-access')
             # N01: a normal request cannot undo an administrator's denial.
             expect(page.locator('[data-portal-app="neostaffing"]')).to_have_count(0)
             self.assertEqual(context.request.get(self.origin+'/neostaffing',max_redirects=0).status,302)
             with self.app.app_context():
                 access=PortalAppAccess.query.filter_by(user_id=user_id,app_code='neostaffing').one()
                 self.assertEqual(access.status,'denied')
+                self.assertEqual(AccountAccessRequest.query.filter_by(user_id=user_id).count(),0)
                 # Separate controlled fixture: inactive prior approval may request review,
                 # while remaining unauthorized until explicit administrator approval.
                 access.status='approved';access.is_active=False;db.session.commit()
             self.ready(page,'/portal')
             expect(page.locator('[data-portal-app="neostaffing"]')).to_have_count(0)
-            token=page.locator('meta[name="csrf-token"]').get_attribute('content')
-            posted=context.request.post(self.origin+'/portal/request-access',form={'app_code':'neostaffing'},headers={'X-CSRFToken':token})
-            self.assertIn(posted.status,(200,302))
+            self.ready(page, '/my-account')
+            form = page.locator('#app-access form').filter(has=page.locator('input[value="neostaffing"]'))
+            form.get_by_label('Reason for access').fill('Staffing coverage for the Night Sort')
+            form.get_by_role('button', name='Request access').click()
+            expect(page.get_by_text('neostaffing · Pending', exact=True)).to_be_visible()
+            page.screenshot(path=str(self.evidence / "chromium-my-account-pending.png"))
+            self.assertEqual(context.request.get(self.origin+'/neostaffing',max_redirects=0).status,302)
             for width in (390,1440):
                 page.set_viewport_size({'width':width,'height':900})
                 self.ready(page,'/portal')
@@ -561,9 +584,10 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 expect(page.locator('[data-portal-app="neogateway"]')).to_be_visible()
             with self.app.app_context():
                 access=PortalAppAccess.query.filter_by(user_id=user_id,app_code='neostaffing').one()
-                self.assertEqual(access.status,'pending')
-                access.status='approved'
-                db.session.commit()
+                self.assertEqual((access.status, access.is_active), ('approved',False))
+                request = AccountAccessRequest.query.filter_by(user_id=user_id, app_code='neostaffing').one()
+                self.assertEqual(request.state,'pending')
+                self.assertEqual(request.reason,'Staffing coverage for the Night Sort')
         finally:
             context.close()
             browser.close()
@@ -658,18 +682,19 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             try:
                 self.login(page)
                 for width, height in sizes:
-                    with self.subTest(engine=engine,width=width):
+                    with self.subTest(engine=engine,width=width,height=height):
                         page.set_viewport_size({'width':width,'height':height})
                         self.ready(page, '/portal')
-                        header = page.locator('[data-mobile-topbar]' if width <= 900 else '.topbar')
-                        brand = header.locator('.mobile-topbar-node-icon-link' if width <= 900 else '.brand').first
+                        header = page.locator('[data-mobile-topbar]' if width <= 900 else '.portal-topbar')
+                        brand = header.locator('.mobile-topbar-node-icon-link' if width <= 900 else '.portal-header-home')
                         self.assertEqual(brand.inner_text().strip(), '')
+                        expect(brand).to_be_visible()
                         expect(brand).to_have_attribute('href', '/portal')
                         expect(brand.locator('img')).to_be_visible()
                         self.assertEqual(page.locator('[data-portal-app]').count(), 2)
                         self.assertEqual(page.locator('[data-portal-app="neobid"]').count(), 0)
                         self.assertTrue(page.locator('.portal-launcher-hero img').evaluate(
-                            "e => e.currentSrc.includes(innerWidth<=900 ? 'neoapps_login_mobile.png' : 'neoapps_portal_desktop.png')"))
+                            "e => e.complete && e.naturalWidth > 0 && new URL(e.currentSrc).pathname.endsWith(innerWidth<=900 ? '/neoapps_login_mobile.webp' : '/neoapps_portal_desktop.webp')"))
                         result = page.evaluate('''() => {
                             const cards=[...document.querySelectorAll('.portal-launch-card')];
                             const hero=document.querySelector('.portal-launcher-hero img'), h=hero.getBoundingClientRect();
@@ -726,7 +751,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                     page.set_viewport_size({'width':width,'height':height})
                     self.ready(page, '/login')
                     hero = page.locator('.portal-login-hero img')
-                    self.assertTrue(hero.evaluate("e => e.complete && e.naturalWidth>0 && e.currentSrc.includes(innerWidth<=900 ? 'neoapps_login_mobile.png' : 'neoapps_login_desktop.png')"))
+                    self.assertTrue(hero.evaluate("e => e.complete && e.naturalWidth>0 && new URL(e.currentSrc).pathname.endsWith(innerWidth<=900 ? '/neoapps_login_mobile.webp' : '/neoapps_login_desktop.webp')"))
                     box = hero.bounding_box()
                     self.assertAlmostEqual(box['width'], width, delta=1)
                     self.assertEqual(hero.evaluate('e=>getComputedStyle(e).objectFit'), 'contain')
@@ -748,7 +773,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                     expect(page.get_by_role('link', name='Forgot Password')).to_be_in_viewport()
                 page.set_viewport_size({'width':390,'height':844})
                 self.ready(page, '/login')
-                page.locator('#dashboard-email').fill('drawer-admin@example.test')
+                page.locator('#dashboard-email').fill('first-login@example.test')
                 page.locator('#dashboard-password').fill('IncorrectPassword123!')
                 # A rejected POST returns 401 at the same URL, not a redirect.
                 # Wait for that response explicitly rather than click's navigation heuristic.
@@ -759,8 +784,9 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth'))
                 page.evaluate('scrollTo(0,0)')
                 page.screenshot(path=str(self.evidence / f'{engine}-login-error-390.png'), full_page=True)
-                self.login(page)
-                self.assertIn('/portal', page.url)
+                # This multi-app account has never visited an operational screen.
+                self.login(page, 'first-login')
+                self.assertEqual(urlsplit(page.url).path, '/portal')
             finally:
                 context.close()
                 browser.close()

@@ -3,7 +3,7 @@ import json
 import subprocess
 import unittest
 from pathlib import Path
-from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest as Fixture
+from tests.browser import test_ballmat_spotters_mobile, test_mobile_drawer
 from app.extensions import db
 from app.models import NeoSektorOperationalSetting, NeoErmacUldRequest
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -14,9 +14,14 @@ from tests.test_neosektor_integration_modes import _complete_sheet_values
 class SektorUIPassTest(unittest.TestCase):
     def test_driver_text_and_priority_visibility(self):
         """Check painted text bounds, not merely a scroll-free document."""
+        for engine in ('chromium', 'webkit'):
+            with self.subTest(engine=engine):
+                self._check_priority_visibility(engine)
+
+    def _check_priority_visibility(self, engine):
+        Fixture = test_mobile_drawer.MobileDrawerBrowserTest
         Fixture.setUpClass()
-        evidence = Path('instance/browser-evidence/sektor-driver-correction').resolve()
-        evidence.mkdir(parents=True, exist_ok=True)
+        evidence = Fixture.evidence
         try:
             with Fixture.app.app_context():
                 gateway = ensure_default_gateway_and_nodes()
@@ -24,7 +29,7 @@ class SektorUIPassTest(unittest.TestCase):
                     gateway_code=gateway.code, integration_mode='neo_only'))
                 apply_standalone_compat_values(gateway, _complete_sheet_values())
                 db.session.commit()
-            browser = Fixture.pw.chromium.launch()
+            browser = getattr(Fixture.pw, engine).launch()
             page = browser.new_page(viewport={'width':390, 'height':844})
             Fixture().login(page)
             for width, height, tv in [(390,844,False),(1920,1080,True),
@@ -33,7 +38,7 @@ class SektorUIPassTest(unittest.TestCase):
                 with self.subTest(width=width, tv=tv):
                     page.set_viewport_size({'width':width, 'height':height})
                     Fixture().ready(page, '/neosektor/driver-routing' + ('?tv=1' if tv else ''))
-                    name = f'driver-{"tv" if tv else "normal"}-{width}x{height}'
+                    name = f'{engine}-driver-{"tv" if tv else "normal"}-{width}x{height}'
                     page.screenshot(path=str(evidence / f'{name}.png'), full_page=True)
                     self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), width+1)
                     if tv:
@@ -45,32 +50,50 @@ class SektorUIPassTest(unittest.TestCase):
                         self.assertTrue(page.locator('.neosektor-driver-back').is_visible())
                     cards = page.locator('[data-driver-priority-index]:visible')
                     self.assertEqual(cards.count(), 3)
+                    state_url = page.locator('[data-driver-routing]').get_attribute('data-state-url')
+                    response = page.request.get(Fixture.origin + state_url)
+                    self.assertEqual(response.status, 200)
+                    bays = response.json()['state']['routing']['bay_priority']
+                    self.assertEqual(cards.locator('[data-driver-bay-name]').all_inner_texts(),
+                                     [bay['bay_name'].removeprefix('Bay ') for bay in bays])
                     if tv:
                         # Three priority cards stay on one horizontal track.
                         boxes = [cards.nth(i).bounding_box() for i in range(3)]
                         self.assertLessEqual(max(b['y'] for b in boxes)-min(b['y'] for b in boxes), 1)
                         self.assertTrue(all(boxes[i]['x']+boxes[i]['width'] <= boxes[i+1]['x']+1 for i in range(2)))
                         size = page.locator('.driver-wave-label').first.evaluate('e=>parseFloat(getComputedStyle(e).fontSize)')
-                        old_size = max(24, min(height*.03, 44))
-                        self.assertAlmostEqual(size / old_size, 1 if width == 390 else 1.2, delta=.02)
-                        if width == 1080:
-                            node = page.locator('.driver-target-node').first
-                            self.assertAlmostEqual(node.evaluate('e=>parseFloat(getComputedStyle(e).fontSize)'), 51.84, delta=.1)
+                        # The TV stylesheet uses larger, orientation-specific type.
+                        # Also check painted bounds below so an oversized label cannot pass.
+                        self.assertGreaterEqual(size, min(94, max(28, height * .049)))
                     for index in range(cards.count()):
                         card = cards.nth(index)
-                        self.assertEqual(card.locator('[data-driver-rank]').inner_text(), ['1ST','2ND','3RD'][index])
                         number = card.locator('[data-driver-bay-name]')
                         self.assertRegex(number.inner_text(), r'^[1-5]$')
                         self.assertEqual(number.evaluate('e=>getComputedStyle(e).color'), 'rgb(240, 246, 250)')
                         self.assertEqual(number.evaluate('e=>getComputedStyle(e).webkitTextFillColor'), 'rgb(240, 246, 250)')
-                    # Range rectangles detect text overflowing even when an ancestor clips it.
-                    bounds = page.locator('[data-driver-bay-name],.driver-priority-rank,.driver-target-node,.driver-instruction,.driver-wave-message').evaluate_all('''es => es.filter(e=>e.getClientRects().length).map(e=>{
+                    # A Range includes unused font ascent/descent. For single bay digits
+                    # compare the actual glyph bounds to both the card and its clipping box.
+                    bounds = page.locator('[data-driver-bay-name],.driver-wave-label,.driver-target-node,.driver-instruction,.driver-wave-message').evaluate_all('''es => es.filter(e=>e.getClientRects().length).map(e=>{
                         const range=document.createRange(); range.selectNodeContents(e);
                         const r=range.getBoundingClientRect();
                         const p=e.closest('[data-driver-wave],[data-driver-priority-index]').getBoundingClientRect();
                         const s=getComputedStyle(e);
+                        let top=r.top, bottom=r.bottom, left=r.left, right=r.right;
+                        if(e.hasAttribute('data-driver-bay-name')){
+                            const ctx=document.createElement('canvas').getContext('2d');
+                            ctx.font=s.fontWeight+' '+s.fontSize+' '+s.fontFamily;
+                            const ink=ctx.measureText(e.textContent);
+                            const baseline=r.top+ink.fontBoundingBoxAscent;
+                            top=baseline-ink.actualBoundingBoxAscent;
+                            bottom=baseline+ink.actualBoundingBoxDescent;
+                            left=r.left-ink.actualBoundingBoxLeft;
+                            right=r.left+ink.actualBoundingBoxRight;
+                        }
+                        const boxes=[p];
+                        if(s.overflow==='hidden') boxes.push(e.getBoundingClientRect());
                         return {text:e.textContent.trim(), visible:s.visibility==='visible' && +s.opacity>0,
-                            fits:r.width>0 && r.height>0 && r.left>=p.left && r.right<=p.right && r.top>=p.top && r.bottom<=p.bottom};
+                            fits:right>left && bottom>top && boxes.every(box=>left>=box.left-1 &&
+                                right<=box.right+1 && top>=box.top-1 && bottom<=box.bottom+1)};
                     })''')
                     self.assertTrue(bounds)
                     for result in bounds:
@@ -84,6 +107,7 @@ class SektorUIPassTest(unittest.TestCase):
             Fixture.tearDownClass()
 
     def test_focused_screens(self):
+        Fixture = test_mobile_drawer.MobileDrawerBrowserTest
         Fixture.setUpClass()
         evidence = Path('instance/browser-evidence/sektor-ui-pass').resolve()
         evidence.mkdir(parents=True, exist_ok=True)
@@ -124,8 +148,7 @@ class SektorUIPassTest(unittest.TestCase):
                 Fixture().ready(page, '/neosektor/'+side)
                 for mode in ([1,2] if side=='ebm' else [1]):
                     if mode == 2:
-                        page.locator('[data-bm-mode="2"]').click()
-                        page.wait_for_function('document.querySelector("[data-ballmat-mobile]").dataset.mode === "2"')
+                        test_ballmat_spotters_mobile.BallmatMobileTest().request_and_approve_two_spotters(page, 'east')
                     alignment = page.evaluate('''() => {
                         const y=e=>{const r=e.getBoundingClientRect();return r.y+r.height/2;};
                         return {local:[...document.querySelectorAll('.bm-local h2,.bm-count-row')].map(y),
@@ -144,8 +167,9 @@ class SektorUIPassTest(unittest.TestCase):
                 self.assertAlmostEqual(east['y'],west['y'],delta=1)
             self.assertEqual(page.locator('[data-live-bay]').evaluate_all('es=>es.map(e=>e.dataset.liveBay)'),['Bay 1','Bay 2','Bay 3','Bay 4','Bay 5'])
             self.assertEqual(page.locator('[data-live-route]').count(),2)
-            for text in page.locator('[data-live-route]').all_text_contents():
-                self.assertIn(text, ['-', 'NOT ARRIVED', 'ROUTING EAST', 'ROUTING WEST'])
+            # No arrivals have blocked in on either wave in this synthetic Sort.
+            self.assertEqual(page.locator('[data-live-route="first"]').inner_text(), '1ST WAVE NOT ARRIVED')
+            self.assertEqual(page.locator('[data-live-route="second"]').inner_text(), '2ND WAVE NOT ARRIVED')
             self.assertEqual(page.locator('#neosektor-live-counts-panel input').count(),0)
 
             Fixture().ready(page, '/neosektor/discharge')
