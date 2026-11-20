@@ -51,6 +51,7 @@
         {% else %}
         <section class="neo-drawer-links" aria-label="Utilities">
             <a href="{{ url_for('auth.my_account') }}">My Account</a>
+            {% if is_rfd_hub_page %}{% set scoped_link = local_scope_admin_link() %}{% if scoped_link %}<a href="{{ scoped_link }}">Roles &amp; Permissions</a>{% endif %}{% endif %}
             {% if not is_portal_page %}<a href="{{ url_for('auth.portal_dashboard') }}">NeoPortal</a>{% endif %}
             {% if is_portal_page and user_can('neoapps.user_management.view') %}<a href="{{ url_for('auth.accounts_people') }}">Accounts &amp; Access</a>{% endif %}
             {% if request.endpoint == 'auth.portal_dashboard' and account_preference and account_preference.show_cryocheck %}<a href="{{ cryocheck_url }}" target="_blank" rel="noopener noreferrer">CryoCheck ↗ · External</a>{% endif %}

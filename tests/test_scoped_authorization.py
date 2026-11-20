@@ -235,6 +235,88 @@ class ScopedAuthorizationTest(TestCase):
         self.assertIsNone(PortalAppAccess.query.filter_by(user_id=self.root.id,app_code='neostaffing').first())
         self.assertEqual(digest(inventory()),before)
 
+    def _sign_in_client(self, client, user):
+        from flask import g
+        with client.session_transaction() as session:
+            session['_user_id'] = str(user.id)
+            session['_fresh'] = True
+            session['auth_session_version'] = user.auth_session_version
+        g.pop('_login_user', None)
+        clear_request_cache()
+
+    def test_scoped_pages_require_active_cutover_and_exact_scope_for_get_and_post(self):
+        client = self.app.test_client()
+        self._sign_in_client(client, self.master)
+        for suffix in ('permissions', 'roles'):
+            path = f'/neoscorpion/{suffix}'
+            self.assertEqual(client.get(path).status_code, 403)
+            self.assertEqual(client.post(path).status_code, 403)
+
+        self._sign_in_client(client, self.root)
+        self.assertEqual(client.get('/neoapps/permissions').status_code, 200)
+        self.assertEqual(client.post('/neoapps/permissions').status_code, 409)
+
+        self.cutover()
+        self._sign_in_client(client, self.master)
+        before = digest(inventory())
+        self.assertEqual(client.get('/neoscorpion/permissions').status_code, 200)
+        self.assertEqual(client.get('/neoscorpion/roles').status_code, 200)
+        for path in ('/neorain/permissions', '/neorain/roles', '/neogateway/permissions',
+                     '/neoapps/permissions', '/admin/permissions', '/motherbrain/permissions',
+                     '/neostaffing/permissions', '/neostaffing/accounts'):
+            with self.subTest(path=path):
+                self.assertEqual(client.get(path).status_code, 403)
+                self.assertEqual(client.post(path).status_code, 403)
+        self.assertEqual(digest(inventory()), before)
+
+        grant = management.existing_role(self.master, self.scope)
+        grant.is_active = False
+        db.session.commit()
+        self._sign_in_client(client, self.master)
+        for suffix in ('permissions', 'roles'):
+            path = f'/neoscorpion/{suffix}'
+            self.assertEqual(client.get(path).status_code, 403)
+            self.assertEqual(client.post(path).status_code, 403)
+
+    def test_inactive_node_is_omitted_without_breaking_other_admin_pages(self):
+        self.cutover()
+        client = self.app.test_client()
+        NeoNode.query.filter_by(code='rain').one().is_active = False
+        db.session.commit()
+        self._sign_in_client(client, self.root)
+        response = client.get('/neoscorpion/permissions')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b'href="/neorain/permissions"', response.data)
+        self.assertEqual(client.get('/neorain/permissions').status_code, 404)
+
+    def test_nonadministrative_accounts_cannot_open_or_submit_scoped_editors(self):
+        from app.models import FuelDriverIdentity, NeoScorpionVendorAccount
+
+        self.cutover()
+        client = self.app.test_client()
+        self._sign_in_client(client, self.target)
+        for suffix in ('permissions', 'roles'):
+            path = f'/neoscorpion/{suffix}'
+            self.assertEqual(client.get(path).status_code, 403)
+            self.assertEqual(client.post(path).status_code, 403)
+
+        for name, kind in (('scope-driver', 'fuel_driver'), ('scope-vendor', 'vendor_supervisor')):
+            # Stale rank information must not override the restricted-account boundary.
+            user = fixture_user(name, platform='grandmaster')
+            db.session.add(NeoScorpionVendorAccount(
+                user_id=user.id, gateway_id=self.gateway.id, invited_by_user_id=self.root.id,
+            ))
+            db.session.add(FuelDriverIdentity(user_id=user.id, account_type=kind))
+            db.session.commit()
+            self._sign_in_client(client, user)
+            account = client.get('/my-account')
+            self.assertEqual(account.status_code, 200)
+            self.assertNotIn(b'Roles &amp; Permissions', account.data)
+            for path in ('/neoscorpion/permissions', '/neoscorpion/roles', '/neoapps/permissions'):
+                with self.subTest(account_type=kind, path=path):
+                    self.assertEqual(client.get(path).status_code, 403)
+                    self.assertEqual(client.post(path).status_code, 403)
+
     def test_nightly_fueler_projection_honors_explicit_revocation_and_local_threshold(self):
         from app.services.neoscorpion_assets import eligible_nightly_fueler_users
         self.cutover()

@@ -56,6 +56,8 @@ def is_platform_admin(user):
 
 
 def can_administer(user,scope):
+    if not getattr(user, 'is_authenticated', False) or not user.is_active or user.id is None:
+        return False
     return authority(user).can_administer(scope)
 
 

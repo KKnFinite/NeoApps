@@ -16,6 +16,37 @@ from tests.test_account_security_phase1 import fixture_user,PASSWORD
 from tests.browser import test_accounts_workspace as workspace
 
 
+def check_node_navigation(page, origin, width, *, administrator):
+    assert page.goto(origin + '/neoscorpion').status == 200
+    if width == 1280:
+        account = page.locator('.operational-account-menu')
+        account.locator('summary').click()
+        switcher = page.locator('[data-operational-topbar] [data-character-switcher]')
+    else:
+        page.locator('[data-drawer-toggle]').click()
+        account = page.locator('[data-drawer-view="menu"]')
+        switcher = page.locator('[data-drawer-view="nodes"]')
+    expect(account.get_by_text('My Account', exact=True)).to_be_visible()
+    expect(account.get_by_text('NeoPortal', exact=True)).to_be_visible()
+    expect(account.get_by_text('App switcher', exact=True)).to_have_count(0)
+    permissions = account.get_by_text('Roles & Permissions', exact=True)
+    if administrator:
+        expect(permissions).to_be_visible()
+        expect(permissions).to_have_attribute('href', '/neoscorpion/permissions')
+    else:
+        expect(permissions).to_have_count(0)
+    if width == 1280:
+        account.locator('summary').click()
+        switcher.get_by_text('Change Characters', exact=True).click()
+    else:
+        page.locator('[data-drawer-close]').click()
+        page.locator('[data-drawer-nodes]').click()
+    destination = switcher.locator('a[href="/neosektor"]')
+    expect(destination).to_be_visible()
+    destination.click()
+    expect(page).to_have_url(origin + '/neosektor')
+
+
 class ScopedAuthorizationBrowserTest(TestCase):
     def test_owned_administration_chromium_webkit_desktop_mobile(self):
         evidence=Path('instance/browser-evidence/accounts-phase5').resolve();evidence.mkdir(parents=True,exist_ok=True)
@@ -60,6 +91,7 @@ class ScopedAuthorizationBrowserTest(TestCase):
                                     with page.expect_navigation(wait_until='domcontentloaded'):page.get_by_role('button',name='Activate complete scoped authorization').click()
                                 expect(page.get_by_role('heading',name='Scoped authorization ACTIVE')).to_be_visible()
                                 workspace.AccountsWorkspaceBrowserTest.login(page,origin,'scope-master@example.test')
+                                check_node_navigation(page, origin, width, administrator=True)
                                 self.assertEqual(page.goto(origin+'/neoscorpion/roles').status,200)
                                 subject=subjects[(engine,width)]
                                 form=page.locator('form').filter(has=page.locator(f'[name=user_id][value="{subject}"]'))
@@ -88,6 +120,8 @@ class ScopedAuthorizationBrowserTest(TestCase):
                                 page.screenshot(path=str(evidence/f'app-access-{engine}-{width}.png'),full_page=True)
                                 self.assertEqual(page.request.get(origin+'/neogateway/accounts').status,403)
                                 self.assertEqual(page.request.post(origin+'/neostaffing/accounts',form={'user_id':str(subject)}).status,400)
+                                workspace.AccountsWorkspaceBrowserTest.login(page,origin,'scope-subject@example.test')
+                                check_node_navigation(page, origin, width, administrator=False)
                                 self.assertEqual(errors,[])
                                 context.close()
                     finally:browser.close()

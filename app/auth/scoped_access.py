@@ -7,28 +7,49 @@ from app.auth import bp
 from app.extensions import db
 from app.models import NeoNode,User,AccountAuthorizationState
 from app.services.account_authority import Scope
-from app.services.account_scope_runtime import NODE_PATHS,PATH_NODES,scoped_active,can_administer,can_configure
+from app.services.account_scope_runtime import PATH_NODES,scoped_active,can_administer,can_configure
 from app.services.access_control import get_current_gateway
 from app.services import scoped_access_management as management
 from app.services.accounts_workspace import review_token
 from app.services.account_foundation import AccountConflict,FoundationNotActivated
 from app.services.permission_rules import permission_is_configurable
+from app.services.account_security import platform_grandmaster
 from app.services.auth_rate_limits import client_ip_for_request,login_is_limited,record_login_failure
 from app.services.grandmaster_commissioning import ReauthenticationFailed,may_initiate_commissioning
 
 
-def scope_for(owner,*,application=False):
-    if owner=='neoapps':return Scope('neoapps')
-    if owner=='neostaffing' or owner=='neogateway' and application:return Scope('application',owner)
-    gateway=get_current_gateway()
-    if owner=='neogateway':return Scope('gateway','neogateway',gateway.id)
-    node=NeoNode.query.filter_by(code=PATH_NODES.get(owner),is_active=True).first()
-    if not node:abort(404)
-    return Scope('node','neogateway',gateway.id,node.id)
+def _resolve_scope(owner, *, application=False):
+    if owner == 'neoapps':
+        return Scope('neoapps')
+    if owner == 'neostaffing' or (owner == 'neogateway' and application):
+        return Scope('application', owner)
+    if owner != 'neogateway' and owner not in PATH_NODES:
+        return None
+    gateway = get_current_gateway()
+    if not gateway.is_active:
+        return None
+    if owner == 'neogateway':
+        return Scope('gateway', 'neogateway', gateway.id)
+    node = NeoNode.query.filter_by(code=PATH_NODES[owner], is_active=True).first()
+    return Scope('node', 'neogateway', gateway.id, node.id) if node else None
+
+
+def scope_for(owner, *, application=False):
+    scope = _resolve_scope(owner, application=application)
+    if scope is None:
+        abort(404)
+    return scope
+
+
+def _can_open_scope(scope):
+    # Before cutover only platform oversight can review the new pages.
+    return (scope is not None and (scoped_active() or platform_grandmaster(current_user))
+            and can_administer(current_user, scope))
 
 
 def _guard(scope):
-    if not can_administer(current_user,scope):abort(403)
+    if not _can_open_scope(scope):
+        abort(403)
 
 
 def _error(error):
@@ -46,8 +67,8 @@ def _error(error):
 
 
 def scope_links():
-    return [(owner,scope_for(owner)) for owner in ['neoapps','neogateway','neostaffing',*NODE_PATHS.values()]
-            if can_administer(current_user,scope_for(owner))]
+    return [owner for owner in ('neoapps', 'neogateway', 'neostaffing', *PATH_NODES)
+            if _can_open_scope(_resolve_scope(owner))]
 
 
 def _subjects(scope):
@@ -67,11 +88,11 @@ def scoped_navigation():
         if not current_user.is_authenticated or not scoped_active():return None
         owner=request.path.strip('/').split('/')[0]
         if owner=='rfd':owner='neogateway'
-        if owner not in {'neoapps','neogateway','neostaffing',*PATH_NODES}:return None
-        scope=scope_for(owner)
-        return url_for('auth.scoped_permissions',owner=owner) if can_administer(current_user,scope) else None
+        return url_for('auth.scoped_permissions', owner=owner) if _can_open_scope(_resolve_scope(owner)) else None
+
     return dict(local_scope_admin_link=local_admin_link,scoped_authorization_active=scoped_active,
-        scope_can_manage_app=lambda owner:can_administer(current_user,scope_for(owner,application=True)) if owner in {'neogateway','neostaffing'} else False)
+        scope_can_manage_app=lambda owner: owner in {'neogateway', 'neostaffing'}
+        and _can_open_scope(_resolve_scope(owner, application=True)))
 
 
 @bp.route('/<owner>/permissions',methods=['GET','POST'])
