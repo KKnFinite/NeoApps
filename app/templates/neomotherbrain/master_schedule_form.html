@@ -61,6 +61,7 @@
     <td>
         <input type="hidden" name="row_indexes" value="{{ row.index }}">
         <input type="hidden" name="row_{{ row.index }}_id" value="{{ row.id }}">
+        {% if row.id and row.version %}<input type="hidden" name="row_{{ row.index }}_version" value="{{ row.version }}">{% endif %}
         <label class="compact-check">
             <input type="checkbox" name="row_{{ row.index }}_active" value="1" {% if row.active %}checked{% endif %}>
             <span>ACTIVE</span>
@@ -113,6 +114,7 @@
 
 <input type="hidden" name="row_indexes" value="{{ row.index }}">
 <input type="hidden" name="row_{{ row.index }}_id" value="{{ row.id }}">
+        {% if row.id and row.version %}<input type="hidden" name="row_{{ row.index }}_version" value="{{ row.version }}">{% endif %}
 <input type="hidden" name="row_{{ row.index }}_mission_type" value="{{ row.mission_type }}" data-master-mission-type>
 <label class="compact-check master-active-check">
     <input type="checkbox" name="row_{{ row.index }}_active" value="1" {% if row.active %}checked{% endif %}>

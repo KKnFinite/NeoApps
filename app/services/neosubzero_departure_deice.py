@@ -134,7 +134,7 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
     missions = (
         SortDateMission.query.filter_by(
             sort_date_operation_id=operation.id,
-            mission_type="departure",
+            mission_type="departure", master_retirement=None,
         )
         .filter(
             or_(
@@ -164,15 +164,25 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
             sort_date_operation_id=operation.id
         ).all()
     }
-    from app.services.neosubzero_evidence import select_tail_event
+    from collections import Counter
+    from app.services.neosubzero_evidence import SHARED_TAIL_REVIEW, select_tail_event
     events, reviews = {}, {}
     for event in NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id).all():
         events.setdefault(_tail(event.tail_number), []).append(event)
     for tail, candidates in events.items():
         events[tail], reviews[tail] = select_tail_event(candidates)
-    current_tails={_tail(mission.assigned_tail_number) for mission in missions}
+    tail_counts = Counter(_tail(mission.assigned_tail_number) for mission in missions)
+    current_tails = set(tail_counts)
+    foreign_events = set()
+    for mission in missions:
+        tail = _tail(mission.assigned_tail_number)
+        event = events.get(tail)
+        if tail_counts[tail] > 1 and event and event.sort_date_mission_id != mission.id:
+            foreign_events.add(mission.id)
     detached_radio=tuple(event for tail,event in events.items() if event and radio_pending(event) and tail not in current_tails)
     detached_source_ids={event.sort_date_mission_id for event in detached_radio}
+    from app.services.departure_labels import departure_occurrences, destination_label
+    ranks = departure_occurrences(missions, operation)
     now_utc = now_utc or datetime.utcnow()
     rows = [
         _departure_row(
@@ -181,9 +191,10 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
             parking_by_tail.get(_tail(mission.assigned_tail_number)),
             tail_states.get(_tail(mission.assigned_tail_number)),
             pretreat_states.get(_tail(mission.assigned_tail_number)),
-            events.get(_tail(mission.assigned_tail_number)),
+            None if mission.id in foreign_events else events.get(_tail(mission.assigned_tail_number)),
             settings,
             now_utc,
+            display_destination=destination_label(mission.destination, ranks.get(mission.id)),
         )
         for mission in missions
     ]
@@ -210,7 +221,7 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
              or event.clear_outcome == "sprayed" or event.id in spray_starts)
     )
     for row in rows:
-        row['ownership_review'] = reviews.get(row['tail'])
+        row['ownership_review'] = SHARED_TAIL_REVIEW if row['mission_id'] in foreign_events else reviews.get(row['tail'])
         row["event_ownership_conflict"] = bool(row["ownership_review"])
         if row['mission_id'] in detached_source_ids:
             row['ownership_review']='A former physical tail is still RADIO PENDING. Resolve the canonical mission/tail identity before continuing.'
@@ -308,12 +319,16 @@ def _save_mobile_departure_evidence(operation, mission, event, action, values, a
 
 def mutate_departure_deice(operation, mission, action, values, *, event=None, actor_id=None):
     _validate_mission(operation, mission)
-    from app.services.neosubzero_evidence import audit_change, evidence_values, departure_event_for_tail
+    from app.services.neosubzero_evidence import audit_change, evidence_values, departure_event_for_tail, require_event_mission
     from app.models import SortDateOperation
     SortDateOperation.query.filter_by(id=operation.id).with_for_update().one()
+    db.session.refresh(mission, attribute_names=['master_retirement', 'assigned_tail_number'])
+    if mission.master_retirement:
+        raise NeoSubZeroDepartureDeiceError('This departure was retired from the current Sort. Refresh the aircraft list.')
     if event is not None and event.id is not None:
         event = NeoSubZeroDepartureDeiceEvent.query.filter_by(id=event.id,
             sort_date_operation_id=operation.id).populate_existing().with_for_update().one()
+        require_event_mission(operation, mission, event)
     else:
         event = departure_event_for_tail(operation,mission,lock=True)
     if event and _tail(event.tail_number) != _tail(mission.assigned_tail_number):
@@ -544,6 +559,7 @@ def _departure_row(
     event,
     settings,
     now_utc,
+    display_destination=None,
 ):
     from app.neonodes.neosubzero.services import pretreat_complete as has_complete_pretreat
 
@@ -617,7 +633,7 @@ def _departure_row(
         "mission_id": mission.id,
         "flight": str(mission.flight_number or "").strip(),
         "tail": tail or "-",
-        "destination": str(mission.destination or "").strip().upper() or "-",
+        "destination": display_destination or mission.destination or "-",
         "parking": str(getattr(parking, "position_code", "") or "").strip() or "TBD",
         "ramp": _ramp_name(getattr(parking, "ramp_code", None)),
         "departure_time": _format_local_time_value(display_time, mission.timezone),

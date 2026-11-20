@@ -3,17 +3,21 @@
 
 {% block title %}Master Schedule | NeoApps{% endblock %}
 
-{% macro hidden_active_days(prefix, active_days=None) %}
-{% set selected_days = active_days.split(",") if active_days else [] %}
-{% if selected_days %}
-    {% for day in selected_days %}
-    <input type="hidden" name="{{ prefix }}active_days" value="{{ day }}">
+{% macro schedule_controls(prefix, schedule) %}
+<td class="master-board-cell master-days-cell" data-label="Sort days">
+    <div class="master-weekdays" role="group" aria-label="Operational Sort weekdays">
+    {% for day, label in active_day_options %}
+        <label title="{{ label }}"><input type="checkbox" name="{{ prefix }}active_days" value="{{ day }}" aria-label="{{ label }}"
+            {% if not schedule or day in parse_active_days(schedule.active_days) %}checked{% endif %}><span>{{ label[:2] }}</span></label>
     {% endfor %}
-{% else %}
-    {% for day_value, _day_label in active_day_options %}
-    <input type="hidden" name="{{ prefix }}active_days" value="{{ day_value }}">
-    {% endfor %}
-{% endif %}
+    </div>
+</td>
+<td class="master-board-cell master-status-cell" data-label="Status">
+    {% if schedule %}
+    <button type="submit" class="table-row-button master-active-control" formaction="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=schedule.id) }}"
+        name="desired_active" value="{{ '0' if schedule.active else '1' }}" aria-pressed="{{ 'true' if schedule.active else 'false' }}">{{ 'Active' if schedule.active else 'Inactive' }}</button>
+    {% else %}Active{% endif %}
+</td>
 {% endmacro %}
 
 {% macro row_hidden_fields(prefix, schedule, mission_type) %}
@@ -21,8 +25,7 @@
 <input type="hidden" name="{{ prefix }}id" value="{{ schedule.id if schedule else '' }}">
 <input type="hidden" name="{{ prefix }}mission_type" value="{{ mission_type }}">
 <input type="hidden" name="{{ prefix }}sort_name" value="{{ schedule.sort_name if schedule else 'night' }}">
-<input type="hidden" name="{{ prefix }}active" value="1">
-{{ hidden_active_days(prefix, schedule.active_days if schedule else none) }}
+{% if schedule %}<input type="hidden" name="version_{{ schedule.id }}" value="{{ schedule.updated_at.isoformat() }}">{% endif %}
 {% endmacro %}
 
 {% macro aircraft_type_select(name, selected_value="") %}
@@ -66,6 +69,7 @@
     <td class="master-board-cell master-cell-wave" data-label="Wave">
         {{ wave_select(prefix ~ "wave", schedule.wave if schedule else "") }}
     </td>
+    {{ schedule_controls(prefix, schedule) }}
     <td data-label="Action" class="table-actions master-cell-actions">
         {% if schedule %}
         <button class="table-row-button table-row-delete-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate aria-label="Delete {{ schedule.flight_number|upper }}">&times;</button>
@@ -103,6 +107,7 @@
     <td class="master-board-cell master-cell-mix" data-label="Mix Pull">
         {{ military_time_select(prefix ~ "mix_pull_time_local", schedule.mix_pull_time_local.strftime("%H:%M") if schedule and schedule.mix_pull_time_local else "") }}
     </td>
+    {{ schedule_controls(prefix, schedule) }}
     <td data-label="Action" class="table-actions master-cell-actions">
         {% if schedule %}
         <button class="table-row-button table-row-delete-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate aria-label="Delete {{ schedule.flight_number|upper }}">&times;</button>
@@ -154,6 +159,7 @@
                 </tbody>
             </table>
         </div>
+        <p data-master-error role="alert"></p>
         <div class="master-board-add-controls">
             <button class="action-button action-button-secondary" type="button" data-master-add-row>
                 {{ "ADD ARRIVAL ROW" if mission_type == "arrival" else "ADD DEPARTURE ROW" }}
@@ -242,67 +248,50 @@
         return Boolean(fieldValue(row, "id")) && rowIsComplete(row);
     };
 
-    const submitForm = (form, delay = 500, submitter = null) => {
-        if (!form) {
-            return;
+    async function saveRow(row, submitter) {
+        const form = row.closest("form");
+        const status = form.querySelector("[data-master-error]");
+        const index = row.querySelector("[name=row_indexes]").value;
+        const version = row.querySelector("[name^=version_]");
+        const data = new FormData(form);
+        const body = new FormData();
+        for (const [key, value] of data) {
+            if ((key === "row_indexes" && value === index) || key.startsWith("row_" + index + "_")
+                || key === version?.name || key === "board_mission_type" || key === "csrf_token") {
+                body.append(key, value);
+            }
         }
+        if (submitter?.name) body.set(submitter.name, submitter.value);
+        const toggle = submitter?.matches(".master-active-control");
+        const response = await fetch(toggle ? submitter.formAction : form.action, {
+            method: "POST", body,
+            headers: {"Accept": "application/json", "X-Requested-With": "fetch"},
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.message || "Master flight could not be saved.");
+        const id = fieldValue(row, "id");
+        if (version && result.versions?.[id]) version.value = result.versions[id];
+        if (toggle) {
+            submitter.value = result.active ? "0" : "1";
+            submitter.textContent = result.active ? "Active" : "Inactive";
+            submitter.setAttribute("aria-pressed", String(result.active));
+        }
+        status.textContent = "";
+        if (result.created) window.location.reload();
+    }
 
-        clearTimeout(form.masterAutosaveTimer);
-        form.masterAutosaveTimer = window.setTimeout(async () => {
-            if (form.dataset.autosavePending === "1") {
-                form.dataset.autosaveQueued = "1";
-                return;
-            }
-
-            form.dataset.autosavePending = "1";
-            form.dataset.autosaveQueued = "";
-            try {
-                let formData;
-                try {
-                    formData = submitter ? new FormData(form, submitter) : new FormData(form);
-                } catch (_error) {
-                    formData = new FormData(form);
-                    if (submitter && submitter.name) {
-                        formData.append(submitter.name, submitter.value);
-                    }
-                }
-                const response = await fetch(form.action || window.location.href, {
-                    method: "POST",
-                    body: formData,
-                    headers: {
-                        "Accept": "application/json",
-                        "X-Requested-With": "fetch",
-                    },
-                });
-                const result = await response.json();
-                if (!response.ok || !result.ok) {
-                    if (submitter && result && result.message) {
-                        window.alert(result.message);
-                    }
-                    return;
-                }
-                if (result.created > 0) {
-                    window.location.reload();
-                    return;
-                }
-            } catch (_error) {
-                return;
-            } finally {
-                form.dataset.autosavePending = "";
-            }
-
-            if (form.dataset.autosaveQueued === "1") {
-                submitForm(form, 150);
-            }
-        }, delay);
+    const queueSave = (row, submitter = null) => {
+        row.saveChain = (row.saveChain || Promise.resolve()).then(() => saveRow(row, submitter)).catch(error => {
+            row.closest("form").querySelector("[data-master-error]").textContent =
+                error.message || "Unable to save this flight. Your edits remain on screen.";
+        });
     };
 
     const handleFieldUpdate = (event, delay) => {
         const row = event.target.closest(".master-board-row");
-        if (!shouldSaveRow(row)) {
-            return;
-        }
-        submitForm(row.closest("[data-master-board-form]"), delay);
+        if (!shouldSaveRow(row)) return;
+        clearTimeout(row.saveTimer);
+        row.saveTimer = setTimeout(() => {row.saveTimer = null; queueSave(row);}, delay);
     };
 
     document.querySelectorAll("[data-master-board-form]").forEach((form) => {
@@ -344,11 +333,6 @@
                 handleFieldUpdate(event, 100);
             }
         });
-        form.addEventListener("focusout", (event) => {
-            if (event.target.matches("input, select")) {
-                handleFieldUpdate(event, 100);
-            }
-        });
         form.addEventListener("keydown", (event) => {
             if (event.key === "Enter" && event.target.matches("input[type='text']")) {
                 event.preventDefault();
@@ -359,12 +343,19 @@
         form.addEventListener("submit", (event) => {
             if (
                 event.submitter
-                && event.submitter.matches(".table-row-button:not(.master-row-save-button)")
+                && event.submitter.matches(".table-row-delete-button")
             ) {
                 return;
             }
             event.preventDefault();
-            submitForm(form, 0, event.submitter);
+            const row = event.submitter?.closest(".master-board-row");
+            if (!row) return;
+            if (row.saveTimer) {
+                clearTimeout(row.saveTimer);
+                row.saveTimer = null;
+                queueSave(row);
+            }
+            queueSave(row, event.submitter);
         });
     });
 })();

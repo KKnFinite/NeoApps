@@ -96,6 +96,21 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertEqual(db.session.get(SortDateMission, mission_id).flight_number, "UPS0955")
         self.assertEqual(SortDateMission.query.count(), 1)
 
+    def test_reused_outbound_row_preserves_both_ewr_flights(self):
+        first = self._apply_departures(self._outbound(4, "901", "N101UP", destination="EWR"))["results"][0]
+        original = db.session.get(SortDateMission, first["mission_id"])
+        original.fuel_status = "complete"
+        db.session.commit()
+        changed = self._apply_departures(self._outbound(4, "902", "N202UP", destination="EWR"),
+                                         self._outbound(5, "901", "N101UP", destination="EWR"))
+        self.assertEqual(changed["applied_count"], 2)
+        new_id, original_id = (row["mission_id"] for row in changed["results"])
+        self.assertNotEqual(new_id, original_id)
+        self.assertEqual(original_id, original.id)
+        self.assertEqual((original.flight_number, original.assigned_tail_number, original.fuel_status),
+                         ("UPS0901", "N101UP", "complete"))
+        self.assertEqual(db.session.get(SortDateMission, new_id).assigned_tail_number, "N202UP")
+
     def test_existing_hot_flight_wins_over_stale_google_row_link(self):
         original=self._apply_departures(self._outbound(4,'950','N950UP',destination='SDF'))['results'][0]
         hot=self._mission('departure','UPS9329',tail='N329UP',destination='HOT')

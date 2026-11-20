@@ -64,7 +64,7 @@ class FlightIdentityTest(unittest.TestCase):
 
     def test_two_lax_choices_exact_tail_parking_times_and_no_advance(self):
         state = building_lineup_state_payload(self.gateway, operation=self.operation)
-        self.assertEqual([c['label'] for c in state['destination_choices']], ['UPS101 \u2014 LAX','UPS202 \u2014 LAX'])
+        self.assertEqual([c['label'] for c in state['destination_choices']], ['UPS101 \u2014 1st LAX','UPS202 \u2014 2nd LAX'])
         self.assertEqual(state['pull_times'][str(self.b.master_flight_schedule_id)],dict(pure='00:20',mix='00:40'))
         card = self.cards()[0]
         self.assertEqual((card['mission_id'],card['flight_number'],card['tail'],card['parking']),
@@ -108,6 +108,39 @@ class FlightIdentityTest(unittest.TestCase):
         self.assertIsNone(self.a.actual_pure_pull_time_local)
         self.assertEqual({c['mission_id']:c['actual']['pure'] for c in self.cards()},
                          {self.a.id:'',self.b.id:'00:25'})
+
+    def test_same_destination_labels_alerts_and_outbound_assignments_use_mission_identity(self):
+        from app.services.neoermac_view_outbound import view_outbound_context
+        self.a.destination = self.b.destination = "EWR"
+        self.a.master_flight_schedule.destination = self.b.master_flight_schedule.destination = "EWR"
+        self.a.planned_datetime_utc = datetime(2026, 6, 11, 4, 50)
+        self.b.planned_datetime_utc = datetime(2026, 6, 11, 5, 15)
+        self.a.pure_pull_time_local = self.b.pure_pull_time_local = time(0, 20)
+        self.assign(self.a, self.row, "west_destination_2")
+        self.assign(self.a, self.row, "east_destination_1")
+        db.session.commit()
+        cards = {card["mission_id"]: card for card in self.cards()}
+        self.assertEqual([cards[m.id]["destination_label"] for m in (self.a, self.b)], ["1st EWR", "2nd EWR"])
+        keys = [cards[m.id]["pull_alerts"]["pure"]["key"] for m in (self.a, self.b)]
+        self.assertTrue(all(keys))
+        self.assertNotEqual(*keys)
+        rows = {row["mission_id"]: row for row in view_outbound_context(self.gateway, operation=self.operation)["rows"]}
+        self.assertEqual([rows[m.id]["destination"] for m in (self.a, self.b)], ["1st EWR", "2nd EWR"])
+        self.assertNotEqual(rows[self.a.id]["assigned_doors"], rows[self.b.id]["assigned_doors"])
+
+    def test_tied_and_retimed_departures_keep_their_flight_identity(self):
+        from app.services.departure_labels import departure_occurrences, destination_label
+        third = self.add_flight("UPS303", "N303UP", "C03", time(1), time(1, 20))
+        departures = [third, self.b, self.a]
+        for mission in departures:
+            mission.eta_datetime_utc = datetime(2026, 6, 11, 6, 10)
+        def labels():
+            ranks = departure_occurrences(departures, self.operation)
+            return {m.flight_number: destination_label(m.destination, ranks.get(m.id)) for m in departures}
+        self.assertEqual(labels(), {"UPS101": "1st LAX", "UPS202": "2nd LAX", "UPS303": "3rd LAX"})
+        third.eta_datetime_utc = datetime(2026, 6, 11, 5, 59)
+        self.assertEqual(labels(), {"UPS303": "1st LAX", "UPS101": "2nd LAX", "UPS202": "3rd LAX"})
+        self.assertEqual({m.destination for m in departures}, {"LAX"})
 
     def test_stale_pull_and_stale_lineup_cannot_rebind_to_other_lax_flight(self):
         card=self.cards()[0]
@@ -183,6 +216,18 @@ class FlightIdentityTest(unittest.TestCase):
         extra.master_flight_schedule_id=self.b.master_flight_schedule_id;db.session.flush()
         self.assertIsNone(self.cards()[0]['mission_id'])
         self.assertEqual(neoermac_dashboard_context(self.gateway,operation=self.operation)['both'],[])
+
+    def test_retirement_preserves_pull_history_through_lineup_changes(self):
+        from app.services.neoermac_pull_aggregation import recompute_current_sort_door_pull_aggregates
+        self.write(self.cards()[0])
+        self.b.master_retirement = {"status": "scheduled"}
+        self.b.departure_status = "cancelled"
+        db.session.flush()
+        self.assign(self.a, self.row, "west_destination_2")
+        results = recompute_current_sort_door_pull_aggregates(self.gateway, operation=self.operation)
+        self.assertNotIn(self.b.id, results)
+        self.assertEqual(self.b.actual_pure_pull_time_local, time(0, 25))
+        self.assertEqual(NeoErmacDoorPull.query.one().sort_date_mission_id, self.b.id)
 
     def test_same_destination_on_separate_doors_has_independent_requirements(self):
         other=next(r for r in get_building_lineup_rows(self.gateway) if r.runout_key=='green_runout')

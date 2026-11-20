@@ -25,7 +25,7 @@ def outbound_snapshot(context):
     order = []
     safe = True
     for row in context["rows"]:
-        key = f"m{row['mission_id']}" if row.get("mission_id") is not None else f"missing:{row['destination']}"
+        key = f"m{row['mission_id']}" if row.get("mission_id") is not None else f"master:{row['master_id']}"
         if key in rendered:
             safe = False
         row["transport_key"] = key

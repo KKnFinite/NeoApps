@@ -70,7 +70,7 @@ def _locked_scope(gateway, mission_id):
         raise DirectEntryConflict('No current sort is available. Draft retained.')
     operation, state = lock_nightly_asset_scope_for_mutation(operation)
     mission = SortDateMission.query.filter_by(id=mission_id, sort_date_operation_id=operation.id,
-        mission_type='departure').populate_existing().with_for_update().first()
+        mission_type='departure', master_retirement=None).populate_existing().with_for_update().first()
     if not mission:
         raise DirectEntryConflict('Mission is not in the current gateway/sort. Draft retained.')
     return operation, state, mission
@@ -210,7 +210,7 @@ def project(row, snapshot):
         row['neo_fuel_display'] = 'UNKNOWN'
     row['center_actual_lbs'] = tanks['ctr'].actual_lbs if row['detailed_aircraft_type'] == 'A300' and 'ctr' in tanks else None
     row['load_planning_output'] = fuel.load_planning_text(row['mission'],row['tail_number'],
-        row['neo_fuel_lbs'],row['center_actual_lbs'])
+        row['neo_fuel_lbs'],row['center_actual_lbs'],row['destination'])
     row['load_planning_ready'] = True
     row['estimated_fuel_display'] = 'UNKNOWN'
     row['fuel_load_display'] = fuel.format_dispatch_thousands(

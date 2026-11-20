@@ -76,6 +76,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "approval_email_sent_at": "DATETIME",
     },
     "sort_date_missions": {
+        "master_retirement": "JSON",
+        "master_template": "JSON",
         "arrival_status": "VARCHAR(32)",
         "wave": "VARCHAR(16)",
         "actual_pure_pull_time_local": "TIME",
@@ -128,6 +130,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "rain_fuel_data_source": "VARCHAR(16) NOT NULL DEFAULT 'google'",
     },
     "master_flight_schedules": {
+        "deleted_at": "TIMESTAMP",
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
         "mix_pull_time_local": "TIME",
@@ -384,6 +387,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "temporary_password_expires_at": "TIMESTAMP WITH TIME ZONE",
     },
     "sort_date_missions": {
+        "master_retirement": "JSON",
+        "master_template": "JSON",
         "arrival_status": "VARCHAR(32)",
         "wave": "VARCHAR(16)",
         "actual_pure_pull_time_local": "TIME",
@@ -437,6 +442,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "rain_fuel_data_source": "VARCHAR(16) NOT NULL DEFAULT 'google'",
     },
     "master_flight_schedules": {
+        "deleted_at": "TIMESTAMP",
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
         "mix_pull_time_local": "TIME",

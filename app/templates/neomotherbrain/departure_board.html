@@ -34,7 +34,7 @@
                     <td>{{ mission.wave|wave_label }}</td>
                     <td>{{ mission.flight_number|upper }}</td>
                     <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
-                    <td>{{ mission.destination|upper }}</td>
+                    <td>{{ mission.display_destination }}</td>
                     <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
                     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
                 </tr>

@@ -502,6 +502,9 @@ def process_api_flights_for_operation(
             normalized,
             missions,
         )
+        if mission and mission.master_retirement:
+            ignored_count += 1
+            continue
         if mission:
             normalized["matched_mission_id"] = mission.id
             normalized["matched_mission_flight_number"] = mission.flight_number
@@ -1710,12 +1713,6 @@ def _match_api_departure_to_mission_with_reason(normalized, candidates):
                 "matched by callsign",
             )
 
-    fallback_matches = _departure_destination_time_matches(candidates, normalized)
-    if len(fallback_matches) > 1:
-        return None, "ambiguous destination/time fallback"
-    if len(fallback_matches) == 1:
-        return fallback_matches[0], "matched by destination/time fallback"
-
     if not provider_key and not call_sign_key:
         return None, "unsupported/blank flight identity"
     return None, "no matching mission"
@@ -1740,23 +1737,6 @@ def _departure_time_mismatches(mission, normalized):
     if difference is None:
         return False
     return difference > DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES
-
-
-def _departure_destination_time_matches(candidates, normalized):
-    api_destination = _clean_upper(normalized.get("destination"))
-    if not api_destination:
-        return []
-    matches = []
-    for mission in candidates:
-        mission_destination = _clean_upper(getattr(mission, "destination", None))
-        difference = _departure_time_difference_minutes(mission, normalized)
-        if not mission_destination or difference is None:
-            continue
-        if mission_destination != api_destination:
-            continue
-        if difference <= DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES:
-            matches.append(mission)
-    return matches
 
 
 def _datetime_difference_minutes(left, right):
@@ -1874,9 +1854,6 @@ def departure_audit_candidate_mission(normalized, missions):
         matches = _missions_matching_ups_key(candidates, call_sign_key)
         if len(matches) == 1:
             return matches[0]
-    fallback_matches = _departure_destination_time_matches(candidates, normalized)
-    if len(fallback_matches) == 1:
-        return fallback_matches[0]
     return None
 
 

@@ -258,6 +258,8 @@
             }
         });
 
+        const destinationTitle = card.querySelector(".neoermac-door-destination-title");
+        if (destinationTitle) destinationTitle.textContent = cardData.destination_label || cardData.destination;
         const summary = card.querySelector("[data-pull-complete-summary]");
         const title = card.querySelector("[data-pull-complete-title]");
         const pullLine = card.querySelector("[data-pull-complete-lines]");

@@ -1,6 +1,5 @@
 """Gateway-scoped, read-only projections of committed operational facts."""
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
 from sqlalchemy.orm import load_only
 
 from app.extensions import db
@@ -17,6 +16,7 @@ from app.services.permission_rules import user_can
 from app.services.neosubzero_evidence import normalized_tail, select_tail_event
 from app.services.neosubzero_operations import departure_presentation
 from app.services.neosubzero_radio import radio_complete, radio_pending
+from app.services.departure_labels import departure_occurrences, departure_order, destination_label, effective_departure_utc
 from app.services.time_display import format_local_hhmm
 from app.services.sort_date_operations import mission_display_timing_data
 
@@ -77,7 +77,7 @@ def snapshot(user, gateway, operation):
         m.departure_status, m.arrival_status, m.fuel_status, m.planned_fuel_load, m.pure_pull_time_local,
         m.mix_pull_time_local, m.actual_pure_pull_time_local, m.actual_mix_pull_time_local)).filter_by(sort_date_operation_id=op_id,
         gateway_code=gateway.code, sort_date=operation.sort_date, sort_name=operation.sort_name
-    ).order_by(SortDateMission.planned_datetime_utc.asc().nullslast(), SortDateMission.id).all()
+    ).filter(m.master_retirement.is_(None)).order_by(SortDateMission.planned_datetime_utc.asc().nullslast(), SortDateMission.id).all()
     positions = {normalized_tail(tail): (position if str(position).startswith(str(ramp)) else f"{ramp or ''}{position}")
                  + (f" · Lane {lane}" if lane else "")
         for tail, ramp, position, lane in db.session.query(SortDateParkingAssignment.tail_number,
@@ -108,16 +108,9 @@ def snapshot(user, gateway, operation):
             .filter(SortDateTailState.deice_status != "unknown")}
     departures = [m for m in missions if m.mission_type == "departure"]
     timings = {m.id: mission_display_timing_data(m, operation) for m in departures}
-    def etd(mission):
-        if mission.eta_datetime_utc:
-            return mission.eta_datetime_utc
-        if mission.planned_datetime_utc:
-            return mission.planned_datetime_utc + timedelta(minutes=timings[mission.id]["effective_window_minutes"] or 0)
-        return None
-    departures.sort(key=lambda m: (etd(m) is None, etd(m) or datetime.max, m.id))
-    destinations = Counter(m.destination for m in departures)
+    departures.sort(key=lambda m: departure_order(m, operation))
+    ranks = departure_occurrences(departures, operation)
     tails = Counter(normalized_tail(m.assigned_tail_number) for m in departures)
-    sequence = Counter()
     for mission in [m for m in missions if m.mission_type == "arrival"] + departures:
         inbound = mission.mission_type == "arrival"
         tail = normalized_tail(mission.assigned_tail_number)
@@ -132,9 +125,8 @@ def snapshot(user, gateway, operation):
         if inbound:
             result["arrivals"].append(row)
             continue
-        sequence[mission.destination] += 1
-        if destinations[mission.destination] > 1 and etd(mission):
-            row["ordinal"] = sequence[mission.destination]
+        row["ordinal"] = ranks.get(mission.id)
+        row["route_label"] = destination_label(mission.destination, row["ordinal"])
         candidates = events.get(tail, ())
         if tails[tail] > 1:
             candidates = [e for e in candidates if e.sort_date_mission_id == mission.id]
@@ -146,7 +138,7 @@ def snapshot(user, gateway, operation):
                 radio_complete=radio_complete(event),radio_pending=radio_pending(event)), tail_state)
         row.update(fuel_status=mission.fuel_status if "scorpion" in access else None,
                    planned_fuel=mission.planned_fuel_load if "scorpion" in access else None,
-                   etd=format_local_hhmm(etd(mission), mission.timezone),
+                   etd=format_local_hhmm(effective_departure_utc(mission, operation), mission.timezone),
                    pulls=pulls[mission.id], pure=_clock(timings[mission.id]["adjusted_pure_pull_time"]) if "ermac" in access else None,
                    mix=_clock(timings[mission.id]["adjusted_mix_pull_time"]) if "ermac" in access else None,
                    actual_pure=_clock(mission.actual_pure_pull_time_local) if "ermac" in access else None,

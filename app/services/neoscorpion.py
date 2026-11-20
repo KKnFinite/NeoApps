@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload, selectinload, lazyload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
+from app.services.departure_labels import departure_occurrences, destination_label, operation_departure_occurrences
 from app.services.request_cache import request_cached
 from app.services.neoscorpion_transfer_fuel import parse_transfer_fuel_gallons
 from app.models import (
@@ -767,6 +768,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
     rows = _fuel_rows(
         operation,
         missions,
+        departure_ranks=departure_occurrences(missions, operation),
         parking_by_tail=parking,
         start_evidence=start_evidence,
         fuel_trucks=trucks,
@@ -938,6 +940,7 @@ def hanzo_context(gateway):
     rows = _fuel_rows(
         operation,
         missions,
+        departure_ranks=departure_occurrences(missions, operation),
         start_evidence=start_evidence,
         status_settings=settings,
         fuel_density_lbs_per_gallon=(settings.fuel_density_lbs_per_gallon if settings else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON),
@@ -1022,6 +1025,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
         .filter(
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
+            SortDateMission.master_retirement.is_(None),
         )
         .order_by(SortDateMission.planned_datetime_utc, SortDateMission.flight_number)
         .all()
@@ -1583,7 +1587,7 @@ def fuel_report_context(gateway):
                     "flight_number": (
                         mission.flight_number if mission else "-"
                     ),
-                    "destination": mission.destination if mission else "-",
+                    "destination": mission.display_destination if mission else "-",
                     "tail_number": event.tail_number,
                     "fueler_name": (
                         event.fueler_user.display_name
@@ -2479,6 +2483,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
+            SortDateMission.master_retirement.is_(None),
         )
         .with_for_update()
         .populate_existing()
@@ -3148,6 +3153,7 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
+            SortDateMission.master_retirement.is_(None),
         )
         .with_for_update()
         .populate_existing()
@@ -3491,6 +3497,7 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
+            SortDateMission.master_retirement.is_(None),
         )
         .with_for_update()
         .first()
@@ -4127,6 +4134,7 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
+            SortDateMission.master_retirement.is_(None),
         )
         .with_for_update()
         .populate_existing()
@@ -5148,6 +5156,7 @@ def _locked_current_fuel_assignment(operation, assignment_id, *, action_label, c
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
+            SortDateMission.master_retirement.is_(None),
         )
         .with_for_update()
         .populate_existing()
@@ -6338,8 +6347,8 @@ def _fuel_work_calculation(
     )
 
 
-def load_planning_text(mission, tail_number, neo_fuel_lbs, center_actual_lbs):
-    text = f"{mission.flight_number or '-'} {mission.destination or '-'} {tail_number or '-'}"
+def load_planning_text(mission, tail_number, neo_fuel_lbs, center_actual_lbs, destination):
+    text = f"{mission.flight_number or '-'} {destination or '-'} {tail_number or '-'}"
     if neo_fuel_lbs is not None:
         text += f" NEO > {format_display_thousands(neo_fuel_lbs)}"
     if center_actual_lbs is not None:
@@ -6480,7 +6489,10 @@ def _fuel_rows(
     status_settings=None,
     now_utc=None,
     projection_sources=(),
+    departure_ranks=None,
 ):
+    if departure_ranks is None:
+        departure_ranks = operation_departure_occurrences(operation)
     now_utc = now_utc or datetime.utcnow()
     tail_states = _tail_states_by_tail(operation)
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
@@ -6524,6 +6536,7 @@ def _fuel_rows(
 
     rows = []
     for mission, source_assignment, source_work in [*((item, None, None) for item in missions), *projection_sources]:
+        display_destination = destination_label(mission.destination, departure_ranks.get(mission.id))
         departure_required = mission.planned_fuel_load
         tail_number = _normalize_tail(mission.assigned_tail_number)
         tail_state = tail_states.get(tail_number)
@@ -6740,7 +6753,7 @@ def _fuel_rows(
             and tank_states_by_code.get("ctr") is not None
             else None
         )
-        load_planning_output = load_planning_text(mission, tail_number, neo_fuel_lbs, center_actual_lbs)
+        load_planning_output = load_planning_text(mission, tail_number, neo_fuel_lbs, center_actual_lbs, display_destination)
         fuel_on_board_complete = bool(
             assignment and assignment.fuel_on_board_at_utc
         )
@@ -7134,7 +7147,7 @@ def _fuel_rows(
                     and not work_ended_early
                     and not administratively_complete
                 ),
-                "destination": mission.destination or "-",
+                "destination": display_destination or "-",
                 "arrival_eta": _arrival_eta_display(arrival),
                 "arrival_status": (
                     "Arrived"
@@ -7904,6 +7917,7 @@ def departure_mission_query(operation):
     return SortDateMission.query.filter(
         SortDateMission.sort_date_operation_id == operation.id,
         SortDateMission.mission_type == "departure",
+        SortDateMission.master_retirement.is_(None),
         db.or_(
             SortDateMission.departure_status.is_(None),
             SortDateMission.departure_status != "cancelled",
@@ -7979,7 +7993,7 @@ def _departure_mission_for_operation(operation, mission_id, *, for_update=False)
     query = SortDateMission.query.filter_by(
         id=mission_id,
         sort_date_operation_id=operation.id,
-        mission_type="departure",
+        mission_type="departure", master_retirement=None,
     )
     if for_update:
         query = query.with_for_update()

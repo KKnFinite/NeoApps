@@ -25,6 +25,23 @@ def select_tail_event(events):
     return max(events,key=lambda event:(event.cleared_at_utc is not None,event.cleared_at_utc or datetime.min,event.id or 0),default=None),None
 
 
+SHARED_TAIL_REVIEW = "This tail is assigned to multiple departures. Review the mission linked to its treatment."
+
+
+def require_event_mission(operation, mission, event):
+    if event is None or event.sort_date_mission_id == mission.id:
+        return
+    from app.models import SortDateMission
+    other = db.session.query(SortDateMission.id).filter(
+        SortDateMission.sort_date_operation_id == operation.id, SortDateMission.mission_type == 'departure',
+        SortDateMission.id != mission.id, SortDateMission.master_retirement.is_(None),
+        db.or_(SortDateMission.departure_status.is_(None), SortDateMission.departure_status != 'cancelled'),
+        func.upper(func.trim(SortDateMission.assigned_tail_number)) == normalized_tail(mission.assigned_tail_number),
+    ).first()
+    if other:
+        raise NeoSubZeroEvidenceError(SHARED_TAIL_REVIEW)
+
+
 def departure_event_for_tail(operation, mission, *, lock=False):
     if operation is None or mission is None: return None
     query=NeoSubZeroDepartureDeiceEvent.query.filter(
@@ -33,6 +50,7 @@ def departure_event_for_tail(operation, mission, *, lock=False):
     if lock: query=query.populate_existing().with_for_update()
     event,review=select_tail_event(query.all())
     if review: raise NeoSubZeroEvidenceError(review)
+    require_event_mission(operation, mission, event)
     return event
 
 

@@ -8,6 +8,7 @@ from flask import current_app
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import func, literal, or_, select, text, union_all
 
+from app.services.departure_labels import departure_occurrences, destination_label
 from app.extensions import db
 from app.models import (
     Gateway,
@@ -23,8 +24,6 @@ from app.models import (
 )
 from app.services.neoermac_building_lineup import (
     get_building_lineup_assignments,
-    get_building_lineup_destinations_for_door,
-    get_building_lineup_doors_by_destination,
     get_building_lineup_doors_by_master,
     get_linked_building_lineup_doors,
     get_outbound_door_options,
@@ -48,7 +47,7 @@ from app.services.neoermac_tail_presence import (
 from app.services.neoermac_pull_aggregation import (
     recompute_current_sort_door_pull_aggregates,
 )
-from app.services.sort_date_operations import mission_display_timing_data
+from app.services.sort_date_operations import master_schedule_runs_on_date, mission_display_timing_data
 from app.services.uld_requests import (
     ULD_TYPES,
     active_on_the_way_event_views,
@@ -123,7 +122,7 @@ def _validate_pull_edit(bundle, door, destination, field, operation_id, mission_
     active_mission = bundle.missions_by_master.get(mission.master_flight_schedule_id) if mission else None
     if (
         not bundle.operation or operation_id != bundle.operation.id
-        or not mission or not active_mission or mission.id != active_mission.id
+        or not mission or mission.master_retirement or not active_mission or mission.id != active_mission.id
         or mission.sort_date_operation_id != operation_id
         or bundle.operation.gateway_id not in (None, bundle.gateway.id)
         or bundle.operation.gateway_code != bundle.gateway.code
@@ -172,12 +171,11 @@ class DoorViewOperationalStateBundle:
     missions: tuple
     door_pulls: list
     initialization_changed: bool = False
+    departure_ranks: dict = field(init=False)
     flights_by_door: dict = field(init=False)
     doors_by_master: dict = field(init=False)
     missions_by_master: dict = field(init=False)
     masters_by_id: dict = field(init=False)
-    destinations_by_door: dict = field(init=False)
-    doors_by_destination: dict = field(init=False)
     departure_missions_by_destination: dict = field(init=False)
     departure_mission_candidates_by_destination: dict = field(init=False)
     arrival_missions: tuple = field(init=False)
@@ -192,22 +190,6 @@ class DoorViewOperationalStateBundle:
 
     def __post_init__(self):
         door_options = get_outbound_door_options()
-        self.destinations_by_door = {
-            door: dict(
-                sorted(
-                    get_building_lineup_destinations_for_door(
-                        self.gateway,
-                        door,
-                        assignments=self.lineup_assignments,
-                    ).items()
-                )
-            )
-            for door in door_options
-        }
-        self.doors_by_destination = get_building_lineup_doors_by_destination(
-            self.gateway,
-            assignments=self.lineup_assignments,
-        )
         self.departure_mission_candidates_by_destination = {}
         arrivals = []
         for mission in self.missions:
@@ -229,15 +211,23 @@ class DoorViewOperationalStateBundle:
             or_(MasterFlightSchedule.gateway_id == self.gateway.id,
                 (MasterFlightSchedule.gateway_id.is_(None) & (MasterFlightSchedule.gateway_code == self.gateway.code))),
         ).all()} if selected_ids else {}
+        self.departure_ranks = departure_occurrences(self.missions, self.operation)
+        retired = {m.master_flight_schedule_id for m in self.missions if m.master_retirement}
+        self.refresh_active_departure_missions()
+        present = {m.master_flight_schedule_id for m in self.missions if m.mission_type == "departure"}
         self.flights_by_door = {door: {} for door in door_options}
         for slot in self.lineup_assignments:
             master_id = slot.get("master_flight_schedule_id")
-            if master_id not in self.masters_by_id:
+            master = self.masters_by_id.get(master_id)
+            if not master or master_id in retired:
+                continue
+            if master_id not in present and (not master.active or self.operation and
+                    (self.operation.sort_name != master.sort_name or not master_schedule_runs_on_date(master, self.operation.sort_date))):
                 continue  # Deleted/foreign identities never fall back to destination.
+            source = self.missions_by_master.get(master_id) or master
             entry = self.flights_by_door[slot["supervising_door"]].setdefault(master_id, {
-                "destination": normalize_destination(self.masters_by_id[master_id].destination), "labels": []})
+                "destination": normalize_destination(source.destination), "labels": []})
             entry["labels"].append(slot["display_label"])
-        self.refresh_active_departure_missions()
         self.arrival_missions = tuple(arrivals)
         self.door_pulls_by_door_destination = {}
         self.door_pulls_by_destination_and_door = {}
@@ -469,10 +459,10 @@ def save_door_pulls(
         initialize_lineup=True,
         for_update=True,
     )
-    allowed_destinations = set(bundle.destinations_by_door.get(selected_door, {}))
+    allowed_destinations = {entry["destination"] for entry in bundle.flights_by_door.get(selected_door, {}).values()}
 
     row_count = _int_value(form_data.get("destination_count"), default=0)
-    changed_destinations = set()
+    changed_missions = {}
     for index in range(row_count):
         destination = normalize_destination(form_data.get(f"destination_{index}"))
         if not destination:
@@ -517,18 +507,17 @@ def save_door_pulls(
                 mission=mission,
                 originals=originals,
             )
-            changed_destinations.add(destination)
+            changed_missions[mission.id] = mission
 
-    if not changed_destinations:
+    if not changed_missions:
         return
 
     db.session.flush()
     recompute_current_sort_door_pull_aggregates(
         gateway,
         operation=operation,
-        destinations=changed_destinations,
         doors_by_master=bundle.doors_by_master,
-        missions_by_destination={m.id: m for m in bundle.missions_by_master.values()},
+        missions_by_destination=changed_missions,
         all_operation_missions=bundle.missions,
         door_pull_records=bundle.door_pulls,
     )
@@ -576,7 +565,7 @@ def save_single_door_pull(
         )
     else:
         operation = bundle.operation
-    allowed_destinations = set(bundle.destinations_by_door.get(selected_door, {}))
+    allowed_destinations = {entry["destination"] for entry in bundle.flights_by_door.get(selected_door, {}).values()}
     if destination not in allowed_destinations:
         raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
@@ -606,7 +595,7 @@ def save_single_door_pull(
         operation=operation,
         destinations=(destination,),
         doors_by_master=bundle.doors_by_master,
-        missions_by_destination={m.id: m for m in bundle.missions_by_master.values()},
+        missions_by_destination={mission.id: mission},
         all_operation_missions=bundle.missions,
         door_pull_records=bundle.door_pulls,
     )
@@ -958,7 +947,7 @@ def door_tab_pull_alerts(
             pull_alerts = _pull_alerts_for_card(
                 gateway,
                 door,
-                destination,
+                f"mission-{mission.id}" if mission else f"master-{master_id}",
                 operation,
                 planned_times,
                 actual,
@@ -1138,7 +1127,7 @@ def _pull_card_payload(
     operation,
     *,
     bundle=None,
-    mission_id=None,
+    mission_id,
 ):
     for index, card in enumerate(
         _destination_cards_for_door(
@@ -1148,7 +1137,7 @@ def _pull_card_payload(
             bundle=bundle,
         )
     ):
-        if card["destination"] == destination and (mission_id is None or card["mission_id"] == mission_id):
+        if card["destination"] == destination and card["mission_id"] == mission_id:
             return _door_card_state_payload(card, order_index=index)
     raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
@@ -1160,6 +1149,7 @@ def _door_card_state_payload(card, order_index):
         "master_flight_schedule_id": card["master_flight_schedule_id"],
         "original": card["original"],
         "destination": card["destination"],
+        "destination_label": card["destination_label"],
         "flight_number": card["flight_number"],
         "tail": card["tail"],
         "parking": card["parking"] or "-",
@@ -1218,6 +1208,7 @@ def _destination_cards_for_door(
     for master_id, entry in bundle.flights_by_door.get(selected_door, {}).items():
         destination, slot_labels = entry["destination"], entry["labels"]
         mission = bundle.missions_by_master.get(master_id)
+        label = destination_label(destination, bundle.departure_ranks.get(mission.id) if mission else None)
         master = bundle.masters_by_id.get(master_id)
         door_pull = _door_pull_for_mission(
             bundle, selected_door, destination, mission, legacy_lookup=door_pulls
@@ -1259,6 +1250,7 @@ def _destination_cards_for_door(
                 },
                 "flight_number": _flight_number_for_card(mission, master),
                 "destination": destination,
+                "destination_label": label,
                 "status": _status_for_card(mission, master, tail_presence),
                 "slot_labels": slot_labels,
                 "tail": mission.assigned_tail_number if mission else "",
@@ -1278,7 +1270,7 @@ def _destination_cards_for_door(
                 "pull_alerts": _pull_alerts_for_card(
                     gateway,
                     selected_door,
-                    destination,
+                    f"mission-{mission.id}" if mission else f"master-{master_id}",
                     operation,
                     planned_times,
                     actual,
@@ -1286,7 +1278,7 @@ def _destination_cards_for_door(
                 ),
                 "pulls_complete": pulls_complete,
                 "complete_title": _complete_title(
-                    destination,
+                    label,
                     visible_parking,
                 ),
                 "pull_summary": _pull_summary(actual, no_pull),
@@ -1419,7 +1411,7 @@ def _door_pull_record(
     if mission_id:
         query = query.filter_by(sort_date_mission_id=mission_id)
     else:
-        query = query.filter_by(destination=destination)
+        query = query.filter_by(destination=destination, sort_date_mission_id=None)
     if operation:
         query = query.filter_by(sort_date_operation_id=operation.id)
     else:
@@ -1518,7 +1510,7 @@ def _master_pull_time(master, pull_key):
 def _pull_alerts_for_card(
     gateway,
     selected_door,
-    destination,
+    flight_key,
     operation,
     planned_times,
     actual,
@@ -1545,7 +1537,7 @@ def _pull_alerts_for_card(
                 gateway,
                 operation,
                 selected_door,
-                destination,
+                flight_key,
                 pull_key,
                 planned_local,
                 start_local,
@@ -1630,7 +1622,7 @@ def _pull_alert_timing(
     gateway,
     operation,
     selected_door,
-    destination,
+    flight_key,
     pull_key,
     planned_local,
     start_local,
@@ -1641,7 +1633,7 @@ def _pull_alert_timing(
         "key": _pull_alert_key(
             operation,
             selected_door,
-            destination,
+            flight_key,
             pull_key,
             planned_local,
         ),
@@ -1682,12 +1674,12 @@ def _pull_planned_datetime(operation, start_local, end_local, planned_time):
     return planned_local
 
 
-def _pull_alert_key(operation, selected_door, destination, pull_key, planned_local):
+def _pull_alert_key(operation, selected_door, flight_key, pull_key, planned_local):
     return ":".join(
         (
             f"op-{operation.id}",
             normalize_door(selected_door) or "-",
-            normalize_destination(destination) or "-",
+            flight_key,
             pull_key,
             planned_local.strftime("%Y%m%d%H%M"),
         )

@@ -28,9 +28,7 @@ from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
     get_building_lineup_rows,
     get_destination_pull_times,
-    get_departure_destination_choices,
-    get_lineup_departures,
-    get_departure_destination_pull_times,
+    lineup_flight_options,
     get_outbound_door_options,
     load_building_lineup_rows,
     lineup_field_name,
@@ -853,9 +851,7 @@ def _placeholder_page(title):
 def _building_lineup_response(gateway, access, rows=None, status_code=200):
     if rows is None:
         rows = get_building_lineup_rows(gateway, initialize=False)
-    masters = get_lineup_departures(gateway)
-    destination_choices = get_departure_destination_choices(gateway, masters=masters)
-    pull_time_lookup = get_departure_destination_pull_times(gateway, masters=masters)
+    destination_choices, pull_time_lookup = lineup_flight_options(gateway)
     response = render_template(
         "neonodes/neoermac/building_lineup.html",
         gateway=gateway,

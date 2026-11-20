@@ -34,7 +34,7 @@ def fill_upcoming_pull(gateway, *, operation_id, mission_id, destination, pull_k
         gateway, operation=operation, initialize_lineup=False, for_update=True,
     )
     mission = next((m for m in bundle.missions if m.id == mission_id and m.mission_type == "departure"), None)
-    if mission is None or not destination or normalize_destination(mission.destination) != destination:
+    if mission is None or mission.master_retirement or not destination or normalize_destination(mission.destination) != destination:
         raise DoorPullConflict("The mission changed. Refresh Upcoming Pulls.")
     doors = bundle.doors_by_master.get(mission.master_flight_schedule_id, ())
     if bundle.missions_by_master.get(mission.master_flight_schedule_id) is not mission:
@@ -60,7 +60,7 @@ def fill_upcoming_pull(gateway, *, operation_id, mission_id, destination, pull_k
         recompute_current_sort_door_pull_aggregates(
             gateway, operation=operation, destinations=(destination,),
             doors_by_master=bundle.doors_by_master,
-            missions_by_destination={destination: mission},
+            missions_by_destination={mission.id: mission},
             all_operation_missions=bundle.missions, door_pull_records=bundle.door_pulls,
         )
     return filled

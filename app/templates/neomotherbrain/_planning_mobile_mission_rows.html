@@ -24,11 +24,11 @@
     data-live-row
     data-live-id="mission:{{ mission.id }}"
     data-live-version="{{ mission.updated_at.isoformat(timespec='microseconds') if mission.updated_at else '' }}"
-    aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} destination {{ mission.destination|upper if mission.destination else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }}"
+    aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} destination {{ mission.display_destination if mission.destination else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }}"
 >
     <strong class="planning-mobile-departure-flight">{{ mission.flight_number|upper }}</strong>
     <span class="planning-mobile-departure-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
-    <span class="planning-mobile-departure-destination">{{ mission.destination|upper if mission.destination else "-" }}</span>
+    <span class="planning-mobile-departure-destination">{{ mission.display_destination if mission.destination else "-" }}</span>
     <span class="planning-mobile-departure-parking">{{ parking.label|upper if parking and parking.has_tail else "-" }}</span>
     <div class="planning-mobile-tail-swap" data-mobile-tail-swap-options>
         {% if can_edit %}

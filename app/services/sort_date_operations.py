@@ -17,6 +17,7 @@ from app.services.flight_rules import (
     default_required_crew_sections,
     derive_aircraft_type_from_tail_number,
 )
+from app.services.mission_identity import flight_identity
 from app.services.night_sorting import sort_datetime_for_local_time
 
 WAVE_OPTIONS = ("1", "2")
@@ -57,6 +58,8 @@ def generate_sort_date_operation_from_master(
 ):
     gateway_code = str(gateway_code).strip().upper()
     sort_name = str(sort_name).strip().lower()
+    from app.services.master_schedule_sync import lock_schedule_gateway
+    lock_schedule_gateway(gateway_code)
     existing_operation = SortDateOperation.query.filter_by(
         sort_date=sort_date,
         gateway_code=gateway_code,
@@ -104,6 +107,8 @@ def generate_sort_date_operation_from_master(
 
 
 def sync_sort_operation_with_master(operation):
+    from app.services.master_schedule_sync import lock_schedule_gateway, update_linked_template
+    lock_schedule_gateway(operation.gateway_code)
     gateway_code = str(operation.gateway_code).strip().upper()
     sort_name = str(operation.sort_name).strip().lower()
     master_rows = (
@@ -128,7 +133,7 @@ def sync_sort_operation_with_master(operation):
         for mission in existing_missions
         if mission.master_flight_schedule_id
     }
-    existing_flight_numbers = {mission.flight_number for mission in existing_missions}
+    existing_flight_numbers = {flight_identity(mission.flight_number) for mission in existing_missions}
     added = []
     updated = []
     skipped = []
@@ -136,20 +141,13 @@ def sync_sort_operation_with_master(operation):
     for master_row in matching_master_rows:
         linked_mission = missions_by_master_id.get(master_row.id)
         if linked_mission:
-            if _master_updated_after_operation_generation(master_row, operation):
-                other_flight_numbers = {
-                    mission.flight_number
-                    for mission in existing_missions
-                    if mission.id != linked_mission.id
-                }
-                if master_row.flight_number in other_flight_numbers:
-                    skipped.append(master_row)
-                    continue
-                if _apply_master_template_to_mission(linked_mission, master_row, operation):
+            if (_master_updated_after_operation_generation(master_row, operation)
+                    and linked_mission.master_template and not linked_mission.master_retirement):
+                if update_linked_template(linked_mission, master_row, linked_mission.master_template, operation):
                     updated.append(linked_mission)
             continue
 
-        if master_row.flight_number in existing_flight_numbers:
+        if flight_identity(master_row.flight_number) in existing_flight_numbers:
             skipped.append(master_row)
             continue
 
@@ -160,7 +158,7 @@ def sync_sort_operation_with_master(operation):
         tail_state = ensure_tail_state_for_mission(mission)
         aircraft_type = tail_state.aircraft_type if tail_state else "unknown"
         create_default_crew_assignments_for_mission(mission, aircraft_type)
-        existing_flight_numbers.add(mission.flight_number)
+        existing_flight_numbers.add(flight_identity(mission.flight_number))
         added.append(mission)
 
     return {
@@ -358,58 +356,8 @@ def mission_display_timing_data(mission, operation=None):
     }
 
 
-def apply_master_planned_times_to_mission(mission, master_row, operation=None):
-    """Apply only authoritative Master planned-time data to a departure mission."""
-    if (
-        not mission
-        or not master_row
-        or mission.mission_type != "departure"
-        or master_row.mission_type != "departure"
-    ):
-        return False
-
-    operation = operation or mission.sort_date_operation
-    if not operation:
-        return False
-
-    before = (
-        mission.planned_datetime_local,
-        mission.planned_datetime_utc,
-        mission.planned_source,
-        mission.pure_pull_time_local,
-        mission.mix_pull_time_local,
-        mission.pull_time_source,
-    )
-    planned_datetime_local = _planned_datetime_local(
-        operation.sort_date,
-        master_row.sort_name,
-        master_row.planned_time_local,
-    )
-    mission.planned_datetime_local = planned_datetime_local
-    mission.planned_datetime_utc = _planned_datetime_utc(
-        planned_datetime_local,
-        master_row.timezone,
-    )
-    mission.planned_source = "master"
-    mission.pure_pull_time_local = master_row.pure_pull_time_local
-    mission.mix_pull_time_local = master_row.mix_pull_time_local
-    mission.pull_time_source = (
-        "master"
-        if any((mission.pure_pull_time_local, mission.mix_pull_time_local))
-        else None
-    )
-    after = (
-        mission.planned_datetime_local,
-        mission.planned_datetime_utc,
-        mission.planned_source,
-        mission.pure_pull_time_local,
-        mission.mix_pull_time_local,
-        mission.pull_time_source,
-    )
-    return before != after
-
-
 def _build_mission_from_master(operation, master_row, sort_date):
+    from app.services.master_schedule_sync import master_template
     planned_datetime_local = _planned_datetime_local(
         sort_date,
         master_row.sort_name,
@@ -431,6 +379,7 @@ def _build_mission_from_master(operation, master_row, sort_date):
         mission_source="master",
         wave=normalize_wave(getattr(master_row, "wave", None)),
         master_flight_schedule_id=master_row.id,
+        master_template=master_template(master_row),
         flight_number=master_row.flight_number.strip().upper(),
         origin=master_row.origin.strip().upper(),
         destination=master_row.destination.strip().upper(),
@@ -456,70 +405,6 @@ def _build_mission_from_master(operation, master_row, sort_date):
         mission.arrival_status = "scheduled"
 
     return mission
-
-
-def _apply_master_template_to_mission(mission, master_row, operation):
-    before = _master_template_snapshot(mission)
-
-    mission.sort_date = operation.sort_date
-    mission.gateway_code = master_row.gateway_code
-    mission.sort_name = master_row.sort_name
-    mission.mission_type = master_row.mission_type
-    mission.mission_source = "master"
-    mission.wave = normalize_wave(getattr(master_row, "wave", None))
-    mission.master_flight_schedule_id = master_row.id
-    mission.flight_number = master_row.flight_number.strip().upper()
-    mission.origin = master_row.origin.strip().upper()
-    mission.destination = master_row.destination.strip().upper()
-    mission.timezone = master_row.timezone
-
-    if master_row.mission_type == "arrival":
-        planned_datetime_local = _planned_datetime_local(
-            operation.sort_date,
-            master_row.sort_name,
-            master_row.planned_time_local,
-        )
-        mission.planned_datetime_local = planned_datetime_local
-        mission.planned_datetime_utc = _planned_datetime_utc(
-            planned_datetime_local,
-            master_row.timezone,
-        )
-        mission.planned_source = "master"
-        mission.arrival_status = mission.arrival_status or "scheduled"
-        mission.departure_status = None
-        mission.pure_pull_time_local = None
-        mission.mix_pull_time_local = None
-        mission.pull_time_source = None
-    else:
-        mission.arrival_status = None
-        mission.departure_status = mission.departure_status or "scheduled"
-        apply_master_planned_times_to_mission(mission, master_row, operation)
-
-    return _master_template_snapshot(mission) != before
-
-
-def _master_template_snapshot(mission):
-    return (
-        mission.sort_date,
-        mission.gateway_code,
-        mission.sort_name,
-        mission.mission_type,
-        mission.mission_source,
-        mission.wave,
-        mission.master_flight_schedule_id,
-        mission.flight_number,
-        mission.origin,
-        mission.destination,
-        mission.timezone,
-        mission.planned_datetime_local,
-        mission.planned_datetime_utc,
-        mission.planned_source,
-        mission.arrival_status,
-        mission.departure_status,
-        mission.pure_pull_time_local,
-        mission.mix_pull_time_local,
-        mission.pull_time_source,
-    )
 
 
 def _master_updated_after_operation_generation(master_row, operation):
@@ -550,9 +435,10 @@ def _raise_for_duplicate_master_flight_numbers(master_rows):
     duplicate_flight_numbers = set()
 
     for master_row in master_rows:
-        if master_row.flight_number in seen_flight_numbers:
+        key = flight_identity(master_row.flight_number)
+        if key in seen_flight_numbers:
             duplicate_flight_numbers.add(master_row.flight_number)
-        seen_flight_numbers.add(master_row.flight_number)
+        seen_flight_numbers.add(key)
 
     if duplicate_flight_numbers:
         duplicates = ", ".join(sorted(duplicate_flight_numbers))

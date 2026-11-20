@@ -6,7 +6,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import func, literal, select, union_all
 
 from app.extensions import db
+from app.services.departure_labels import departure_occurrences, destination_label
 from app.models import (
+    MasterFlightSchedule,
     NeoErmacBuildingLineup,
     NeoErmacDoorPull,
     SortDateGoogleMissionLink,
@@ -21,6 +23,7 @@ from app.services.gateway_matrix import (
 )
 from app.services.neoermac_building_lineup import (
     get_building_lineup_assignments,
+    get_lineup_departures,
     normalize_destination,
 )
 from app.services.neoermac_live_refresh import (
@@ -34,7 +37,7 @@ from app.services.neoermac_tail_presence import (
     normalize_tail_number,
     tail_presence_status_override,
 )
-from app.services.sort_date_operations import mission_display_timing_data
+from app.services.sort_date_operations import master_schedule_runs_on_date, mission_display_timing_data
 
 
 PULL_KEYS = (
@@ -59,7 +62,7 @@ def view_outbound_context(
 ):
     if operation is _OPERATION_UNSET:
         operation = _current_operation(gateway)
-    assignments_by_destination = _lineup_assignments_by_destination(
+    assignments_by_master = _lineup_assignments_by_master(
         gateway,
         initialize=initialize_lineup,
     )
@@ -67,18 +70,21 @@ def view_outbound_context(
     arrivals_by_tail = arrival_presence_by_tail(operation)
     missions = _departure_missions(operation)
     pulls_by_mission = _door_pulls_by_mission(gateway, operation, missions)
+    ranks = departure_occurrences([m for m in missions if not m.master_retirement], operation)
 
     rows = []
-    seen_destinations = set()
+    seen_masters = set()
     for mission in missions:
         destination = normalize_destination(mission.destination)
         if not destination:
             continue
-        seen_destinations.add(destination)
+        seen_masters.add(mission.master_flight_schedule_id)
+        if mission.master_retirement:
+            continue
         rows.append(
             _row_for_destination(
-                destination,
-                assignments_by_destination.get(destination, []),
+                destination_label(destination, ranks.get(mission.id)),
+                assignments_by_master.get(mission.master_flight_schedule_id, []),
                 pulls_by_mission.get(mission.id, []),
                 operation,
                 mission,
@@ -87,11 +93,16 @@ def view_outbound_context(
             )
         )
 
-    for destination in sorted(set(assignments_by_destination) - seen_destinations):
+    missing = set(assignments_by_master) - seen_masters
+    if missing:
+        missing.intersection_update(master.id for master in get_lineup_departures(gateway)
+                                    if not operation or (master.sort_name == operation.sort_name and
+                                    master_schedule_runs_on_date(master, operation.sort_date)))
+    for master_id in sorted(missing):
         rows.append(
             _row_for_destination(
-                destination,
-                assignments_by_destination.get(destination, []),
+                assignments_by_master[master_id][0]["destination"],
+                assignments_by_master[master_id],
                 [],
                 operation,
                 None,
@@ -141,6 +152,11 @@ def view_outbound_revision(gateway, *, operation=_OPERATION_UNSET, now=None):
         else model.sort_date_operation_id.is_(None)
     )
     aggregate_queries = (
+        _revision_aggregate(
+            "master_departures", MasterFlightSchedule, MasterFlightSchedule.updated_at,
+            MasterFlightSchedule.gateway_code == gateway.code, MasterFlightSchedule.mission_type == "departure",
+            MasterFlightSchedule.active.is_(True),
+        ),
         _revision_aggregate(
             "lineup",
             NeoErmacBuildingLineup,
@@ -294,6 +310,7 @@ def _row_for_destination(
 
     return {
         "destination": destination,
+        "master_id": mission.master_flight_schedule_id if mission else assignments[0]["master_id"],
         "mission_id": mission.id if mission else None,
         "flight_number": _text_value(getattr(mission, "flight_number", "")),
         "tail": _text_value(getattr(mission, "assigned_tail_number", "")),
@@ -334,16 +351,18 @@ def _pull_timing_state(planned, actual, pull_key, *, no_pull=False):
     return "late" if lateness > allowance else "on-time"
 
 
-def _lineup_assignments_by_destination(gateway, *, initialize=True):
-    assignments_by_destination = {}
+def _lineup_assignments_by_master(gateway, *, initialize=True):
+    assignments_by_master = {}
     for slot in get_building_lineup_assignments(gateway, initialize=initialize):
-        assignments_by_destination.setdefault(slot["destination"], []).append(
+        assignments_by_master.setdefault(slot["master_flight_schedule_id"], []).append(
             {
+                "destination": slot["destination"],
+                "master_id": slot["master_flight_schedule_id"],
                 "door": slot["supervising_door"],
                 "location": slot["display_label"],
             }
         )
-    return assignments_by_destination
+    return assignments_by_master
 
 
 def _door_pulls_by_mission(gateway, operation, missions):

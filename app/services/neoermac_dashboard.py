@@ -75,7 +75,7 @@ def neoermac_dashboard_context(
             continue
         mission = candidates[0]
         destination = normalize_destination(mission.destination)
-        if str(mission.departure_status or "").lower() in {"departed", "cancelled", "blocked_out"}:
+        if mission.master_retirement or str(mission.departure_status or "").lower() in {"departed", "cancelled", "blocked_out"}:
             continue
         tail = _text_value(mission.assigned_tail_number)
         parking = _parking_for_tail(parking_by_tail, tail)
@@ -106,6 +106,7 @@ def neoermac_dashboard_context(
                         "pull_type": pull_field["label"],
                         "pull_order": pull_order,
                         "destination": destination,
+                        "destination_label": mission.display_destination,
                         "tail": tail or "-",
                         "parking": parking or "-",
                         "location": assignment["location"],

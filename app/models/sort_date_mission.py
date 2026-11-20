@@ -114,6 +114,15 @@ class SortDateMission(db.Model):
     crew_load_completed_source = db.Column(
         db.String(32), nullable=False, default="unknown"
     )
+    # SQL NULL means eligible; a saved snapshot belongs only to a Master retirement.
+    master_template = db.Column(db.JSON(none_as_null=True), nullable=True)
+    master_retirement = db.Column(db.JSON(none_as_null=True), nullable=True)
+
+    @property
+    def display_destination(self):
+        from app.services.departure_labels import mission_destination_label
+        return mission_destination_label(self)
+
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

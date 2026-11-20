@@ -80,7 +80,7 @@ class NeoErmacTransportTest(unittest.TestCase):
         initial, _ = self.measure('/neoermac/view-outbound/state?revision=old')
         manifest = initial.json['row_manifest']
         self.assertIn(f'm{second_id}', manifest['rows'])  # Repeated destinations stay distinct.
-        self.assertIn('missing:PHX', manifest['rows'])
+        self.assertIn(f"master:{self.flight_ids['PHX']}", manifest['rows'])
         second = db.session.get(SortDateMission, second_id)
         second.actual_mix_pull_time_local = time(2, 45)
         second.pure_pull_time_local = time(0, 30)  # Change canonical order as well.
@@ -100,12 +100,13 @@ class NeoErmacTransportTest(unittest.TestCase):
         # Removal and reappearance of a missing-mission destination use distinct keys.
         self.gateway = db.session.get(Gateway, self.gateway_id)
         third = self._add_operation_departure('UPS503', 'PHX', tail='N503UP')
+        third.master_flight_schedule_id = self.flight_ids['PHX']
         third_id = third.id
         db.session.delete(db.session.get(SortDateMission, second_id))
         db.session.commit()
         next_response, _ = self.measure('/neoermac/view-outbound/state?'+urlencode({'revision':'old', 'rows':json.dumps(delta.json['row_manifest'])}))
         self.assertNotIn(f'm{second_id}', next_response.json['row_delta']['order'])
-        self.assertNotIn('missing:PHX', next_response.json['row_delta']['order'])
+        self.assertNotIn(f"master:{self.flight_ids['PHX']}", next_response.json['row_delta']['order'])
         self.assertIn(f'm{third_id}', next_response.json['row_delta']['order'])
 
     def test_outbound_fallbacks_and_unchanged_remain_read_only(self):

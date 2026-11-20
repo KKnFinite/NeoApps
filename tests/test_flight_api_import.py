@@ -2365,7 +2365,7 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["review_items"]), 0)
         self.assertIsNone(mission.assigned_tail_number)
 
-    def test_departure_destination_time_fallback_matches_exactly_one_candidate(self):
+    def test_departure_destination_time_cannot_identify_even_one_candidate(self):
         mission = self._mission(
             "departure",
             "UPS0910",
@@ -2395,14 +2395,10 @@ class FlightApiImportTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(len(result["matched"]), 1)
-        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
-        self.assertEqual(
-            result["matched"][0]["match_diagnostic"],
-            "matched by destination/time fallback",
-        )
-        self.assertEqual(mission.assigned_tail_number, "N910UP")
-        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(result["matched"], [])
+        self.assertIsNone(mission.assigned_tail_number)
+        self.assertEqual(len(result["review_items"]), 1)
+        self.assertEqual(result["review_items"][0].review_reason, "unsupported/blank flight identity")
 
     def test_departure_destination_time_fallback_stays_unmatched_when_ambiguous(self):
         first = self._mission(
@@ -2444,11 +2440,11 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["review_items"]), 1)
         self.assertEqual(
             result["review_items"][0].review_reason,
-            "ambiguous destination/time fallback",
+            "unsupported/blank flight identity",
         )
         self.assertEqual(
             result["api_ups_departures"][0]["unmatched_reason"],
-            "ambiguous destination/time fallback",
+            "unsupported/blank flight identity",
         )
 
     def test_departure_matching_is_current_sort_operation_only(self):

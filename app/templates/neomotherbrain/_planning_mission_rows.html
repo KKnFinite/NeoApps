@@ -49,7 +49,7 @@
     <td>{{ mission.wave|wave_label }}</td>
     <td>{{ mission.flight_number|upper }}</td>
     <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
-    <td>{{ mission.destination|upper if mission.destination else "-" }}</td>
+    <td>{{ mission.display_destination if mission.destination else "-" }}</td>
     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
     <td>{{ planning_parking_cell(row, operation) }}</td>
     <td>

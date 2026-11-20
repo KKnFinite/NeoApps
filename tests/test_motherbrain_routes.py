@@ -2942,7 +2942,83 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIsNone(updated.pure_pull_time_local)
         self.assertIsNone(updated.mix_pull_time_local)
 
-    def test_master_schedule_time_edit_propagates_to_current_linked_departure_only(self):
+    def test_current_sort_master_lifecycle_preserves_ids_and_evidence(self):
+        # At 01:00 Tuesday the ongoing Night Sort still owns Monday's departures.
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 11, 24, 1)
+        self._set_sort_window("night", time(21), time(5))
+        operation = self._operation(sort_date=date(2026, 11, 23))
+        history = self._operation(sort_date=date(2026, 11, 16))
+        db.session.add_all([operation, history])
+        db.session.commit()
+        def save(number, days, planned, master=None):
+            data = self._master_schedule_form_data(flight_number=number, destination="EWR",
+                                                  active_days=days, planned_time_local=planned)
+            url = f"/motherbrain/master-schedule/{master.id}/edit" if master else "/motherbrain/master-schedule/new"
+            response = self.client.post(url, data=data)
+            self.assertEqual(response.status_code, 302, response.data[:300])
+        save("UPS101", ["monday"], "23:50")
+        save("UPS202", ["monday", "tuesday"], "00:15")
+        save("UPS303", ["tuesday"], "01:00")
+        def active():
+            return {m.flight_number: (m.id, m.display_destination) for m in operation.missions if not m.master_retirement}
+        first, second = sorted(operation.missions, key=lambda m: m.flight_number)
+        first_id, second_id = first.id, second.id
+        self.assertEqual(active(), {"UPS101": (first_id, "1st EWR"), "UPS202": (second_id, "2nd EWR")})
+        first.assigned_tail_number, second.assigned_tail_number = "N101UP", "N202UP"
+        first.fuel_completed_at_utc = datetime(2026, 11, 24, 5)
+        first.fuel_status = "complete"
+        first.actual_pure_pull_time_local = time(23, 30)
+        first.departure_status = "ramp_load_complete"
+        db.session.commit()
+        master = first.master_flight_schedule
+        url = f"/motherbrain/master-schedule/{master.id}/toggle-active"
+        old_version = master.updated_at.isoformat()
+        for _ in range(2):
+            save("UPS101", ["monday"], "02:30", master)
+        self.assertEqual(active()["UPS101"], (first_id, "2nd EWR"))
+        response = self.client.post(url, data={"desired_active": "0", f"version_{master.id}": old_version})
+        self.assertEqual(response.status_code, 409)
+        save("UPS101", ["tuesday"], "02:30", master)
+        self.assertEqual(active(), {"UPS202": (second_id, "EWR")})
+        save("UPS101", ["monday"], "02:30", master)
+        self.assertEqual(first.departure_status, "ramp_load_complete")
+        from app.models import NeoSubZeroDepartureDeiceEvent
+        event = NeoSubZeroDepartureDeiceEvent(sort_date_operation_id=operation.id, sort_date_mission_id=first_id,
+                                              tail_number=first.assigned_tail_number, status="cleared", radio_state="pending")
+        db.session.add(event)
+        db.session.commit()
+        blocked = self.client.post(url, data={"desired_active": "0"})
+        self.assertEqual(blocked.status_code, 409)
+        self.assertTrue(master.active)
+        self.assertIsNone(first.master_retirement)
+        event.radio_state = "complete"
+        event.radio_completed_at_utc = datetime(2026, 11, 24, 6, 20)
+        event.radio_completed_by_user_id = User.query.first().id
+        db.session.commit()
+        self.assertEqual(self.client.post(url, data={"desired_active": "0"}).status_code, 302)
+        self.assertFalse(master.active)
+        self.assertEqual(first.departure_status, "cancelled")
+        row = self._master_schedule_form_data(flight_number="UPS101", destination="EWR",
+                                              active_days=["monday"], planned_time_local="03:30")
+        post = {"board_mission_type": "departure", "row_indexes": "A", "row_A_id": str(master.id),
+                **{"row_A_" + key: value for key, value in row.items()}}
+        result = self.client.post("/motherbrain/master-schedule", data=post, headers={"Accept":"application/json"})
+        self.assertEqual(result.status_code, 200, result.data[:300])
+        self.assertFalse(master.active)
+        self.assertEqual(first.planned_datetime_local.hour, 2)
+        self.assertEqual(self.client.post(url, data={"desired_active": "1"}).status_code, 302)
+        self.assertEqual(first.planned_datetime_local, datetime(2026, 11, 24, 3, 30))
+        self.assertEqual(active()["UPS101"], (first_id, "2nd EWR"))
+        self.assertEqual(self.client.post(f"/motherbrain/master-schedule/{master.id}/delete").status_code, 302)
+        self.assertEqual(first.master_flight_schedule_id, master.id)
+        self.assertEqual(self.client.post(f"/motherbrain/operations/{operation.id}/missions/{first_id}/delete").status_code, 409)
+        self.assertEqual((first.assigned_tail_number, first.actual_pure_pull_time_local, first.fuel_status),
+                         ("N101UP", time(23, 30), "complete"))
+        self.assertEqual(second.assigned_tail_number, "N202UP")
+        self.assertEqual(active(), {"UPS202": (second_id, "EWR")})
+        self.assertEqual(history.missions, [])
+
+    def test_master_schedule_time_edit_rejects_manual_override_atomically(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026,
             6,
@@ -3013,13 +3089,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         db.session.expire_all()
         updated = db.session.get(SortDateMission, mission.id)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(updated.planned_datetime_local, datetime(2026, 6, 2, 3, 30))
-        self.assertEqual(updated.planned_datetime_utc, datetime(2026, 6, 2, 8, 30))
-        self.assertEqual(updated.planned_source, "master")
-        self.assertEqual(updated.pure_pull_time_local, time(2, 30))
-        self.assertEqual(updated.mix_pull_time_local, time(3, 0))
-        self.assertEqual(updated.pull_time_source, "master")
+        self.assertEqual(response.status_code, 409)
+        self.assertIn(b"override", response.data)
+        self.assertEqual(master.planned_time_local, time(3))
+        self.assertEqual(updated.planned_datetime_local, datetime(2026, 6, 2, 3, 15))
+        self.assertEqual(updated.planned_datetime_utc, datetime(2026, 6, 2, 8, 15))
+        self.assertEqual(updated.planned_source, "manual")
+        self.assertEqual(updated.pure_pull_time_local, time(2, 15))
+        self.assertEqual(updated.mix_pull_time_local, time(2, 45))
+        self.assertEqual(updated.pull_time_source, "manual")
         self.assertEqual(updated.actual_pure_pull_time_local, time(2, 16))
         self.assertEqual(updated.actual_mix_pull_time_local, time(2, 46))
         self.assertEqual(
@@ -3039,10 +3117,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         timing = mission_display_timing_data(updated, operation)
         self.assertEqual(
             timing["adjusted_planned_departure_time"],
-            datetime(2026, 6, 2, 3, 40),
+            datetime(2026, 6, 2, 3, 25),
         )
-        self.assertEqual(timing["adjusted_pure_pull_time"], time(2, 40))
-        self.assertEqual(timing["adjusted_mix_pull_time"], time(3, 10))
+        self.assertEqual(timing["adjusted_pure_pull_time"], time(2, 25))
+        self.assertEqual(timing["adjusted_mix_pull_time"], time(2, 55))
 
     def test_master_schedule_explicit_new_row_save_rejects_invalid_partial_row(self):
         response = self.client.post(
@@ -3568,9 +3646,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         updated_mission = db.session.get(SortDateMission, mission.id)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/motherbrain/master-schedule")
-        self.assertIsNone(db.session.get(MasterFlightSchedule, master.id))
-        self.assertIsNotNone(updated_mission)
-        self.assertIsNone(updated_mission.master_flight_schedule_id)
+        self.assertIsNotNone(master.deleted_at)
+        self.assertFalse(master.active)
+        self.assertEqual(self.client.get(f"/motherbrain/master-schedule/{master.id}").status_code, 404)
+        self.assertEqual(updated_mission.master_flight_schedule_id, master.id)
 
     def test_create_departure_master_row_with_pull_times(self):
         response = self.client.post(

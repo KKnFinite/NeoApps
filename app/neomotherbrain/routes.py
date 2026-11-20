@@ -35,6 +35,10 @@ from app.models import (
     SortTimelineSettings,
 )
 from app.neomotherbrain import bp
+from app.services.mission_identity import flight_identity
+from app.services.master_schedule_sync import (
+    MasterScheduleConflict, lock_master_editor, master_template, reconcile_current_sort,
+)
 from app.services.flight_rules import (
     crew_sections_for_tail_swap,
     default_required_crew_sections,
@@ -88,18 +92,17 @@ from app.services.alp_preview_state import (
     save_alp_preview_state,
 )
 from app.services.sort_date_operations import (
-    apply_master_planned_times_to_mission,
     ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
     mission_display_timing_data,
     normalize_optional_window_minutes,
     normalize_wave,
+    parse_active_days,
 )
 from app.services.gateway_matrix import (
     DAY_OPTIONS as MATRIX_DAY_OPTIONS,
     SORT_OPTIONS as MATRIX_SORT_OPTIONS,
     current_gateway_local_datetime,
-    current_operations_for_gateway,
     matrix_state_for_gateway,
     save_gateway_matrix,
 )
@@ -2060,6 +2063,19 @@ def operations():
     return render_template("neomotherbrain/operations.html", operations=operations)
 
 
+@bp.errorhandler(MasterScheduleConflict)
+def master_conflict(error):
+    db.session.rollback()
+    if _wants_json_response():
+        return {"ok": False, "message": str(error)}, 409
+    return str(error), 409, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+def _check_master_version(schedule, expected):
+    if expected and expected != schedule.updated_at.isoformat():
+        raise MasterScheduleConflict("This master flight changed. Reload its current values before saving.")
+
+
 @bp.route("/motherbrain/master-schedule", methods=["GET", "POST"])
 @gateway_node_required("motherbrain")
 def master_schedule():
@@ -2067,12 +2083,13 @@ def master_schedule():
     denied = _permission_guard(MASTER_SCHEDULE_VIEW_PERMISSION)
     if denied:
         return denied
-    selected_operation = _selected_manage_sort_operation(gateway)
-    schedules = _master_schedules_for_gateway(gateway)
     if request.method == "POST":
         denied = _permission_guard(MASTER_SCHEDULE_EDIT_PERMISSION)
         if denied:
             return denied
+    selected_operation = _selected_manage_sort_operation(gateway)
+    schedules = _master_schedules_for_gateway(gateway)
+    if request.method == "POST":
         mission_type = request.form.get("board_mission_type", "").strip().lower()
         rows = _master_schedule_bulk_rows_from_request(gateway)
         strict_row_index = request.form.get("master_save_row", "").strip()
@@ -2096,6 +2113,9 @@ def master_schedule():
                 redirect_args["operation_id"] = selected_operation.id
             return redirect(url_for("neomotherbrain.master_schedule", **redirect_args))
 
+        saved_ids = {row["id"] for row in rows}
+        db.session.flush()
+        versions = {str(s.id): s.updated_at.isoformat() for s in schedules if str(s.id) in saved_ids}
         db.session.commit()
         if _wants_json_response():
             return {
@@ -2103,6 +2123,7 @@ def master_schedule():
                 "mission_type": mission_type,
                 "updated": updated_count,
                 "created": created_count,
+                "versions": versions,
             }
         flash(
             f"Master {mission_type} board saved: "
@@ -2116,6 +2137,7 @@ def master_schedule():
 
     return render_template(
         "neomotherbrain/master_schedule.html",
+        parse_active_days=parse_active_days,
         arrival_schedules=[
             schedule for schedule in schedules if schedule.mission_type == "arrival"
         ],
@@ -2137,6 +2159,8 @@ def new_master_schedule():
     denied = _permission_guard(MASTER_SCHEDULE_EDIT_PERMISSION if request.method == "POST" else MASTER_SCHEDULE_VIEW_PERMISSION)
     if denied:
         return denied
+    if request.method == "POST":
+        lock_master_editor(gateway)
     if request.method == "POST" and request.form.getlist("row_indexes"):
         rows = _master_schedule_bulk_rows_from_request(gateway)
         try:
@@ -2163,6 +2187,7 @@ def new_master_schedule():
             _apply_master_schedule_form(master_schedule, form, gateway)
             _raise_for_duplicate_active_master_schedule(master_schedule)
         except ValueError as error:
+            db.session.rollback()
             flash(str(error), "error")
             return _render_master_schedule_form(form, "new"), 400
 
@@ -2282,6 +2307,7 @@ def edit_master_schedule(master_id):
             _apply_master_schedule_form(master_schedule, form, gateway)
             _raise_for_duplicate_active_master_schedule(master_schedule)
         except ValueError as error:
+            db.session.rollback()
             flash(str(error), "error")
             return _render_master_schedule_form(form, "edit", master_schedule), 400
 
@@ -2308,12 +2334,17 @@ def toggle_master_schedule_active(master_id):
     if denied:
         return denied
     master_schedule = _master_schedule_or_404(master_id)
-    master_schedule.active = not master_schedule.active
+    previous = master_template(master_schedule)
+    desired = request.form.get("desired_active")
+    _check_master_version(master_schedule, request.form.get("version_" + str(master_id)))
+    master_schedule.active = desired == "1" if desired in ("0", "1") else not master_schedule.active
 
     try:
         _raise_for_duplicate_active_master_schedule(master_schedule)
     except ValueError as error:
         db.session.rollback()
+        if _wants_json_response():
+            return {"ok": False, "message": str(error)}, 409
         flash(str(error), "error")
         return redirect(
             url_for(
@@ -2322,7 +2353,12 @@ def toggle_master_schedule_active(master_id):
             )
         )
 
+    reconcile_current_sort(master_schedule, get_current_gateway(), previous)
     db.session.commit()
+    if _wants_json_response():
+        return {"ok": True, "active": master_schedule.active, "versions": {str(master_id): master_schedule.updated_at.isoformat()}}
+    if request.form.get("board_mission_type"):
+        return redirect(url_for("neomotherbrain.master_schedule"))
     state = "activated" if master_schedule.active else "deactivated"
     flash(f"Master flight schedule {state}.", "info")
     return redirect(
@@ -2340,11 +2376,11 @@ def delete_master_schedule(master_id):
     if denied:
         return denied
     master_schedule = _master_schedule_or_404(master_id)
-    SortDateMission.query.filter_by(master_flight_schedule_id=master_schedule.id).update(
-        {"master_flight_schedule_id": None},
-        synchronize_session=False,
-    )
-    db.session.delete(master_schedule)
+    _check_master_version(master_schedule, request.form.get("version_" + str(master_id)))
+    previous = master_template(master_schedule)
+    master_schedule.deleted_at = datetime.utcnow()
+    master_schedule.active = False
+    reconcile_current_sort(master_schedule, get_current_gateway(), previous)
     db.session.commit()
     flash("Master flight schedule row deleted.", "info")
     return redirect(url_for("neomotherbrain.master_schedule"))
@@ -3340,7 +3376,7 @@ def delete_mission(operation_id, mission_id):
     if denied:
         return denied
     operation = _operation_or_404(operation_id)
-    mission = _mission_or_404(operation, mission_id)
+    mission = _mission_or_404(operation, mission_id, for_update=True)
 
     SortDateCrewAssignment.query.filter_by(sort_date_mission_id=mission.id).delete()
     db.session.delete(mission)
@@ -3404,6 +3440,8 @@ def restore_mission(operation_id, mission_id):
     if conflict:
         return _planning_conflict_response(operation, mission.mission_type, conflict)
 
+    if mission.master_retirement:
+        return _planning_action_error(operation, mission.mission_type, "Restore eligibility in Master Schedule first.", 409)
     _restore_mission(mission)
     db.session.commit()
     return _planning_action_response(
@@ -4873,20 +4911,24 @@ def _mission_or_404(operation, mission_id, for_update=False):
     )
     if for_update:
         query = query.populate_existing().with_for_update()
-    return query.first_or_404()
+    mission = query.first_or_404()
+    if for_update and mission.master_retirement:
+        raise MasterScheduleConflict("This mission is retained as history. Restore eligibility in Master Schedule before editing.")
+    return mission
 
 
 def _master_schedule_or_404(master_id):
     gateway = get_current_gateway()
-    return MasterFlightSchedule.query.filter_by(
-        id=master_id,
-        gateway_code=gateway.code,
-    ).first_or_404()
+    if request.method == "POST":
+        lock_master_editor(gateway)
+    return MasterFlightSchedule.query.filter_by(id=master_id, gateway_code=gateway.code, deleted_at=None).first_or_404()
 
 
 def _master_schedules_for_gateway(gateway):
+    if request.method == "POST":
+        lock_master_editor(gateway)
     schedules = (
-        MasterFlightSchedule.query.filter_by(gateway_code=gateway.code)
+        MasterFlightSchedule.query.filter_by(gateway_code=gateway.code, deleted_at=None)
         .order_by(
             MasterFlightSchedule.gateway_code.asc(),
             MasterFlightSchedule.mission_type.asc(),
@@ -4950,6 +4992,7 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
             f"{prefix}mix_pull_time_local",
         ),
         "active": source.get(f"{prefix}active", active_default) == "1",
+        "version": source.get(f"{prefix}version"),
     }
     _apply_gateway_airport_defaults(form, gateway)
     if form["mission_type"] == "arrival":
@@ -4991,12 +5034,13 @@ def _master_schedule_form_from_model(master_schedule):
         "aircraft_type": master_schedule.aircraft_type or "",
         "origin": master_schedule.origin,
         "destination": master_schedule.destination,
-        "active_days": _active_days_set(master_schedule.active_days),
+        "active_days": parse_active_days(master_schedule.active_days),
         "planned_time_local": _format_time(master_schedule.planned_time_local),
         "timezone": master_schedule.timezone,
         "pure_pull_time_local": _format_time(master_schedule.pure_pull_time_local),
         "mix_pull_time_local": _format_time(master_schedule.mix_pull_time_local),
         "active": master_schedule.active,
+        "version": master_schedule.updated_at.isoformat(),
     }
 
 
@@ -5179,6 +5223,11 @@ def _apply_master_schedule_board_edit(
             schedule = MasterFlightSchedule()
             created_schedules.append(schedule)
 
+        if schedule_id:
+            _check_master_version(schedule, request.form.get("version_" + schedule_id))
+            row["active"] = schedule.active
+        else:
+            row["active"] = True
         _apply_master_schedule_form(schedule, row, gateway)
         processed_schedules.append(schedule)
 
@@ -5239,15 +5288,10 @@ def _master_schedule_board_row_is_complete(row):
 
 
 def _apply_master_schedule_form(master_schedule, form, gateway=None):
-    previous_planned_times = (
-        (
-            master_schedule.planned_time_local,
-            master_schedule.pure_pull_time_local,
-            master_schedule.mix_pull_time_local,
-        )
-        if master_schedule.id is not None
-        else None
-    )
+    if master_schedule.id:
+        _check_master_version(master_schedule, form.get("version"))
+    previous = master_template(master_schedule) if master_schedule.id else None
+    was_active = master_schedule.active
     gateway_code = gateway.code if gateway else form["gateway_code"].strip().upper()
     sort_name = form["sort_name"].strip().lower()
     mission_type = form["mission_type"].strip().lower()
@@ -5286,56 +5330,12 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     if mission_type == "arrival":
         master_schedule.pure_pull_time_local = None
         master_schedule.mix_pull_time_local = None
-        return
-
-    master_schedule.pure_pull_time_local = _parse_optional_time(
-        form["pure_pull_time_local"],
-        "Pure pull time",
-    )
-    master_schedule.mix_pull_time_local = _parse_optional_time(
-        form["mix_pull_time_local"],
-        "Mix pull time",
-    )
-    current_planned_times = (
-        master_schedule.planned_time_local,
-        master_schedule.pure_pull_time_local,
-        master_schedule.mix_pull_time_local,
-    )
-    if (
-        gateway
-        and previous_planned_times is not None
-        and previous_planned_times != current_planned_times
-    ):
-        _propagate_master_planned_times(master_schedule, gateway)
-
-
-def _propagate_master_planned_times(master_schedule, gateway):
-    operation_ids = [
-        operation.id
-        for operation in current_operations_for_gateway(gateway)
-        if operation.id is not None
-    ]
-    if not operation_ids:
-        return []
-
-    missions = (
-        SortDateMission.query.filter(
-            SortDateMission.master_flight_schedule_id == master_schedule.id,
-            SortDateMission.sort_date_operation_id.in_(operation_ids),
-            SortDateMission.mission_type == "departure",
-        )
-        .order_by(SortDateMission.id.asc())
-        .all()
-    )
-    return [
-        mission
-        for mission in missions
-        if apply_master_planned_times_to_mission(
-            mission,
-            master_schedule,
-            mission.sort_date_operation,
-        )
-    ]
+    else:
+        master_schedule.pure_pull_time_local = _parse_optional_time(form["pure_pull_time_local"], "Pure pull time")
+        master_schedule.mix_pull_time_local = _parse_optional_time(form["mix_pull_time_local"], "Mix pull time")
+    if gateway and (was_active or master_schedule.active):
+        _raise_for_duplicate_active_master_schedule(master_schedule)
+        reconcile_current_sort(master_schedule, gateway, previous)
 
 
 def _raise_for_duplicate_active_master_schedule(master_schedule):
@@ -5346,17 +5346,21 @@ def _raise_for_duplicate_active_master_schedule(master_schedule):
         MasterFlightSchedule.active.is_(True),
         MasterFlightSchedule.gateway_code == master_schedule.gateway_code,
         MasterFlightSchedule.sort_name == master_schedule.sort_name,
-        MasterFlightSchedule.mission_type == master_schedule.mission_type,
-        func.upper(MasterFlightSchedule.flight_number) == master_schedule.flight_number.upper(),
     )
 
     if master_schedule.id:
         duplicate_query = duplicate_query.filter(MasterFlightSchedule.id != master_schedule.id)
 
-    if duplicate_query.first():
+    key = flight_identity(master_schedule.flight_number)
+    days = parse_active_days(master_schedule.active_days)
+    candidates = duplicate_query.with_entities(MasterFlightSchedule.flight_number, MasterFlightSchedule.mission_type,
+                                              MasterFlightSchedule.active_days)
+    if any(flight_identity(row.flight_number) == key and
+           (row.mission_type == master_schedule.mission_type or days.intersection(parse_active_days(row.active_days)))
+           for row in candidates):
         raise ValueError(
             "An active master schedule row already exists for this "
-            "gateway, sort, mission type, and flight number."
+            "gateway, Sort and flight number."
         )
 
 
@@ -5370,7 +5374,7 @@ def _raise_for_duplicate_active_master_schedule_rows(schedules):
             schedule.gateway_code,
             schedule.sort_name,
             schedule.mission_type,
-            schedule.flight_number.upper(),
+            flight_identity(schedule.flight_number),
         )
         if key in seen:
             raise ValueError(
@@ -5382,13 +5386,6 @@ def _raise_for_duplicate_active_master_schedule_rows(schedules):
 def _active_days_value(active_days):
     selected_days = set(active_days or ())
     return ",".join(day for day, _label in ACTIVE_DAY_OPTIONS if day in selected_days)
-
-
-def _active_days_set(active_days):
-    if not active_days:
-        return set()
-
-    return {day.strip().lower() for day in active_days.split(",") if day.strip()}
 
 
 def _parse_time(value, label):
@@ -5883,8 +5880,7 @@ def _missions_for_operation(operation, mission_type, include_cancelled=True):
 
 def _mission_count(operation, mission_type):
     return SortDateMission.query.filter_by(
-        sort_date_operation_id=operation.id,
-        mission_type=mission_type,
+        sort_date_operation_id=operation.id, mission_type=mission_type, master_retirement=None,
     ).count()
 
 

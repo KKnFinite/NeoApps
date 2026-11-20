@@ -27,7 +27,7 @@ def locked_operation(gateway):
 
 
 def locked_mission(operation):
-    mission=SortDateMission.query.filter_by(id=request.form.get('mission_id',type=int),sort_date_operation_id=operation.id,mission_type='departure').populate_existing().with_for_update().one_or_none()
+    mission=SortDateMission.query.filter_by(id=request.form.get('mission_id',type=int),sort_date_operation_id=operation.id,mission_type='departure',master_retirement=None).populate_existing().with_for_update().one_or_none()
     if mission is None or not normalized_tail(request.form.get('physical_tail')) or normalized_tail(request.form.get('physical_tail'))!=normalized_tail(mission.assigned_tail_number):
         raise NeoSubZeroEvidenceError('Aircraft identity changed. Your draft is kept; reload the effective tail.')
     return mission
@@ -113,9 +113,12 @@ def participation_mutate():
                 if not user_can('neosubzero.pretreat.edit'): return 'Access denied.',403
                 parent=NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id,tail_number=normalized_tail(mission.assigned_tail_number)).with_for_update().one_or_none()
             elif kind=='departure':
+                from app.services.neosubzero_evidence import require_event_mission
                 if not can_manage_operations(): return 'Access denied.',403
                 parent_id=request.form.get('event_id',type=int)
                 parent=NeoSubZeroDepartureDeiceEvent.query.filter_by(id=parent_id,sort_date_operation_id=operation.id,tail_number=normalized_tail(mission.assigned_tail_number)).with_for_update().one_or_none() if parent_id else departure_event_for_tail(operation,mission,lock=True)
+                if parent_id:
+                    require_event_mission(operation, mission, parent)
             else: raise NeoSubZeroEvidenceError('Choose Pretreat or departure participation.')
         if kind=='departure' and not can_manage_operations(): return 'Access denied.',403
         if parent is None: raise NeoSubZeroEvidenceError('Save the treatment plan before selecting participants.')

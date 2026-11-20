@@ -1,3 +1,4 @@
+from collections import Counter
 from dataclasses import dataclass
 
 from flask import current_app
@@ -11,6 +12,7 @@ from app.models import (
     NeoErmacBuildingLineup,
     SortDateMission,
 )
+from app.services.departure_labels import departure_occurrences, destination_label
 from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data
 
@@ -119,7 +121,7 @@ def _lock_lineup(gateway):
 
 def building_lineup_state_payload(gateway, *, operation=_UNRESOLVED):
     rows = get_building_lineup_rows(gateway, initialize=False)
-    masters = get_lineup_departures(gateway)
+    choices, pull_times = lineup_flight_options(gateway, operation=operation)
     return {
         "slots": {
             lineup_field_name(row, field): {
@@ -128,8 +130,8 @@ def building_lineup_state_payload(gateway, *, operation=_UNRESOLVED):
             }
             for row in rows for field in DESTINATION_FIELDS
         },
-        "destination_choices": get_departure_destination_choices(gateway, masters=masters),
-        "pull_times": get_departure_destination_pull_times(gateway, masters=masters, operation=operation),
+        "destination_choices": choices,
+        "pull_times": pull_times,
     }
 
 
@@ -200,9 +202,26 @@ def get_lineup_departures(gateway):
     )
 
 
-def get_departure_destination_choices(gateway, *, masters=None):
+def lineup_flight_options(gateway, *, operation=_UNRESOLVED):
+    if operation is _UNRESOLVED:
+        operation = current_operational_sort_operation(gateway)
+    masters = get_lineup_departures(gateway)
+    missions = _lineup_operation_missions(operation)
+    return (get_departure_destination_choices(gateway, masters=masters, operation=operation, missions=missions),
+            get_departure_destination_pull_times(gateway, masters=masters, operation=operation, missions=missions))
+
+
+def get_departure_destination_choices(gateway, *, masters=None, operation=_UNRESOLVED, missions=None):
+    if operation is _UNRESOLVED:
+        operation = current_operational_sort_operation(gateway)
+    if missions is None:
+        missions = _lineup_operation_missions(operation)
+    ranks = departure_occurrences(missions, operation)
+    linked_counts = Counter(m.master_flight_schedule_id for m in missions if m.master_flight_schedule_id)
+    labels = {m.master_flight_schedule_id: destination_label(m.destination, ranks[m.id])
+              for m in missions if m.id in ranks and linked_counts[m.master_flight_schedule_id] == 1}
     rows = get_lineup_departures(gateway) if masters is None else masters
-    return [{"value": str(row.id), "label": f"{row.flight_number} — {normalize_destination(row.destination)}"}
+    return [{"value": str(row.id), "label": f"{row.flight_number} — {labels.get(row.id, normalize_destination(row.destination))}"}
             for row in rows if normalize_destination(row.destination)]
 
 
@@ -381,9 +400,11 @@ def get_linked_building_lineup_doors(
         assignment
         for assignment in assignments
         if assignment["supervising_door"] == door
-        and assignment["destination"] == destination
-        and (master_flight_schedule_id is None or assignment["master_flight_schedule_id"] == master_flight_schedule_id)
+        and (assignment["master_flight_schedule_id"] == master_flight_schedule_id if master_flight_schedule_id is not None
+             else assignment["destination"] == destination)
     ]
+    if len({slot['master_flight_schedule_id'] for slot in source_assignments}) != 1:
+        return ()
     linked_doors = set()
     for source in source_assignments:
         for candidate in assignments:

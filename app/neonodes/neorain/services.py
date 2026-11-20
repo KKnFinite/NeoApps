@@ -571,6 +571,8 @@ def _outbound_rows(operation, *, missions=None, fuel_source=None, fuel_by_missio
         fuel_by_mission = completed_scorpion_fuel_by_mission(operation) if fuel_source == RAIN_FUEL_SOURCE_NEO else google_rain_fuel_by_mission(operation)
     if fuel_review_pending is None:
         fuel_review_pending = fuel_review_pending_by_mission(operation, fuel_by_mission) if fuel_source == RAIN_FUEL_SOURCE_NEO else {}
+    from app.services.departure_labels import departure_occurrences, destination_label
+    ranks = departure_occurrences(missions, operation)
     service_by_mission = outbound_service_states(operation)
     rows = [
         _outbound_row(
@@ -583,6 +585,7 @@ def _outbound_rows(operation, *, missions=None, fuel_source=None, fuel_by_missio
             fuel_value=fuel_by_mission.get(mission.id, {}),
             fuel_review_pending=bool(fuel_review_pending.get(mission.id)),
             service_state=service_by_mission.get(mission.id),
+            display_destination=destination_label(mission.destination, ranks.get(mission.id)),
         )
         for mission in missions
     ]
@@ -824,7 +827,7 @@ def _outbound_departure_missions(operation):
                 MasterFlightSchedule.load_planner_person
             ),
         )
-        .filter_by(sort_date_operation_id=operation.id, mission_type="departure")
+        .filter_by(sort_date_operation_id=operation.id, mission_type="departure", master_retirement=None)
         .all()
     )
 
@@ -834,7 +837,7 @@ def _inbound_arrival_missions(operation):
         return []
     return SortDateMission.query.options(joinedload(SortDateMission.delay_info_rows)).filter_by(
         sort_date_operation_id=operation.id,
-        mission_type="arrival",
+        mission_type="arrival", master_retirement=None,
     ).all()
 
 
@@ -1060,6 +1063,7 @@ def _outbound_row(
     fuel_value=None,
     fuel_review_pending=False,
     service_state=None,
+    display_destination=None,
 ):
     timing = mission_display_timing_data(mission, operation)
     planned = timing.get("adjusted_planned_departure_time") or mission.planned_datetime_local
@@ -1076,6 +1080,7 @@ def _outbound_row(
         "flight_number": _text(mission.flight_number),
         "tail": _text(mission.assigned_tail_number),
         "destination": _text(mission.destination),
+        "destination_label": display_destination or mission.display_destination,
         "parking": parking_by_tail.get(_tail_key(mission.assigned_tail_number), ""),
         "planned_time": _time_value(planned),
         "etd": format_local_hhmm(mission.eta_datetime_utc, timezone_name) or _time_value(planned),

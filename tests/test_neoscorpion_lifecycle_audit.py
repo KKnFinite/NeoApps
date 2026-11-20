@@ -403,3 +403,16 @@ class LifecycleAuditTest(unittest.TestCase):
         rows=fuel.fuel_dispatch_context(self.gateway)['rows']
         self.assertEqual({r['mission'].id:r['tail_number'] for r in rows},
             {self.mission.id:'N491UP',other_mission.id:'N492UP'})
+        self.finish()
+        event = NeoScorpionFuelingEvent.query.one()
+        self.assertEqual((event.fuel_assignment_id, event.tail_number), (self.assignment.id, 'N491UP'))
+        self.assertIsNotNone(self.assignment.completed_at_utc)
+        self.assertIsNone(other.completed_at_utc)
+        self.assertIsNone(saved.fuel_work_state.manual_on_at_utc)
+        other_mission.master_retirement = {"status": "scheduled"}
+        other_mission.departure_status = "cancelled"
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "not found"):
+            fuel.save_fueler_entry(self.gateway, self.dispatcher, dict(assignment_id=other.id, notes="stale draft"))
+        db.session.rollback()
+        self.assertEqual(saved.fuel_work_state.notes, "Different flight, same destination")

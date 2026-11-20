@@ -92,6 +92,8 @@ def recompute_current_sort_door_pull_aggregates(
         )
     results = {}
     for mission in missions:
+        if mission.master_retirement:
+            continue
         assigned_doors = doors_by_master.get(mission.master_flight_schedule_id, ())
         if not assigned_doors:
             continue  # Preserve canonical historical pulls for unassigned flights.

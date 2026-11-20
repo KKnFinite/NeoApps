@@ -10,6 +10,8 @@
 
     <div class="action-row">
         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=master_schedule.id) }}">
+            <input type="hidden" name="version_{{ master_schedule.id }}" value="{{ master_schedule.updated_at.isoformat() }}">
+            <input type="hidden" name="desired_active" value="{{ 0 if master_schedule.active else 1 }}">
             <button class="action-button" type="submit">{{ "DEACTIVATE" if master_schedule.active else "ACTIVATE" }}</button>
         </form>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">BACK TO MASTER SCHEDULE</a>

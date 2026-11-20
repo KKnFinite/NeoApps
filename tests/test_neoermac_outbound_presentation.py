@@ -38,13 +38,13 @@ class OutboundPresentationTest(unittest.TestCase):
 
     def row(self, *, missing=False, no_pull=False):
         mission = None if missing else SimpleNamespace(
-            id=41, flight_number="UPS501", assigned_tail_number="N501UP",
+            id=41, master_flight_schedule_id=11, flight_number="UPS501", assigned_tail_number="N501UP",
             departure_status="scheduled", planned_datetime_local=datetime(2026, 6, 11, 2, 35),
             pure_pull_time_local=time(1, 20), mix_pull_time_local=time(1, 55),
             actual_pure_pull_time_local=None if no_pull else time(1, 45),
             actual_mix_pull_time_local=None if no_pull else time(2, 17),
         )
-        assignments = [dict(door=door, location="Belt fixture") for door in ("D32", "D34")]
+        assignments = [dict(door=door, master_id=11, location="Belt fixture") for door in ("D32", "D34")]
         pulls = [SimpleNamespace(door=door, no_pure_pull=True, no_mix_pull=True,
                     actual_pure_pull_time_local=None, actual_mix_pull_time_local=None)
                  for door in ("D32", "D34")] if no_pull else []
@@ -101,4 +101,4 @@ class OutboundPresentationTest(unittest.TestCase):
                     self.assertIn('NO MIX PULL', html)
                 if missing:
                     self.assertIn('is-missing-mission', html)
-                    self.assertIn('data-outbound-key="missing:SDF"', html)
+                    self.assertIn('data-outbound-key="master:11"', html)

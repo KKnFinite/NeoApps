@@ -229,6 +229,7 @@ def supervisor_gateway_context(gateway):
     from sqlalchemy import or_
     from app.models import NeoScorpionFuelTruck, NeoScorpionFuelAssignment, NeoScorpionFuelWorkState, SortDateMission, SortDateParkingAssignment
     from app.services.neoscorpion import current_sort_operation
+    from app.services.departure_labels import destination_label, operation_departure_occurrences
     operation = current_sort_operation(gateway)
     rows = []
     if operation and not operation.archived_at_utc:
@@ -257,12 +258,14 @@ def supervisor_gateway_context(gateway):
                         SortDateParkingAssignment, (SortDateParkingAssignment.sort_date_operation_id == operation.id)
                         & (SortDateParkingAssignment.tail_number == SortDateMission.assigned_tail_number)).filter(
                         SortDateMission.sort_date_operation_id == operation.id, SortDateMission.gateway_code == gateway.code,
+                        SortDateMission.master_retirement.is_(None),
                         NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
                         NeoScorpionFuelAssignment.review_status != "complete",
                         or_(NeoScorpionFuelAssignment.assigned_truck_id == truck.id, NeoScorpionFuelWorkState.physical_truck_id == truck.id)
                     ).order_by(SortDateMission.eta_datetime_utc, SortDateMission.id).all()
+                ranks = operation_departure_occurrences(operation) if fields else {}
                 missions = [dict(id=r.id, tail=r.assigned_tail_number, flight=r.flight_number,
-                    destination=r.destination, parking=(r.ramp_code or '')+(r.position_code or '') or None,
+                    destination=destination_label(r.destination, ranks.get(r.id)), parking=(r.ramp_code or '')+(r.position_code or '') or None,
                     etd=(r.eta_datetime_utc or r.planned_datetime_utc).isoformat() if r.eta_datetime_utc or r.planned_datetime_utc else None) for r in fields]
             rows.append(dict(user_id=user_id, name=user.display_name, status=night.status if night else "pending",
                 truck=truck.truck_number if truck else None, missions=missions))

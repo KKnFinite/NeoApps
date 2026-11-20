@@ -41,6 +41,23 @@ class GlobalOutboundTest(TestCase):
         self.assertEqual(second.status,'configured')
         self.assertEqual(NeoSubZeroDepartureDeiceEvent.query.count(),2)
 
+    def test_same_tail_on_two_departures_does_not_share_treatment(self):
+        from app.services.neosubzero_operations import operations_context
+        first, second = self.f.alpha, self.f.remote
+        self.assertEqual(self.mutation(first, 'initial_contact').status_code, 200)
+        event = departure_event_for_tail(self.f.operation, first)
+        second.destination = first.destination
+        second.assigned_tail_number = first.assigned_tail_number
+        db.session.commit()
+        rows = {r['mission_id']: r for r in operations_context(self.f.gateway, self.f.operation, 'outbound')['rows']}
+        self.assertEqual(rows[first.id]['event'].id, event.id)
+        self.assertIsNone(rows[second.id]['event'])
+        self.assertTrue(rows[second.id]['ownership_review'])
+        reply = self.post(action='toggle_configured', mission_id=second.id, physical_tail=second.assigned_tail_number,
+                          event_id=event.id, expected_version=entity_version(event))
+        self.assertEqual(reply.status_code, 409)
+        self.assertEqual(event.status, 'deice_planned')
+
     def test_configuration_is_not_hardcoded_to_gateway_sort_or_ramp(self):
         from datetime import date,datetime
         from app.services.neosubzero_departure_deice import mutate_departure_deice

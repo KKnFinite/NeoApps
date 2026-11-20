@@ -60,7 +60,7 @@
         <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }} {{ late_class }}" data-neorain-outbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-service-version="{{ row.service_version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
             <div class="neorain-mobile-mission-grid neorain-mobile-mission-grid--outbound" role="row">
                 <div role="cell"><button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-label="{{ row.flight_number }} DETAILS" aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button></div>
-                <span role="cell">{{ row.tail or '-' }}</span><span role="cell">{{ row.destination or '-' }}</span>
+                <span role="cell">{{ row.tail or '-' }}</span><span role="cell">{{ row.destination_label or row.destination or '-' }}</span>
                 <span role="cell">{{ row.parking or '-' }}</span>
                 <div role="cell">{% include "neonodes/neorain/_scorpion_fuel.html" %}</div>
                 <span role="cell">{{ row.center_fuel_display or '-' }}</span>
@@ -72,7 +72,7 @@
                 <dl class="neorain-mobile-detail-facts">
                     <div><dt>WAVE</dt><dd>{{ row.wave }}</dd></div>
                     <div><dt>TAIL</dt><dd>{{ row.tail or '-' }}</dd></div>
-                    <div><dt>DESTINATION</dt><dd>{{ row.destination or '-' }}</dd></div>
+                    <div><dt>DESTINATION</dt><dd>{{ row.destination_label or row.destination or '-' }}</dd></div>
                     <div><dt>PARKING</dt><dd>{{ row.parking or '-' }}</dd></div>
                     <div><dt>STD/ETD</dt><dd>{{ rain_time(row, 'etd', 'ETD', row.etd) }}</dd></div>
                     <div><dt>LOAD PLANNER</dt><dd>{{ row.load_planner or 'UNASSIGNED' }}</dd></div>

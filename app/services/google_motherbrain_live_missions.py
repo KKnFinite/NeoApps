@@ -299,6 +299,10 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
             )
         elif matches:
             mission = matches[0]
+        elif (mission_type == "departure" and linked is not None and row["destination_mode"] != "spare"
+              and not is_hot_placeholder_mission(linked)):
+            # A numbered outbound moving into an occupied sheet row is a separate flight.
+            mission = None
 
     opposite = opposite_flights.get(flight_identity(row["flight_number"]),[])
     if not matches and opposite:
@@ -307,7 +311,7 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
         # outbound echo to the already-created same-tail HOT departure without
         # renaming it, changing direction, or touching operational evidence.
         hot_matches = [candidate for candidate in missions.values()
-            if is_hot_placeholder_mission(candidate)
+            if not candidate.master_retirement and is_hot_placeholder_mission(candidate)
             and _normalize_tail(candidate.assigned_tail_number) == row["effective_tail"]]
         if (mission_type == "departure" and row["destination_mode"] == "hot"
             and _missing_live_time(row["planned_time"])
@@ -338,7 +342,7 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
         hot_matches = [
             candidate
             for candidate in missions.values()
-            if is_hot_placeholder_mission(candidate)
+            if not candidate.master_retirement and is_hot_placeholder_mission(candidate)
             and _normalize_tail(candidate.assigned_tail_number) == row["effective_tail"]
         ]
         if len(hot_matches) > 1:
@@ -347,6 +351,8 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
             )
         mission = hot_matches[0] if hot_matches else None
 
+    if mission is not None and mission.master_retirement:
+        raise GoogleMotherBrainMissionError("Mission retired by Master Schedule.")
     if mission_type == "departure" and row["destination_mode"] == "spare":
         link = link or _new_link(operation, mission_type, row)
         result = _apply_spare_row(
@@ -382,6 +388,8 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
     else:
         if mission_type == "departure":
             lock_current_departure_for_google_import(operation, mission)
+        if mission.master_retirement:
+            raise GoogleMotherBrainMissionError("Mission retired by Master Schedule.")
         if is_hot_placeholder_mission(mission):
             mission.mission_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
         mission.flight_number = row["flight_number"]

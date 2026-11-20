@@ -63,6 +63,7 @@ class FlightIdentityBrowserTest(unittest.TestCase):
                         Fixture().ready(page,'/neoermac/door-view?door=D32')
                         card=page.locator('[data-door-destination-card]')
                         expect(card).to_have_count(1);expect(card.locator('[data-pull-mission]')).to_have_value(str(bid))
+                        expect(card.locator('.neoermac-door-destination-title')).to_have_text('2nd LAX')
                         expect(card.locator('[data-door-tail]')).to_have_text('N202UP')
                         expect(card.locator('[data-door-parking]')).to_have_text('B06')
                         expect(card.locator('[data-door-planned="pure"]')).to_have_text('00:20')
