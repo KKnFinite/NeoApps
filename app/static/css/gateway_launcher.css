@@ -1,0 +1,56 @@
+/* The launcher owns its canvas. Operational node pages and Portal use separate shells. */
+body.gateway-shell-page { background: #091219; }
+.gateway-shell-page .gateway-shell-topbar, .gateway-shell-page .gateway-mobile-header {
+    background: #0e1a23;
+    border-bottom-color: #29434d;
+}
+.gateway-shell-page .gateway-command-launcher {
+    position: relative;
+    align-content: start;
+    min-height: 0;
+    isolation: isolate;
+}
+.gateway-launch-identity {
+    grid-area: 1 / 1;
+    align-self: center;
+    justify-self: start;
+    padding: 16px clamp(18px, 3vw, 44px);
+    z-index: 1;
+}
+.gateway-launch-identity p { margin: 0 0 6px; color: #a7c4ca; font: 650 .82rem/1.35 system-ui, sans-serif; }
+.gateway-launch-identity h1 { margin: 0; color: #eef5f6; font: 650 clamp(1.65rem,3vw,2.8rem)/1.1 system-ui,sans-serif; letter-spacing: -.04em; }
+.gateway-shell-page .gateway-dashboard-hero {
+    position: relative;
+    grid-area: 1 / 1;
+    inset: auto;
+    height: clamp(104px, 15vh, 152px);
+    aspect-ratio: auto;
+    overflow: hidden;
+    border: 1px solid #30414a;
+    border-radius: 14px;
+    background: #101c25;
+    z-index: 0;
+}
+.gateway-dashboard-hero picture { margin-left: auto; max-width: 60%; }
+.gateway-shell-page .gateway-dashboard-hero img { object-fit: cover; object-position: center 36%; }
+.gateway-shell-page .gateway-dashboard-hero::after {
+    box-shadow: none;
+    background: linear-gradient(95deg,#101c25 30%,transparent 72%);
+}
+.gateway-shell-page .gateway-node-card {
+    border-radius: 13px;
+    background: radial-gradient(ellipse at 0% 0%,rgba(var(--node-rgb),.14),transparent 73%),#11212b;
+    box-shadow: 0 3px 12px #050e1455;
+}
+.gateway-node-card-copy small { color: #bcccd2; font-family: system-ui,sans-serif; }
+.gateway-shell-page .gateway-node-card:focus-visible { outline: 3px solid var(--node-highlight); outline-offset: 2px; }
+@media (min-width:901px) {
+    .gateway-shell-page .gateway-command-launcher { padding: 22px 0 32px; gap: 18px; }
+    .gateway-shell-page .gateway-node-launcher, .gateway-shell-page .gateway-node-grid { gap: 12px; }
+    .gateway-shell-page .gateway-node-card { min-height: 112px; padding: 14px 20px; }
+    .gateway-shell-page .gateway-launcher-heading h2 { font: 650 1.25rem/1.35 system-ui,sans-serif; text-transform: none; letter-spacing: -.015em; }
+}
+@media (max-width:900px) {
+    .gateway-shell-page .gateway-node-card-copy small { white-space: normal; }
+}
+

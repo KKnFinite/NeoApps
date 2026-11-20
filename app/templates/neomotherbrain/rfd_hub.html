@@ -36,7 +36,10 @@
 {% block content %}
 {% set selected_operation_id = gateway_active_sort_operation.id if gateway_active_sort_operation else none %}
 <section class="gateway-command-launcher" aria-label="{{ gateway.code }} NeoGateway operational launcher">
-    <h1 class="gateway-dashboard-heading">NeoGateway</h1>
+    <header class="gateway-launch-identity">
+        <p>{{ gateway.code }}{% if gateway_active_sort_operation %} · {{ gateway_active_sort_operation.sort_name|title }} Sort{% endif %}</p>
+        <h1>NeoGateway</h1>
+    </header>
     <div class="gateway-dashboard-hero">
         <picture>
         <source media="(min-width:901px)" srcset="{{ url_for('static', filename='images/hero/neo_gateway_red_energy_portal_fade.webp', hero='f48f67a8b267') }}" type="image/webp" width="1672" height="941">

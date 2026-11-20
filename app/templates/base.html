@@ -49,6 +49,9 @@
     <script defer src="{{ url_for('static', filename='js/accounts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/csp_compatibility.css', v='20261031-csp-v1') }}">
+    {% if is_rfd_hub_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gateway_launcher.css', v=config.STATIC_ASSET_VERSION) }}">
+    {% endif %}
     {% if request.endpoint == 'auth.portal_dashboard' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/portal_navigation.css', v=config.STATIC_ASSET_VERSION) }}">
     {% endif %}
