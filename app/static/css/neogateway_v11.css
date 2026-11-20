@@ -152,7 +152,6 @@ body.gateway-shell-page .gateway-command-launcher.gateway-v11 {
     gap: 12px;
 }
 .gateway-v11 .gateway-node-card {
-    --node-rgb: var(--node-gateway-primary-rgb);
     position: relative;
     display: grid;
     gap: 12px;
