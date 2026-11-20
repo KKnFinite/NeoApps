@@ -184,3 +184,111 @@ a.shift-door-person:hover, a.shift-door-person:focus-visible { outline:1px solid
   .shift-ballmat-roster h2 small { line-height:1.45; }
   .shift-ballmat-sides { grid-template-columns:1fr; }
 }
+
+/* Desktop V11 surfaces. Keep roster sizing, scroll and stage colors above. */
+@media (min-width: 901px) {
+  .neostaffing-shift-flow {
+    --shift-panel: #11212b;
+    --shift-card: #172b35;
+    --shift-header: #1c333d;
+    --shift-border: #29434d;
+    --shift-control-border: #3b5963;
+    --shift-text: #ecf4f4;
+    --shift-muted: #a1b7be;
+    --shift-accent: #6bdecf;
+    --shift-depth: 0 3px 10px rgb(0 0 0 / 18%);
+  }
+
+  .neostaffing-shift-flow .neostaffing-shift-flow-workspace {
+    background: #091219;
+  }
+
+  .shift-door-roster h2,
+  .neostaffing-shift-flow-head h1 {
+    color: var(--shift-text);
+    letter-spacing: .04em;
+  }
+
+  .shift-door-roster h2 small,
+  .shift-door-search,
+  .shift-door-search-results,
+  .shift-setup-legend,
+  .shift-door-empty,
+  .shift-ballmat-empty {
+    color: var(--shift-muted);
+  }
+
+  .neostaffing-shift-flow .shift-door-roster .shift-door-controls :is(button, input[type="search"]) {
+    background: var(--shift-card);
+    border-color: var(--shift-control-border);
+    border-radius: 8px;
+    color: var(--shift-text);
+  }
+
+  .neostaffing-shift-flow .shift-door-roster .shift-door-controls button:not(:disabled):hover {
+    background: var(--shift-header);
+    border-color: var(--shift-accent);
+  }
+
+  .shift-door-columns,
+  .shift-ballmat-side,
+  .shift-roster-needs {
+    border-color: var(--shift-border);
+    border-radius: 10px;
+    box-shadow: var(--shift-depth);
+  }
+
+  .shift-door-column {
+    background: var(--shift-panel);
+    border-color: var(--shift-border);
+    border-radius: 8px;
+  }
+
+  .shift-door-column header,
+  .shift-ballmat-side header {
+    background: var(--shift-header);
+    border-color: var(--shift-border);
+    border-radius: 7px 7px 0 0;
+    color: var(--shift-text);
+  }
+
+  .shift-door-column header span,
+  .shift-ballmat-side header span {
+    color: var(--shift-accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .shift-door-person,
+  .shift-ballmat-person {
+    border-radius: 7px;
+  }
+
+  .shift-door-person:not(.is-search-current),
+  .shift-ballmat-person {
+    box-shadow: inset 0 0 0 1px rgb(215 240 244 / 18%), 0 2px 3px rgb(0 0 0 / 18%);
+  }
+
+  .shift-door-person[data-flow-color=""],
+  .shift-ballmat-person {
+    background: var(--shift-card);
+    color: var(--shift-text);
+  }
+
+  .shift-roster-needs {
+    background: var(--shift-panel);
+    border-color: #70553b;
+  }
+
+  .shift-roster-rail .shift-roster-needs h2,
+  .shift-roster-rail .shift-roster-needs h2 small {
+    color: #f4c275;
+  }
+
+  .shift-ballmat-roster {
+    border-color: var(--shift-border);
+  }
+
+  .shift-ballmat-side {
+    background: var(--shift-panel);
+  }
+}

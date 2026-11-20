@@ -128,6 +128,16 @@ body:has(.v11-app) > .shell > .content {
     min-width: 0;
 }
 .v11-panel > h2 { margin-bottom: 10px; }
+@media (min-width: 901px) {
+    .v11-page :is(.v11-panel, .v11-metric, .neostaffing-people-roster-workspace) {
+        box-shadow: 0 3px 10px rgb(0 0 0 / 18%);
+    }
+    .v11-quick-grid a:hover,
+    .v11-report-library a:not([aria-current="page"]):hover {
+        background: var(--v11-surface-3);
+        border-color: var(--v11-border-2);
+    }
+}
 .v11-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .v11-metric { display: grid; gap: 3px; border-top: 2px solid var(--v11-border-2); }
 .v11-metric-accent { border-top-color: var(--v11-teal); background: #133034; }
