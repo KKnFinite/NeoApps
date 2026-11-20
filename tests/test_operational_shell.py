@@ -292,3 +292,29 @@ class OperationalShellTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Fuel Dispatch", sidebar)
         self.assertIn(b'href="/neoscorpion/settings"', sidebar)
+
+    def test_board_view_footer_placement_and_real_content_expansion(self):
+        template = Path(
+            self.app.root_path, "templates/neonodes/_node_desktop_sidebar.html"
+        ).read_text(encoding="utf-8")
+        utilities = template.split('class="operational-sidebar-utilities"', 1)[1]
+        self.assertLess(utilities.index("NeoGateway"), utilities.index("NeoPortal"))
+        self.assertLess(utilities.index("NeoPortal"), utilities.index("Board View"))
+        self.assertEqual(utilities.count("data-operational-board-toggle"), 1)
+
+        css = Path(
+            self.app.root_path, "static/css/operational_node_shell.css"
+        ).read_text(encoding="utf-8")
+        self.assertIn("NeoStaffing V11 visual language", css)
+        self.assertIn("body.operational-shell-page.operational-board-view > .shell > .content", css)
+        self.assertIn("padding: 12px !important;", css)
+        self.assertIn("--operational-sidebar-width: 0px;", css)
+        self.assertIn("html.operational-board-view-boot body.operational-shell-page", css)
+        self.assertIn("body.operational-shell-page.operational-board-view .operational-board-exit", css)
+
+        script = Path(
+            self.app.root_path, "static/js/operational_shell.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn('new Event("resize")', script)
+        self.assertIn('new CustomEvent("neo:board-layout"', script)
+        self.assertIn("wasEnabled !== enabled", script)
