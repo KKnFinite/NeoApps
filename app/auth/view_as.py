@@ -144,11 +144,11 @@ def fueler_preview(gateway, user, part):
     from app.services.neoscorpion_tail_notes import tail_notes_revision
     access = _fueler_access(gateway, user) if user is not None else None
     if part == 'revision':
-        fingerprint = neoscorpion_live_revision(gateway)
+        fingerprint = neoscorpion_live_revision(gateway, include_remaining=True)
         fingerprint['fueler_on_break'] = bool(user and fueler_on_break(fingerprint['operation_id'], user.id))
     else:
         subject = user or SimpleNamespace(id=None, display_name='Fueler')
-        context = fueler_context(gateway, subject, truck_id=None if user else -1)
+        context = fueler_context(gateway, subject, truck_id=None if user else -1, include_remaining=True)
         operation = context['operation']
         fingerprint = {'operation_id': operation.id if operation else None, 'revision': context['fuel_assignments_revision']}
     fingerprint['tail_notes_revision'] = tail_notes_revision(gateway)

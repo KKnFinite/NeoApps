@@ -48,6 +48,8 @@ class FobUpliftPostgresTest(contracts.FobUpliftTest):
         self.assertEqual(NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=ids[2]).count(), 2)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
         self.assertEqual(NeoScorpionTruckInventoryAudit.query.count(), 0)
+        snapshot = fuel.neoscorpion_live_revision(db.session.get(Gateway, ids[0]), include_remaining=True)
+        self.assertEqual(snapshot["remaining_fueling_assignments"], 1)
 
 
 @skipUnless(pg.URI, 'Requires disposable loopback PostgreSQL')

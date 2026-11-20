@@ -5,7 +5,7 @@ from unittest import TestCase
 
 from app.extensions import db
 from app.models import (AccountAccessDecision, AccountAccessRequest, NeoScorpionFuelCycleHistory,
-    NeoScorpionFuelingEvent, NeoScorpionTruckInventoryAudit, PortalAppAccess)
+    NeoScorpionFuelingEvent, NeoScorpionTruckInventoryAudit, PortalAppAccess, SortDateMission)
 from app.services import neoscorpion as fuel
 from tests import test_neoscorpion_uplift_defuel as visit_fixtures
 from tests import test_accounts_workspace as account_fixtures
@@ -38,6 +38,50 @@ class FobUpliftTest(TestCase):
         return fuel.start_follow_up_fuel_cycle(self.gateway, self.dispatcher, assignment.id,
             'uplift', '32.0', None, None, expected_cycle=1,
             expected_tail=assignment.sort_date_mission.assigned_tail_number, **kwargs)
+
+    def test_fueler_remaining_count_tracks_current_departures_and_reopened_uplift(self):
+        from datetime import timedelta
+
+        operation, _, assignment, _ = self.fob()
+        _, other = self._assignment(operation, flight="UPS902", tail="N413UP")
+        other.assigned_fueler_user_id = self.other_fueler.id
+        self._truck(operation, other, "OTHER", 500)
+        past = self._operation(day=operation.sort_date - timedelta(days=7))
+        for index, (sort, kind, status) in enumerate((
+            (operation, "departure", None),
+            (operation, "departure", "cancelled"),
+            (operation, "arrival", None),
+            (past, "departure", None),
+        ), 1):
+            db.session.add(SortDateMission(
+                sort_date_operation_id=sort.id, sort_date=sort.sort_date, gateway_code=sort.gateway_code,
+                sort_name=sort.sort_name, mission_type=kind, mission_source="manual", flight_number=f"UPS50{index}",
+                origin="RFD", destination="SDF", departure_status=status,
+            ))
+        db.session.commit()
+
+        def assert_count(expected):
+            text = f"{expected} fueling assignments remaining".encode()
+            for user in (self.fueler, self.other_fueler):
+                self.client.post("/logout")
+                self._login(user)
+                page = self.client.get("/neoscorpion/fueler")
+                self.assertIn(text, page.data)
+                revision = self.client.get("/neoscorpion/fuel-assignments/revision").json
+                self.assertEqual(revision["operation_id"], operation.id)
+                self.assertEqual(revision["remaining_fueling_assignments"], expected)
+                panel = self.client.get("/neoscorpion/fueler/live-panel").json
+                self.assertIn(text.decode(), panel["html"])
+
+        assert_count(2)
+        self.start(assignment)
+        db.session.commit()
+        assert_count(3)
+        truck, _ = self._truck(operation, SimpleNamespace(assigned_truck_id=None), "UPLIFT", 500)
+        self._reassign_cycle(assignment, truck.id)
+        self._complete_cycle(operation, assignment, remaining=(10, 10, 10), actual=(12, 10, 10), transfer=300)
+        self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=assignment.id).count(), 1)
+        assert_count(2)
 
     def test_fob_uplift_full_lifecycle_preserves_evidence_and_posts_only_uplift_once(self):
         operation, mission, assignment, original = self.fob()

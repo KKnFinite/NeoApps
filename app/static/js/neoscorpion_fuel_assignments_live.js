@@ -271,6 +271,7 @@
     };
 
     const poll = async () => {
+        const requestGeneration = stateGeneration;
         const response = await (window.NeoLiveRevision?.revision || fetch)(revisionUrl, {
             cache: "no-store",
             credentials: "same-origin",
@@ -286,6 +287,13 @@
             ? "none"
             : String(payload.operation_id);
         const nextRevision = Number(payload.revision || 0);
+        const count = payload.remaining_fueling_assignments;
+        if (requestGeneration === stateGeneration && (nextOperationId !== operationId || nextRevision >= revision)
+                && Number.isSafeInteger(count) && count >= 0) {
+            const remaining = root.querySelector("[data-fueler-remaining]");
+            const text = `${count} fueling assignments remaining`;
+            if (remaining && remaining.textContent !== text) remaining.textContent = text;
+        }
         // Availability notices are independent of operational forms and drafts.
         const breakNotice = root.querySelector('[data-fueler-break-notice]');
         if (breakNotice && typeof payload.fueler_on_break === 'boolean') breakNotice.hidden = !payload.fueler_on_break;

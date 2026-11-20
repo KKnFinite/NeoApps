@@ -76,6 +76,19 @@ class AccountsViewAsBrowserTest(TestCase):
             expect(page.locator('form')).to_have_count(0)
             self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'))
             if key == 'fueler':
+                remaining = page.locator('[data-fueler-remaining]')
+                expect(remaining).to_have_text('1 fueling assignments remaining')
+                expect(remaining).to_be_visible()
+                self.assertTrue(remaining.evaluate('el => el === el.parentElement.lastElementChild'))
+                with fixture.app.app_context():
+                    operation = db.session.get(SortDateOperation, operation_id)
+                    unassigned = SortDateMission(sort_date_operation_id=operation.id, sort_date=operation.sort_date,
+                        gateway_code=operation.gateway_code, sort_name=operation.sort_name, mission_type='departure',
+                        mission_source='manual', flight_number='UPS502', origin='RFD', destination='SDF')
+                    db.session.add(unassigned)
+                    db.session.commit()
+                    unassigned_id = unassigned.id
+                expect(remaining).to_have_text('2 fueling assignments remaining', timeout=25000)
                 expect(page.get_by_text('YOU ARE ON BREAK')).to_be_hidden()
                 with fixture.app.app_context():
                     operation = db.session.get(SortDateOperation, operation_id)
@@ -85,6 +98,8 @@ class AccountsViewAsBrowserTest(TestCase):
                 with fixture.app.app_context():
                     operation = db.session.get(SortDateOperation, operation_id)
                     set_nightly_fueler_break(operation, fueler_id, '0', '1')
+                    db.session.get(SortDateMission, unassigned_id).departure_status = 'cancelled'
                     db.session.commit()
+                expect(remaining).to_have_text('1 fueling assignments remaining', timeout=25000)
             page.get_by_role('link', name='Exit preview').click()
             expect(page).to_have_url(fixture.origin + VIEW_AS)

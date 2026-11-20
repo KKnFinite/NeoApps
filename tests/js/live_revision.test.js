@@ -59,6 +59,20 @@ test('different users, gateways, sorts and screens remain isolated', async () =>
         a.api.revision('/revision',{},5000,'9'),a.api.revision('/other',{},5000,'8')]);
     assert.equal(w.requests,4);
 });
+test('same-session Fueler tabs retain the sort-wide assignment total in revision hints', async () => {
+    const w = world(), a = w.tab(), b = w.tab();
+    let calls = 0;
+    for (const tab of [a, b]) tab.context.fetch = async () => {
+        calls++;
+        return new Response('{"revision":1,"operation_id":8,"remaining_fueling_assignments":3}', {
+            headers: {'X-Neo-Live-Scope': 'user-gateway-session'},
+        });
+    };
+    const url = '/neoscorpion/fuel-assignments/revision';
+    const responses = await Promise.all([a.api.revision(url, {}, 5000, '8'), b.api.revision(url, {}, 5000, '8')]);
+    for (const response of responses) assert.equal((await response.json()).remaining_fueling_assignments, 3);
+    assert.equal(calls, 1);
+});
 test('coordinator closes, remaining tab continues at its configured cadence', async () => {
     const w=world(),a=w.tab(),b=w.tab();await a.api.revision('/revision',{},5000,'8');
     a.listeners.pagehide();w.advance(5000);w.setRevision(2);

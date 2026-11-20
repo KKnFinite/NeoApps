@@ -352,7 +352,9 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
                 "operation_id": None,
                 "revision": 0,
                 "tail_notes_revision": 0,
-                },
+                "fueler_on_break": False,
+                "remaining_fueling_assignments": 0,
+            },
         )
         self.assertEqual(response.headers["Cache-Control"], "no-store")
 
@@ -360,7 +362,8 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         response = self.client.get("/neoscorpion/fuel-assignments/revision")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"ok": True, "current_operation": False,
-                                              "operation_id": None, "revision": 0, "tail_notes_revision": 0})
+                                              "operation_id": None, "revision": 0, "tail_notes_revision": 0,
+                                              "fueler_on_break": False, "remaining_fueling_assignments": 0})
 
     def test_revision_endpoint_is_one_fingerprint_query_and_never_writes(self):
         operator = self._add_user("query_operator", "operator")
@@ -387,6 +390,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["operation_id"], operation.id)
         self.assertEqual(response.get_json()["revision"], 0)
+        self.assertEqual(response.get_json()["remaining_fueling_assignments"], 1)
         self.assertIsNone(
             NeoScorpionSortAssetState.query.filter_by(
                 sort_date_operation_id=operation.id

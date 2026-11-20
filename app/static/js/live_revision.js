@@ -3,7 +3,7 @@
     "use strict";
     const scope = document.querySelector('meta[name="live-poll-scope"]')?.content;
     const entries = new Map();
-    const fields = ['ok', 'current_operation', 'operation_id', 'revision', 'version', 'tail_revision', 'tail_notes_revision', 'can_edit'];
+    const fields = ['ok', 'current_operation', 'operation_id', 'revision', 'version', 'tail_revision', 'tail_notes_revision', 'can_edit', 'remaining_fueling_assignments'];
     const primitive = value => value === null || typeof value === 'boolean'
         || (typeof value === 'number' && Number.isFinite(value))
         || (typeof value === 'string' && value.length <= 160);

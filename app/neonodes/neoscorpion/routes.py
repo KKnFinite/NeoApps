@@ -1365,7 +1365,7 @@ def fuel_assignments_live_panel():
         return _json_no_store({"ok": False, "error": "Access denied."}, 403)
 
     notes_revision = tail_notes_revision(gateway)
-    context = fueler_context(gateway, current_user)
+    context = fueler_context(gateway, current_user, include_remaining=True)
     operation = context["operation"]
     return _json_no_store(
         {
@@ -1500,7 +1500,7 @@ def fuel_assignments_revision():
     response = jsonify(
         {
             "ok": True,
-            **fuel_assignments_live_revision(gateway),
+            **fuel_assignments_live_revision(gateway, include_remaining=True),
             "tail_notes_revision": tail_notes_revision(gateway),
         }
     )
@@ -2274,7 +2274,7 @@ def _fueler_response(gateway, access, status_code=200):
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
-        **fueler_context(gateway, current_user),
+        **fueler_context(gateway, current_user, include_remaining=True),
     )
     return response, status_code
 

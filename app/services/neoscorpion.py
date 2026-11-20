@@ -356,30 +356,21 @@ def current_sort_operation(gateway, now=None):
     return operations[0] if operations else None
 
 
-def neoscorpion_live_revision(gateway):
+def neoscorpion_live_revision(gateway, *, include_remaining=False):
     """Return the current sort/revision fingerprint without building screen state."""
     operation = current_sort_operation(gateway)
-    if operation is None:
-        return {
-            "current_operation": False,
-            "operation_id": None,
-            "revision": 0,
-        }
-    revision = (
-        db.session.query(NeoScorpionSortAssetState.revision)
-        .filter(NeoScorpionSortAssetState.sort_date_operation_id == operation.id)
-        .scalar()
-    )
+    status = (_fueler_sort_snapshot(operation) if include_remaining
+              else {"revision": _fuel_assignments_revision_for_operation(operation)})
     return {
-        "current_operation": True,
-        "operation_id": operation.id,
-        "revision": int(revision or 0),
+        "current_operation": operation is not None,
+        "operation_id": operation.id if operation else None,
+        **status,
     }
 
 
-def fuel_assignments_live_revision(gateway):
+def fuel_assignments_live_revision(gateway, *, include_remaining=False):
     """Backward-compatible name for the shared NeoScorpion fingerprint."""
-    result = neoscorpion_live_revision(gateway)
+    result = neoscorpion_live_revision(gateway, include_remaining=include_remaining)
     from app.services.neoscorpion_assets import fueler_on_break
     result["fueler_on_break"] = fueler_on_break(
         result["operation_id"], getattr(current_user, "id", None))
@@ -389,12 +380,45 @@ def fuel_assignments_live_revision(gateway):
 def _fuel_assignments_revision_for_operation(operation):
     if operation is None:
         return 0
-    revision = (
-        db.session.query(NeoScorpionSortAssetState.revision)
-        .filter(NeoScorpionSortAssetState.sort_date_operation_id == operation.id)
-        .scalar()
+    return int(db.session.scalar(_fuel_revision_query(operation)) or 0)
+
+
+def _fuel_revision_query(operation):
+    return db.select(NeoScorpionSortAssetState.revision).where(
+        NeoScorpionSortAssetState.sort_date_operation_id == operation.id
     )
-    return int(revision or 0)
+
+
+def _fueler_sort_snapshot(operation):
+    """Read the global departure count and revision in the same statement."""
+    if operation is None:
+        return {"revision": 0, "remaining_fueling_assignments": 0}
+    assignment = NeoScorpionFuelAssignment
+    # Match the current administrative completion markers in _fuel_rows.
+    # Starting a new UPLIFT clears these markers. Historical cycles, physical
+    # visits and Fueler submissions do not independently complete a departure.
+    complete_assignment = db.exists().where(
+        assignment.sort_date_mission_id == SortDateMission.id,
+        assignment.sort_date_operation_id == operation.id,
+        db.or_(assignment.review_status == "complete", assignment.completed_at_utc.is_not(None),
+               assignment.fuel_on_board_at_utc.is_not(None)),
+    )
+    remaining = departure_mission_query(operation).filter(
+        SortDateMission.fuel_status.is_distinct_from("complete"),
+        ~complete_assignment,
+    ).with_entities(db.func.count(SortDateMission.id)).scalar_subquery()
+    revision, count = db.session.execute(
+        db.select(_fuel_revision_query(operation).scalar_subquery(), remaining)
+    ).one()
+    return {"revision": int(revision or 0), "remaining_fueling_assignments": count}
+
+
+def _fueler_context_revision(operation, include_remaining):
+    if not include_remaining:
+        return {"fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation)}
+    status = _fueler_sort_snapshot(operation)
+    status["fuel_assignments_revision"] = status.pop("revision")
+    return status
 
 
 def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nicknames=True,
@@ -963,7 +987,7 @@ def hanzo_context(gateway):
 
 
 def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physical_work_id=None, physical_sequence=None,
-                   truck_id=None, include_completed=False, include_timing=True):
+                   truck_id=None, include_completed=False, include_timing=True, include_remaining=False):
     operation = current_sort_operation(gateway)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     refresh_setting = live_screen_refresh_value(
@@ -980,7 +1004,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
         return {
             "operation": operation,
             "rows": [],
-            "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
+            **_fueler_context_revision(operation, include_remaining),
             "fuel_assignments_refresh": refresh_setting,
             "settings": settings,
             "operational_fueler_name": operational_name,
@@ -1112,7 +1136,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     return {
         "operation": operation,
         "rows": rows,
-        "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
+        **_fueler_context_revision(operation, include_remaining),
         "fuel_assignments_refresh": refresh_setting,
         "settings": settings,
         "operational_fueler_name": operational_name,

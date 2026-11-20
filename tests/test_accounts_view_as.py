@@ -90,14 +90,19 @@ class AccountsViewAsTest(TestCase):
                     self.assertEqual(self.get(key, user, 'revision').status_code, 200)
                     if key == 'fueler':
                         self.assertNotIn(b'N876UP', page.data)
+                        self.assertIn(b'2 fueling assignments remaining', page.data)
                         panel = self.get(key, user, 'panel')
                         self.assertEqual(panel.status_code, 200)
                         self.assertIn(b'N491UP', panel.data)
                         self.assertNotIn(b'N876UP', panel.data)
+                        self.assertIn(b'2 fueling assignments remaining', panel.data)
                     if key == 'vendor-supervisor':
                         self.assertIsNone(db.session.get(NeoScorpionVendorNight,
                             (self.fixture.operation.id, self.supervisor.id)))
             self.assertIn(b'N876UP', self.get('fueler', self.other_fueler).data)
+            for subject in (self.fueler, self.other_fueler, None):
+                self.assertEqual(self.get('fueler', subject, 'revision').json['remaining_fueling_assignments'], 2)
+            self.assertIn(b'2 fueling assignments remaining', self.get('fueler').data)
             db.session.flush()
         finally:
             event.remove(engine, 'before_cursor_execute', collect)
