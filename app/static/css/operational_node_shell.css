@@ -112,3 +112,123 @@ body.operational-shell-page select optgroup {
     background: #0d171c;
     color: #e7f0f2;
 }
+
+/* NeoStaffing V11 visual language for the operational shell.
+   Keep node-colored accents and each screen's original behavior. */
+body.operational-shell-page {
+    --operational-v11-bg: #091219;
+    --operational-v11-sidebar: #0d1a22;
+    --operational-v11-surface: #11212b;
+    --operational-v11-surface-hover: #172b35;
+    --operational-v11-border: #29434d;
+    --operational-v11-muted: #a1b7be;
+    background-color: var(--operational-v11-bg);
+}
+@media (min-width:901px) {
+    body.operational-shell-page {
+        --operational-sidebar-width: 234px;
+    }
+    body.operational-shell-page .operational-node-topbar {
+        background: var(--operational-v11-sidebar);
+        border-bottom-color: var(--operational-v11-border);
+        box-shadow: 0 4px 14px rgba(0,0,0,.22);
+    }
+    body.operational-shell-page .operational-desktop-sidebar {
+        background: var(--operational-v11-sidebar);
+        border-right: 1px solid var(--operational-v11-border);
+        box-shadow: none;
+    }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-context {
+        border-radius: 8px;
+        background: var(--operational-v11-surface);
+    }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-link {
+        border-radius: 7px;
+        min-height: 39px;
+        color: var(--operational-v11-muted);
+        font: 600 13px/1.3 Inter, system-ui, sans-serif;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-link:hover,
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-link:focus-visible {
+        background: var(--operational-v11-surface-hover);
+        color: #ecf4f4;
+    }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-link.is-active {
+        color: var(--node-highlight);
+        background: rgba(var(--node-primary-rgb,57,184,175), .11);
+        border-left: 2px solid var(--node-highlight);
+    }
+    body.operational-shell-page .operational-sidebar-utilities {
+        border-top-color: var(--operational-v11-border);
+    }
+    body.operational-shell-page .operational-sidebar-utility {
+        border-radius: 7px;
+        min-height: 39px;
+        font: 600 13px/1.3 Inter, system-ui, sans-serif;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+    body.operational-shell-page .operational-sidebar-board-entry {
+        margin-top: 8px;
+        border-color: var(--operational-v11-border);
+        background: var(--operational-v11-surface);
+        color: #ecf4f4;
+    }
+
+    /* Real full-width Board View.  The old mode only hid navigation on some
+       pages because the shell still reserved its sidebar/topbar padding. */
+    body.operational-shell-page.operational-board-view {
+        --operational-sidebar-width: 0px;
+        --operational-topbar-height: 0px;
+    }
+    body.operational-shell-page.operational-board-view :is(
+        .operational-topbar, .operational-node-topbar, .operational-desktop-sidebar
+    ) { display: none !important; }
+    body.operational-shell-page.operational-board-view > .shell {
+        display: block;
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0;
+        min-height: 100dvh;
+        margin: 0 !important;
+    }
+    body.operational-shell-page.operational-board-view > .shell > .content {
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0;
+        min-height: 100dvh;
+        height: auto;
+        box-sizing: border-box;
+        margin: 0 !important;
+        padding: 12px !important;
+        overflow-x: auto;
+    }
+    body.operational-shell-page.operational-board-view > .shell > .content > :where(
+        section, article, div, main
+    ):not(.flash-stack) {
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+    }
+    body.operational-shell-page.operational-board-view .operational-board-exit {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 1200;
+        border-radius: 8px;
+        border: 1px solid var(--operational-v11-border);
+        background: rgba(13,26,34,.93);
+    }
+}
+@media (max-width:900px) {
+    body.operational-shell-page .operational-mobile-header {
+        background: var(--operational-v11-sidebar);
+        border-bottom-color: var(--operational-v11-border);
+    }
+}
