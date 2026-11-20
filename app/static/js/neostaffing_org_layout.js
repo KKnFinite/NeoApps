@@ -59,7 +59,7 @@
         const svg = canvas.querySelector('[data-org-connectors]');
         const read = list => [...list.children].map(element => {
             const card = element.querySelector(':scope > .staffing-reporting-card');
-            const children = element.querySelector(':scope > .staffing-reporting-branches');
+            const children = element.querySelector(':scope > .staffing-reporting-branches:not([hidden])');
             const bounds = card.getBoundingClientRect();
             return {element, card, width: bounds.width, height: bounds.height,
                 children: children ? read(children) : []};
@@ -103,6 +103,34 @@
         const schedule = () => {
             if (frame === null) frame = requestAnimationFrame(draw);
         };
+        const workspace = viewport.closest('[data-v11-org]');
+        if (workspace) {
+            const search = workspace.querySelector('[data-management-search]');
+            search.addEventListener('input', () => {
+                const query = search.value.trim().toLocaleLowerCase();
+                for (const person of workspace.querySelectorAll('[data-management-person]')) {
+                    person.hidden = !person.textContent.toLocaleLowerCase().includes(query);
+                }
+            });
+            let zoom = 0;
+            for (const control of workspace.querySelectorAll('[data-reporting-zoom]')) {
+                control.addEventListener('click', () => {
+                    zoom = Math.min(3, Math.max(-2, zoom + Number(control.dataset.reportingZoom)));
+                    canvas.style.setProperty('--reporting-card-width', `${172 + zoom * 18}px`);
+                    canvas.style.setProperty('--reporting-card-font', `${14 + zoom}px`);
+                    schedule();
+                });
+            }
+            viewport.addEventListener('click', event => {
+                const toggle = event.target.closest('[data-reporting-toggle]');
+                if (!toggle) return;
+                const reports = toggle.nextElementSibling;
+                reports.hidden = !reports.hidden;
+                toggle.setAttribute('aria-expanded', String(!reports.hidden));
+                toggle.textContent = reports.hidden ? '+' : '−';
+                schedule();
+            });
+        }
         schedule();
         document.fonts?.ready.then(schedule);
         if (typeof ResizeObserver !== 'undefined') {

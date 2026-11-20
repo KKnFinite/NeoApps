@@ -12,4 +12,4 @@
   <h2 id="employee-transfer-title">TRANSFER EMPLOYEE</h2>
   <form data-employee-transfer-form><div data-transfer-fields></div><p data-transfer-error role="alert" hidden></p><div class="employee-editor-actions"><button type="button" data-transfer-cancel>CANCEL</button><button type="submit">CONFIRM TRANSFER</button></div></form>
 </dialog>
-<script src="{{ url_for('static', filename='js/neostaffing_employee_editor.js', v='20261104-transfer-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neostaffing_employee_editor.js', v='staffing-v11' if staffing_v11|default(false) else '20261104-transfer-v1') }}"></script>

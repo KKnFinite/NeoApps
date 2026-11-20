@@ -1,4 +1,3 @@
-from tests.css_contracts import stylesheet_source
 from datetime import date, datetime, timedelta
 from html import unescape
 import re
@@ -22,6 +21,7 @@ from app.models import (
     StaffingWorkAssignment,
     User,
 )
+from app.models.staffing_daily_attendance import StaffingUnmarkedAttendanceNote
 from app.services import neostaffing as staffing_service
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.password_policy import set_user_password
@@ -343,29 +343,26 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         self._login(supervisor.username)
         path = f"/neostaffing/attendance?work_area_id={area.id}"
         form = {"sort_date_operation_id": operation.id, "sort_id": sort.id, "work_area_id": area.id,
-                f"status_{person.id}": "", f"note_{person.id}": "  Keep this note  ",
+                f"status_{person.id}": "here", f"note_{person.id}": "Forged replacement",
                 f"original_{person.id}": self._attendance_original_from_page(path, person.id)}
-        note = self.client.post("/neostaffing/attendance/save", data=form)
-        self.assertEqual(note.status_code, 200)
-        saved = note.json["rows"][0]
-        self.assertEqual((saved["status"], saved["note"]), ("", "Keep this note"))
-        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
-        self.assertIn(b'Keep this note', self.client.get(path).data)
-
-        form[f"status_{person.id}"] = "here"
+        staffing_service.save_attendance({**form, f"status_{person.id}": "", f"note_{person.id}": "Keep this note"}, supervisor)
+        db.session.commit()
+        self.assertNotIn(b'Keep this note', self.client.get(path).data)
         stale = self.client.post("/neostaffing/attendance/save", data=form)
         self.assertEqual(stale.status_code, 409)
-        self.assertEqual(stale.json["row"], saved)
-        form[f"original_{person.id}"] = saved["original"]
-        form.pop(f"note_{person.id}")
+        self.assertNotIn("note", stale.json["row"])
+        form[f"original_{person.id}"] = stale.json["row"]["original"]
         marked = self.client.post("/neostaffing/attendance/save", data=form)
         self.assertEqual(marked.status_code, 200)
         saved = marked.json["rows"][0]
-        self.assertEqual((saved["status"], saved["note"]), ("here", "Keep this note"))
+        self.assertEqual(saved["status"], "here")
+        self.assertNotIn("note", saved)
+        self.assertEqual(StaffingDailyAttendance.query.one().note, "Keep this note")
         form.update({f"original_{person.id}": saved["original"], f"status_{person.id}": ""})
         cleared = self.client.post("/neostaffing/attendance/save", data=form)
         self.assertEqual(cleared.status_code, 200)
-        self.assertEqual(cleared.json["rows"][0]["note"], "Keep this note")
+        self.assertNotIn("note", cleared.json["rows"][0])
+        self.assertEqual(StaffingUnmarkedAttendanceNote.query.one().note, "Keep this note")
         self.assertEqual(StaffingDailyAttendance.query.count(), 0)
 
     def test_multi_area_scope_post_autosave_all_here_and_reject_outside(self):
@@ -406,20 +403,22 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
 
         # A row in the SECOND selected area previously failed HTTP 400 because
         # a MultiDict .get("work_area_ids") discarded every ID except the first.
+        staffing_service.save_attendance(MultiDict(common + [
+            (f"status_{eligible_two.id}", ""), (f"note_{eligible_two.id}", "Supervisor note"),
+            (f"status_{marked.id}", ""), (f"note_{marked.id}", "Previously approved"),
+        ]), operator)
+        db.session.commit()
         second_original = self._attendance_original_from_page(path, eligible_two.id)
-        note_only = self.client.post("/neostaffing/attendance/save", data=MultiDict(
-            common + [(f"status_{eligible_two.id}", ""),
-                      (f"note_{eligible_two.id}", "Supervisor note"),
-                      (f"original_{eligible_two.id}", second_original)]))
-        self.assertEqual(note_only.status_code, 200, note_only.get_data(as_text=True))
-        self.assertEqual(note_only.json["rows"][0]["note"], "Supervisor note")
+        second = self.client.post("/neostaffing/attendance/save", data=MultiDict(
+            common + [(f"status_{eligible_two.id}", ""), (f"original_{eligible_two.id}", second_original)]))
+        self.assertEqual(second.status_code, 200, second.get_data(as_text=True))
+        self.assertNotIn("note", second.json["rows"][0])
 
         # Marking someone in the FIRST area must also work, without rewriting
         # the second person's note or changing anyone outside the scope.
         first_original = self._attendance_original_from_page(path, marked.id)
         first = self.client.post("/neostaffing/attendance/save", data=MultiDict(
             common + [(f"status_{marked.id}", "vacation"),
-                      (f"note_{marked.id}", "Previously approved"),
                       (f"original_{marked.id}", first_original)]))
         self.assertEqual(first.status_code, 200, first.get_data(as_text=True))
 
@@ -480,16 +479,20 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         staffing_service.save_attendance({**scope, f"status_{raced.id}": "call_in", f"note_{raced.id}": "Called"}, writer)
         staffing_service.save_attendance({**scope, f"status_{noted.id}": "", f"note_{noted.id}": "New note"}, writer)
         db.session.commit()
+        self.assertNotIn(f'name="original_{outside.id}"', self.client.get(path).text)
         forged = {**batch, "work_area_id": "", f"status_{outside.id}": "",
-                  f"original_{outside.id}": self._attendance_original_from_page(path, outside.id)}
+                  f"original_{outside.id}": staffing_service._attendance_row_payload(
+                      outside.id, operation, None, include_notes=False)["original"]}
         self.assertEqual(self.client.post("/neostaffing/attendance/save", data=forged).status_code, 400)
         self.assertEqual(StaffingDailyAttendance.query.count(), 2)
 
         response = self.client.post("/neostaffing/attendance/save", data=batch)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["saved"], 1)
-        self.assertEqual({row["person_id"]: (row["status"], row["note"]) for row in response.json["rows"]},
-                         {unmarked.id: ("here", ""), raced.id: ("call_in", "Called"), noted.id: ("", "New note")})
+        self.assertEqual({row["person_id"]: row["status"] for row in response.json["rows"]},
+                         {unmarked.id: "here", raced.id: "call_in", noted.id: ""})
+        self.assertTrue(all("note" not in row for row in response.json["rows"]))
+        self.assertEqual(StaffingUnmarkedAttendanceNote.query.filter_by(person_id=noted.id).one().note, "New note")
         self.assertEqual({row.person_id: (row.status, row.note) for row in StaffingDailyAttendance.query.all()},
                          {unmarked.id: ("here", None), raced.id: ("call_in", "Called"), marked.id: ("vacation", "Approved")})
         self.assertEqual(self.client.post("/neostaffing/attendance/save", data=batch).json["saved"], 0)
@@ -719,39 +722,26 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         page = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('class="neostaffing-attendance-console theme-staffing"', page)
-        self.assertIn('data-attendance-tree-scroll', page)
-        self.assertIn('data-attendance-tree', page)
-        self.assertIn('data-attendance-tree-toggle', page)
-        self.assertIn('neostaffing.attendance.hierarchy.v1', page)
-        self.assertIn("2 AREAS", page)
+        self.assertIn("data-attendance-roster", page)
+        self.assertIn("Current work area scope", page)
+        self.assertIn('aria-label="HERE by area"', page)
         self.assertIn(nested_area.name, page)
         self.assertIn(direct_area.name, page)
         self.assertIn(f'name="work_area_ids" value="{nested_area.id}"', page)
         self.assertIn(f'name="work_area_ids" value="{direct_area.id}"', page)
         self.assertIn(nested.employee_id, page)
         self.assertIn(direct.employee_id, page)
-        self.assertIn("Attendance Area", page)
-        for label in (
-            "On Payroll", "Working", "Unmarked", "Called In", "No Call",
-            "Scheduled Off", "Vacation", "Opt Day", "Anniversary Day",
-            "Disability", "Work Comp", "Funeral", "Jury", "FMLA",
-            "Military", "Personal Leave", "Cleared",
-        ):
+        self.assertIn("Work Area", page)
+        self.assertIn("Assigned", page)
+        self.assertIn("Unmarked", page)
+        for _status, label in staffing_service.attendance_status_choices():
             self.assertIn(label, page)
         self.assertNotIn("neostaffing-dashboard-shell", page)
         self.assertNotIn("neostaffing-data-card", page)
 
-        css = stylesheet_source()
-        attendance_css = css.split(
-            "/* NeoStaffing Attendance full-width operations console. */", 1
-        )[1]
-        self.assertIn("grid-template-columns: minmax(0, 1fr)", attendance_css)
-        self.assertNotIn("body:has(.neostaffing-attendance-console) { overflow-x", css)
-        self.assertNotIn("min-width: 720px; table-layout: fixed", attendance_css)
-        self.assertIn("min-height: 27px", attendance_css)
         self.assertIn('data-attendance-search', page)
-        self.assertIn('ALL HERE — CURRENT SCOPE', page)
+        self.assertIn('data-attendance-all', page)
+        self.assertNotIn('name="note_', page)
         self.assertNotIn('SAVE ATTENDANCE', page)
 
         context = staffing_service.attendance_context(

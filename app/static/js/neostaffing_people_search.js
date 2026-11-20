@@ -27,6 +27,7 @@
     }
     const query = params();
     query.set('person_id', item.id);
+    query.set('inspect', '1');
     const target = new URL(form.action || window.location.pathname, window.location.href);
     target.search = query.toString();
     window.location.assign(target.pathname + target.search);

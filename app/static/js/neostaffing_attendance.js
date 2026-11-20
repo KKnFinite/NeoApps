@@ -25,7 +25,7 @@
         rows.set(id, {
             id, element, status, note, original,
             editable: Boolean(status && !status.disabled),
-            saved: {status: element.dataset.attendanceStatus, note: note.value, original: original.value},
+            saved: {status: element.dataset.attendanceStatus, note: note?.value || '', original: original.value},
             searchText: `${element.dataset.attendanceName} ${element.dataset.attendanceEmployeeId}`.toLowerCase(),
             output: element.querySelector('[data-attendance-state]'),
             retry: element.querySelector('[data-attendance-retry]'),
@@ -69,18 +69,19 @@
         row.retry.hidden = kind !== 'error';
     }
 
-    const draft = row => ({status: row.status.value, note: row.note.value.trim()});
+    const draft = row => ({status: row.status?.value ?? row.saved.status, note: row.note?.value.trim() || ''});
     const differs = (a, b) => a.status !== b.status || a.note !== b.note;
 
     function reconcile(row, authoritative, compared) {
         const current = draft(row);
-        if (current.status === compared.status && current.status !== authoritative.status) {
+        if (row.status && current.status === compared.status && current.status !== authoritative.status) {
             row.status.value = authoritative.status;
         }
-        if (current.note === compared.note && current.note !== authoritative.note) {
+        if (row.note && current.note === compared.note && current.note !== authoritative.note) {
             row.note.value = authoritative.note;
         }
-        row.saved = authoritative;
+        row.saved = {...authoritative, note: row.note ? authoritative.note || '' : ''};
+        row.element.dataset.attendanceStatus = authoritative.status;
         row.original.value = authoritative.original;
     }
 
@@ -106,7 +107,7 @@
         state(row, 'saving', 'Saving…');
         const body = new URLSearchParams(scope);
         body.set(`status_${row.id}`, sent.status);
-        body.set(`note_${row.id}`, sent.note);
+        if (row.note) body.set(`note_${row.id}`, sent.note);
         body.set(`original_${row.id}`, row.saved.original);
         roster.dataset.attendanceMutation = String(Number(roster.dataset.attendanceMutation || 0) + 1);
         row.request = post(body).then(({rows: [authoritative], scope_here: scopeHere}) => {
@@ -121,7 +122,7 @@
                 updateCounts();
                 updateScopeCounts(error.scopeHere);
                 const currentStatus = Array.from(row.status.options).find(option => option.value === error.current.status);
-                state(row, 'error', `Error: Changed by another supervisor. Current: ${currentStatus?.text || error.current.status}${error.current.note ? ` · ${error.current.note}` : ''}. Retry to apply your edit.`);
+                state(row, 'error', `Error: Changed by another supervisor. Current: ${currentStatus?.text || error.current.status}${row.note && error.current.note ? ` · ${error.current.note}` : ''}. Retry to apply your edit.`);
             } else {
                 state(row, 'error', `Error: ${error.message}`);
             }
@@ -150,8 +151,8 @@
     for (const row of rows.values()) {
         if (!row.editable) continue;
         row.status.addEventListener('change', () => queue(row));
-        row.note.addEventListener('input', () => queue(row, 500));
-        row.note.addEventListener('blur', () => queue(row));
+        row.note?.addEventListener('input', () => queue(row, 500));
+        row.note?.addEventListener('blur', () => queue(row));
         row.retry.addEventListener('click', () => {
             row.blocked = false;
             state(row, 'saving', 'Saving…');

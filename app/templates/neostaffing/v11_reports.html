@@ -1,0 +1,68 @@
+{% extends "neostaffing/v11_shell.html" %}
+{% set library = [('staffing', 'Daily Area Staffing'), ('attendance', 'Employee Attendance History'), ('seniority', 'Seniority')] %}
+{% block workspace_content %}
+{% for key, title in library if reports.view == key %}{{ heading('Analysis · Reports', title, 'Review staffing, attendance and seniority in your scope.') }}{% endfor %}
+<div class="v11-report-layout">
+    <nav class="v11-panel v11-report-library" aria-label="Report library">
+        <h2>Report Library</h2>
+        {% for key, title in library %}<a href="{{ url_for('neostaffing.reports', report_type=key) }}" {% if reports.view == key %}aria-current="page"{% endif %}>
+            <strong>{{ title }}</strong></a>{% endfor %}
+    </nav>
+    <section class="v11-panel v11-report-content">
+        <form method="get" class="v11-report-picker">
+            <label>Report Type<select name="report_type" data-v11-report-select>
+                {% for key, title in library %}<option value="{{ key }}" {% if reports.view == key %}selected{% endif %}>{{ title }}</option>{% endfor %}
+            </select></label><button type="submit">Open report</button>
+        </form>
+        <form class="v11-report-filters" method="get">
+            <input name="report_type" type="hidden" value="{{ reports.view }}">
+            {% if reports.view == 'staffing' %}
+            <label>Date<input type="date" name="attendance_date" value="{{ reports.date }}" required></label>
+            {% elif reports.view == 'attendance' %}
+            <label class="v11-report-search">Find employee<input type="search" name="search" value="{{ reports.query }}" placeholder="Search by name or Employee / UPS ID" maxlength="140" required></label>
+            <label>From<input type="date" name="from_date" value="{{ reports.from_date }}" required></label>
+            <label>Through<input type="date" name="through_date" value="{{ reports.through_date }}" required></label>
+            {% endif %}
+            <label>Classification<select name="classification"><option value="">All classifications</option>
+                {% for key, label in classification_choices %}<option value="{{ key }}" {% if reports.classification == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select></label>
+            <button type="submit">{{ 'Search' if reports.view == 'attendance' else 'Run report' }}</button>
+        </form>
+        {% if reports.error %}<p role="alert" class="v11-warning">{{ reports.error }}</p>{% endif %}
+        {% if reports.view == 'attendance' %}
+            {% if reports.people %}
+            <nav class="v11-link-list v11-report-results" aria-label="Matching employees">
+                {% for person in reports.people %}<a href="{{ url_for('neostaffing.reports', report_type='attendance', search=reports.query, person_id=person.id, from_date=reports.from_date, through_date=reports.through_date, classification=reports.classification) }}" {% if reports.person and reports.person.id == person.id %}aria-current="page"{% endif %}>
+                    <strong>{{ person.full_name }}</strong><small>{{ person.employee_id }}</small></a>{% endfor %}
+            </nav>{% elif reports.query and not reports.error %}<p>No employees in scope match the search.</p>{% endif %}
+            {% if reports.person %}
+                <h3>{{ reports.person.full_name }}</h3>
+                <ul class="v11-history">
+                    {% for day, area_id, person_id, status in reports.rows %}<li><time datetime="{{ day }}">{{ day.strftime('%b %d, %Y') }}</time><strong>{{ attendance_status_labels[status] }}</strong></li>
+                    {% else %}<li>No retained attendance records in this date range.</li>{% endfor %}
+                </ul>
+            {% endif %}
+        {% elif reports.view == 'staffing' %}
+            {% if reports.rows %}<div class="v11-metrics v11-report-metrics">
+                {{ metric('Recorded marks', reports.rows|sum(attribute='recorded')) }}
+                {{ metric('Work areas', reports.rows|length) }}
+            </div>{% endif %}
+            <div class="v11-report-areas">
+                {% for row in reports.rows %}<article><h3>{{ row.name }}</h3><span>{{ row.here }} HERE</span><span>{{ row.recorded }} recorded</span></article>
+                {% else %}<p>No retained area headcounts match this report.</p>{% endfor %}
+            </div>
+        {% else %}
+            {% for operation, rows in reports.groups %}
+            <h3 class="v11-rank-heading">{{ operation }}</h3>
+            <ol class="v11-seniority" aria-label="{{ operation }} seniority">
+                {% for row in rows %}<li>
+                    <span class="v11-rank" aria-label="Rank {{ row.rank }}">{{ row.rank }}</span>
+                    <div><strong>{{ row.person.full_name }}</strong><small>{{ row.person.employee_id }} · {{ row.scope_name }}</small></div>
+                    <time>{{ row.person.seniority_date.strftime('%b %d, %Y') if row.person.seniority_date else '—' }}</time>
+                </li>{% endfor %}
+            </ol>{% else %}<p>No seniority records match this scope.</p>{% endfor %}
+        {% endif %}
+        {% if reports.coverage %}<p class="v11-record-coverage" role="status">{{ reports.coverage }}</p>{% endif %}
+    </section>
+</div>
+{% endblock %}

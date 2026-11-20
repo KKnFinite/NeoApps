@@ -50,7 +50,7 @@
       return payload;
     } finally { if (timer !== null) clearTimeout(timer); }
   };
-  const open = async (id, origin = 'people') => {
+  const open = async (id, origin = 'people', previewTransfer = null) => {
     if (busy) return;
     opener = document.activeElement;
     const url = new URL(dialog.dataset.editorUrl, location.href);
@@ -109,7 +109,8 @@
       });
       form.employeeDelete = () => mutate(form.dataset.deleteUrl,
         {confirm_delete:'yes',confirmed_employee_id:form.dataset.deleteId});
-      form.querySelector('[data-employee-transfer]')?.addEventListener('click', event => {
+      const transferButton = form.querySelector('[data-employee-transfer]');
+      transferButton?.addEventListener('click', event => {
         if (busy || !transferForm) return;
         if (savedFields !== JSON.stringify([...new FormData(form)].filter(([key]) => key !== 'csrf_token'))) {
           error('Save your employee or Shift Flow edits before transferring. Your entries are still here.'); return;
@@ -120,6 +121,16 @@
         transferForm.querySelector('[data-transfer-error]').hidden = true;
         const destination = transferForm.elements.destination_work_area_id;
         const source = transferForm.elements.source_assignment_id;
+        if (previewTransfer) {
+          const {sourceId, destinationId} = previewTransfer;
+          previewTransfer = null;
+          if (!(source.value === sourceId || [...(source.options || [])].some(option => option.value === sourceId)) ||
+              ![...destination.options].some(option => option.value === destinationId)) {
+            error('The selected placement changed. Review the current Work Area before transferring.'); return;
+          }
+          source.value = sourceId;
+          destination.value = destinationId;
+        }
         const currentPath = transferForm.querySelector('[data-transfer-current-path]');
         if (currentPath) {
           const syncSource = () => { currentPath.textContent = source.selectedOptions[0]?.textContent || ''; };
@@ -129,6 +140,10 @@
         destination.addEventListener('change', syncDestination); syncDestination();
         transferDialog.showModal();
       });
+      if (previewTransfer) {
+        if (transferButton) transferButton.click();
+        else error('This employee no longer has a Work Area that can be transferred.');
+      }
     } catch (cause) { content.textContent = cause.message; if (!dialog.open) dialog.showModal(); }
   };
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
@@ -165,11 +180,14 @@
     if (!anchor || !anchor.closest('.neostaffing-people-console,[data-shift-roster]')) return;
     const url = new URL(anchor.href, location.href);
     const id = url.searchParams.get('person_id');
-    if (id && ['/neostaffing/people','/neostaffing/shift-flow'].includes(url.pathname)) {
+    if (id && !url.searchParams.has('inspect') && ['/neostaffing/people','/neostaffing/shift-flow'].includes(url.pathname)) {
       event.preventDefault(); void open(id);
     }
   });
   document.addEventListener('neostaffing:edit-employee', event => { void open(event.detail.personId); });
+  document.addEventListener('neostaffing:preview-transfer', event => {
+    void open(event.detail.personId, 'people', event.detail);
+  });
   try {
     const saved = JSON.parse(sessionStorage.getItem(stateKey) || 'null');
     if (saved?.url === location.pathname + location.search) {

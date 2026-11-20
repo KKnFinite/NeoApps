@@ -1,0 +1,46 @@
+{% extends "neostaffing/v11_shell.html" %}
+{% block workspace_content %}
+{{ heading('Current Sort', 'Sort Overview', 'Staffing coverage and attendance for your scope.') }}
+{% set current = workspace_scope.operation %}
+<div class="v11-metrics">
+    {{ metric('Assigned', summary.total_roster, 'Unique assigned employees') }}
+    {{ metric('HERE', summary.status_counts.get('here', 0) if current else '—', 'Working this Sort') }}
+    {{ metric('Unmarked', summary.unmarked if current else '—', 'Awaiting attendance') }}
+    {{ metric('Needs Assignment', unassigned_count if workspace_scope.master and not workspace_scope.selected else '—', 'Employees without a Work Area') }}
+</div>
+<div class="v11-overview-grid">
+    <div class="v11-stack">
+        <section class="v11-panel">
+            <h2>Needs Attention</h2>
+            {% if current and summary.unmarked %}<div class="v11-attention-item"><strong>{{ summary.unmarked }}</strong><span>Attendance not completed</span>{% if 'neostaffing.attendance' in workspace_primary|map(attribute=1) %}<a href="{{ url_for('neostaffing.attendance') }}">Review →</a>{% endif %}</div>
+            {% elif not current %}<p>No current Sort is available for this scope.</p>
+            {% else %}<p>Attendance is marked for every assigned employee in scope.</p>{% endif %}
+            {% for status, count in summary.status_counts.items() if status in ('call_in', 'no_call') %}
+            <div class="v11-attention-item"><strong>{{ count }}</strong><span>{{ 'Called in' if status == 'call_in' else 'No call' }}</span></div>
+            {% endfor %}
+            {% if unassigned_count %}<div class="v11-attention-item"><strong>{{ unassigned_count }}</strong><span>Needs Assignment</span><a href="{{ url_for('neostaffing.board') }}">Open board →</a></div>{% endif %}
+            {% set gaps = coverage|selectattr('unit.required_headcount', 'ne', none)|list %}
+            {% set ns = namespace(short=0) %}
+            {% for area in gaps if area.assigned < area.unit.required_headcount %}{% set ns.short = ns.short + 1 %}{% endfor %}
+            {% if ns.short %}<div class="v11-attention-item"><strong>{{ ns.short }}</strong><span>Areas below required headcount</span></div>{% endif %}
+        </section>
+        <section class="v11-panel">
+            <h2>Area Coverage</h2>
+            <table class="v11-table"><thead><tr><th>Work area</th><th>Coverage</th><th>HERE / Assigned</th></tr></thead>
+                <tbody>{% for area in overview_coverage %}
+                <tr><th scope="row">{{ area.unit.name }}</th><td>{% if area.here is not none %}<progress aria-label="{{ area.unit.name }} attendance coverage" value="{{ area.here }}" max="{{ [area.assigned, 1]|max }}"></progress>{% else %}—{% endif %}</td><td>{{ area.here if area.here is not none else '—' }} / {{ area.assigned }}</td></tr>
+                {% else %}<tr><td colspan="3">No work areas in this scope.</td></tr>{% endfor %}</tbody>
+            </table>
+        </section>
+    </div>
+    <div class="v11-stack">
+        <section class="v11-panel"><h2>Quick Actions</h2><nav class="v11-quick-grid" aria-label="Quick actions">
+            {% for label, endpoint, icon, short in workspace_primary if endpoint in ('neostaffing.attendance', 'neostaffing.board', 'neostaffing.people', 'neostaffing.reports') %}{{ nav_link(label, endpoint, icon) }}{% endfor %}
+        </nav></section>
+        <section class="v11-panel"><h2>Current Sort</h2>
+            {% if current %}<p>{{ current.gateway_code }} · {{ current.sort_name }}<br>{{ current.sort_date.strftime('%A, %B %d, %Y') }}</p>
+            {% else %}<p>No current Sort.</p>{% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

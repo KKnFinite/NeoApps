@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% macro nav_link(label, endpoint, icon="", short="") %}
+<a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>
+    {% if icon %}<span aria-hidden="true">{{ icon }}</span>{% endif %}{{ short or label }}
+</a>
+{% endmacro %}
+{% macro secondary_nav() %}
+{% if workspace_secondary %}
+<details class="v11-more">
+    <summary>More Tools</summary>
+    <nav aria-label="More tools">
+        {% for item in workspace_secondary %}{{ nav_link(item.label, item.endpoint) }}{% endfor %}
+    </nav>
+</details>
+{% endif %}
+{% endmacro %}
+{% macro heading(section, title, description="") %}
+<header class="v11-heading">
+    <span>{{ section }}</span><h1>{{ title }}</h1>
+    {% if description %}<p>{{ description }}</p>{% endif %}
+</header>
+{% endmacro %}
+{% macro metric(label, value, detail="") %}
+<div class="v11-metric"><span>{{ label }}</span><strong>{{ value }}</strong>{% if detail %}<small>{{ detail }}</small>{% endif %}</div>
+{% endmacro %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION) }}">
+<div class="v11-app" data-staffing-v11>
+    <aside class="v11-sidebar">
+        <a class="v11-brand" href="{{ url_for('neostaffing.index') }}"><b aria-hidden="true">N</b><span>NeoStaffing<small>Staffing workspace</small></span></a>
+        <nav aria-label="Staffing workspaces">
+            {% for title, endpoints in [
+                ('Operations', ('neostaffing.index','neostaffing.attendance','neostaffing.board')),
+                ('Workforce', ('neostaffing.people','neostaffing.org_chart')),
+                ('Analysis', ('neostaffing.reports',))] %}
+                {% set links = workspace_primary|selectattr('1', 'in', endpoints)|list %}
+                {% if links %}<small class="v11-nav-group">{{ title }}</small>{% endif %}
+                {% for label, endpoint, icon, short in links %}{{ nav_link(label, endpoint, icon) }}{% endfor %}
+            {% endfor %}
+        </nav>
+        {{ secondary_nav() }}
+        <div class="v11-sidebar-account">
+            <a href="{{ url_for('auth.portal_dashboard') }}">NeoApps Portal</a>
+            {% include "auth/_account_links.html" %}
+            <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button type="submit">Sign out</button></form>
+        </div>
+    </aside>
+    <div class="v11-body">
+        <header class="v11-top">
+            <a class="v11-brand v11-phone-brand" href="{{ url_for('neostaffing.index') }}"><b aria-hidden="true">N</b><span>NeoStaffing
+                {% if workspace_scope.operation %}<small>{{ workspace_scope.operation.sort_name|title }} Sort · {{ workspace_scope.operation.sort_date.strftime('%b %d') }}</small>{% endif %}
+            </span></a>
+            <div class="v11-breadcrumb">
+                <strong>{{ workspace_titles.get(request.endpoint, 'Menu') }}</strong>
+                {% if workspace_scope.operation %}<small>{{ workspace_scope.operation.gateway_code }} · {{ workspace_scope.operation.sort_name|title }} Sort · {{ workspace_scope.operation.sort_date.strftime('%b %d, %Y') }}</small>{% endif %}
+            </div>
+            <form class="v11-scope" method="post" action="{{ url_for('neostaffing.save_workspace_scope') }}">
+                {{ csrf_field() }}<input type="hidden" name="endpoint" value="{{ request.endpoint }}">
+                {% for key in workspace_filter_keys if request.args.get(key) %}<input type="hidden" name="{{ key }}" value="{{ request.args[key] }}">{% endfor %}
+                <label for="v11-scope">Current work area scope</label>
+                <select id="v11-scope" name="unit_id">
+                    <option value="">All My Areas</option>
+                    {% for unit in workspace_scope.options %}
+                    <option value="{{ unit.id }}" {% if workspace_scope.selected and workspace_scope.selected.id == unit.id %}selected{% endif %}>
+                    {{ unit.parent.name ~ ' / ' if unit.parent else '' }}{{ unit.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" data-scope-submit>Apply</button>
+            </form>
+        </header>
+        <div class="v11-page">{% block workspace_content %}{% endblock %}</div>
+    </div>
+    <nav class="v11-dock" aria-label="Mobile Staffing workspaces">
+        {% for label, endpoint, icon, short in workspace_primary if short %}{{ nav_link(label, endpoint, icon, short) }}{% endfor %}
+        <a href="{{ url_for('neostaffing.workspace_menu') }}" {% if request.endpoint in ('neostaffing.workspace_menu','neostaffing.org_chart','neostaffing.hierarchy','neostaffing.reports') %}{% if request.endpoint == 'neostaffing.workspace_menu' %}aria-current="page"{% else %}class="v11-dock-active"{% endif %}{% endif %}><span aria-hidden="true">☰</span>Menu</a>
+    </nav>
+</div>
+<script defer src="{{ url_for('static', filename='js/neostaffing_v11_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+{% endblock %}

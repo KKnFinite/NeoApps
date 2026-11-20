@@ -33,6 +33,7 @@ from app.services import neostaffing_management_review as management_review_serv
 from app.services import neostaffing_notifications as notification_service
 from app.services import neostaffing_vacation as vacation_service
 from app.services import neostaffing_vacation_reports as vacation_report_service
+from app.services import neostaffing_workspace as workspace
 from app.services.permission_rules import user_can
 
 
@@ -117,12 +118,50 @@ def staffing_screen_items():
 
 @bp.context_processor
 def inject_neostaffing_navigation():
+    items = staffing_screen_items()
+    primary, secondary = _workspace_navigation(items)
     return {
         "neostaffing_nav": notification_service.notification_navigation_state(
             current_user
         ),
-        "staffing_screen_items": staffing_screen_items(),
+        "staffing_screen_items": items,
+        "workspace_primary": primary,
+        "workspace_secondary": secondary,
     }
+
+
+WORKSPACES = (
+    ("Sort Overview", "neostaffing.index", "⌂", "Home"),
+    ("Attendance", "neostaffing.attendance", "✓", "Attendance"),
+    ("Staffing Board", "neostaffing.board", "▤", "Board"),
+    ("People", "neostaffing.people", "♙", "People"),
+    ("Org Chart", "neostaffing.org_chart", "◇", ""),
+    ("Reports", "neostaffing.reports", "▥", ""),
+)
+WORKSPACE_FILTERS = {
+    "neostaffing.people": ("search", "classification", "employee_status", "active", "assignment_status", "per_page", "leadership_only"),
+    "neostaffing.org_chart": ("view",),
+    "neostaffing.reports": ("report_type", "classification", "attendance_date", "from_date", "through_date", "search"),
+}
+
+
+def _workspace_navigation(visible_items):
+    items = {item["endpoint"]: item for item in visible_items}
+    if items and user_can(BOARD_VIEW_PERMISSION):
+        items.update({endpoint: {"endpoint": endpoint} for endpoint in ("neostaffing.index", "neostaffing.board")})
+    primary = [(label, endpoint, icon, short) for label, endpoint, icon, short in WORKSPACES if endpoint in items]
+    secondary = [item for endpoint, item in items.items()
+                 if endpoint not in {row[1] for row in WORKSPACES} and endpoint != "neostaffing.shift_flow"]
+    return primary, secondary
+
+
+def _workspace_view(template, **context):
+    scope = workspace.workspace_scope(current_user)
+    return render_template(
+        template, staffing_v11=True, workspace_scope=scope,
+        workspace_titles={endpoint: label for label, endpoint, _, _ in WORKSPACES},
+        workspace_filter_keys=WORKSPACE_FILTERS.get(request.endpoint, ()), **context,
+    )
 
 
 def neostaffing_app_required(minimum_role="watcher", permission_key=None):
@@ -158,17 +197,62 @@ def neostaffing_app_required(minimum_role="watcher", permission_key=None):
     return decorator
 
 
+@bp.post("/workspace-scope")
+@neostaffing_app_required()
+def save_workspace_scope():
+    target = request.form.get("endpoint")
+    if target not in {row[1] for row in WORKSPACES} | {"neostaffing.workspace_menu"}:
+        target = "neostaffing.index"
+    raw = request.form.get("unit_id", "").strip()
+    try:
+        workspace.set_workspace_scope(current_user, int(raw) if raw else None)
+    except ValueError as error:
+        flash(str(error), "error")
+    filters = {key: request.form[key][:140] for key in WORKSPACE_FILTERS.get(target, ()) if key in request.form}
+    return redirect(url_for(target, **filters))
+
+
 @bp.route("")
 @neostaffing_app_required(permission_key=BOARD_VIEW_PERMISSION)
 def index():
-    role = get_user_app_role(current_user, "neostaffing")
-    can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
-    return render_template(
-        "neostaffing/index.html",
-        app_role=role,
-        can_manage_app=can_manage,
-        attendance_shortcut=staffing_service.management_attendance_context_for_user(current_user),
+    scope = workspace.workspace_scope(current_user)
+    coverage, summary = workspace.live_staffing(scope)
+    return _workspace_view(
+        "neostaffing/v11_overview.html", coverage=coverage, summary=summary,
+        overview_coverage=workspace.overview_coverage(scope, coverage),
+        unassigned_count=len(workspace.needs_assignment(scope)),
     )
+
+
+@bp.get("/board")
+@neostaffing_app_required(permission_key=BOARD_VIEW_PERMISSION)
+def board():
+    scope = workspace.workspace_scope(current_user)
+    coverage, _summary = workspace.live_staffing(scope)
+    selected_coverage = [area for area in coverage if area["shift"]]
+    if scope["selected"] and coverage and len(selected_coverage) == len(coverage) and user_can(PEOPLE_VIEW_PERMISSION):
+        return redirect(url_for("neostaffing.shift_flow"))
+    from app.services import neostaffing_transfers
+
+    can_edit_people = user_can(PEOPLE_EDIT_PERMISSION)
+    destinations = [unit for unit in neostaffing_transfers.destinations()
+                    if unit.id in workspace.authorized_areas(scope)] if can_edit_people else []
+    general = [area for area in coverage if not area["shift"]]
+    rows = {row["person"].id: row for area in general for row in area["rows"]}
+    return _workspace_view(
+        "neostaffing/v11_board.html", coverage=general,
+        summary=staffing_service._daily_attendance_summary(rows.values()),
+        has_shift=bool(selected_coverage) and user_can(PEOPLE_VIEW_PERMISSION),
+        unassigned=workspace.needs_assignment(scope) if user_can(PEOPLE_VIEW_PERMISSION) else [],
+        can_edit_people=can_edit_people, destinations=destinations, unit_path=staffing_service.unit_path,
+        assignment_version=staffing_service.assignment_service.version,
+    )
+
+
+@bp.get("/menu")
+@neostaffing_app_required()
+def workspace_menu():
+    return _workspace_view("neostaffing/v11_menu.html")
 
 
 @bp.route("/")
@@ -360,6 +444,8 @@ def seniority():
 @bp.route("/people")
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def people():
+    scope = workspace.workspace_scope(current_user)
+    filters = {} if any(key in request.args for key in workspace.SCOPE_KEYS) else workspace.organization_filters(scope, default_sort=False)
     can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
     can_edit_people = user_can(PEOPLE_EDIT_PERMISSION)
     can_assign_management = user_can(MANAGEMENT_ASSIGN_PERMISSION)
@@ -375,10 +461,7 @@ def people():
         employee_status = ""
     context = staffing_service.people_context(
         {
-            "sort_id": request.args.get("sort_id", "").strip(),
-            "operation_id": request.args.get("operation_id", "").strip(),
-            "department_id": request.args.get("department_id", "").strip(),
-            "work_area_id": request.args.get("work_area_id", "").strip(),
+            **{key: request.args.get(key, filters.get(key, "")).strip() for key in workspace.SCOPE_KEYS},
             "classification": classification,
             "employee_status": employee_status,
             "active": active,
@@ -404,7 +487,7 @@ def people():
         context.get("selected_unit")
     ) if (can_edit_people or can_assign_management) else None
     all_classification_choices = staffing_service.classification_choices()
-    return render_template(
+    return _workspace_view(
         "neostaffing/people.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=can_manage,
@@ -1011,7 +1094,7 @@ def reverse_change_request_item(item_id):
 def _handle_attendance():
     if request.method == "GET":
         try:
-            selected_sort = db.session.get(StaffingUnit, request.args.get("sort_id", type=int)) if request.args.get("sort_id", type=int) else None
+            selected_sort = db.session.get(StaffingUnit, request.args.get("sort_id", type=int)) if request.args.get("sort_id", type=int) else workspace.workspace_scope(current_user)["sort"]
             rollover = attendance_history_service.maintain_current_attendance_rollover(
                 current_user, sort_name=selected_sort.name if selected_sort and selected_sort.unit_type == "sort" else None)
             if rollover.changed:
@@ -1047,12 +1130,10 @@ def _handle_attendance():
                 work_area_ids=request.form.getlist("work_area_ids"),
             )
         )
-    filters = {
-        "sort_id": request.args.get("sort_id", "").strip(),
-        "operation_id": request.args.get("operation_id", "").strip(),
-        "department_id": request.args.get("department_id", "").strip(),
-        "work_area_id": request.args.get("work_area_id", "").strip(),
-    }
+    scope = workspace.workspace_scope(current_user)
+    explicit = any(request.args.get(key) for key in workspace.SCOPE_KEYS) or request.args.getlist("work_area_ids")
+    filters = ({key: request.args.get(key, "").strip() for key in workspace.SCOPE_KEYS}
+               if explicit else workspace.organization_filters(scope))
     if request.args.getlist("work_area_ids"):
         filters["work_area_ids"] = request.args.getlist("work_area_ids")
     context = staffing_service.attendance_context(
@@ -1060,10 +1141,12 @@ def _handle_attendance():
         current_user,
         include_staffing_groups=can_view_staffing_groups,
         authority=authority,
+        include_notes=False,
+        allowed_area_ids=workspace.authorized_areas(scope),
     )
     for row in context["rows"]:
         row["authorized"] = getattr(row["work_area"], "id", None) in authority.work_area_ids
-    return render_template(
+    return _workspace_view(
         "neostaffing/attendance.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
@@ -1090,6 +1173,12 @@ def org_chart():
 def reports():
     can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
     report_type = request.args.get("report_type", "").strip()
+    if report_type not in {"vacation_calendars", "union_seniority"}:
+        scope = workspace.workspace_scope(current_user)
+        context = workspace.reports(scope, request.args)
+        return _workspace_view("neostaffing/v11_reports.html", reports=context,
+                               classification_choices=staffing_service.classification_choices(),
+                               attendance_status_labels=staffing_service.ATTENDANCE_STATUS_LABELS)
     if report_type == "vacation_calendars":
         vacation_year = _vacation_year_arg()
         context = {
@@ -1099,7 +1188,7 @@ def reports():
             ),
             "filters": {"report_type": report_type, "vacation_year": vacation_year},
         }
-    elif report_type == "union_seniority":
+    else:
         context = {
             "report_type": report_type,
             "union_seniority": {
@@ -1113,31 +1202,6 @@ def reports():
                 ).strip(),
             },
         }
-    else:
-        context = staffing_service.reports_context(
-            {
-                "report_type": report_type,
-                "sort_id": request.args.get("sort_id", "").strip(),
-                "operation_id": request.args.get("operation_id", "").strip(),
-                "department_id": request.args.get("department_id", "").strip(),
-                "work_area_id": request.args.get("work_area_id", "").strip(),
-                "classification": request.args.get("classification", "").strip(),
-                "employee_status": request.args.get("employee_status", "").strip(),
-                "assignment_status": request.args.get(
-                    "assignment_status", ""
-                ).strip(),
-                "attendance_date": request.args.get("attendance_date", "").strip(),
-                "attendance_status": request.args.get(
-                    "attendance_status", ""
-                ).strip(),
-                "active": request.args.get("active", "").strip(),
-                "search": request.args.get("search", "").strip(),
-                "include_management": request.args.get(
-                    "include_management", ""
-                ).strip(),
-            },
-            current_user if not can_manage else None,
-        )
     return render_template(
         "neostaffing/reports.html",
         report_tab_filters={key: request.args[key] for key in (
@@ -2077,6 +2141,8 @@ def people_assign_work_area(person_id):
         flash(safe_mutation_error(error, "assign a work area"), "error")
     else:
         flash("Work area assignment updated.", "success")
+    if request.form.get("return_board") == "1":
+        return redirect(url_for("neostaffing.board"))
     return redirect(_people_return_url(person_id))
 
 
@@ -2139,10 +2205,13 @@ def _render_org_chart():
     selected_unit_id = next((request.args.get(key, "").strip() for key in
         ("unit_id", "work_area_id", "department_id", "operation_id", "sort_id")
         if request.args.get(key, "").strip()), "")
+    scope = workspace.workspace_scope(current_user)
+    if not selected_unit_id and scope["selected"]:
+        selected_unit_id = str(scope["selected"].id)
     management = staffing_service.management_org_chart_context(
         request.args.get("person_id", "").strip(), selected_unit_id)
     units = management["units"]
-    return render_template(
+    return _workspace_view(
         "neostaffing/org_chart.html",
         app_role=app_role,
         management=management,
@@ -2156,6 +2225,9 @@ def _render_org_chart():
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         unit_path=staffing_service.unit_path,
+        structure_view=request.args.get("view") == "structure" or request.endpoint == "neostaffing.hierarchy",
+        can_edit_planned_staffing=user_can(PLANNED_STAFFING_EDIT_PERMISSION),
+        selected_unit_version=staffing_service.entity_version(management["selected_unit"]),
     )
 
 
@@ -2218,8 +2290,13 @@ def create_unit():
 @bp.route("/app-management/hierarchy/units/<int:unit_id>/update", methods=["POST"])
 @neostaffing_app_required(permission_key=ORG_CHART_EDIT_STRUCTURE_PERMISSION)
 def update_unit(unit_id):
-    unit = _get_unit(unit_id)
+    unit = db.session.get(StaffingUnit, unit_id, populate_existing=True, with_for_update=True)
     try:
+        if not unit:
+            raise ValueError("Select an existing Staffing unit.")
+        expected = request.form.get("expected_version")
+        if expected is not None and expected != staffing_service.entity_version(unit):
+            raise ValueError("This Staffing unit changed. Review the current values before saving.")
         normalized = staffing_service.validated_unit_update_values(unit, request.form)
         if normalized["parent_id"] != unit.parent_id:
             mutation = management_review_service.unit_update_mutation(unit, normalized)
@@ -2245,7 +2322,7 @@ def update_unit(unit_id):
     else:
         flash("Staffing unit updated.", "success")
     return redirect(
-        url_for("neostaffing.org_chart", **_org_chart_return_values(unit.id))
+        url_for("neostaffing.org_chart", **_org_chart_return_values(unit_id))
     )
 
 
@@ -2294,8 +2371,13 @@ def planned_staffing():
 @bp.route("/app-management/planned-staffing/<int:unit_id>/update", methods=["POST"])
 @neostaffing_app_required(permission_key=PLANNED_STAFFING_EDIT_PERMISSION)
 def update_planned_staffing(unit_id):
-    unit = _get_unit(unit_id)
+    unit = db.session.get(StaffingUnit, unit_id, populate_existing=True, with_for_update=True)
     try:
+        if not unit:
+            raise ValueError("Select an existing Staffing unit.")
+        expected = request.form.get("expected_version")
+        if expected is not None and expected != staffing_service.entity_version(unit):
+            raise ValueError("This Staffing unit changed. Review the current values before saving.")
         staffing_service.update_required_headcount(unit, request.form.get("required_headcount"))
         db.session.commit()
     except (ValueError, IntegrityError) as error:
@@ -2305,7 +2387,7 @@ def update_planned_staffing(unit_id):
     else:
         flash("Planned staffing updated.", "success")
 
-    return redirect(url_for("neostaffing.org_chart", **_org_chart_return_values(unit.id)))
+    return redirect(url_for("neostaffing.org_chart", **_org_chart_return_values(unit_id)))
 
 
 @bp.route("/app-management/people")
@@ -2818,7 +2900,10 @@ def _mutate(callback, success_message, redirect_endpoint, redirect_values=None):
 def _org_chart_return_values(default_unit_id=None):
     """Keep the selected tree unit stable after an Org Chart mutation."""
     unit_id = request.form.get("return_unit_id", "").strip() or str(default_unit_id or "")
-    return {"unit_id": unit_id} if unit_id else {}
+    values = {"unit_id": unit_id} if unit_id else {}
+    if request.form.get("view") == "structure":
+        values["view"] = "structure"
+    return values
 
 
 def _redirect_legacy_scope_to_org_chart():

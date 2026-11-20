@@ -2,9 +2,17 @@
 <html lang="en"{% if request.endpoint == 'neosektor.driver_routing' and request.args.get('tv') == '1' %} id="sektor-tv"{% endif %}>
 {% from "_neo_brand.html" import neo_brand, neo_brand_name %}
 {% set is_accounts_workspace = scoped_workspace|default(false) or (request.blueprint == 'auth' and (request.path.startswith('/accounts') or request.endpoint == 'auth.my_account')) %}
+{% if staffing_v11|default(false) %}
+{% set uses_mobile_chrome = false %}
+{% set show_mobile_bottom_nav = false %}
+{% set uses_operational_shell = false %}
+{% set uses_node_header = false %}
+{% set uses_motherbrain_header = false %}
+{% set uses_node_desktop_shell = false %}
+{% endif %}
 {% if is_accounts_workspace %}{% set uses_mobile_chrome = false %}{% set show_mobile_bottom_nav = false %}{% endif %}
 {% set is_sektor_dashboard = request.endpoint == 'neosektor.index' %}
-{% set uses_shared_mobile_drawer = uses_operational_shell or is_rfd_hub_page or is_portal_page or is_neostaffing_page %}
+{% set uses_shared_mobile_drawer = not staffing_v11|default(false) and (uses_operational_shell or is_rfd_hub_page or is_portal_page or is_neostaffing_page) %}
 {% set is_gateway_typography_page = uses_operational_shell or is_rfd_hub_page or request.blueprint == 'neonodes' or (request.blueprint == 'auth' and request.path.startswith('/motherbrain/')) %}
 {% set is_gateway_dock_page = uses_operational_shell or is_rfd_hub_page or request.blueprint == 'neonodes' or (uses_motherbrain_header and not is_portal_page) or (request.blueprint == 'auth' and request.path.startswith('/admin/')) %}
 <head>
@@ -156,6 +164,7 @@
     <div class="shell"{% if is_gateway_dock_page %} data-gateway-dock{% endif %}{% if is_gateway_typography_page %} data-gateway-typography{% endif %}>
         {% if is_accounts_workspace %}
         <header class="aa-platform-header"><a class="aa-platform-brand" href="{{ url_for('auth.portal_dashboard') if not current_user.scorpion_vendor else url_for('scorpion_vendor.my_truck') }}">{{ neo_brand('Apps','apps') }}</a><nav aria-label="Account navigation">{% include "auth/_account_links.html" %}<form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button type="submit">Sign out</button></form></nav></header>
+        {% elif staffing_v11|default(false) %}
         {% elif uses_operational_shell %}
         <header class="operational-node-topbar" data-operational-topbar>
             {% if is_neostaffing_page %}<span class="operational-node-identity" aria-label="NeoStaffing">{% else %}<a class="operational-node-identity" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
@@ -479,7 +488,7 @@
             {% set flight_api_auto_poll_visible = is_flight_api_test_page %}
             {% include "neomotherbrain/_flight_api_auto_poll_timer.html" %}
             {% endif %}
-            {% if is_neostaffing_page and request.endpoint not in ('neostaffing.index', 'neostaffing.reports', 'neostaffing.people', 'neostaffing.attendance', 'neostaffing.org_chart') %}{% include "neostaffing/_secondary_controls.html" %}{% endif %}
+            {% if is_neostaffing_page and not staffing_v11|default(false) and request.endpoint not in ('neostaffing.index', 'neostaffing.reports', 'neostaffing.people', 'neostaffing.attendance', 'neostaffing.org_chart') %}{% include "neostaffing/_secondary_controls.html" %}{% endif %}
             {% block content %}{% endblock %}
         </main>
         {% block page_overlay %}{% endblock %}

@@ -4665,7 +4665,8 @@ def staffing_groups_context():
     }
 
 
-def attendance_context(filters=None, user=None, include_staffing_groups=False, *, authority=None):
+def attendance_context(filters=None, user=None, include_staffing_groups=False, *, authority=None,
+                       include_notes=True, allowed_area_ids=None):
     filters = dict(filters or {})
     gateway = _attendance_gateway()
     hierarchy = _daily_attendance_hierarchy()
@@ -4703,6 +4704,13 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False, *
             hierarchy=hierarchy,
         )
 
+    if allowed_area_ids is not None:
+        requested = selected_work_area_ids or _daily_attendance_work_area_ids(selected_scope, hierarchy)
+        selected_work_area_ids = requested & allowed_area_ids
+        if not selected_work_area_ids:
+            return _empty_daily_attendance_context(
+                filters, "No attendance areas are available in this scope.", operation=operation, hierarchy=hierarchy,
+            )
     group_area_ids = selected_work_area_ids
     loaded_assignments = _daily_attendance_assignments(
         selected_scope,
@@ -4729,8 +4737,9 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False, *
     ).all()} if unmarked_ids else {}
     for row in rows:
         person_id = row["person"].id
-        payload = _attendance_row_payload(person_id, operation, row["attendance"], unmarked_notes.get(person_id))
-        row.update(note=payload["note"], original_snapshot=payload["original"])
+        payload = _attendance_row_payload(person_id, operation, row["attendance"],
+                                          unmarked_notes.get(person_id), include_notes=include_notes)
+        row.update(note=payload.get("note", ""), original_snapshot=payload["original"])
 
     staffing_groups = []
     if include_staffing_groups:
@@ -4902,11 +4911,26 @@ def _attendance_original(record, unmarked_note=None):
     }
 
 
-def _attendance_row_payload(person_id, operation, record, unmarked_note=None):
+def _attendance_snapshot_fields(original, include_notes):
+    if include_notes:
+        return original
+    from hmac import digest
+
+    secret = current_app.config["SECRET_KEY"]
+    if isinstance(secret, str):
+        secret = secret.encode()
+
+    return {**{key: value for key, value in original.items() if key != "note"},
+            "note_digest": digest(secret, b"staffing-note\0" + original["note"].encode(), "sha256").hex()}
+
+
+def _attendance_row_payload(person_id, operation, record, unmarked_note=None, *, include_notes=True):
     original = _attendance_original(record, unmarked_note)
-    return {"person_id": person_id, "status": original["status"], "note": original["note"],
+    return {"person_id": person_id, "status": original["status"],
+            **({"note": original["note"]} if include_notes else {}),
             "original": _attendance_snapshot_serializer().dumps({
-                "person_id": person_id, "operation_id": operation.id, "original": original,
+                "person_id": person_id, "operation_id": operation.id,
+                "original": _attendance_snapshot_fields(original, include_notes),
             })}
 
 
@@ -4933,8 +4957,9 @@ def _changed_attendance_form_rows(values, submitted_ids, operation, *, bulk_stat
                 originals[person_id] = original
             continue
         status = str(values.get(f"status_{person_id}") or "").strip()
-        note = _optional_text(values.get(f"note_{person_id}", original["note"])) or ""
-        if not include_unchanged and status == original["status"] and note == original["note"]:
+        note = _optional_text(values.get(f"note_{person_id}", original.get("note"))) or ""
+        note_changed = "note" in original and note != original["note"]
+        if not include_unchanged and status == original["status"] and not note_changed:
             continue
         changed.add(person_id)
         originals[person_id] = original
@@ -5096,7 +5121,10 @@ def save_attendance(values, user, *, form_submission=False, return_rows=False, d
     authority = require_attendance_assignments(user, assignments_by_person, person_ids, hierarchy)
 
     def current_row(person_id):
-        return _attendance_row_payload(person_id, operation, existing.get(person_id), existing.unmarked_notes.get(person_id))
+        return _attendance_row_payload(
+            person_id, operation, existing.get(person_id), existing.unmarked_notes.get(person_id),
+            include_notes="note_digest" not in originals.get(person_id, {}),
+        )
 
     def scope_here():
         counts = _daily_attendance_scope_here_counts(operation, staffing_sort, hierarchy, authority.work_area_ids)
@@ -5105,8 +5133,13 @@ def save_attendance(values, user, *, form_submission=False, return_rows=False, d
         return {"counts": counts, "revision": str(time_ns())}
 
     response_ids = person_ids
-    stale = {person_id for person_id, original in originals.items()
-             if _attendance_original(existing.get(person_id), existing.unmarked_notes.get(person_id)) != original}
+    stale = {
+        person_id for person_id, original in originals.items()
+        if _attendance_snapshot_fields(
+            _attendance_original(existing.get(person_id), existing.unmarked_notes.get(person_id)),
+            include_notes="note" in original,
+        ) != original
+    }
     if bulk_status:
         # Check under the employee lock, after another supervisor's write can be seen.
         person_ids = person_ids - existing.keys() - stale
@@ -5128,7 +5161,7 @@ def save_attendance(values, user, *, form_submission=False, return_rows=False, d
         unmarked_note = existing.unmarked_notes.get(person_id)
         original = _attendance_original(record, unmarked_note)
         note = original["note"] or None
-        if not bulk_status:
+        if not bulk_status and "note_digest" not in originals.get(person_id, {}):
             note = _optional_text(values.get(f"note_{person_id}", note))
         if (form_submission or not status_value) and status_value == original["status"] and (note or "") == original["note"]:
             continue
@@ -5556,6 +5589,7 @@ def _daily_attendance_rows(assignments, existing, hierarchy):
         rows.append(
             {
                 "person": assignment.person,
+                "assignment_id": assignment.id,
                 "work_area": work_area,
                 "department": department,
                 "operation": operation_unit,

@@ -1,3 +1,4 @@
+{% if request.endpoint in ('neostaffing.shift_flow', 'neostaffing.save_shift_flow') %}
 {% set nav_sections = namespace(construction_header_shown=false) %}
 {% for item in staffing_screen_items %}
 {% if item.under_construction and not nav_sections.construction_header_shown %}
@@ -11,3 +12,22 @@
     {% if staffing_nav_class|default('') %}</span>{% endif %}
 </a>
 {% endfor %}
+{% else %}
+{% for label, endpoint, icon, short in workspace_primary %}
+<a class="{{ staffing_nav_class|default('') }}{% if request.endpoint == endpoint %} is-active{% endif %}"
+   data-staffing-nav href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>
+    <span class="operational-side-link-icon" aria-hidden="true">{{ icon }}</span><span class="operational-side-link-label">{{ label }}</span>
+</a>
+{% endfor %}
+{% if workspace_secondary %}
+<details class="staffing-legacy-more-tools" {% if workspace_secondary|selectattr('active')|list %}open{% endif %}>
+    <summary class="{{ staffing_nav_class|default('') }}">More Tools</summary>
+    {% for item in workspace_secondary %}
+    <a class="{{ staffing_nav_class|default('') }}{% if item.active %} is-active{% endif %}" data-staffing-nav href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>
+        <span class="operational-side-link-icon" aria-hidden="true">{{ item.label[0] }}</span><span class="operational-side-link-label">{{ item.label }}</span>
+        {% if item.badge and neostaffing_nav[item.badge] %}<strong class="neostaffing-status-pill is-yellow">{{ neostaffing_nav[item.badge] }}</strong>{% endif %}
+    </a>
+    {% endfor %}
+</details>
+{% endif %}
+{% endif %}

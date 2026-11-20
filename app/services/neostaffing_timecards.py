@@ -74,6 +74,7 @@ def _context(assignment, units, operation):
     return {
         "employee_id": assignment.person.employee_id,
         "employee": assignment.person.full_name,
+        "classification_at_recording": assignment.person.classification,
         "gateway": operation.gateway_code,
         "timezone": gateway_timezone(operation.gateway),
         **{kind: getattr(chain.get(kind), "name", "") for kind in ("sort", "operation", "department", "work_area")},

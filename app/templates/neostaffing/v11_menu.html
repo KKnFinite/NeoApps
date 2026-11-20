@@ -1,0 +1,14 @@
+{% extends "neostaffing/v11_shell.html" %}
+{% block workspace_content %}
+{{ heading('NeoStaffing · Navigation', 'Workspaces') }}
+<section>
+    <nav class="v11-link-list v11-menu-list" aria-label="Staffing workspaces">
+        {% for label, endpoint, icon, short in workspace_primary %}{{ nav_link(label, endpoint, icon) }}{% endfor %}
+    </nav>
+</section>
+{{ secondary_nav() }}
+<nav class="v11-link-list" aria-label="Account"><a href="{{ url_for('auth.portal_dashboard') }}">NeoApps Portal</a>
+    {% include "auth/_account_links.html" %}
+    <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button type="submit">Sign out</button></form>
+</nav>
+{% endblock %}

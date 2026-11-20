@@ -1,130 +1,66 @@
-{% extends "base.html" %}
-{% block title %}NeoStaffing Attendance{% endblock %}
-
-{% macro scope_href(unit) -%}
-{%- if unit.unit_type == "sort" -%}{{ url_for("neostaffing.attendance", sort_id=unit.id) }}
-{%- elif unit.unit_type == "operation" -%}{{ url_for("neostaffing.attendance", sort_id=attendance.selected_sort.id, operation_id=unit.id) }}
-{%- elif unit.unit_type == "department" -%}{{ url_for("neostaffing.attendance", sort_id=attendance.selected_sort.id, department_id=unit.id) }}
-{%- else -%}{{ url_for("neostaffing.attendance", sort_id=attendance.selected_sort.id, work_area_id=unit.id) }}{%- endif -%}
-{%- endmacro %}
-
-{% macro scope_node(node, selected_scope, selected_work_area_ids) -%}
-{% set unit = node.unit %}
-{% set selected = (selected_scope and selected_scope.id == unit.id) or (unit.unit_type == "work_area" and unit.id in selected_work_area_ids) %}
-<li data-attendance-tree-item data-attendance-tree-id="unit-{{ unit.id }}">
-    <div class="neostaffing-attendance-scope-row">
-        {% if node.children %}<button type="button" class="neostaffing-attendance-tree-toggle" data-attendance-tree-toggle aria-expanded="false" aria-label="Toggle {{ unit.name }}"></button>{% else %}<span class="neostaffing-attendance-tree-spacer"></span>{% endif %}
-        <a class="neostaffing-attendance-scope-node{% if selected %} is-selected{% endif %}" href="{{ scope_href(unit) }}" data-unit-type="{{ unit.unit_type }}">
-            <span>{{ unit.unit_type|replace("_", " ") }}</span><strong>{{ unit.name }}</strong>
-            {% set here_count = attendance.scope_here_counts.get(unit.id) %}
-            <span class="neostaffing-attendance-scope-count" data-attendance-scope-here="{{ unit.id }}" title="HERE in your leadership scope">{{ here_count if here_count is not none else '—' }}</span>
-        </a>
-    </div>
-    {% if node.children %}<div data-attendance-tree-children><ul class="neostaffing-attendance-scope-tree">{% for child in node.children %}{{ scope_node(child, selected_scope, selected_work_area_ids) }}{% endfor %}</ul></div>{% endif %}
-</li>
-{%- endmacro %}
-
-{% block content %}
+{% extends "neostaffing/v11_shell.html" %}
+{% block workspace_content %}
+{{ heading('Sort Staffing', 'Attendance', 'Mark attendance and review who is working this Sort.') }}
+{% if attendance.ready %}
 {% set filters = attendance.filters %}
-<section class="neostaffing-attendance-console theme-staffing" aria-labelledby="staffing-attendance-title" data-attendance-console>
-    {% include "neostaffing/_section_nav.html" %}
-    <aside data-staffing-scope class="neostaffing-attendance-scope neostaffing-side-filter" data-attendance-tree-scroll aria-label="Attendance organization scope">
-        <div class="neostaffing-attendance-scope-head"><span>ATTENDANCE SCOPE</span>{% if attendance.selected_work_area_ids|length > 1 %}<strong>{{ attendance.selected_work_area_ids|length }} AREAS</strong>{% endif %}</div>
-        <form data-staffing-filter method="get"><label>Sort <select name="sort_id" aria-label="Attendance Sort">{% for sort in attendance.configured_sorts %}<option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>{% endfor %}</select></label><button type="submit">VIEW SORT</button></form>
-        {% if attendance.ready %}
-            {% if attendance.selected_work_areas %}<div class="neostaffing-attendance-active-areas" aria-label="Active attendance areas">{% for area in attendance.selected_work_areas %}<span>{{ area.name }}</span>{% endfor %}</div>
-            {% elif attendance.selected_scope %}<p class="neostaffing-attendance-current-scope">{{ unit_path(attendance.selected_scope) }}</p>{% endif %}
-            <nav data-attendance-tree aria-label="Attendance areas">
-                <div class="neostaffing-attendance-scope-count-heading" title="Counts in your leadership scope">HERE</div>
-                <ul class="neostaffing-attendance-scope-tree">{% for node in attendance.scope_tree %}{{ scope_node(node, attendance.selected_scope, attendance.selected_work_area_ids) }}{% endfor %}</ul>
-            </nav>
-            {% if attendance.staffing_groups %}
-            <section class="neostaffing-attendance-group-rollups" aria-label="Staffing Groups">
-                <div><strong>STAFFING GROUPS</strong><a href="{{ url_for('neostaffing.staffing_groups') }}">VIEW</a></div>
-                {% for rollup in attendance.staffing_groups %}<article><strong>{{ rollup.group.name }}</strong><span>{{ rollup.total_roster }} payroll · {{ rollup.here }} working · {{ rollup.unmarked }} unmarked</span></article>{% endfor %}
-            </section>
-            {% endif %}
-        {% else %}<p class="neostaffing-attendance-current-scope" role="status">{{ attendance.message }}</p>{% endif %}
+<div class="v11-metrics">
+    {{ metric('Assigned', attendance.summary.total_roster) }}
+    {% for status, label in [('here','HERE'), ('','Unmarked'), ('call_in','Called in')] %}
+    <div class="v11-metric"><span>{{ label }}</span><strong data-attendance-count="{{ status }}">{{ attendance.counts.get(status, 0) if status else attendance.summary.unmarked }}</strong></div>
+    {% endfor %}
+</div>
+<div class="v11-attendance-layout" data-attendance-console>
+    <aside class="v11-panel v11-attendance-areas" aria-label="HERE by area">
+        <h2>HERE by area</h2>
+        {% for area in attendance.selected_work_areas %}
+        <div><span>{{ area.name }}</span><strong data-attendance-scope-here="{{ area.id }}">{{ attendance.scope_here_counts.get(area.id, '—') }}</strong></div>
+        {% else %}<p>No areas available.</p>{% endfor %}
     </aside>
-
-    <main class="neostaffing-attendance-workspace">
-        <header class="neostaffing-attendance-header">
-            <div><h1 id="staffing-attendance-title">ATTENDANCE</h1>{% if attendance.sort_date_operation %}<p>{{ attendance.sort_date_operation.gateway_code }} · {{ attendance.sort_date_operation.sort_name|upper }} · {{ attendance.attendance_date.strftime("%b %d, %Y")|upper }}</p>{% else %}<p>Current Night sort</p>{% endif %}</div>
-            {% if attendance.ready %}<strong>{{ attendance.total_loaded }} EMPLOYEE{% if attendance.total_loaded != 1 %}S{% endif %}</strong>{% endif %}
-        </header>
-
-        {% if attendance.ready %}
-        <section class="neostaffing-attendance-summary" aria-label="Attendance counts">
-            <article><span>On Payroll</span><strong>{{ attendance.summary.total_roster }}</strong></article>
-            {% for status, label in [('here','Working'), ('','Unmarked'), ('call_in','Called In'), ('no_call','No Call'), ('scheduled_off','Scheduled Off'), ('vacation','Vacation'), ('optional_day','Opt Day'), ('anniversary_day','Anniversary Day'), ('disability','Disability'), ('comp','Work Comp'), ('funeral','Funeral'), ('jury','Jury'), ('int_fmla','FMLA'), ('military','Military'), ('personal_leave','Personal Leave'), ('cleared','Cleared')] %}
-            <article><span>{{ label }}</span><strong data-attendance-count="{{ status }}">{{ attendance.counts.get(status, 0) if status else attendance.summary.unmarked }}</strong></article>
-            {% endfor %}
-        </section>
-
-        <section class="neostaffing-attendance-roster" data-attendance-roster data-save-url="{{ url_for('neostaffing.attendance_save') }}">
-            <input type="hidden" name="sort_date_operation_id" value="{{ attendance.sort_date_operation.id }}"><input type="hidden" name="sort_id" value="{{ filters.sort_id }}"><input type="hidden" name="operation_id" value="{{ filters.operation_id }}"><input type="hidden" name="department_id" value="{{ filters.department_id }}"><input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">{% for work_area_id in attendance.selected_work_area_ids %}<input type="hidden" name="work_area_ids" value="{{ work_area_id }}">{% endfor %}
-            <div class="neostaffing-attendance-toolbar">
-                <div class="neostaffing-attendance-roster-title"><strong>DAILY ROSTER</strong>{% if attendance.selected_work_areas %}<span>{{ attendance.selected_work_areas|map(attribute="name")|join(" · ") }}</span>{% elif attendance.selected_scope %}<span>{{ unit_path(attendance.selected_scope) }}</span>{% endif %}</div>
-                <div class="neostaffing-attendance-search">
-                    <input type="search" data-attendance-search aria-label="Search employees" placeholder="Search by name or employee ID" autocomplete="off">
-                    <button type="button" data-attendance-clear class="action-button action-button-secondary" hidden>Clear</button>
-                    <span data-attendance-matches role="status">{{ attendance.total_loaded }} matches</span>
-                </div>
+    <section class="v11-panel v11-attendance-roster" data-attendance-roster data-save-url="{{ url_for('neostaffing.attendance_save') }}">
+        <input type="hidden" name="sort_date_operation_id" value="{{ attendance.sort_date_operation.id }}">
+        {% for field in ('sort_id', 'operation_id', 'department_id', 'work_area_id') %}<input type="hidden" name="{{ field }}" value="{{ filters[field] }}">{% endfor %}
+        {% for work_area_id in attendance.selected_work_area_ids %}<input type="hidden" name="work_area_ids" value="{{ work_area_id }}">{% endfor %}
+        <header class="v11-attendance-toolbar">
+            <h2>Daily Roster</h2>
+            <div class="v11-search-row">
+                <input type="search" data-attendance-search aria-label="Search employees" placeholder="Search by name or employee ID" autocomplete="off">
+                <button type="button" data-attendance-clear hidden>Clear</button>
                 {% if can_edit_attendance and attendance.rows|selectattr('authorized')|list %}
-                <div class="neostaffing-attendance-bulk">
-                    <button class="action-button action-button-secondary" type="button" data-attendance-all aria-describedby="attendance-bulk-help">ALL HERE — CURRENT SCOPE</button>
-                    <small id="attendance-bulk-help">Marks editable Unmarked employees in this scope, including hidden search results.</small>
-                    <span data-attendance-bulk-result role="status" hidden></span>
-                </div>
+                <button type="button" data-attendance-all aria-describedby="attendance-bulk-help">All Here</button>
                 {% endif %}
             </div>
-            <div class="neostaffing-attendance-table-wrap">
-                <table class="neostaffing-attendance-table" role="table" aria-label="Daily attendance roster">
-                    <thead role="rowgroup"><tr role="row"><th scope="col">Employee</th><th scope="col">Attendance Area</th><th scope="col">Attendance</th><th scope="col">Note</th></tr></thead>
-                    <tbody role="rowgroup">{% for row in attendance.rows %}<tr role="row" data-attendance-person="{{ row.person.id }}" data-attendance-status="{{ row.status }}" data-attendance-name="{{ row.person.first_name }} {{ row.person.last_name }}" data-attendance-employee-id="{{ row.person.employee_id }}">
-                        <td role="cell"><input type="hidden" name="original_{{ row.person.id }}" value="{{ row.original_snapshot }}"><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td>
-                        <td role="cell">{{ row.work_area.name if row.work_area else "Unassigned" }}</td>
-                        <td role="cell"><span class="neostaffing-attendance-mobile-label">Attendance</span>{% if row.status and not row.status_writable %}<span class="neostaffing-attendance-readonly-status">{{ row.status_label }}</span>{% else %}<select name="status_{{ row.person.id }}" aria-label="Attendance for {{ row.person.full_name }}" {% if not can_edit_attendance or not row.authorized %}disabled{% endif %}><option value="" {% if not row.status %}selected{% endif %}>Unmarked</option>{% for value, label in attendance.status_choices %}<option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}</td>
-                        <td role="cell"><span class="neostaffing-attendance-mobile-label">Note</span><input name="note_{{ row.person.id }}" value="{{ row.note }}" placeholder="Optional note" aria-label="Attendance note for {{ row.person.full_name }}" {% if not can_edit_attendance or not row.authorized or not row.status_writable %}disabled{% endif %}>
-                            {% if can_edit_attendance and row.authorized and row.status_writable %}<div class="neostaffing-attendance-save-state"><span data-attendance-state role="status"></span><button type="button" data-attendance-retry hidden>Retry</button></div>{% endif %}
-                        </td>
-                    </tr>{% endfor %}<tr role="row" data-attendance-empty {% if attendance.rows %}hidden{% endif %}><td role="cell" colspan="4" class="neostaffing-attendance-empty">No assigned employees match this attendance scope.</td></tr></tbody>
-                </table>
-            </div>
-        </section>
-        <script defer src="{{ url_for('static', filename='js/neostaffing_attendance.js', v='20261111-scope-here-v1') }}"></script>
-        {% else %}<div class="neostaffing-attendance-empty-state" role="status">{{ attendance.message }}</div>{% endif %}
-    </main>
-</section>
-<script nonce="{{ csp_nonce() }}">
-(() => {
-    const tree = document.querySelector("[data-attendance-tree]");
-    const scroller = document.querySelector("[data-attendance-tree-scroll]");
-    const storageKey = "neostaffing.attendance.hierarchy.v1";
-    if (!tree || !scroller) return;
-    let expanded = [];
-    try { expanded = JSON.parse(localStorage.getItem(storageKey) || "[]"); } catch (_error) {}
-    const openIds = new Set(Array.isArray(expanded) ? expanded : []);
-    const apply = (item, open) => {
-        const toggle = item.querySelector(":scope > .neostaffing-attendance-scope-row [data-attendance-tree-toggle]");
-        if (!toggle) return;
-        item.classList.toggle("is-collapsed", !open);
-        toggle.setAttribute("aria-expanded", String(open));
-    };
-    tree.querySelectorAll("[data-attendance-tree-item]").forEach(item => { if (item.querySelector(".is-selected")) openIds.add(item.dataset.attendanceTreeId); apply(item, openIds.has(item.dataset.attendanceTreeId)); });
-    tree.dataset.attendanceTreeReady = "1";
-    tree.addEventListener("click", event => {
-        const toggle = event.target.closest("[data-attendance-tree-toggle]");
-        if (!toggle) return;
-        const item = toggle.closest("[data-attendance-tree-item]");
-        const open = item.classList.contains("is-collapsed");
-        open ? openIds.add(item.dataset.attendanceTreeId) : openIds.delete(item.dataset.attendanceTreeId);
-        apply(item, open);
-        localStorage.setItem(storageKey, JSON.stringify([...openIds]));
-    });
-    scroller.scrollTop = Number(localStorage.getItem(`${storageKey}.scroll`) || 0);
-    scroller.addEventListener("scroll", () => localStorage.setItem(`${storageKey}.scroll`, String(scroller.scrollTop)), { passive: true });
-    requestAnimationFrame(() => tree.querySelector(".is-selected")?.scrollIntoView({ block: "nearest" }));
-})();
-</script>
+            <small data-attendance-matches role="status">{{ attendance.total_loaded }} matches</small>
+            {% if can_edit_attendance %}
+            <small id="attendance-bulk-help">All Here includes authorized unmarked employees hidden by search.</small>
+            <p data-attendance-bulk-result role="status" hidden></p>
+            {% endif %}
+        </header>
+        <table class="v11-table v11-attendance-table" role="table" aria-label="Daily attendance roster">
+            <thead role="rowgroup"><tr role="row"><th scope="col">Employee</th><th scope="col">Work Area</th><th scope="col">Attendance</th></tr></thead>
+            <tbody role="rowgroup">
+                {% for row in attendance.rows %}
+                <tr role="row" data-attendance-person="{{ row.person.id }}" data-attendance-status="{{ row.status }}" data-attendance-name="{{ row.person.full_name }}" data-attendance-employee-id="{{ row.person.employee_id }}">
+                    <td role="cell"><input type="hidden" name="original_{{ row.person.id }}" value="{{ row.original_snapshot }}"><strong>{{ row.person.full_name }}</strong><small>{{ row.person.employee_id }}</small></td>
+                    <td role="cell">{{ row.work_area.name if row.work_area else "Unassigned" }}</td>
+                    <td role="cell">
+                        {% if row.status and not row.status_writable %}<span>{{ row.status_label }}</span>
+                        {% else %}
+                        <select name="status_{{ row.person.id }}" aria-label="Attendance for {{ row.person.full_name }}" {% if not can_edit_attendance or not row.authorized %}disabled{% endif %}>
+                            <option value="" {% if not row.status %}selected{% endif %}>Unmarked</option>
+                            {% for value, label in attendance.status_choices %}<option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                        </select>
+                        {% endif %}
+                        {% if can_edit_attendance and row.authorized and row.status_writable %}
+                        <div class="v11-save-state"><span data-attendance-state role="status"></span><button type="button" data-attendance-retry hidden>Retry</button></div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr role="row" data-attendance-empty {% if attendance.rows %}hidden{% endif %}><td role="cell" colspan="3">No assigned employees match this attendance scope.</td></tr>
+            </tbody>
+        </table>
+    </section>
+</div>
+<script defer src="{{ url_for('static', filename='js/neostaffing_attendance.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+{% else %}<div class="v11-panel" role="status">{{ attendance.message }}</div>{% endif %}
 {% endblock %}
