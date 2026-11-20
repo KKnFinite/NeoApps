@@ -175,3 +175,30 @@ class GatewayShellTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertNotIn(b"data-gateway-shell", response.data)
                 self.assertNotIn(b"gateway-shell-topbar", response.data)
+
+    def test_gateway_v11_launchpad_is_scoped_and_preserves_locked_logos(self):
+        response = self.client.get("/rfd")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-neogateway-v11", response.data)
+        self.assertIn(b"css/neogateway_v11.css", response.data)
+        self.assertIn(b"gateway-v11-masthead", response.data)
+        self.assertIn(b"NeoApps / Operations", response.data)
+        self.assertIn(b"gateway-v11-intro", response.data)
+        self.assertIn(b"gateway-v11-section-description", response.data)
+        for logo in (
+            "motherbrain_small", "sektor_small", "ermac_small",
+            "scorpion", "rain_small", "subzero_small", "reptile_small",
+        ):
+            self.assertIn(f"images/logos/newlogo_{logo}.png".encode(), response.data)
+        # Until the native screen and approved logo exist, do not create a dead Raiden link.
+        self.assertNotIn(b'href="/neoraiden"', response.data)
+        css = Path(self.app.root_path, "static/css/neogateway_v11.css").read_text(encoding="utf-8")
+        self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr))", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", css)
+        self.assertIn(".gateway-v11 a.gateway-node-card:focus-visible", css)
+        self.assertNotIn("--node-rgb: var(--node-gateway-primary-rgb)", css)
+        for route in ("/portal", "/neostaffing"):
+            with self.subTest(route=route):
+                page = self.client.get(route)
+                self.assertEqual(page.status_code, 200)
+                self.assertNotIn(b"css/neogateway_v11.css", page.data)
