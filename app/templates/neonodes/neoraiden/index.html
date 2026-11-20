@@ -1,23 +1,33 @@
 {% extends "base.html" %}
-{% block title %}Command center | NeoRaiden{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION) }}">
-<section class="raiden" data-raiden data-revision="{{ revision }}" data-state="{{ url_for('neoraiden.state', gateway=gateway.code, operation_id=selected_id) }}">
-    <header class="raiden-header"><div><p>NeoRaiden</p><h1>Operations command center</h1></div>
-        <div class="raiden-actions">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='god-mode-1') }}">
+<section class="raiden" data-raiden data-theme="dark" data-list="arrivals" aria-label="NeoRaiden — God Mode"
+         data-revision="{{ revision }}" data-state="{{ url_for('neoraiden.state', gateway=gateway.code, operation_id=selected_id) }}">
+    <header class="rd-header">
+        <h1><span>NeoRaiden</span> God Mode</h1>
+        <div class="rd-controls">
+            <button type="button" data-tv>TV Mode</button>
+            <button type="button" data-theme-toggle aria-label="Light theme" aria-pressed="false">Light</button>
             <button type="button" data-refresh>Refresh</button>
-            <details><summary aria-label="Refresh settings" title="Refresh settings">⚙</summary>
+            <details class="rd-settings"><summary aria-label="Refresh settings" title="Refresh settings">⚙</summary>
                 <label>Refresh interval <select data-interval>{% for n in (15,30,60,120,300) %}<option value="{{ n }}"{% if n == 30 %} selected{% endif %}>{{ n }} seconds</option>{% endfor %}</select></label>
             </details>
         </div>
     </header>
-    <div class="raiden-toolbar">
-        <form method="get"><label>Gateway <select name="gateway" data-submit-on-change>{% for g in gateways %}<option value="{{ g.code }}"{% if g.id == gateway.id %} selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></label></form>
-        <form method="get"><input type="hidden" name="gateway" value="{{ gateway.code }}"><label>Sort <select data-sort-choice><option value="{{ url_for('neoraiden.index',gateway=gateway.code) }}">Current Sort</option>{% for s in sorts %}<option value="{{ url_for('neoraiden.index',gateway=gateway.code,operation_id=s.id) }}"{% if s.id == selected_id %} selected{% endif %}>{{ s.sort_date }} · {{ s.sort_name|title }}</option>{% endfor %}</select></label></form>
-        <span>Updated <time data-success></time> · <span data-countdown></span></span>
+    <div class="rd-context">
+        <form><select name="gateway" aria-label="Gateway" data-submit-on-change>{% for g in gateways %}<option value="{{ g.code }}"{% if g.id == gateway.id %} selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></form>
+        <select aria-label="Sort" data-sort-choice><option value="{{ url_for('neoraiden.index',gateway=gateway.code) }}">Current Sort</option>{% for s in sorts %}<option value="{{ url_for('neoraiden.index',gateway=gateway.code,operation_id=s.id) }}"{% if s.id == selected_id %} selected{% endif %}>{{ s.sort_date }} · {{ s.sort_name|title }}</option>{% endfor %}</select>
+        <div class="rd-refresh">Updated <time data-success></time><span data-countdown></span></div>
     </div>
-    <p class="raiden-stale" role="status" data-stale hidden></p>
+    <p class="rd-stale" role="status" data-stale hidden></p>
     <div data-board>{% include "neonodes/neoraiden/_board.html" %}</div>
+    <nav class="rd-pager" aria-label="TV pages" hidden>
+        <button type="button" data-prev aria-label="Previous page">‹</button>
+        <output data-page></output>
+        <button type="button" data-next aria-label="Next page">›</button>
+        <button type="button" data-pause aria-pressed="false">Pause</button>
+    </nav>
 </section>
-<script defer src="{{ url_for('static', filename='js/neoraiden.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+<script defer src="{{ url_for('static', filename='js/neoraiden_workspace.js', v=config.STATIC_ASSET_VERSION, rev='god-mode-1') }}"></script>
+<script defer src="{{ url_for('static', filename='js/neoraiden.js', v=config.STATIC_ASSET_VERSION, rev='god-mode-1') }}"></script>
 {% endblock %}

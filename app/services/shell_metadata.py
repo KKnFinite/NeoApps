@@ -324,7 +324,7 @@ def resolve_shell_metadata(
     )
     neostaffing_current_label = _neostaffing_label(endpoint)
     if is_neoraiden_page:
-        node_current_label = "Command center"
+        node_current_label = "God Mode"
     if is_neostaffing_page:
         node_current_label = neostaffing_current_label
     mobile_shell_key = (

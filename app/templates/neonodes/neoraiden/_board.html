@@ -1,21 +1,33 @@
-{% macro value(v) %}{{ v if v is not none and v != '' else '—' }}{% endmacro %}
+{% from 'neonodes/neoraiden/_mission.html' import mission,metric,val %}
 {% if not board.operation_id %}
-<p class="raiden-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
+<p class="rd-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
 {% else %}
-<header class="raiden-sort"><h2>{{ board.gateway }} · {{ board.sort_label }}</h2>{% if board.window is not none %}<span>Sort window {{ board.window }} min</span>{% endif %}</header>
-{% for title, rows in (('Arrivals',board.arrivals), ('Departures',board.departures)) %}
-<section class="raiden-section"><h2>{{ title }} <span>{{ rows|length }}</span></h2>
-{% if rows %}
-<table><thead><tr><th>Flight / Tail</th><th>{{ 'From' if title == 'Arrivals' else 'To' }}</th><th>Parking</th><th>Scheduled / Actual</th><th>Status</th>{% if title == 'Departures' %}<th>Fuel / Plan (lb)</th><th>Pure / Mix pull</th><th>Deice</th>{% endif %}</tr></thead>
-<tbody>{% for m in rows %}
-<tr data-mission="{{ m.id }}"><th scope="row"><strong>{{ m.flight }}</strong><small>{{ value(m.tail) }}</small></th>
-<td data-label="Route">{{ value(m.route) }}{% if m.ordinal %} · {{ m.ordinal }}{% endif %}</td><td data-label="Parking">{{ value(m.parking) }}</td>
-<td data-label="Sched / Actual">{{ value(m.planned) }} / {{ value(m.actual) }}{% if m.etd %}<small>ETD {{ m.etd }}</small>{% elif m.eta and not m.actual %}<small>ETA {{ m.eta }}</small>{% endif %}</td><td data-label="Status">{{ value(m.status|replace('_',' ')|title if m.status else none) }}</td>
-{% if title == 'Departures' %}<td data-label="Fuel / Plan">{{ value(m.fuel_status|title if m.fuel_status else none) }} / {{ value(m.planned_fuel) }}</td>
-<td data-label="Pure / Mix">Plan {{ value(m.pure) }} / {{ value(m.mix) }}{% if m.actual_pure or m.actual_mix %}<small>Actual {{ value(m.actual_pure) }} / {{ value(m.actual_mix) }}</small>{% endif %}{% for p in m.pulls %}<small>{{ p.door }} · {{ value(p.pure) }} / {{ value(p.mix) }}</small>{% endfor %}</td>
-<td data-label="Deice">{{ value(m.deice) }}</td>{% endif %}</tr>
-{% endfor %}</tbody></table>{% else %}<p>No {{ title|lower }} recorded.</p>{% endif %}</section>
-{% endfor %}
-<section class="raiden-section"><h2>Staffing</h2>{% if board.marked_here is not none %}<p>Recorded HERE · {{ board.marked_here }}</p>{% endif %}{% for s in board.staffing %}<p><strong>{{ s.area }}</strong> · {{ s.worked }} worked / {{ s.payroll }} on payroll</p>{% else %}<p>Finalized staffing totals unavailable.</p>{% endfor %}</section>
-<p class="raiden-key">— Unavailable · Times local to the mission</p>
+<div class="rd-overview">
+  <section class="rd-uld" aria-label="Native ULD counts">
+    <div class="rd-uld-title"><h2>ULD counts</h2><span>{{ board.gateway }} · {{ board.sort_label }}</span></div>
+    {% if board.uld %}{% set u = board.uld %}
+    <table><thead><tr><th>Wave</th><th>East</th><th>West</th><th>Left to arrive</th><th>Left to unload</th></tr></thead>
+    <tbody>{% for w in u.waves %}<tr><th scope="row">{{ '1st' if loop.first else '2nd' }}</th><td>{{ val(w.east) }}</td><td>{{ val(w.west) }}</td><td>{{ val(w.arrive) }}</td><td>{{ val(w.unload) }}</td></tr>{% endfor %}</tbody></table>
+    <div class="rd-uld-foot"><span>Open bays <b>E {{ val(u.east_open) }} · W {{ val(u.west_open) }}</b></span>
+      {{ metric('On ballmats',u.unloaded) }}{{ metric('Plan',u.planned) }}{% if u.percent is not none %}<span>Progress <b>{{ u.percent }}%</b></span>{% endif %}</div>
+    {% else %}<p>Native ULD counts unavailable.</p>{% endif %}
+  </section>
+  <aside class="rd-sort"><div class="rd-totals">{{ metric('Arrivals',board.arrivals|length) }}{{ metric('Departures',board.departures|length) }}</div>
+    <details class="rd-staff"><summary>Staffing{% if board.marked_here is not none %} · {{ board.marked_here }} HERE{% endif %}{% if board.window is not none %} · {{ board.window }} min window{% endif %}</summary>
+    {% for s in board.staffing %}<p>{{ s.area }} · {{ s.worked }} worked / {{ s.payroll }} payroll</p>{% else %}<p>Finalized staffing totals unavailable.</p>{% endfor %}</details>
+  </aside>
+</div>
+<div class="rd-tools">
+  <div class="rd-segments" role="group" aria-label="Mission list">{% for title,rows in (('Arrivals',board.arrivals),('Departures',board.departures)) %}<button type="button" data-list-choice="{{ title|lower }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ title }} <b>{{ rows|length }}</b></button>{% endfor %}</div>
+  <input type="search" data-search aria-label="Find flight, tail or station" placeholder="Find flight, tail or station">
+</div>
+<div class="rd-workspace">
+{% for title,rows in (('Arrivals',board.arrivals),('Departures',board.departures)) %}
+<section class="rd-panel" data-panel="{{ title|lower }}" aria-label="{{ title }}">
+  <h2>{{ title }} <b>{{ rows|length }}</b></h2>
+  <div class="rd-scroll"><div class="rd-columns" aria-hidden="true"><span>Flight / Tail</span><span>{{ 'From' if loop.first else 'To' }} / Park</span><span>Time</span><span>Status</span></div>
+  <div class="rd-rows">{% for m in rows %}{{ mission(m,title=='Arrivals') }}{% endfor %}</div>
+  <p class="rd-empty" data-empty {% if rows %}hidden{% endif %}>{{ 'No matching flights.' if rows else 'No ' ~ title|lower ~ ' recorded.' }}</p></div>
+</section>{% endfor %}
+</div>
 {% endif %}

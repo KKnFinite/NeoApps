@@ -37,6 +37,7 @@
             });
             if (response.redirected || [401,403,404].includes(response.status)) {
                 get("board").replaceChildren();
+                root.dispatchEvent(new Event("raiden:updated"));
                 warn("This Sort is no longer available. Reopen NeoRaiden to check access.");
                 stopped = true;
                 return;
@@ -50,7 +51,9 @@
                 if (!response.ok) throw Error();
                 const data = await response.json();
                 if (typeof data.html !== "string") throw Error();
+                root.dispatchEvent(new Event("raiden:before-update"));
                 get("board").innerHTML = data.html;
+                root.dispatchEvent(new Event("raiden:updated"));
             }
             revision = (response.headers.get("ETag") || "").replaceAll('"',"");
             stamp();

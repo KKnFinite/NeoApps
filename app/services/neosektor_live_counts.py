@@ -1514,6 +1514,47 @@ def _operational_settings_for_state(
     )
 
 
+def native_uld_summary(gateway, sort_date, sort_name):
+    """Project recorded counts without initialization, integration routing or timer writes."""
+    rows = _read_only_state_rows(gateway, sort_date, sort_name)
+    if not rows["sort"]:
+        return None
+
+    # Working copies are essential: canonical rollups normally maintain the operational rows.
+    state = _copy_sort_state(rows["sort"][0], gateway, sort_date, sort_name)
+    waves = _read_only_waves(rows["timer"])
+    counts = _read_only_wave_counts(rows["wave"])
+    mats = _read_only_ballmats(rows["ballmat"])
+    openings = _read_only_open_bays(rows["open"])
+    _sync_ballmat_rollups(state, counts, waves, mats)
+    sides = _side_state_views(counts, mats, openings, [])
+    derived = _wave_views(waves, sides, read_neosektor_operational_settings(gateway), persist_timer=False)
+
+    # Sektor uses zero defaults on its editable board. An observer must distinguish
+    # a missing component from an explicit zero before publishing dependent metrics.
+    counts_by_key = {(row.wave_name, row.side): row.count for row in rows["wave"]}
+    open_by_side = {row.side: row.open_count for row in rows["open"]}
+    recorded_waves = {row.wave_name for row in rows["timer"]}
+    all_inputs = {"EAST", "WEST"} <= open_by_side.keys()
+    complete_counts = True
+    result = []
+    for wave in derived:
+        name = wave["name"]
+        east = counts_by_key.get((name, "EAST"))
+        west = counts_by_key.get((name, "WEST"))
+        complete_counts = complete_counts and east is not None and west is not None
+        # Second-wave lifecycle depends on the first wave's completion timer as well.
+        all_inputs = all_inputs and complete_counts and name in recorded_waves
+        result.append(dict(name=name, east=east, west=west,
+                           arrive=wave["left_to_arrive"] if name in recorded_waves else None,
+                           unload=wave["left_to_unload"] if all_inputs else None))
+
+    return dict(waves=result, east_open=open_by_side.get("EAST"), west_open=open_by_side.get("WEST"),
+                planned=state.planned_total, unloaded=state.unloaded_total if complete_counts else None,
+                percent=_completion_percent(state.planned_total, state.unloaded_total)
+                if complete_counts and state.planned_total > 0 else None)
+
+
 def _read_only_ballmat_components(gateway, sort_date, sort_name, *, include_routing=False):
     count_rows = _read_only_state_rows(gateway, sort_date, sort_name, include_routing=include_routing)
     persisted = next(iter(count_rows["sort"]), None)

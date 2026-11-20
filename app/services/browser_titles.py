@@ -15,6 +15,8 @@ def browser_tab_title(request):
     """
 
     path = request.path.rstrip("/") or "/"
+    if path == "/neoraiden":
+        return "NeoRaiden — God Mode"
 
     page_name, owner = _title_parts(path, request.args.get("side", ""))
     return f"{page_name} | {owner}"

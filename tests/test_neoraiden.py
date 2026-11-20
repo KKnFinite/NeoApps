@@ -37,9 +37,63 @@ class RaidenTest(unittest.TestCase):
     setUp = fixtures.GatewayShellTest.setUp
     tearDown = fixtures.GatewayShellTest.tearDown
 
+    def test_recorded_uld_projection_and_wave_lifecycle(self):
+        from datetime import timedelta
+        from app.models import NeoSektorOperationalSetting, NeoSektorBallmatWaveCount, NeoSektorWaveState
+        from app.services.neosektor_live_counts import native_uld_summary
+        from tests.neoraiden_fixtures import record_counts
+
+        op = seed_sort(self.gateway)
+        db.session.add(NeoSektorOperationalSetting(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+                       integration_mode="google_primary", first_wave_unload_modifier=10, all_up_to_down_minutes=15))
+        db.session.commit()
+        def read():
+            return native_uld_summary(self.gateway, op.sort_date, op.sort_name)
+        with patch("app.services.neosektor_live_counts._neosektor_integration_mode",side_effect=AssertionError("integration routing")), \
+             patch("requests.sessions.Session.request",side_effect=AssertionError("external HTTP")):
+            self.assertIsNone(read())
+            state = record_counts(self.gateway,op)
+            first, second = read()["waves"]
+            self.assertEqual((first["east"],first["west"],first["arrive"],first["unload"]),(6,0,15,26))
+            self.assertEqual((second["east"],second["west"],second["arrive"],second["unload"]),(4,7,32,38))
+            self.assertEqual((read()["east_open"],read()["west_open"],read()["unloaded"],read()["percent"]),(2,3,17,17))
+            self.assertIsNone(native_uld_summary(self.gateway,op.sort_date,"day"))
+            other=Gateway(code="SEA",name="Seattle")
+            db.session.add(other)
+            db.session.commit()
+            self.assertIsNone(native_uld_summary(other,op.sort_date,op.sort_name))
+            with self.app.test_request_context():
+                self.assertEqual(snapshot(self.user,self.gateway,op)["uld"],read())
+            sector = NeoNode.query.filter_by(code="sektor").one()
+            membership = GatewayMembership.query.filter_by(user_id=self.user.id,gateway_id=self.gateway.id).one()
+            GatewayNodeRole.query.filter_by(node_id=sector.id,gateway_membership_id=membership.id).update({"is_active":False})
+            db.session.commit()
+            with self.app.test_request_context():
+                self.assertIsNone(snapshot(self.user,self.gateway,op)["uld"])
+            waves = NeoSektorWaveState.query.filter_by(sort_state_id=state.id)
+            counts = NeoSektorBallmatWaveCount.query.filter_by(sort_state_id=state.id)
+            waves.update({"planned_count":0})
+            counts.update({"count":0})
+            db.session.commit()
+            self.assertEqual([(w["arrive"],w["unload"]) for w in read()["waves"]],
+                             [("ALL IN","ALL UP"),("ALL IN","PENDING")])
+            self.assertIsNone(waves.first().all_up_started_at)
+            waves.update({"all_up_started_at":datetime.utcnow()-timedelta(hours=2)})
+            db.session.commit()
+            self.assertEqual([w["unload"] for w in read()["waves"]],["DOWN","DOWN"])
+            counts.filter_by(side="WEST",wave_name="2ND WAVE").delete()
+            db.session.commit()
+            incomplete = read()
+            self.assertIsNone(incomplete["waves"][1]["west"])
+            self.assertIsNone(incomplete["waves"][1]["unload"])
+            self.assertIsNone(incomplete["unloaded"])
+            self.assertEqual(incomplete["waves"][0]["unload"],"DOWN")
+
     def test_command_center_reads_under_explicit_grants_without_dml(self):
         from app.models import AccountAuthorizationState, AccountSecurityEvent, PortalAppAccess
+        from tests.neoraiden_fixtures import record_counts
         op = seed_sort(self.gateway)
+        record_counts(self.gateway, op)
         approval = PortalAppAccess.query.filter_by(user_id=self.user.id, app_code="neogateway").first()
         if not approval:
             approval = PortalAppAccess(user_id=self.user.id, app_code="neogateway")

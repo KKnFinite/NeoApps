@@ -12,6 +12,7 @@ from app.models import (
 from app.models.user import ROLE_LEVELS
 from app.services.account_authority import Scope
 from app.services.account_scope_runtime import authority
+from app.services.neosektor_live_counts import native_uld_summary
 from app.services.permission_rules import user_can
 from app.services.neosubzero_evidence import normalized_tail, select_tail_event
 from app.services.neosubzero_operations import departure_presentation
@@ -50,7 +51,7 @@ def can_open_raiden(user, gateway):
 def _source_access(user, gateway):
     evidence = authority(user)
     nodes = db.session.query(NeoNode.id, NeoNode.code).filter(
-        NeoNode.code.in_(("scorpion","ermac","subzero")), NeoNode.is_active.is_(True))
+        NeoNode.code.in_(("scorpion","ermac","subzero","sektor")), NeoNode.is_active.is_(True))
     return {code for node_id, code in nodes if evidence.role(
         Scope("node","neogateway",gateway.id,node_id))}
 
@@ -61,7 +62,7 @@ def _clock(value):
 
 def snapshot(user, gateway, operation):
     result = dict(gateway=gateway.code, operation_id=operation.id if operation else None,
-                  sort_label=None, arrivals=[], departures=[], staffing=[], marked_here=None, window=None)
+                  sort_label=None, arrivals=[], departures=[], staffing=[], marked_here=None, window=None, uld=None)
     if operation is None:
         return result
     if operation.gateway_code != gateway.code or operation.gateway_id not in (None, gateway.id):
@@ -84,6 +85,8 @@ def snapshot(user, gateway, operation):
             SortDateParkingAssignment.lane_number).filter_by(sort_date_operation_id=op_id)
         if tail and position}
     access = _source_access(user, gateway)
+    if "sektor" in access:
+        result["uld"] = native_uld_summary(gateway, operation.sort_date, operation.sort_name)
     pulls = defaultdict(list)
     if "ermac" in access:
         for pull in NeoErmacDoorPull.query.filter_by(gateway_id=gateway.id, sort_date_operation_id=op_id
