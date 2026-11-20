@@ -29,11 +29,20 @@
     {% if unit.id in workspace_scope.picker_branch_ids %}<span aria-hidden="true">›</span>{% endif %}
 </button>
 {% endmacro %}
+{% macro workspace_brand(mobile=false) %}
+<a class="v11-brand{% if mobile %} v11-phone-brand{% endif %}" href="{{ url_for('neostaffing.index') }}">
+    <img src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="35" height="35" decoding="async">
+    <span>NeoStaffing<small>
+        <span class="v11-brand-context">Operations{% if workspace_scope.gateway_code %} / {{ workspace_scope.gateway_code }}{% endif %}</span>
+        {% if mobile and workspace_scope.operation %} · {{ workspace_scope.operation.sort_name|title }} Sort · {{ workspace_scope.operation.sort_date.strftime('%b %d') }}{% endif %}
+    </small></span>
+</a>
+{% endmacro %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION, rev='full-rosters') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION, rev='workspace-brand') }}">
 <div class="v11-app" data-staffing-v11>
     <aside class="v11-sidebar">
-        <a class="v11-brand" href="{{ url_for('neostaffing.index') }}"><b aria-hidden="true">N</b><span>NeoStaffing<small>Operations{% if workspace_scope.gateway_code %} / {{ workspace_scope.gateway_code }}{% endif %}</small></span></a>
+        {{ workspace_brand() }}
         <nav aria-label="Staffing workspaces">
             {% for title, endpoints in [
                 ('Operations', ('neostaffing.index','neostaffing.attendance','neostaffing.board')),
@@ -53,9 +62,7 @@
     </aside>
     <div class="v11-body">
         <header class="v11-top">
-            <a class="v11-brand v11-phone-brand" href="{{ url_for('neostaffing.index') }}"><b aria-hidden="true">N</b><span>NeoStaffing
-                {% if workspace_scope.operation %}<small>{{ workspace_scope.operation.sort_name|title }} Sort · {{ workspace_scope.operation.sort_date.strftime('%b %d') }}</small>{% endif %}
-            </span></a>
+            {{ workspace_brand(mobile=true) }}
             <div class="v11-breadcrumb"><a href="{{ url_for('auth.portal_dashboard') }}">NeoApps</a><span aria-hidden="true">›</span><a href="{{ url_for('neostaffing.index') }}">NeoStaffing</a><span aria-hidden="true">›</span><strong>{{ workspace_titles.get(request.endpoint, 'Menu') }}</strong></div>
             <form class="v11-scope" method="post" action="{{ url_for('neostaffing.save_workspace_scope') }}">
                 {% if workspace_scope.operation %}<span class="v11-sort-chip">{{ workspace_scope.operation.sort_date.strftime('%a %b %d') }} · {{ workspace_scope.operation.sort_name|title }} Sort</span>{% endif %}
