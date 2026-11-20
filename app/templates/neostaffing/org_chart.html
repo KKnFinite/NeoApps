@@ -33,16 +33,16 @@
 </ul>
 {% endmacro %}
 {% macro structure_item(node, selected) %}
-{% if node.unit.active %}
+{% if node.unit.active or can_edit_structure %}
 {% set unit = node.unit %}
 {% set selection = url_for('neostaffing.org_chart', view='structure', unit_id=unit.id) %}
     {% if node.children %}
     <details open>
-        <summary>{{ unit.name }}</summary>
+        <summary>{{ unit.name }}{% if not unit.active %} · Inactive{% endif %}</summary>
         <a href="{{ selection }}" {% if selected and selected.id == unit.id %}aria-current="page"{% endif %}>{{ unit.name }} details</a>
         {% for child in node.children %}{{ structure_item(child, selected) }}{% endfor %}
     </details>
-    {% else %}<a href="{{ selection }}" {% if selected and selected.id == unit.id %}aria-current="page"{% endif %}>{{ unit.name }}</a>{% endif %}
+    {% else %}<a href="{{ selection }}" {% if selected and selected.id == unit.id %}aria-current="page"{% endif %}>{{ unit.name }}{% if not unit.active %} · Inactive{% endif %}</a>{% endif %}
 {% endif %}
 {% endmacro %}
 {% block workspace_content %}
@@ -50,8 +50,8 @@
 {% set selected=management.selected_unit %}
 {{ heading('Staffing Organization', 'Org Chart', 'Explore management reporting and operational structure.') }}
 <nav class="v11-view-tabs" aria-label="Organization views">
-    <a href="{{ url_for('neostaffing.org_chart', view='management') }}" {% if not structure_view %}aria-current="page"{% endif %}>Management Reporting</a>
-    <a href="{{ url_for('neostaffing.org_chart', view='structure') }}" {% if structure_view %}aria-current="page"{% endif %}>Operational Structure</a>
+    <a href="{{ url_for('neostaffing.org_chart', view='management', unit_id=selected.id if selected else none) }}" {% if not structure_view %}aria-current="page"{% endif %}>Management Reporting</a>
+    <a href="{{ url_for('neostaffing.org_chart', view='structure', unit_id=selected.id if selected else none) }}" {% if structure_view %}aria-current="page"{% endif %}>Operational Structure</a>
 </nav>
 {% if not structure_view %}
 <div class="v11-org-layout" data-v11-org>
@@ -78,19 +78,23 @@
 </div></div>
 {% else %}
 <div class="v11-structure-layout">
+<section class="v11-panel v11-structure-panel" aria-label="Operational structure">
+<h2>Operational Structure</h2>
+{% for sort in management.scope_hierarchy if (sort.unit.active or can_edit_structure) and (not structure_sort or sort.unit.id == structure_sort.id) %}
+<a class="v11-sort-node" href="{{ url_for('neostaffing.org_chart', view='structure', unit_id=sort.unit.id) }}" {% if selected and selected.id == sort.unit.id %}aria-current="page"{% endif %}>{{ sort.unit.name }}{% if not sort.unit.active %} · Inactive{% endif %}</a>
 <div class="v11-structure-grid">
-{% for sort in management.scope_hierarchy if sort.unit.active and (not workspace_scope.sort or sort.unit.id == workspace_scope.sort.id) %}
-    {% for operation in sort.children if operation.unit.active %}
+    {% for operation in sort.children if operation.unit.active or can_edit_structure %}
     <article class="v11-panel">
-        <small>{{ sort.unit.name }}</small><h2><a href="{{ url_for('neostaffing.org_chart', view='structure', unit_id=operation.unit.id) }}" {% if selected and selected.id == operation.unit.id %}aria-current="page"{% endif %}>{{ operation.unit.name }}</a></h2>
+        <small>Operation</small><h3><a href="{{ url_for('neostaffing.org_chart', view='structure', unit_id=operation.unit.id) }}" {% if selected and selected.id == operation.unit.id %}aria-current="page"{% endif %}>{{ operation.unit.name }}{% if not operation.unit.active %} · Inactive{% endif %}</a></h3>
         {% for child in operation.children %}{{ structure_item(child, selected) }}{% endfor %}
     </article>
-    {% else %}<article class="v11-panel"><h2>{{ sort.unit.name }}</h2><p>No active operations.</p></article>{% endfor %}
-{% endfor %}
+    {% else %}<p>No operations in this Sort.</p>{% endfor %}
 </div>
+{% else %}<p>No configured Sorts in this scope.</p>{% endfor %}
+</section>
 <aside class="v11-panel">
 <h2>{{ selected.name if selected else 'Structure Inspector' }}</h2>
-{% if selected %}<p>{{ unit_path(selected) }}</p>
+{% if selected %}<p>{{ unit_type_labels[selected.unit_type] }} · {{ unit_path(selected) }}</p>
 {% if selected.unit_type == 'work_area' %}
 <p>Required HC · {{ selected.required_headcount if selected.required_headcount is not none else 'Not set' }}</p>
 {% if can_edit_planned_staffing %}

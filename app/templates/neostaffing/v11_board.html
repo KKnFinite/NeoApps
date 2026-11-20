@@ -6,14 +6,14 @@
     {% if workspace_scope.operation %}<span>{{ summary.status_counts.get('here', 0) }} HERE</span><span>{{ summary.unmarked }} unmarked</span>{% endif %}
     {% if unassigned %}<span class="v11-warning">{{ unassigned|length }} needs assignment</span>{% endif %}
 </div>
-{% if has_shift %}<a class="v11-panel v11-shift-entry" href="{{ url_for('neostaffing.shift_flow') }}"><strong>Ramp / Shift</strong><span>Open Shift Flow →</span></a>{% endif %}
+{% if has_shift %}<a class="v11-panel v11-shift-entry" href="{{ url_for('neostaffing.shift_flow') }}"><strong>Ramp / Shift <small>Final Door and Ballmat staffing</small></strong><span>Open Shift Flow →</span></a>{% endif %}
 <div class="v11-board-layout" data-workspace-board>
     <div class="v11-board-grid">
         {% for area in coverage %}
         <section class="v11-panel v11-board-area" data-board-area="{{ area.unit.id }}">
-            <h2>{{ area.unit.name }}</h2>
-            <p>{{ area.assigned }} assigned{% if area.here is not none %} · {{ area.here }} HERE{% endif %}
-            {% if area.unit.required_headcount is not none %} · {{ area.unit.required_headcount }} required{% endif %}</p>
+            <header><h2>{{ area.unit.name }}</h2><strong aria-label="{{ area.assigned }} assigned">{{ area.assigned }}</strong>
+            <p>{% if area.here is not none %}{{ area.here }} HERE{% else %}{{ area.assigned }} assigned{% endif %}
+            {% if area.unit.required_headcount is not none %} · {{ area.unit.required_headcount }} required{% endif %}</p></header>
             {% for row in area.rows %}
                 <button type="button" class="v11-board-person" data-board-person="{{ row.person.id }}"
                         data-source="{{ row.assignment_id }}" data-label="{{ row.person.full_name }}"

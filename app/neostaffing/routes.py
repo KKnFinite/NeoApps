@@ -2211,6 +2211,8 @@ def _render_org_chart():
     management = staffing_service.management_org_chart_context(
         request.args.get("person_id", "").strip(), selected_unit_id)
     units = management["units"]
+    selected = management["selected_unit"]
+    structure_view = request.args.get("view") == "structure" or request.endpoint == "neostaffing.hierarchy"
     return _workspace_view(
         "neostaffing/org_chart.html",
         app_role=app_role,
@@ -2225,7 +2227,8 @@ def _render_org_chart():
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         unit_path=staffing_service.unit_path,
-        structure_view=request.args.get("view") == "structure" or request.endpoint == "neostaffing.hierarchy",
+        structure_view=structure_view,
+        structure_sort=staffing_service.assignment_service.sort_of(selected) if selected else scope["sort"],
         can_edit_planned_staffing=user_can(PLANNED_STAFFING_EDIT_PERMISSION),
         selected_unit_version=staffing_service.entity_version(management["selected_unit"]),
     )
@@ -2901,13 +2904,17 @@ def _org_chart_return_values(default_unit_id=None):
     """Keep the selected tree unit stable after an Org Chart mutation."""
     unit_id = request.form.get("return_unit_id", "").strip() or str(default_unit_id or "")
     values = {"unit_id": unit_id} if unit_id else {}
-    if request.form.get("view") == "structure":
+    if request.endpoint in {
+        "neostaffing.create_unit", "neostaffing.update_unit", "neostaffing.toggle_unit_active",
+        "neostaffing.delete_unit", "neostaffing.update_planned_staffing",
+    } or request.form.get("view") == "structure":
         values["view"] = "structure"
     return values
 
 
 def _redirect_legacy_scope_to_org_chart():
     query = dict(request.args)
+    query["view"] = "structure"
     for key in ("work_area_id", "department_id", "operation_id", "sort_id"):
         unit_id = query.get(key)
         if unit_id:

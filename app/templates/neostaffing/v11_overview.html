@@ -1,10 +1,13 @@
 {% extends "neostaffing/v11_shell.html" %}
 {% block workspace_content %}
-{{ heading('Current Sort', 'Sort Overview', 'Staffing coverage and attendance for your scope.') }}
+<div class="v11-page-heading">
+    {{ heading('Current Sort · Command Overview', 'Sort Overview', 'Staffing coverage and attendance for your scope.') }}
+    {% if 'neostaffing.board' in workspace_primary|map(attribute=1) %}<a class="v11-action v11-primary" href="{{ url_for('neostaffing.board') }}">Open Staffing Board →</a>{% endif %}
+</div>
 {% set current = workspace_scope.operation %}
 <div class="v11-metrics">
     {{ metric('Assigned', summary.total_roster, 'Unique assigned employees') }}
-    {{ metric('HERE', summary.status_counts.get('here', 0) if current else '—', 'Working this Sort') }}
+    {{ metric('HERE', summary.status_counts.get('here', 0) if current else '—', 'Working this Sort', accent=true) }}
     {{ metric('Unmarked', summary.unmarked if current else '—', 'Awaiting attendance') }}
     {{ metric('Needs Assignment', unassigned_count if workspace_scope.master and not workspace_scope.selected else '—', 'Employees without a Work Area') }}
 </div>
@@ -38,7 +41,11 @@
             {% for label, endpoint, icon, short in workspace_primary if endpoint in ('neostaffing.attendance', 'neostaffing.board', 'neostaffing.people', 'neostaffing.reports') %}{{ nav_link(label, endpoint, icon) }}{% endfor %}
         </nav></section>
         <section class="v11-panel"><h2>Current Sort</h2>
-            {% if current %}<p>{{ current.gateway_code }} · {{ current.sort_name }}<br>{{ current.sort_date.strftime('%A, %B %d, %Y') }}</p>
+            {% if current %}<dl class="v11-sort-facts">
+                <div><dt>Gateway</dt><dd>{{ current.gateway_code }}</dd></div>
+                <div><dt>Sort</dt><dd>{{ current.sort_name|title }}</dd></div>
+                <div><dt>Reporting date</dt><dd>{{ current.sort_date.strftime('%b %d, %Y') }}</dd></div>
+            </dl>
             {% else %}<p>No current Sort.</p>{% endif %}
         </section>
     </div>

@@ -1,13 +1,11 @@
 """Shared assertions for current Staffing scope and unified editor contracts."""
-from urllib.parse import parse_qs,urlsplit
 from tests.html_contracts import document
 
 
 def selected_attendance_area(test,response,area_id):
-    links=document(response).findall('a','neostaffing-attendance-scope-node',**{'data-unit-type':'work_area'})
-    selected=[link for link in links if 'is-selected' in link.attrs.get('class','').split()
-              and parse_qs(urlsplit(link.attrs['href']).query).get('work_area_id')==[str(area_id)]]
-    test.assertEqual(len(selected),1)
+    roster = document(response).one('section', **{'data-attendance-roster': None})
+    selected = roster.findall("input", name="work_area_ids")
+    test.assertEqual([field.attrs["value"] for field in selected], [str(area_id)])
 
 
 def employee_editor(test,client,response,person_id):

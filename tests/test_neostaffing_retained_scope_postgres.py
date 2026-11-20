@@ -3,6 +3,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from threading import Event
+from sqlalchemy import event
 from app.extensions import db
 from app.models import User
 from app.services import neostaffing as staffing
@@ -24,8 +25,12 @@ class RetainedScopePostgresTest(contracts.RetainedScopeTest):
         # assign_work_area and the edit share the existing employee-parent lock.
         staffing.assign_work_area(self.peer,self.areas['wbm']);db.session.flush()
         def edit():
-            with self.app.test_request_context('/neosektor/manage-employees?area=ebm'):
-                actor=db.session.get(User,uid);entered.set()
+            with self.app.app_context(), self.app.test_request_context('/neosektor/manage-employees?area=ebm'):
+                actor=db.session.get(User,uid)
+                def observe_lock(_conn, _cursor, statement, _params, _context, _many):
+                    if "FROM staffing_people" in statement and "FOR UPDATE" in statement:
+                        entered.set()
+                event.listen(db.session.connection(), "before_cursor_execute", observe_lock)
                 try:
                     tc.save_segments(actor,[command],as_of=date(2026,9,12),node_workspace='sektor',node_area='ebm')
                     db.session.commit();return 'saved'
@@ -37,7 +42,8 @@ class RetainedScopePostgresTest(contracts.RetainedScopeTest):
             self.assertTrue(entered.wait(10));db.session.commit()
             self.assertIn('outside your leadership scope',job.result(timeout=20))
         db.session.remove();self.assertEqual(contracts.snapshot(),before)
-        with self.app.test_request_context('/neosektor/manage-employees?area=wbm'):
+        # Isolate Flask-Login's request user cache from the fixture's prior DB session.
+        with self.app.app_context(), self.app.test_request_context('/neosektor/manage-employees?area=wbm'):
             actor=db.session.get(User,uid)
             tc.save_segments(actor,[command],as_of=date(2026,9,12),node_workspace='sektor',node_area='wbm');db.session.commit()
         self.assertEqual(len(tc.read_rows(db.session.get(User,uid),date(2026,9,12),date(2026,9,12))),1)

@@ -371,7 +371,7 @@ class NeoStaffingReportingTest(unittest.TestCase):
         self._login(viewer.username)
         response = self.client.get(f"/neostaffing/org-chart?view=management&person_id={manager.id}&unit_id={sort.id}")
         self.assertEqual(response.status_code, 200)
-        for hook in (b'data-people-scope', b'Management reporting hierarchy', b'neostaffing_scope_rail.js', b'neostaffing_org_explorer.css', b'DIRECT REPORTS'):
+        for hook in (b'id="v11-scope"', b'Management reporting hierarchy', b'data-management-search', b'neostaffing_org_explorer.css', b'DIRECT REPORTS'):
             self.assertIn(hook, response.data)
         self.assertNotIn(b'SAVE REPORTS TO', response.data)
 
@@ -391,11 +391,10 @@ class NeoStaffingReportingTest(unittest.TestCase):
         event.listen(db.engine, "before_cursor_execute", capture_sql)
         try:
             with patch("app.neostaffing.routes.db.session.commit") as commit:
-                management = self.client.get("/neostaffing/org-chart?view=management")
+                management = self.client.get("/neostaffing/org-chart")
+                operational = self.client.get("/neostaffing/org-chart?view=structure")
         finally:
             event.remove(db.engine, "before_cursor_execute", capture_sql)
-        operational = self.client.get("/neostaffing/org-chart")
-
         self.assertEqual(management.status_code, 200)
         self.assertIn(b"Management reporting hierarchy", management.data)
         self.assertIn(b"data-reporting-person", management.data)
@@ -403,8 +402,9 @@ class NeoStaffingReportingTest(unittest.TestCase):
         self.assertEqual(dml, [])
         commit.assert_not_called()
         self.assertEqual(operational.status_code, 200)
-        self.assertIn(b"Management reporting hierarchy", operational.data)
-        self.assertIn(b"data-people-tree", operational.data)
+        self.assertIn(b'aria-label="Operational structure"', operational.data)
+        self.assertNotIn(b"Management reporting hierarchy", operational.data)
+        self.assertNotIn(b"STRUCTURE ACTIONS", operational.data)
 
     def test_management_view_displays_allowed_operational_mismatch(self):
         first_sort, _first_operation, _first_department, _first_area = self._hierarchy(
@@ -582,9 +582,9 @@ class NeoStaffingReportingTest(unittest.TestCase):
         self.assertNotIn('SELECT A SCOPE',html)
         self.assertNotIn('ASSIGN MANAGEMENT',html)
         self.assertNotIn('STRUCTURE ACTIONS',html)
-        self.assertIn('neostaffing-people-organization',html)
-        self.assertIn('neostaffing_scope_rail.js',html)
-        self.assertIn(f'work_area_id={units[3].id}',html)
+        self.assertIn('id="v11-scope"',html)
+        self.assertIn('data-management-search',html)
+        self.assertIn(f'value="{units[3].id}"',html)
 
     def _person(
         self,

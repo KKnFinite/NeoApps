@@ -5,17 +5,21 @@
 <div class="v11-report-layout">
     <nav class="v11-panel v11-report-library" aria-label="Report library">
         <h2>Report Library</h2>
-        {% for key, title in library %}<a href="{{ url_for('neostaffing.reports', report_type=key) }}" {% if reports.view == key %}aria-current="page"{% endif %}>
+        {% for key, title in library %}<a href="{{ url_for('neostaffing.reports', report_type=key, classification=reports.classification, **reports.scope_args) }}" {% if reports.view == key %}aria-current="page"{% endif %}>
             <strong>{{ title }}</strong></a>{% endfor %}
     </nav>
     <section class="v11-panel v11-report-content">
         <form method="get" class="v11-report-picker">
+            {% for key, value in reports.scope_args.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+            <input type="hidden" name="classification" value="{{ reports.classification }}">
             <label>Report Type<select name="report_type" data-v11-report-select>
                 {% for key, title in library %}<option value="{{ key }}" {% if reports.view == key %}selected{% endif %}>{{ title }}</option>{% endfor %}
             </select></label><button type="submit">Open report</button>
         </form>
+        {% if reports.scope_args %}<p class="v11-report-scope">Scope · {{ reports.scope_label }}</p>{% endif %}
         <form class="v11-report-filters" method="get">
             <input name="report_type" type="hidden" value="{{ reports.view }}">
+            {% for key, value in reports.scope_args.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
             {% if reports.view == 'staffing' %}
             <label>Date<input type="date" name="attendance_date" value="{{ reports.date }}" required></label>
             {% elif reports.view == 'attendance' %}
@@ -32,13 +36,13 @@
         {% if reports.view == 'attendance' %}
             {% if reports.people %}
             <nav class="v11-link-list v11-report-results" aria-label="Matching employees">
-                {% for person in reports.people %}<a href="{{ url_for('neostaffing.reports', report_type='attendance', search=reports.query, person_id=person.id, from_date=reports.from_date, through_date=reports.through_date, classification=reports.classification) }}" {% if reports.person and reports.person.id == person.id %}aria-current="page"{% endif %}>
+                {% for person in reports.people %}<a href="{{ url_for('neostaffing.reports', report_type='attendance', search=reports.query, person_id=person.id, from_date=reports.from_date, through_date=reports.through_date, classification=reports.classification, **reports.scope_args) }}" {% if reports.person and reports.person.id == person.id %}aria-current="page"{% endif %}>
                     <strong>{{ person.full_name }}</strong><small>{{ person.employee_id }}</small></a>{% endfor %}
             </nav>{% elif reports.query and not reports.error %}<p>No employees in scope match the search.</p>{% endif %}
             {% if reports.person %}
                 <h3>{{ reports.person.full_name }}</h3>
                 <ul class="v11-history">
-                    {% for day, area_id, person_id, status in reports.rows %}<li><time datetime="{{ day }}">{{ day.strftime('%b %d, %Y') }}</time><strong>{{ attendance_status_labels[status] }}</strong></li>
+                    {% for day, area_id, person_id, status in reports.rows %}<li><time datetime="{{ day }}">{{ day.strftime('%b %d, %Y') }}</time><strong class="v11-status" data-mark="{{ status }}">{{ attendance_status_labels[status] }}</strong></li>
                     {% else %}<li>No retained attendance records in this date range.</li>{% endfor %}
                 </ul>
             {% endif %}
@@ -48,7 +52,13 @@
                 {{ metric('Work areas', reports.rows|length) }}
             </div>{% endif %}
             <div class="v11-report-areas">
-                {% for row in reports.rows %}<article><h3>{{ row.name }}</h3><span>{{ row.here }} HERE</span><span>{{ row.recorded }} recorded</span></article>
+                {% for row in reports.rows %}<article>
+                    <header><h3>{{ row.name }}</h3><span>{{ row.here }} HERE · {{ row.recorded }} recorded</span></header>
+                    {% if row.people %}<ul>{% for person in row.people %}<li>
+                        <span>{{ person.name }}{% if person.classification %}<small> · {{ person.classification }}</small>{% endif %}</span>
+                        <span class="v11-status" data-mark="{{ person.status }}">{{ attendance_status_labels[person.status] }}</span>
+                    </li>{% endfor %}</ul>{% endif %}
+                </article>
                 {% else %}<p>No retained area headcounts match this report.</p>{% endfor %}
             </div>
         {% else %}
@@ -63,6 +73,7 @@
             </ol>{% else %}<p>No seniority records match this scope.</p>{% endfor %}
         {% endif %}
         {% if reports.coverage %}<p class="v11-record-coverage" role="status">{{ reports.coverage }}</p>{% endif %}
+        {% if reports.earliest %}<p class="v11-record-coverage">Earliest retained linked record · <time datetime="{{ reports.earliest }}">{{ reports.earliest.strftime('%b %d, %Y') }}</time></p>{% endif %}
     </section>
 </div>
 {% endblock %}

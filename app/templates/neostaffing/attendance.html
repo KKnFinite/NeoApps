@@ -6,7 +6,7 @@
 <div class="v11-metrics">
     {{ metric('Assigned', attendance.summary.total_roster) }}
     {% for status, label in [('here','HERE'), ('','Unmarked'), ('call_in','Called in')] %}
-    <div class="v11-metric"><span>{{ label }}</span><strong data-attendance-count="{{ status }}">{{ attendance.counts.get(status, 0) if status else attendance.summary.unmarked }}</strong></div>
+    <div class="v11-metric{% if status == 'here' %} v11-metric-accent{% endif %}"><span>{{ label }}</span><strong data-attendance-count="{{ status }}">{{ attendance.counts.get(status, 0) if status else attendance.summary.unmarked }}</strong></div>
     {% endfor %}
 </div>
 <div class="v11-attendance-layout" data-attendance-console>
@@ -26,7 +26,7 @@
                 <input type="search" data-attendance-search aria-label="Search employees" placeholder="Search by name or employee ID" autocomplete="off">
                 <button type="button" data-attendance-clear hidden>Clear</button>
                 {% if can_edit_attendance and attendance.rows|selectattr('authorized')|list %}
-                <button type="button" data-attendance-all aria-describedby="attendance-bulk-help">All Here</button>
+                <button type="button" class="v11-primary" data-attendance-all aria-describedby="attendance-bulk-help">All Here</button>
                 {% endif %}
             </div>
             <small data-attendance-matches role="status">{{ attendance.total_loaded }} matches</small>

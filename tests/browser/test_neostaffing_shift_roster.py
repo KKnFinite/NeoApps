@@ -90,22 +90,22 @@ class ShiftRosterBrowserTest(unittest.TestCase):
             self.assertLessEqual(abs(sticky['headerTop'] - sticky['viewportTop']), 2)
             self.assertLessEqual(sticky['pageWidth'], sticky['viewportWidth'])
             helper.ready(page, f'/neostaffing/shift-flow?person_id={self.ids["GREEN"]}')
-            actions = page.locator('.employee-editor-actions')
-            bounds = actions.bounding_box()
-            save = actions.locator('button[type="submit"]').bounding_box()
-            delete = actions.locator('[data-employee-delete]').bounding_box()
-            self.assertLess(save['x'], delete['x'])
-            self.assertLessEqual(abs(save['x'] - bounds['x']), 2)
-            self.assertLessEqual(abs(delete['x'] + delete['width'] - bounds['x'] - bounds['width']), 2)
-            self.assertLessEqual(abs((save['y'] + save['height']) - (delete['y'] + delete['height'])), 2)
-            helper.ready(page, f'/neostaffing/people?person_id={self.ids["GREEN"]}')
-            actions = page.locator('.employee-editor-actions')
-            bounds = actions.bounding_box()
-            save = actions.locator('button[type="submit"]').bounding_box()
-            delete = actions.locator('[data-employee-delete]').bounding_box()
-            self.assertLess(save['x'], delete['x'])
-            self.assertLessEqual(abs(save['x'] - bounds['x']), 2)
-            self.assertLessEqual(abs(delete['x'] + delete['width'] - bounds['x'] - bounds['width']), 2)
+            for route in ('shift-flow', 'people'):
+                helper.ready(page, f'/neostaffing/{route}?person_id={self.ids["GREEN"]}')
+                actions = page.locator('[data-employee-editor] .employee-editor-actions')
+                expect(actions).to_be_visible()
+                boxes = []
+                bounds = actions.bounding_box()
+                for selector in ('button[type="submit"]', '[data-employee-transfer]', '[data-employee-delete]'):
+                    button = actions.locator(selector)
+                    expect(button).to_be_enabled()
+                    box = button.bounding_box()
+                    self.assertGreaterEqual(box['x'], bounds['x'] - 1)
+                    self.assertLessEqual(box['x'] + box['width'], bounds['x'] + bounds['width'] + 1)
+                    for prior in boxes:
+                        self.assertTrue(box['x'] >= prior['x'] + prior['width'] - 1 or
+                                        box['y'] >= prior['y'] + prior['height'] - 1)
+                    boxes.append(box)
         context.unroute_all(behavior='ignoreErrors')
         browser.close()
 
@@ -207,21 +207,19 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         self.assertEqual(discharge_person.count(), 1)
         expect(discharge_person).to_have_class('shift-door-person is-discharge')
         rail = page.locator('.shift-roster-rail')
-        self.assertEqual(rail.locator(':scope > section').count(), 2)
+        self.assertEqual(rail.locator(':scope > section').count(), 1)
         self.assertEqual(rail.locator('.shift-roster-needs').count(), 1)
-        self.assertEqual(rail.locator('.shift-roster-unassigned').count(), 1)
-        self.assertEqual(rail.locator('[data-roster-person]').count(), 2)
-        expect(rail.locator('.shift-roster-needs [data-roster-person]')).to_have_attribute('data-roster-person', str(self.ids['INCOMPLETE']))
-        expect(rail.locator('.shift-roster-unassigned [data-roster-person]')).to_have_attribute('data-roster-person', str(self.ids['UNSET']))
+        self.assertEqual(rail.locator('[data-roster-person]').count(), 1)
+        expect(rail.locator('.shift-roster-needs [data-roster-person]')).to_have_attribute('data-roster-person', str(self.ids['UNSET']))
+        expect(page.locator('[data-door-label="D1"]').locator(f'[data-roster-person="{self.ids["INCOMPLETE"]}"]')).to_be_attached()
         door_one = page.locator('[data-final-door-target][data-door-label="D1"]')
         self.assertGreaterEqual(rail.bounding_box()['x'], door_one.bounding_box()['x'] + door_one.bounding_box()['width'])
         self.assertLessEqual(abs(rail.bounding_box()['y'] - door_one.bounding_box()['y']), 1)
-        for employee_id, section in [('INCOMPLETE', 'shift-roster-needs'), ('UNSET', 'shift-roster-unassigned')]:
-            rail.locator(f'.{section} [data-roster-person="{self.ids[employee_id]}"]').click()
-            expect(page.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
-            expect(page.locator('.neostaffing-shift-flow-drawer header strong')).to_have_text(
-                'Ian Pending' if employee_id == 'INCOMPLETE' else 'Una Assigned')
-            page.locator('.neostaffing-shift-flow-drawer header a').click()
+        rail.locator('[data-roster-person]').click()
+        editor = page.locator('[data-employee-editor]')
+        expect(editor).to_be_visible()
+        expect(editor.locator('[name="first_name"]')).to_have_value('Una')
+        editor.locator('[data-employee-close]').click()
         before = None
         with self.fixture.app.app_context():
             person = db.session.get(StaffingPerson, self.ids['MISSING'])
@@ -242,7 +240,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
             card.drag_to(destination)
             expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Zoe Smith!', 'Ada Smith!'])
             expect(page.locator('[data-shift-roster]')).to_have_attribute('aria-busy', 'true')
-            self.assertEqual(page.locator('.neostaffing-shift-flow-drawer').count(), 0)
+            expect(page.locator('[data-employee-editor]')).to_be_hidden()
             self.assertTrue(card.evaluate('el => !el.dispatchEvent(new MouseEvent("click", {bubbles:true,cancelable:true}))'))
             self.assertNotIn('person_id=', page.url)
             page.evaluate('window.releaseRosterSave()')
@@ -272,8 +270,8 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         expect(page.locator('[data-roster-feedback]')).to_contain_text('Reload and try again')
         page.unroute('**/final-door')
         card.click()
-        expect(page.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
-        self.assertEqual(page.locator('.neostaffing-shift-flow-drawer form').count(), 1)
+        expect(editor).to_be_visible()
+        expect(editor.locator('form[data-employee-form]')).to_have_count(1)
         expect(page.locator('[name="shift_flow_final_door_work_area_id"]')).to_have_value(str(self.area_ids['Door 32']))
         page.locator('[name="shift_flow_ballmat_transition"]').select_option('2')
         page.locator('[data-employee-editor] button[type="submit"]').click()
@@ -329,38 +327,23 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         for width, height in ((390, 844), (375, 568), (375, 400)):
             page.set_viewport_size({'width':width, 'height':height})
             helper.ready(page, f'/neostaffing/shift-flow?person_id={self.ids["INCOMPLETE"]}')
-            page.add_style_tag(content=':root { --neo-safe-top: 47px; --neo-safe-bottom: 34px; }')
-            drawer = page.locator('.neostaffing-shift-flow-drawer')
-            expect(drawer).to_be_visible()
-            expect(drawer.locator('header strong')).to_have_text('Ian Pending')
-            expect(drawer.locator('header a')).to_have_text('CLOSE')
-            expect(drawer.locator('label').first).to_contain_text('Start Area')
-            self.assertEqual(drawer.locator('[data-phase-editor]').count(), 0)
-            geometry = page.evaluate('''() => {
-                const drawer = document.querySelector('.neostaffing-shift-flow-drawer');
-                const header = drawer.querySelector('header');
-                const content = drawer.querySelector('.neostaffing-shift-flow-drawer-content');
-                const dock = document.querySelector('.neo-mobile-bottom');
-                const rect = el => { const b=el.getBoundingClientRect(); return {top:b.top,bottom:b.bottom,left:b.left,right:b.right}; };
-                return {page:document.documentElement.scrollWidth, viewport:innerWidth,
-                    drawer:rect(drawer), header:rect(header), content:rect(content), dock:rect(dock),
-                    bodyOverflow:getComputedStyle(document.body).overflow,
-                    contentOverflow:getComputedStyle(content).overflowY};
-            }''')
-            self.assertLessEqual(geometry['page'], geometry['viewport'])
-            self.assertGreaterEqual(geometry['header']['top'], 47)
-            self.assertLessEqual(geometry['header']['bottom'], geometry['content']['top'])
-            self.assertLessEqual(geometry['drawer']['bottom'], geometry['dock']['top'] + 1)
-            self.assertEqual(geometry['bodyOverflow'], 'hidden')
-            self.assertEqual(geometry['contentOverflow'], 'auto')
-            self.assertLessEqual(geometry['drawer']['right'], width)
+            editor = page.locator('[data-employee-editor]:modal')
+            expect(editor).to_be_visible()
+            expect(editor.locator('[name="first_name"]')).to_have_value('Ian')
+            expect(editor.locator('[name="shift_flow_sort_start_work_area_id"]')).to_have_value(str(self.area_ids['Door 1']))
+            bounds = editor.bounding_box()
+            self.assertGreaterEqual(bounds['y'], 0)
+            self.assertGreaterEqual(bounds['x'], 0)
+            self.assertLessEqual(bounds['y'] + bounds['height'], height)
+            self.assertLessEqual(bounds['x'] + bounds['width'], width)
+            self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), width)
             if height == 400:
-                scroll = drawer.locator('.neostaffing-shift-flow-drawer-content').evaluate(
-                    'el => { el.scrollTop = el.scrollHeight; return el.scrollTop; }')
-                self.assertGreater(scroll, 0)
-                self.assertGreaterEqual(drawer.locator('header').bounding_box()['y'], 47)
-            page.locator('.neostaffing-shift-flow-drawer header a').click()
-            self.assertEqual(page.locator('.neostaffing-shift-flow-drawer').count(), 0)
+                save = editor.locator('button[type="submit"]')
+                save.scroll_into_view_if_needed()
+                self.assertGreater(editor.evaluate('el => el.scrollTop'), 0)
+                self.assertTrue(save.evaluate('el => {const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2, r.y+r.height/2));}'))
+            page.keyboard.press('Escape')
+            expect(editor).to_have_count(0)
         context.unroute_all(behavior='ignoreErrors')
         browser.close()
 
@@ -501,7 +484,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         page.on('pageerror', lambda error: errors.append(str(error)))
         helper = self.fixture(); helper.login(page); helper.ready(page, '/neostaffing/shift-flow')
         person_id = self.ids['UNSET']
-        card = page.locator(f'.shift-roster-unassigned [data-roster-person="{person_id}"]')
+        card = page.locator(f'.shift-roster-needs [data-roster-person="{person_id}"]')
         target = page.locator(f'[data-final-door-target="{self.area_ids["Door 17"]}"]')
         expect(card).to_have_attribute('draggable', 'true')
         before = int(page.locator('[data-roster-total-count]').inner_text())
@@ -510,7 +493,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         self.assertEqual(response.value.status, 200)
         expect(target.locator(f'[data-roster-person="{person_id}"]')).to_be_visible()
         expect(page.locator('[data-roster-total-count]')).to_have_text(str(before + 1))
-        self.assertEqual(page.locator(f'.shift-roster-unassigned [data-roster-person="{person_id}"]').count(), 0)
+        self.assertEqual(page.locator(f'.shift-roster-needs [data-roster-person="{person_id}"]').count(), 0)
         with self.fixture.app.app_context():
             person = db.session.get(StaffingPerson, person_id)
             plan = person.shift_flow_plan
@@ -567,7 +550,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         search.fill('Bea')
         expect(page.locator(f'.shift-roster-needs [data-roster-person="{pending_id}"]')).to_have_class('shift-door-person is-search-match is-search-current')
         search.fill('Una')
-        expect(page.locator(f'.shift-roster-unassigned [data-roster-person="{self.ids["UNSET"]}"]')).to_have_class('shift-door-person is-search-match is-search-current')
+        expect(page.locator(f'.shift-roster-needs [data-roster-person="{self.ids["UNSET"]}"]')).to_have_class('shift-door-person is-search-match is-search-current')
         search.fill('')
         self.assertEqual(page.locator('.shift-door-person.is-search-match, .shift-door-person.is-search-dimmed').count(), 0)
         self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
@@ -605,7 +588,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
             self.assertEqual(person.shift_flow_plan.setup_work_area_id, self.area_ids['Door 21'])
             self.assertIsNone(person.shift_flow_plan.ballmat_transition)
 
-        incomplete = page.locator(f'.shift-roster-needs [data-roster-person="{self.ids["INCOMPLETE"]}"]')
+        incomplete = page.locator(f'.shift-roster-needs [data-roster-person="{self.ids["UNSET"]}"]')
         original_count = page.locator('[data-roster-needs-count]').inner_text()
         page.route('**/final-door', lambda route: route.fulfill(status=409, content_type='application/json',
             body='{"ok":false,"conflict":{"message":"Reload and try again."}}'))

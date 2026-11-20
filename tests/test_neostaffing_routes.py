@@ -102,40 +102,19 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             summary.assert_not_called()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"neostaffing-primary-menu", response.data)
-        self.assertIn(b"PEOPLE", response.data)
-        self.assertIn(b"ORG CHART", response.data)
-        self.assertIn(b"REPORTS", response.data)
-        self.assertIn(b"ATTENDANCE", response.data)
-        self.assertIn(b'href="/neostaffing/people"', response.data)
-        self.assertIn(b'href="/neostaffing/org-chart"', response.data)
-        self.assertIn(b'href="/neostaffing/reports"', response.data)
-        self.assertIn(b'href="/neostaffing/attendance"', response.data)
-        menu=document(response).one('nav',**{'aria-label':'NeoStaffing main menu'})
-        self.assertEqual([n.attrs['href'] for n in menu.findall('a')],['/neostaffing/'+n for n in ('people','org-chart','attendance','reports','shift-flow','settings')])
-        self.assertFalse(menu.findall('a',href='/neostaffing/vacation-selection'))
-        self.assertIn(b"neo-brand--apps", response.data)
-        self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
-        self.assertIn(b"operational-node-topbar", response.data)
-        self.assertNotIn(b"data-operational-sidebar ", response.data)
-        self.assertIn(b"neostaffing-launch-console", response.data)
-        self.assertIn(b"neostaffing-launch-grid", response.data)
-        self.assertIn(b"SHIFT FLOW", response.data)
-        self.assertEqual(len(menu.findall("a")),6)
-        self.assertNotIn(b'href="/neostaffing/people/attendance" class="neostaffing-menu-tile"', response.data)
-        self.assertNotIn(b"APP ROLE", response.data)
-        self.assertNotIn(b"neostaffing-home-header", response.data)
-        self.assertNotIn(b"Total People", response.data)
-        self.assertNotIn(b"Active Roster", response.data)
-        self.assertNotIn(b"Assigned", response.data)
-        self.assertNotIn(b"Unassigned", response.data)
-        self.assertNotIn(b"Work Areas", response.data)
-        self.assertNotIn(b"Today Attendance", response.data)
-        self.assertNotIn(b"neostaffing-home-summary", response.data)
-        self.assertNotIn(b"TOTAL PLANNED STAFFING", response.data)
-        self.assertNotIn(b"STAFFING BOARD", response.data)
-        self.assertNotIn(b"NeoMotherBrain", response.data)
-        self.assertNotIn("Change Characters",menu.text)
+        page = document(response)
+        menu = page.one("aside", "v11-sidebar").one("nav", **{"aria-label": "Staffing workspaces"})
+        self.assertEqual([a.attrs["href"] for a in menu.findall("a")], [
+            "/neostaffing", "/neostaffing/attendance", "/neostaffing/board",
+            "/neostaffing/people", "/neostaffing/org-chart", "/neostaffing/reports",
+        ])
+        self.assertIn("Sort Overview", page.one("h1").text)
+        self.assertIn("Assigned", response.text)
+        self.assertIn("HERE", response.text)
+        self.assertFalse(menu.findall("a", href="/neostaffing/shift-flow"))
+        self.assertIn("No current Sort", response.text)
+        self.assertNotIn("APP ROLE", response.text)
+
 
     def test_landing_hides_destinations_when_existing_thresholds_deny_them(self):
         user = self._user("staffing_landing_viewer")
@@ -153,23 +132,19 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self._login(user.username)
 
         response = self.client.get("/neostaffing")
-        landing_menu = response.data.split(
-            b'<nav class="neostaffing-primary-menu', 1
-        )[1].split(b"</nav>", 1)[0]
-
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'href="/neostaffing/people"', landing_menu)
-        self.assertIn(b'href="/neostaffing/shift-flow"', landing_menu)
-        # Ordinary read-only node pages now rely on NeoStaffing node access;
-        # changing obsolete per-page view thresholds must not hide them.
-        self.assertIn(b'href="/neostaffing/reports"', landing_menu)
-        full=document(response).one('nav',**{'aria-label':'NeoStaffing screens'})
-        self.assertTrue(full.findall('a',href='/neostaffing/requests'))
-        self.assertTrue(full.findall('a',href='/neostaffing/notifications'))
-        self.assertFalse(document(response).findall('a',href='/neostaffing/bulk-change'))
-        self.assertFalse(document(response).findall('a',href='/neostaffing/app-management/employee-recovery'))
-        self.assertNotIn(b'href="/neostaffing/vacation-selection"', landing_menu)
-        self.assertNotIn(b'href="/neostaffing/permissions"', landing_menu)
+        page = document(response)
+        main = page.one("aside", "v11-sidebar").one("nav", **{"aria-label": "Staffing workspaces"})
+        for route in ("people", "reports", "board"):
+            self.assertTrue(main.findall("a", href=f"/neostaffing/{route}"))
+        tools = page.one("nav", **{"aria-label": "More tools"})
+        for route in ("requests", "notifications"):
+            self.assertTrue(tools.findall("a", href=f"/neostaffing/{route}"))
+        for route in ("bulk-change", "app-management/employee-recovery", "permissions"):
+            self.assertFalse(page.findall("a", href=f"/neostaffing/{route}"), route)
+        self.assertFalse(main.findall("a", href="/neostaffing/vacation-selection"))
+        vacation = self.client.get("/neostaffing/vacation-selection")
+        self.assertEqual(bool(tools.findall("a", href="/neostaffing/vacation-selection")), vacation.status_code == 200)
 
     def test_staffing_dashboard_sidebar_and_mobile_menu_share_ordered_destinations(self):
         user = self._user("staffing_nav_order")
@@ -178,30 +153,27 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self._login(user.username)
 
         expected = [
-            b"/neostaffing/people", b"/neostaffing/org-chart",
-            b"/neostaffing/attendance", b"/neostaffing/reports",
-            b"/neostaffing/shift-flow", b"/neostaffing/settings", b"/neostaffing/staffing-groups",
-            b"/neostaffing/requests", b"/neostaffing/notifications",
-            b"/neostaffing/bulk-change", b"/neostaffing/employee-records",
-            b"/neostaffing/timecards",b"/neostaffing/accountability",b"/neostaffing/vacation-selection",
+            "/neostaffing", "/neostaffing/attendance", "/neostaffing/board",
+            "/neostaffing/people", "/neostaffing/org-chart", "/neostaffing/reports",
         ]
+        for path in ("/neostaffing", "/neostaffing/people", "/neostaffing/menu"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                page = document(response)
+                sidebar = page.one("aside", "v11-sidebar")
+                nav = sidebar.one("nav", **{"aria-label": "Staffing workspaces"})
+                self.assertEqual([link.attrs["href"] for link in nav.findall("a")], expected)
+                dock = page.one("nav", **{"aria-label": "Mobile Staffing workspaces"})
+                self.assertEqual([link.attrs["href"] for link in dock.findall("a")], expected[:4] + ["/neostaffing/menu"])
+                if path == "/neostaffing/menu":
+                    menu = page.one("nav", "v11-menu-list")
+                    self.assertEqual([link.attrs["href"] for link in menu.findall("a")], expected)
+                more = sidebar.one("details", "v11-more")
+                self.assertNotIn("open", more.attrs)
+                self.assertTrue(more.findall("a", href="/neostaffing/settings"))
+                self.assertFalse(page.findall("a", href="/neostaffing/app-management/employee-recovery"))
 
-        def destinations(html, label):
-            nav = re.search(rb'<nav[^>]*aria-label="' + label + rb'"[^>]*>(.*?)</nav>', html, re.S)
-            self.assertIsNotNone(nav, label)
-            return re.findall(rb'<a[^>]*href="([^"]+)"', nav.group(1))
-
-        dashboard = self.client.get("/neostaffing")
-        section = self.client.get("/neostaffing/people")
-        self.assertEqual(dashboard.status_code, 200)
-        self.assertEqual(section.status_code, 200)
-        self.assertEqual(destinations(dashboard.data, b"NeoStaffing main menu"), expected[:6])
-        self.assertEqual(destinations(dashboard.data, b"NeoStaffing screens"), expected)
-        self.assertEqual(destinations(section.data, b"NeoStaffing menu"), expected)
-        self.assertEqual(destinations(section.data, b"NeoStaffing screens"), expected)
-        for html in (dashboard.data, section.data):
-            self.assertNotIn(b'href="/neostaffing" aria-label="NeoStaffing home"', html)
-            self.assertNotIn(b'href="/neostaffing/app-management/employee-recovery"',html)
 
     def test_staffing_menus_omit_items_without_permission(self):
         user = self._user("staffing_nav_watcher")
@@ -231,20 +203,15 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
-                self.assertNotIn(b'aria-label="NeoStaffing section navigation"', response.data)
-                self.assertEqual(response.data.count(b'data-operational-sidebar '), 1)
-                self.assertEqual(response.data.count(b'data-staffing-secondary '), 0)
-                for label in (b"People", b"Org Chart", b"Reports", b"Attendance"):
-                    self.assertIn(label, response.data)
-                self.assertIn(active_label, response.data)
-                self.assertIn(b"mobile-bottom-nav", response.data)
-                self.assertIn(b"<strong>" + active_label + b"</strong>", response.data)
-                self.assertNotIn(b"neostaffing-mobile-tabs", response.data)
-                self.assertNotIn(b"<strong>DASHBOARD</strong>", response.data)
-                self.assertNotIn(b"APP ROLE", response.data)
-                self.assertNotIn(b"neostaffing-rail-brand", response.data)
-                self.assertNotIn(b"neostaffing-rail-icon", response.data)
-                self.assertNotIn(b"neostaffing-rail-title", response.data)
+                page = document(response)
+                sidebar = page.one("aside", "v11-sidebar")
+                nav = sidebar.one("nav", **{"aria-label": "Staffing workspaces"})
+                self.assertEqual(nav.one("a", **{"aria-current": "page"}).attrs["href"], path)
+                self.assertIn(active_label.decode(), nav.text)
+                self.assertEqual(len(page.findall("nav", "v11-dock")), 1)
+                self.assertFalse(page.findall(**{"data-operational-sidebar": None}))
+                self.assertFalse(page.findall(**{"data-staffing-secondary": None}))
+
 
     def test_shift_flow_page_renders_active_shift_assignment(self):
         user = self._user("staffing_shift_flow_viewer")
@@ -575,18 +542,20 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         one_scope = self.client.get("/neostaffing")
 
         self.assertEqual(one_scope.status_code, 200)
-        self.assertIn(b"TAKE ATTENDANCE", one_scope.data)
-        self.assertIn(f"/neostaffing/attendance?work_area_id={work_area.id}".encode(), one_scope.data)
-        self.assertNotIn(b"MY AREAS", one_scope.data)
+        menu = document(one_scope).one("nav", **{"aria-label": "Quick actions"})
+        self.assertTrue(menu.findall("a", href="/neostaffing/attendance"))
+        scope = document(one_scope).one("select", id="v11-scope")
+        self.assertTrue(scope.findall("option", value=str(work_area.id)))
 
         staffing_service.create_leadership_assignment(supervisor, second_work_area)
         db.session.commit()
         multiple = self.client.get("/neostaffing")
 
         self.assertEqual(multiple.status_code, 200)
-        self.assertIn(b"MY AREAS", multiple.data)
-        self.assertIn(f"work_area_id={work_area.id}".encode(), multiple.data)
-        self.assertIn(f"work_area_id={second_work_area.id}".encode(), multiple.data)
+        scope = document(multiple).one("select", id="v11-scope")
+        self.assertIn("All My Areas", scope.text)
+        self.assertTrue(scope.findall("option", value=str(work_area.id)))
+        self.assertTrue(scope.findall("option", value=str(second_work_area.id)))
 
     def test_landing_hides_attendance_shortcut_when_management_person_is_missing_for_lower_role(self):
         user = self._user("staffing_missing_person")
@@ -657,16 +626,16 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
-        sort_response = self.client.get(f"/neostaffing/org-chart?unit_id={sort.id}")
-        response = self.client.get(f"/neostaffing/org-chart?unit_id={operation.id}")
-        department_response = self.client.get(f"/neostaffing/org-chart?unit_id={department.id}")
-        work_area_response = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        sort_response = self.client.get(f"/neostaffing/org-chart?view=structure&unit_id={sort.id}")
+        response = self.client.get(f"/neostaffing/org-chart?view=structure&unit_id={operation.id}")
+        department_response = self.client.get(f"/neostaffing/org-chart?view=structure&unit_id={department.id}")
+        work_area_response = self.client.get(f"/neostaffing/org-chart?view=structure&unit_id={work_area.id}")
 
         self.assertEqual(sort_response.status_code, 200)
-        self.assertIn(b"data-people-tree", sort_response.data)
-        self.assertIn(b"neostaffing-org-console", sort_response.data)
+        self.assertIn(b'aria-label="Operational structure"', sort_response.data)
+        self.assertIn(b"v11-structure-layout", sort_response.data)
         self.assertNotIn(b"neostaffing-dashboard-shell", sort_response.data)
-        self.assertIn(b"data-people-tree", sort_response.data)
+        self.assertIn(b'aria-label="Operational structure"', sort_response.data)
         self.assertIn(b"+ Operation", sort_response.data)
         self.assertNotIn(b"#management-editor", sort_response.data)
         self.assertEqual(response.status_code, 200)
@@ -675,7 +644,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"East Shift Department", response.data)
         self.assertIn(b"Load Planning", response.data)
         self.assertIn(b"EBM", response.data)
-        self.assertIn(b"data-people-tree", response.data)
+        self.assertIn(b'aria-label="Operational structure"', response.data)
         self.assertNotIn(b"Child /", response.data)
         self.assertNotIn(b"0 Assigned", response.data)
         self.assertIn(b"+ Department", response.data)
@@ -686,7 +655,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(work_area_response.status_code, 200)
         self.assertIn(b'aria-current="page"', work_area_response.data)
         self.assertIn(b'aria-current="page"', work_area_response.data)
-        self.assertIn(b"No active management assigned to this scope.", work_area_response.data)
+        self.assertNotIn(b"Management reporting hierarchy", work_area_response.data)
         self.assertNotIn(b"Child Count", work_area_response.data)
         self.assertNotIn(b"Assigned Count", work_area_response.data)
         self.assertNotIn(b"neostaffing-tree-stats", work_area_response.data)
@@ -761,7 +730,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        self.assertEqual(added.location, f"/neostaffing/org-chart?unit_id={operation.id}")
+        self.assertEqual(added.location, f"/neostaffing/org-chart?unit_id={operation.id}&view=structure")
         after_add = self.client.get(added.location)
         self.assertIn(b"State Child Area", after_add.data)
         self.assertIn(b'aria-current="page"', after_add.data)
@@ -779,7 +748,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        self.assertEqual(updated.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+        self.assertEqual(updated.location, f"/neostaffing/org-chart?unit_id={work_area.id}&view=structure")
         self.assertEqual(db.session.get(StaffingUnit, work_area.id).parent_id, operation.id)
         self.assertEqual(db.session.get(StaffingUnit, work_area.id).required_headcount, 5)
 
@@ -788,7 +757,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             data={"return_unit_id": str(work_area.id)},
             follow_redirects=False,
         )
-        self.assertEqual(toggled.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+        self.assertEqual(toggled.location, f"/neostaffing/org-chart?unit_id={work_area.id}&view=structure")
 
         assigned = self.client.post(
             "/neostaffing/app-management/management-assignments",
@@ -817,11 +786,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             data={"required_headcount": "6", "return_unit_id": str(work_area.id)},
             follow_redirects=False,
         )
-        self.assertEqual(headcount.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+        self.assertEqual(headcount.location, f"/neostaffing/org-chart?unit_id={work_area.id}&view=structure")
 
         restored = self.client.get(headcount.location)
         self.assertEqual(restored.status_code, 200)
-        self.assertIn(b"data-people-tree", restored.data)
+        self.assertIn(b'aria-label="Operational structure"', restored.data)
         self.assertIn(b'aria-current="page"', restored.data)
         self.assertIn(f'name="return_unit_id" value="{work_area.id}"'.encode(), restored.data)
 
@@ -848,18 +817,20 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         attendance = self.client.get("/neostaffing/reports?report_type=attendance")
 
         self.assertEqual(staffing.status_code, 200)
-        self.assertIn(b"neostaffing-reports-console", staffing.data)
-        self.assertIn(b"MORE FILTERS", staffing.data)
-        self.assertIn(b"DEDUPLICATED EMPLOYEE ROSTER", staffing.data)
-        self.assertIn(b"neostaffing-reports-table-wrap", staffing.data)
-        self.assertIn(b"STAFFING REPORT", staffing.data)
-        self.assertIn(b"25001", staffing.data)
-        self.assertIn(b"Active", staffing.data)
+        page = document(staffing)
+        self.assertEqual(page.one("h1").text, "Daily Area Staffing")
+        self.assertNotIn(b"25001", staffing.data)
+        self.assertIn(b"No retained area headcounts", staffing.data)
         self.assertEqual(seniority.status_code, 200)
-        self.assertIn(b"SENIORITY REPORT", seniority.data)
-        self.assertIn(b"Night Sort / Shift Operation / East Shift Department / EBM", seniority.data)
+        self.assertEqual(document(seniority).one("h1").text, "Seniority")
+        self.assertIn(b"25001", seniority.data)
+        self.assertIn(b"EBM", seniority.data)
+        self.assertNotIn(b"555-555-0100", seniority.data)
         self.assertEqual(attendance.status_code, 200)
-        self.assertIn(b"ATTENDANCE REPORT", attendance.data)
+        page = document(attendance)
+        self.assertEqual(page.one("h1").text, "Employee Attendance History")
+        self.assertTrue(page.findall("input", type="search", name="search"))
+        self.assertFalse(page.findall("select", name="person_id"))
 
     def test_reports_filter_staffing_and_attendance_by_scope_and_status(self):
         user = self._user("staffing_reports_filters")
@@ -906,12 +877,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         staffing = self.client.get(f"/neostaffing/reports?report_type=staffing&work_area_id={work_area.id}")
         attendance = self.client.get(
-            f"/neostaffing/reports?report_type=attendance&operation_id={operation.id}&attendance_date=2026-07-03&attendance_status=call_in"
+            f"/neostaffing/reports?report_type=attendance&operation_id={operation.id}&attendance_date=2026-07-03&search=RF100&person_id={avery.id}"
         )
 
         self.assertEqual(staffing.status_code, 200)
-        self.assertIn(b"RF100", staffing.data)
-        self.assertNotIn(b"RF101", staffing.data)
+        self.assertIn(b"Avery Filter", staffing.data)
+        self.assertNotIn(b"Morgan Filter", staffing.data)
         self.assertIn(b"Part Time", staffing.data)
         self.assertEqual(attendance.status_code, 200)
         self.assertIn(b"RF100", attendance.data)
@@ -922,7 +893,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         user = self._user("reports_date_admin")
         self._grant_app_access(user, "neostaffing", "master")
         sort, operation, department, area = self._staffing_hierarchy()
-        self._current_night_operation()
+        current = self._current_night_operation()
+        previous = SortDateOperation(
+            gateway_id=current.gateway_id, gateway_code=current.gateway_code,
+            sort_name=current.sort_name, sort_date=date(2026, 7, 2),
+        )
+        db.session.add(previous)
+        db.session.flush()
         for index, recorded_date in enumerate((date(2026, 7, 3), date(2026, 7, 2))):
             person = staffing_service.create_person(dict(
                 employee_id=f"REPORTDAY{index}", first_name="Report", last_name=f"Day{index}",
@@ -932,19 +909,18 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 person_id=person.id, attendance_date=recorded_date, sort_unit_id=sort.id,
                 operation_unit_id=operation.id, department_unit_id=department.id,
                 work_area_unit_id=area.id, status="here",
+                sort_date_operation_id=(current if index == 0 else previous).id,
             ))
         db.session.commit()
         self._login(user.username)
-        url = f"/neostaffing/reports?report_type=attendance&work_area_id={area.id}"
+        url = f"/neostaffing/reports?report_type=attendance&work_area_id={area.id}&search=REPORTDAY"
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn("REPORTDAY0", html)
         self.assertNotIn("REPORTDAY1", html)
-        self.assertEqual(html.count('name="attendance_date"'), 1)
-        rail = html.split('aria-label="Scope">', 1)[1].split('</div>', 1)[0]
-        self.assertIn('name="attendance_date" value="2026-07-03" required', rail)
-        self.assertIn("FILTERS · 2026-07-03", html)
+        self.assertIn('name="from_date" value="2026-07-03"', html)
+        self.assertIn('name="through_date" value="2026-07-03"', html)
         response = self.client.get(url + "&attendance_date=2026-07-02")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"REPORTDAY1", response.data)
@@ -970,22 +946,19 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             with self.subTest(family=family):
                 response = self.client.get(f'/neostaffing/reports?report_type={family}&work_area_id={area.id}&classification=part_time&active=inactive')
                 self.assertEqual(response.status_code, 200)
-                html = response.get_data(as_text=True)
-                self.assertNotIn('data-staffing-secondary ', html)
-                self.assertNotIn('name="report_type">', html)
-                self.assertNotIn('RUN REPORT', html)
-                self.assertEqual(html.count('aria-label="Report families"'), 1)
-                tabs = html.split('aria-label="Report families"', 1)[1].split('</nav>', 1)[0]
-                self.assertEqual(tabs.count('<a '), 5)
-                for label in ('STAFFING', 'SENIORITY', 'ATTENDANCE', 'VACATION CALENDARS', 'UNION SENIORITY'):
-                    self.assertIn(label, tabs)
-                self.assertIn('classification=part_time', tabs)
-                self.assertIn('active=inactive', tabs)
-                self.assertIn('data-report-filter-toggle', html)
-                if family in ('staffing','seniority','attendance'):
-                    self.assertIn('data-report-scope="work_area"', html)
-                    self.assertIn('Night Sort › Shift Operation › East Shift Department › EBM', html)
-                    self.assertIn('value="inactive" selected', html)
+                page = document(response)
+                self.assertFalse(page.findall(**{"data-staffing-secondary": None}))
+                if family in ("staffing", "seniority", "attendance"):
+                    picker = page.one("select", name="report_type")
+                    self.assertEqual([option.attrs["value"] for option in picker.findall("option")],
+                                     ["staffing", "attendance", "seniority"])
+                    self.assertEqual(picker.one("option", selected=None).attrs["value"], family)
+                    form = page.one("form", "v11-report-filters")
+                    self.assertEqual(form.one("input", name="work_area_id").attrs["value"], str(area.id))
+                    self.assertEqual(form.one("select", name="classification").one("option", selected=None).attrs["value"], "part_time")
+                    self.assertIn("Night Sort / Shift Operation / East Shift Department / EBM", page.one("p", "v11-report-scope").text)
+                else:
+                    self.assertTrue(page.findall("nav", **{"aria-label": "Report families"}))
         self.client.get('/logout')
         stranger = self._user('console_stranger')
         db.session.commit()
@@ -1025,7 +998,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         for family in ('staffing', 'seniority', 'attendance'):
             page = self.client.get('/neostaffing/reports?report_type=' + family)
             self.assertEqual(page.status_code, 200)
-            self.assertIn(f'<option value="{department.id}" selected'.encode(), page.data)
+            scope = document(page).one("select", id="v11-scope")
+            self.assertTrue(scope.findall("option", value=str(department.id)))
+            self.assertTrue(scope.findall("option", value=str(area.id)))
+            self.assertFalse(scope.findall("option", value=str(other_sort.id)))
 
     def test_reports_query_budgets_do_not_grow_per_employee(self):
         from sqlalchemy import event
@@ -1116,7 +1092,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
     def test_legacy_people_management_get_pages_redirect_to_current_flow(self):
         paths = {
             "/neostaffing/app-management": "/neostaffing/people",
-            "/neostaffing/app-management/planned-staffing": "/neostaffing/org-chart",
+            "/neostaffing/app-management/planned-staffing": "/neostaffing/org-chart?view=structure",
             "/neostaffing/app-management/people": "/neostaffing/people",
             "/neostaffing/app-management/work-assignments": "/neostaffing/people",
             "/neostaffing/app-management/management-assignments": "/neostaffing/org-chart",
@@ -1173,7 +1149,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             b"PEOPLE CONTROL DECK",
         ):
             self.assertNotIn(stale_label, response.data)
-        self.assertIn(b"data-people-tree-scroll", response.data)
+        self.assertIn(b'id="v11-scope"', response.data)
         self.assertIn(b"ADD MANAGEMENT", response.data)
         self.assertIn(b"ADD EMPLOYEE", response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
@@ -1259,7 +1235,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(people_page.status_code, 200)
-        self.assertIn(b"data-people-tree-scroll", people_page.data)
+        self.assertIn(b'id="v11-scope"', people_page.data)
         self.assertEqual(created.status_code, 302)
         self.assertEqual(updated.status_code, 302)
         self.assertEqual(db.session.get(StaffingPerson, person.id).last_name, "Updated")
@@ -1312,10 +1288,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
-        hierarchy = self.client.get("/neostaffing/org-chart")
+        hierarchy = self.client.get("/neostaffing/org-chart?view=structure")
         self.assertEqual(hierarchy.status_code, 200)
-        self.assertIn(b"data-people-tree", hierarchy.data)
-        self.assertIn(b"neostaffing-org-console", hierarchy.data)
+        self.assertIn(b'aria-label="Operational structure"', hierarchy.data)
+        self.assertIn(b"v11-structure-layout", hierarchy.data)
         self.assertIn(b"+ Sort", hierarchy.data)
         self.assertNotIn(b"is-tree-only", hierarchy.data)
         self.assertNotIn(b"<h2>DETAIL</h2>", hierarchy.data)
@@ -1324,10 +1300,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         people_page = self.client.get(f"/neostaffing/people?work_area_id={work_area.id}")
         self.assertEqual(people_page.status_code, 200)
-        self.assertIn(b"data-people-tree-scroll", people_page.data)
+        self.assertIn(b'id="v11-scope"', people_page.data)
         self.assertIn(b"ADD EMPLOYEE", people_page.data)
         self.assertIn(b"neostaffing-people-roster-table", people_page.data)
-        self.assertIn(b"neostaffing-people-detail-drawer", people_page.data)
+        self.assertIn(b"v11-people-inspector", people_page.data)
         self.assertNotIn(b"PEOPLE CONTROL DECK", people_page.data)
         self.assertNotIn(b"WORK AREA ASSIGNMENT DECK", people_page.data)
 
@@ -1353,7 +1329,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         page = self.client.get(f"/neostaffing/app-management/planned-staffing?work_area_id={work_area.id}", follow_redirects=False)
         self.assertEqual(page.status_code, 302)
-        self.assertEqual(page.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+        self.assertEqual(page.location, f"/neostaffing/org-chart?view=structure&unit_id={work_area.id}")
 
         update = self.client.post(
             f"/neostaffing/app-management/planned-staffing/{work_area.id}/update",
@@ -1387,7 +1363,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         operator_client = self._logged_in_client(lower.username)
         blocked = operator_client.get("/neostaffing/app-management/planned-staffing", follow_redirects=False)
         self.assertEqual(blocked.status_code, 302)
-        self.assertEqual(blocked.location, "/neostaffing/org-chart")
+        self.assertEqual(blocked.location, "/neostaffing/org-chart?view=structure")
 
         self.assertIsNotNone(second_work_area)
 
@@ -1420,8 +1396,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
-        response = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
-        defaulted = self.client.get(f"/neostaffing/org-chart?unit_id={default_area.id}")
+        response = self.client.get(f"/neostaffing/org-chart?view=structure&unit_id={work_area.id}")
+        defaulted = self.client.get(f"/neostaffing/org-chart?view=structure&unit_id={default_area.id}")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Work Area", response.data)
@@ -1466,7 +1442,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         response = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"MANAGEMENT", response.data)
+        self.assertIn(b"Management reporting hierarchy", response.data)
         self.assertIn(b"Scope Leader", response.data)
         self.assertNotIn(b"Child Count", response.data)
         self.assertNotIn(b"Assigned Count", response.data)
@@ -1524,8 +1500,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         master_client = self._logged_in_client(master.username)
-        master_tree = master_client.get("/neostaffing/org-chart")
-        master_page = master_client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        master_tree = master_client.get("/neostaffing/org-chart?view=structure")
+        master_page = master_client.get(f"/neostaffing/org-chart?view=structure&unit_id={work_area.id}")
         created_structure = master_client.post(
             "/neostaffing/app-management/hierarchy/units",
             data={"unit_type": "department", "parent_id": str(operation.id), "name": "Allowed Org Dept"},
@@ -1547,7 +1523,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"+ People", simulator_page.data)
         self.assertNotIn(b"+ PT Sup", simulator_page.data)
         self.assertNotIn(b"Add/Assign People", simulator_page.data)
-        self.assertIn(b"Management / Reports To", simulator_page.data)
+        self.assertIn(b"Management reporting hierarchy", simulator_page.data)
         self.assertNotIn(b"STRUCTURE ACTIONS", simulator_page.data)
         self.assertNotIn(b"SAVE UNIT", simulator_page.data)
         self.assertEqual(assigned.status_code, 302)
@@ -1589,8 +1565,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(master_page.status_code, 200)
         self.assertIn(b"+ Sort", master_tree.data)
         self.assertIn(b"STRUCTURE ACTIONS", master_page.data)
-        self.assertIn(b"SAVE UNIT", master_page.data)
-        self.assertIn(b"DEACTIVATE", master_page.data)
+        self.assertIn(b"Save Unit", master_page.data)
+        self.assertIn(b"Deactivate", master_page.data)
         self.assertIn(b"Move / Parent", master_page.data)
         self.assertEqual(created_structure.status_code, 302)
         self.assertIsNotNone(StaffingUnit.query.filter_by(name="Allowed Org Dept").first())
@@ -1622,7 +1598,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/neostaffing/reports?report_type=seniority")
         self.assertEqual(reports.status_code, 200)
-        self.assertIn(b"SENIORITY REPORT", reports.data)
+        self.assertIn(b"<h1>Seniority</h1>", reports.data)
         self.assertNotIn(b"neostaffing-seniority-workspace", reports.data)
         self.assertIn(b'href="/neostaffing/people"', dashboard.data)
         self.assertIn(b'href="/neostaffing/org-chart"', dashboard.data)
@@ -1693,11 +1669,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         ):
             self.assertIn(expected, redirect.location)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"SENIORITY REPORT", response.data)
+        self.assertIn(b"<h1>Seniority</h1>", response.data)
         self.assertIn(b"Night Sort", response.data)
         self.assertIn(b"Shift Operation", response.data)
         self.assertIn(b"E710", response.data)
-        self.assertIn(b"Spotter, Avery", response.data)
+        self.assertIn(b"Avery Spotter", response.data)
         self.assertNotIn(b"E711", response.data)
         self.assertNotIn(b"Loader, Morgan", response.data)
         self.assertIn(b"Rank", response.data)
@@ -1715,16 +1691,16 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"People", response.data)
-        self.assertIn(b"data-people-tree-scroll", response.data)
+        self.assertIn(b'id="v11-scope"', response.data)
         self.assertNotIn(b"Step 1", response.data)
         self.assertNotIn(b"Step 2", response.data)
         self.assertNotIn(b"Select Operation", response.data)
         self.assertIn(b"All People", response.data)
         self.assertIn(b"data-people-search-input", response.data)
-        self.assertIn(b"data-people-sort-picker", response.data)
+        self.assertIn(b'name="unit_id"', response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
         self.assertNotIn(b"Select an organization node", response.data)
-        self.assertIn(b"mobile-bottom-nav", response.data)
+        self.assertIn(b"v11-dock", response.data)
         self.assertNotIn(b"neostaffing-mobile-tabs", response.data)
         self.assertNotIn(b'action-button action-button-secondary" href="/neostaffing/attendance"', response.data)
         self.assertNotIn(b"<span>Limit</span>", response.data)
@@ -1795,7 +1771,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b'data-management-current-scope hidden', people_page.data)
         self.assertIn(f'value="{work_area.id}" data-unit-type="work_area" data-current-scope="1" selected'.encode(), people_page.data)
         self.assertNotIn(b">ASSIGN</button>", org_page.data)
-        self.assertIn(b"Management / Reports To", org_page.data)
+        self.assertIn(b"Management reporting hierarchy", org_page.data)
 
         assigned = self.client.post(
             "/neostaffing/app-management/management-assignments",
@@ -1868,32 +1844,30 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(initial.status_code, 200)
-        self.assertIn(b"data-people-tree-scroll", initial.data)
-        self.assertIn(b"neostaffing-people-org-tree", initial.data)
-        self.assertIn(b"data-people-tree-toggle", initial.data)
-        self.assertIn(b"data-people-tree-scroll", initial.data)
-        self.assertIn(b"neostaffing_scope_rail.js", initial.data)
-        self.assertIn(b"data-people-tree-item", initial.data)
+        self.assertIn(b'id="v11-scope"', initial.data)
+        scope = document(initial).one("select", id="v11-scope")
+        for unit in (sort, operation, department, work_area, direct_work_area):
+            self.assertTrue(scope.findall("option", value=str(unit.id)))
         self.assertNotIn(b"Step 1", initial.data)
         self.assertNotIn(b"LOAD ROSTER", initial.data)
-        self.assertIn(b"+ ADD MANAGEMENT", initial.data)
-        self.assertIn(b"+ ADD EMPLOYEE", initial.data)
+        self.assertIn(b'data-people-open-add="management"', initial.data)
+        self.assertIn(b'data-people-open-add="employee"', initial.data)
         self.assertIn(b'data-people-add-drawer="employee"', initial.data)
         self.assertIn(b"data-employee-work-area-picker", initial.data)
         self.assertNotIn(b"BULK ADD EMPLOYEES", initial.data)
 
         self.assertEqual(by_sort.status_code, 200)
         self.assertIn(b"Shift Operation", by_sort.data)
-        self.assertIn(b"+ ADD MANAGEMENT", by_sort.data)
+        self.assertIn(b'data-people-open-add="management"', by_sort.data)
 
         self.assertEqual(by_operation.status_code, 200)
         self.assertIn(b"East Shift Department", by_operation.data)
         self.assertIn(b"Load Planning", by_operation.data)
-        self.assertIn(b"+ ADD MANAGEMENT", by_operation.data)
+        self.assertIn(b'data-people-open-add="management"', by_operation.data)
 
         self.assertEqual(by_department.status_code, 200)
         self.assertIn(b"EBM", by_department.data)
-        self.assertIn(b"+ ADD MANAGEMENT", by_department.data)
+        self.assertIn(b'data-people-open-add="management"', by_department.data)
 
         self.assertEqual(by_direct_work_area.status_code, 200)
         self.assertIn(b"ADD EMPLOYEE", by_direct_work_area.data)
@@ -1905,7 +1879,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"neostaffing-people-roster-table", by_direct_work_area.data)
         self.assertIn(b"PD100", by_direct_work_area.data)
         self.assertIn(b"Load Planning", by_direct_work_area.data)
-        self.assertIn(b"neostaffing-people-detail-drawer", by_direct_work_area.data)
+        self.assertIn(b"v11-people-inspector", by_direct_work_area.data)
         self.assertNotIn(b"/neostaffing/people/attendance", by_direct_work_area.data)
 
     def test_people_view_blocks_user_without_neostaffing_access(self):
@@ -1981,13 +1955,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"EBM", response.data)
         self.assertIn(b"East Shift Department", response.data)
         self.assertIn(b"Shift Operation", response.data)
-        self.assertIn(b"neostaffing-people-detail-drawer", response.data)
+        self.assertIn(b"v11-people-inspector", response.data)
         self.assertIn(b"REMOVE FROM WORK AREA", response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
-        self.assertIn(b"+ ADD EMPLOYEE", response.data)
+        self.assertIn(b'data-people-open-add="employee"', response.data)
         self.assertNotIn(b"OPEN IN APP MANAGEMENT", response.data)
         self.assertIn(b"All statuses", response.data)
-        self.assertNotIn(b"Roster Status", response.data)
+        self.assertIn(b'name="active" data-people-auto-submit', response.data)
         self.assertNotIn(b"roster_status", response.data)
         self.assertNotIn(b"<span>Status</span>", response.data)
         roster = response.data.split(b"<tbody>", 1)[1].split(b"</tbody>", 1)[0]
@@ -2001,7 +1975,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Part Time Supervisor", leadership.data)
         self.assertNotIn(b"E810", leadership.data)
         self.assertEqual(supervisor_selected.status_code, 200)
-        self.assertIn(b"neostaffing-people-detail-drawer", supervisor_selected.data)
+        self.assertIn(b"v11-people-inspector", supervisor_selected.data)
         self.assertEqual(document(employee_editor(self,self.client,supervisor_selected,supervisor.id)).one('input',name='employee_id').attrs['value'],'E812')
         supervisor_roster = supervisor_selected.data.split(b"<tbody>", 1)[1].split(b"</tbody>", 1)[0]
         self.assertNotIn(b"E812", supervisor_roster)
@@ -2276,8 +2250,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b"MANAGEMENT", page.data)
-        self.assertEqual(len(document(page).findall('h1',id='staffing-org-title')),1)
+        self.assertIn(b"Management Explorer", page.data)
+        self.assertEqual(len(document(page).findall('h1')),1)
         self.assertNotIn(b">ASSIGN</button>", page.data)
         self.assertNotIn(b"#management-editor", page.data)
         self.assertNotIn(b"PTC-100", page.data)
@@ -2776,8 +2750,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"AO100", page.data)
         self.assertIn(b"AO101", page.data)
         self.assertIn(b'option value="call_in" selected', page.data)
-        self.assertIn(b"On Payroll", page.data)
-        self.assertIn(b"2", page.data)
+        self.assertIn(b"Assigned", page.data)
+        self.assertIn(b"<strong>2</strong>", page.data)
 
     def test_people_single_and_bulk_employee_create_assign_to_selected_work_area(self):
         simulator = self._user("staffing_people_create_simulator")
@@ -2959,7 +2933,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(global_page.status_code, 200)
-        self.assertIn(b"+ ADD MANAGEMENT", global_page.data)
+        self.assertIn(b'data-people-open-add="management"', global_page.data)
         self.assertIn(b"Initial Assignment", global_page.data)
         self.assertNotIn(b"BULK ADD EMPLOYEES", global_page.data)
         self.assertIn(f'data-unit-id="{work_area.id}"'.encode(), scoped_page.data)
@@ -3099,7 +3073,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         from tests.presentation_contracts import assert_scripts_parse
         root=assert_scripts_parse(self,page)
-        for marker in ('data-people-tree-toggle','data-people-open-add','data-people-add-drawer','data-people-smart-form'):
+        self.assertTrue(root.findall('select', id='v11-scope'))
+        for marker in ('data-people-open-add','data-people-add-drawer','data-people-smart-form'):
             self.assertTrue(root.findall(**{marker:None}),marker)
         for form in root.findall('form',**{'data-people-smart-form':None}):
             self.assertEqual(form.attrs.get('method','get').lower(),'post')
@@ -3166,8 +3141,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         management = html[management_start:employee_start]
         employee = html[employee_start:bulk_start]
 
-        self.assertIn("+ ADD MANAGEMENT", html)
-        self.assertIn("+ ADD EMPLOYEE", html)
+        self.assertIn('data-people-open-add="management"', html)
+        self.assertIn('data-people-open-add="employee"', html)
         self.assertIn("BULK ADD", html)
         for classification in (
             "part_time_supervisor",
@@ -3292,7 +3267,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(date_input.attrs['placeholder'],'MM/DD/YYYY')
         self.assertEqual(date_input.attrs['inputmode'],'numeric')
         self.assertEqual(date_input.attrs['maxlength'],'10')
-        self.assertIn(b">02/03/2026</td>", edit_page.data)
+        self.assertIn(b">Feb 03, 2026</dd>", edit_page.data)
 
         invalid_date = client.post(
             f"/neostaffing/app-management/people/{person.id}/update",
