@@ -1,0 +1,254 @@
+/* Master Schedule and the two Manage Sort bodies share the same planning surface. */
+.mb-planning.panel {
+    --mb-line: #384751;
+    --mb-muted: #b4c3cc;
+    --mb-surface: #172229;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin-inline: auto;
+    padding: clamp(10px, 1.6vw, 24px);
+    border: 0;
+    background: #11191f;
+    color: #f0f4f6;
+    box-shadow: none;
+    font-family: system-ui, sans-serif;
+    text-align: left;
+}
+.mb-planning .manage-sort-shell { margin-top: 0; }
+.mb-planning .mb-heading, .mb-planning .mb-section-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 18px;
+}
+.mb-planning .mb-heading { margin-bottom: 16px; }
+.mb-heading p, .mb-section-title > span {
+    margin: 0 0 4px;
+    color: var(--mb-muted);
+    font: 550 .8rem/1.4 system-ui, sans-serif;
+}
+.mb-planning .mb-heading h1 {
+    margin: 0;
+    color: inherit;
+    font: 650 clamp(1.22rem, 2vw, 1.65rem)/1.2 system-ui, sans-serif;
+    letter-spacing: -.025em;
+    text-transform: none;
+}
+.mb-planning .mb-jumps, .mb-planning .mb-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.mb-jumps a, .mb-planning .action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 5px 12px;
+    color: #f1f5f8;
+    font: 600 .84rem/1.25 system-ui, sans-serif;
+    letter-spacing: normal;
+    text-decoration: none;
+    border: 1px solid #526570;
+    border-radius: 6px;
+    background: #25353f;
+    box-shadow: none;
+}
+.mb-jumps a b { color: #c1ced7; font-variant-numeric: tabular-nums; }
+.mb-planning :is(.mb-jumps a, .action-button):hover { background: #354953; }
+.mb-planning :focus-visible { outline: 2px solid #a9dcff; outline-offset: 2px; }
+.mb-planning :is(.mb-section, .master-schedule-section, .mb-disclosure) {
+    min-width: 0;
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--mb-line);
+    border-radius: 8px;
+    background: var(--mb-surface);
+    box-shadow: none;
+    text-align: left;
+}
+.mb-planning :is(.mb-section h2, .master-schedule-subheading h2) {
+    color: inherit;
+    margin: 0;
+    font: 650 1rem/1.35 system-ui, sans-serif;
+    letter-spacing: normal;
+}
+.mb-planning .master-schedule-sections { display: block; }
+.mb-planning .master-schedule-section { scroll-margin-top: 90px; }
+.mb-planning .master-schedule-subheading { text-align: left; margin: 0 0 8px; }
+.mb-planning .mb-fields { display: block; min-width: 0; margin: 0; padding: 0; border: 0; }
+.mb-planning .master-board-add-controls { margin: 8px 0 0; justify-content: flex-start; }
+.mb-planning .master-board-table :is(input[type=text], select), .mb-planning .manage-sort-window-form input {
+    min-height: 32px;
+    border: 1px solid #536571;
+    border-radius: 4px;
+    color: #f6f8fa;
+    background: #22313a;
+    box-shadow: none;
+    font: 550 .85rem/1.2 system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+}
+.mb-planning .master-board-table .flight-number-input { font-weight: 700; }
+.mb-planning .master-weekdays label { display: inline-flex; align-items: stretch; }
+.mb-planning .master-weekdays label input { width: 100%; height: 100%; margin: 0; min-height: 0; }
+.mb-planning .master-weekdays span {
+    display: grid;
+    place-items: center;
+    min-width: 24px;
+    min-height: 30px;
+    padding: 0 2px;
+    border-color: #51616a;
+    color: var(--mb-muted);
+    font: 600 .73rem/1 system-ui, sans-serif;
+}
+.mb-planning .master-weekdays input:checked + span { background: #23534f; color: #e5fffa; border-color: #72aba4; }
+.mb-planning .master-active-control { color: #e5fffa; background: #254941; border-color: #567d70; }
+.mb-planning .master-active-control[aria-pressed=false] { color: #e3e9ed; background: #344149; border-color: #697780; }
+.mb-planning .table-row-button { min-height: 30px; font: 600 .8rem/1.1 system-ui, sans-serif; }
+.mb-planning [data-master-error]:not(:empty) { margin: 8px 0; color: #ffbeb8; }
+.mb-planning .manage-sort-detail-list, .mb-planning .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+}
+.mb-planning .manage-sort-detail-list div, .mb-planning .metric-tile {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    padding: 4px 8px;
+    min-height: 0;
+    background: transparent;
+    border: 0;
+    border-left: 2px solid var(--mb-line);
+    border-radius: 0;
+    box-shadow: none;
+}
+.mb-planning .manage-sort-detail-list dt, .mb-planning .metric-tile span {
+    color: var(--mb-muted);
+    font: 550 .78rem/1.25 system-ui, sans-serif;
+}
+.mb-planning .manage-sort-detail-list dd, .mb-planning .metric-tile strong {
+    color: inherit;
+    margin: 0;
+    font: 650 1rem/1.2 system-ui, sans-serif;
+}
+.mb-planning .manage-sort-active-selector { justify-content: start; margin-top: 8px; }
+.mb-planning .manage-sort-active-button[aria-current] { border-color: #d98b83; }
+.mb-planning .manage-sort-window-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    align-items: end;
+    gap: 8px;
+    margin: 12px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--mb-line);
+}
+.mb-planning .mb-disclosure summary { cursor: pointer; font: 600 .9rem/1.45 system-ui, sans-serif; }
+.mb-planning .mb-disclosure p { margin: 8px 0 0; color: var(--mb-muted); font: 400 .86rem/1.5 system-ui, sans-serif; }
+
+@media (min-width: 761px) {
+    .mb-planning .master-board-table { display: table; width: 100%; table-layout: auto; }
+    .mb-planning .master-board-table thead { display: table-header-group; }
+    .mb-planning .master-board-table tbody { display: table-row-group; }
+    .mb-planning .master-board-table tr { display: table-row; }
+    .mb-planning :is(#master-arrivals, #master-departures) .master-board-table :is(th, td) {
+        display: table-cell;
+        width: auto;
+        padding: 5px 3px;
+        border: 0;
+        border-bottom: 1px solid var(--mb-line);
+        text-align: center;
+        vertical-align: middle;
+    }
+    .mb-planning .master-days-cell::before { content: none; }
+    .mb-planning .master-board-table th { color: var(--mb-muted); font: 600 .72rem/1.2 system-ui, sans-serif; }
+    .mb-planning .master-board-table .military-time-select {
+        grid-template-columns: 2em .3em 2em;
+        gap: 0;
+    }
+    .mb-planning .master-board-table .military-time-select input { min-width: 0; width: 100%; }
+}
+/* Preserve all ten departure columns in the narrower tablet workspace. */
+@media (min-width: 761px) and (max-width: 1100px) {
+    .mb-planning.panel { padding: 8px; }
+    .mb-planning .master-schedule-section { padding-inline: 8px; }
+    .mb-planning .master-board-table .military-time-select { grid-template-columns: 26px 3px 26px; }
+    .mb-planning .master-weekdays span { min-width: 21px; }
+    .mb-planning .master-board-table :is(th, td) { white-space: normal; }
+    .mb-planning .master-board-table .flight-number-input { width: 6em; }
+    .mb-planning .master-board-table .airport-code-input { width: 3.5em; }
+}
+@media (max-width: 760px) {
+    .mb-planning.panel { padding: 10px; }
+    .mb-planning .mb-heading { margin-bottom: 10px; }
+    .mb-planning :is(.mb-section, .master-schedule-section, .mb-disclosure) { padding: 10px; }
+    .mb-planning .master-board-table thead { display: none; }
+    .mb-planning .master-board-table, .mb-planning .master-board-table tbody { display: block; width: 100%; }
+    .mb-planning :is(#master-arrivals, #master-departures) .master-board-table tr.master-board-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(0, .78fr) minmax(0, .86fr) minmax(0, 1fr) minmax(32px, .55fr);
+        grid-template-areas: none;
+        align-items: end;
+        gap: 6px;
+        margin: 0;
+        padding: 9px 0;
+        border: 0;
+        border-top: 1px solid var(--mb-line);
+        border-radius: 0;
+        background: transparent;
+    }
+    .mb-planning :is(#master-arrivals, #master-departures) tr.master-board-row td {
+        display: grid;
+        grid-area: auto;
+        gap: 3px;
+        padding: 0;
+        border: 0;
+        min-width: 0;
+        text-align: left;
+    }
+    .mb-planning :is(#master-arrivals, #master-departures) tr.master-board-row .master-days-cell { grid-column: 1 / 4; }
+    .mb-planning :is(#master-arrivals, #master-departures) tr.master-board-row .master-cell-actions {
+        grid-column: 5;
+        grid-row: auto;
+        justify-self: end;
+    }
+    .mb-planning #master-departures tr.master-board-row .master-cell-pure-pull,
+    .mb-planning #master-departures tr.master-board-row .master-cell-mix { grid-column: span 2; }
+    .mb-planning .master-board-table td.master-board-cell::before {
+        display: block;
+        content: attr(data-label);
+        color: var(--mb-muted);
+        font: 550 .68rem/1.1 system-ui, sans-serif;
+        text-align: left;
+    }
+    .mb-planning .master-board-table .military-time-select {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 4px minmax(0, 1fr);
+        width: 100%;
+        gap: 0;
+    }
+    .mb-planning .master-board-table :is(select, input[type=text]), .mb-planning .master-board-table .military-time-select input {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        min-height: 34px;
+        font-size: .82rem;
+        padding-inline: 1px;
+    }
+    .mb-planning .master-board-table select { padding-right: 12px; text-align-last: left; }
+    .mb-planning .master-board-table .master-weekdays { justify-content: start; gap: 3px; }
+    .mb-planning .master-weekdays span { min-width: 0; min-height: 34px; }
+    .mb-planning .master-board-table .master-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+    .mb-planning .manage-sort-window-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .mb-planning .manage-sort-window-form .action-button { grid-column: 1 / -1; }
+    body.mobile-app-chrome .mb-planning:is(.manage-sort-page, .manage-sort-operation-page) {
+        width: 100%;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+    }
+}

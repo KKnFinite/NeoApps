@@ -3,17 +3,29 @@
 {% block title %}Operation {{ operation.id }} | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page manage-sort-sidebar-page manage-sort-operation-page" data-mobile-manage-sort-compact>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="mb-planning panel centered-command-page manage-sort-sidebar-page manage-sort-operation-page" data-mobile-manage-sort-compact>
     {% set manage_sort_sidebar_operation = operation %}
     {% set manage_sort_sidebar_active = "summary" %}
     <div class="manage-sort-shell">
         {% include "neomotherbrain/_manage_sort_sidebar.html" %}
         <div class="manage-sort-main">
-            <div class="section-heading">
-                <h1 class="manage-sort-operation-title neo-page-title">{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date.strftime("%m-%d-%Y") }}</h1>
-            </div>
-
-            <div class="metric-grid">
+            <header class="mb-heading">
+                <div><p>Manage Sort · {{ 'Archived' if operation.archived_at_utc else ('Locked' if operation.locked_at_utc else 'Open') }}</p>
+                <h1 class="manage-sort-operation-title neo-page-title">{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date.strftime("%m-%d-%Y") }}</h1></div>
+            </header>
+            <section class="mb-section">
+                <div class="mb-section-title"><h2>Mission totals</h2>
+                    <span>Generated {{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M UTC") if operation.generated_at_utc else "—" }}</span></div>
+                <dl class="manage-sort-detail-list">
+                    <div><dt>Total missions</dt><dd>{{ mission_count }}</dd></div>
+                    <div><dt>Arrivals</dt><dd>{{ arrival_count }}</dd></div>
+                    <div><dt>Departures</dt><dd>{{ departure_count }}</dd></div>
+                </dl>
+            </section>
+            <section class="mb-section">
+                <h2>Operation windows</h2>
+                <div class="metric-grid">
                 <article class="metric-tile">
                     <span>GLOBAL WINDOW</span>
                     <strong>{{ operation.window_minutes ~ " MIN" if operation.window_minutes is not none else "TBD" }}</strong>
@@ -34,35 +46,8 @@
                         {% else %}TBD{% endif %}
                     </strong>
                 </article>
-                <article class="metric-tile">
-                    <span>TOTAL MISSIONS</span>
-                    <strong>{{ mission_count }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>ARRIVALS</span>
-                    <strong>{{ arrival_count }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>DEPARTURES</span>
-                    <strong>{{ departure_count }}</strong>
-                </article>
-            </div>
-
-            <dl class="detail-list">
-                <div>
-                    <dt>GENERATED</dt>
-                    <dd>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</dd>
                 </div>
-                <div>
-                    <dt>GATEWAY</dt>
-                    <dd>{{ operation.gateway_code }}</dd>
-                </div>
-                <div>
-                    <dt>SORT</dt>
-                    <dd>{{ operation.sort_name }}</dd>
-                </div>
-            </dl>
-
+                {% if user_can("neomotherbrain.manage_sort.edit") %}
             <form class="operation-form inline-operation-form manage-sort-window-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}" data-operation-window-form>
                 <label>
                     <span>GLOBAL WINDOW</span>
@@ -78,12 +63,12 @@
                 </label>
                 <button class="action-button" type="submit">UPDATE WINDOW</button>
             </form>
+            {% endif %}
+            </section>
 
-            <section id="google-current-sort-reader" class="google-current-sort-reader" data-google-current-sort-reader>
-                <div class="section-heading">
-                    <h2>GOOGLE CURRENT SORT</h2>
-                    <p>Preview only &mdash; no Neo data will be changed.</p>
-                </div>
+            <details id="google-current-sort-reader" class="mb-disclosure google-current-sort-reader" data-google-current-sort-reader>
+                <summary>GOOGLE CURRENT SORT</summary>
+                <p>Read-only preview</p>
 
                 {% if not google_reader_status.enabled %}
                     <p class="empty-state" data-google-reader-status="disabled">Google reader is disabled.</p>
@@ -100,11 +85,11 @@
                         READY &mdash; share the locked workbook as Viewer with
                         <strong>{{ google_reader_status.service_account_email }}</strong>.
                     </p>
-                    <form method="post" action="{{ url_for('neomotherbrain.google_current_sort_preview', operation_id=operation.id) }}">
+                    {% if user_can("neomotherbrain.manage_sort.edit") %}<form method="post" action="{{ url_for('neomotherbrain.google_current_sort_preview', operation_id=operation.id) }}">
                         <button class="action-button primary-action" type="submit">READ GOOGLE CURRENT SORT</button>
-                    </form>
+                    </form>{% endif %}
                 {% endif %}
-            </section>
+            </details>
         </div>
     </div>
 </section>

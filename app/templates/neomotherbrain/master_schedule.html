@@ -55,10 +55,10 @@
     <td class="master-board-cell master-cell-flight" data-label="Flight">
         {{ row_hidden_fields(prefix, schedule, "arrival") }}
         <input type="hidden" name="{{ prefix }}destination" value="{{ gateway.code }}">
-        <input class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
+        <input aria-label="Flight number" class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
     </td>
     <td class="master-board-cell master-cell-origin" data-label="Origin">
-        <input class="airport-code-input" type="text" name="{{ prefix }}origin" value="{{ schedule.origin if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+        <input aria-label="Origin" class="airport-code-input" type="text" name="{{ prefix }}origin" value="{{ schedule.origin if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
     </td>
     <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
         {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
@@ -87,10 +87,10 @@
     <td class="master-board-cell master-cell-flight" data-label="Flight">
         {{ row_hidden_fields(prefix, schedule, "departure") }}
         <input type="hidden" name="{{ prefix }}origin" value="{{ gateway.code }}">
-        <input class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
+        <input aria-label="Flight number" class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
     </td>
     <td class="master-board-cell master-cell-destination" data-label="Destination">
-        <input class="airport-code-input" type="text" name="{{ prefix }}destination" value="{{ schedule.destination if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+        <input aria-label="Destination" class="airport-code-input" type="text" name="{{ prefix }}destination" value="{{ schedule.destination if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
     </td>
     <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
         {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
@@ -126,6 +126,7 @@
 
     <form class="master-board-form" method="post" data-master-board-form data-master-board-type="{{ mission_type }}">
         <input type="hidden" name="board_mission_type" value="{{ mission_type }}">
+        <fieldset class="mb-fields" aria-label="{{ title }}" {% if not user_can('neomotherbrain.master_schedule.edit') %}disabled{% endif %}>
         <div class="table-wrap">
             <table class="data-table master-flight-table master-board-table">
                 <thead>
@@ -145,6 +146,8 @@
                         <th>PURE PULL</th>
                         <th>MIX PULL</th>
                         {% endif %}
+                        <th>Sort days</th>
+                        <th>Status</th>
                         <th>ACTION</th>
                     </tr>
                 </thead>
@@ -165,6 +168,7 @@
                 {{ "ADD ARRIVAL ROW" if mission_type == "arrival" else "ADD DEPARTURE ROW" }}
             </button>
         </div>
+        </fieldset>
         <template data-master-row-template>
             {% if mission_type == "arrival" %}
             {{ arrival_row(none, "new__INDEX__", True) }}
@@ -177,7 +181,8 @@
 {% endmacro %}
 
 {% block content %}
-<section class="panel master-schedule-panel centered-command-page">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="mb-planning panel master-schedule-panel centered-command-page">
     {% if selected_operation %}
     {% set manage_sort_sidebar_operation = selected_operation %}
     {% set manage_sort_sidebar_active = "master-schedule" %}
@@ -185,9 +190,13 @@
         {% include "neomotherbrain/_manage_sort_sidebar.html" %}
         <div class="manage-sort-main">
     {% endif %}
-            <div class="section-heading">
-                <h1 class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Master Schedule</h1>
-            </div>
+            <header class="mb-heading">
+                <div><p>{{ gateway.code }} · Flight planning</p><h1>Master Schedule</h1></div>
+                <nav class="mb-jumps" aria-label="Schedule tables">
+                    <a href="#master-arrivals">Arrivals <b>{{ arrival_schedules|length }}</b></a>
+                    <a href="#master-departures">Departures <b>{{ departure_schedules|length }}</b></a>
+                </nav>
+            </header>
 
             <div class="master-schedule-sections">
                 {{ board("MASTER ARRIVALS", arrival_schedules, "arrival") }}

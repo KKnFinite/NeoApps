@@ -1828,7 +1828,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         html = first_response.data.decode()
         main_html = html.split('<main class="content">', 1)[1].split("</main>", 1)[0]
         workflow_html = main_html
-        self.assertIn("Current / Selected Sort Operation", workflow_html)
+        self.assertIn('aria-label="Select active sort"', workflow_html)
+        self.assertIn('aria-current="true"', workflow_html)
         self.assertIn(f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}", workflow_html)
         self.assertIn("manage-sort-sidebar", workflow_html)
         self.assertIn("Selected Sort", workflow_html)
@@ -1840,10 +1841,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("Master Schedule", workflow_html)
         self.assertIn("System Settings", workflow_html)
         self.assertIn("Unmatched Queue", workflow_html)
-        self.assertIn("Sort Operation Settings", workflow_html)
-        self.assertIn("Gateway Matrix / Schedule Source Controls", workflow_html)
-        self.assertIn("API Polling Configuration", workflow_html)
-        self.assertIn("Generate / Rebuild / Save Actions", workflow_html)
+        self.assertIn("Night Sort windows", workflow_html)
+        self.assertIn("Schedule source and Flight API readiness", workflow_html)
+        self.assertIn("Operation settings</a>", workflow_html)
+        self.assertIn("Refresh Sort</a>", workflow_html)
         self.assertNotIn("Selected Sort Menu", workflow_html)
         self.assertNotIn("SORT ACTIONS", workflow_html)
         self.assertNotIn("Warnings / Preview", workflow_html)
@@ -1861,6 +1862,31 @@ class MotherBrainRoutesTest(unittest.TestCase):
         desktop_sidebar_html = html.split('data-motherbrain-desktop-side-nav', 1)[1].split("</aside>", 1)[0]
         self.assertIn(f'href="/motherbrain/operations/{operations[0].id}"', desktop_sidebar_html)
         self.assertIn("Selected Sort", desktop_sidebar_html)
+
+    def test_planning_pages_preserve_view_only_access(self):
+        ensure_default_permission_rules()
+        for feature in ("manage_sort", "master_schedule"):
+            for action, role in (("view", "simulator"), ("edit", "master")):
+                rule = PermissionRule.query.filter_by(permission_key=f"neomotherbrain.{feature}.{action}").one()
+                rule.minimum_role = role
+        operation = self._operation(window_minutes=18)
+        db.session.add(operation)
+        db.session.commit()
+        self._login_motherbrain_role("PlanningReadOnly", "simulator")
+
+        board = self.client.get("/motherbrain/master-schedule")
+        self.assertEqual(board.status_code, 200)
+        fields = document(board).findall("fieldset", **{"class": "mb-fields"})
+        self.assertEqual(len(fields), 2)
+        self.assertTrue(all("disabled" in field.attrs for field in fields))
+        path = f"/motherbrain/operations/{operation.id}"
+        settings = self.client.get(path)
+        self.assertEqual(settings.status_code, 200)
+        self.assertIn(b"18 MIN", settings.data)
+        self.assertFalse(document(settings).findall("form", action=path + "/window"))
+        denied = self.client.post(path + "/window", data={"window_minutes": "42"})
+        self.assertEqual(denied.status_code, 302)
+        self.assertEqual(db.session.get(SortDateOperation, operation.id).window_minutes, 18)
 
     def test_manage_sort_unmatched_queue_links_selected_operation(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
