@@ -9,7 +9,7 @@ from werkzeug.datastructures import MultiDict
 from app.extensions import db
 from app.models import (
     SortDateOperation, StaffingDailyAttendance, StaffingLeadershipAssignment, StaffingPerson,
-    StaffingTimecardSlice,
+    StaffingTimecardSlice, StaffingWorkAssignment,
 )
 from app.services import neostaffing as staffing
 from tests import test_neostaffing_daily_attendance as attendance_fixture
@@ -27,6 +27,75 @@ def site():
 
 def token(response, person_id):
     return unescape(re.search(fr'name="original_{person_id}" value="([^"]+)"', response.text)[1])
+
+
+def board_move_values(site, person, destination, source):
+    board = site.client.get("/neostaffing/board")
+    return {
+        "scope_stamp": unescape(re.search(r'data-scope-stamp="([^"]+)"', board.text)[1]),
+        "expected_person_version": staffing.entity_version(person),
+        "expected_assignment_version": str(person.shift_flow_version),
+        "source_assignment_id": str(source.id) if source else "",
+        "destination_work_area_id": destination.id,
+        "confirm_transfer": "yes",
+    }
+
+
+def test_board_transfer_preserves_combo_placement_history_and_attendance(site, monkeypatch):
+    sort, _, _, area, destination = site._hierarchy()
+    _, _, _, other_sort_area, _ = site._hierarchy("Day")
+    current = site._night_operation()
+    monkeypatch.setattr(staffing, "current_operations_for_gateway", lambda gateway: [current])
+    person = site._person("BOARD-COMBO", area)
+    person.classification = "full_time_combo"
+    source = StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).one()
+    secondary = staffing.assign_work_area(person, other_sort_area)
+    attendance = StaffingDailyAttendance(attendance_date=current.sort_date,
+        sort_unit_id=sort.id, work_area_unit_id=area.id, sort_date_operation_id=current.id,
+        person_id=person.id, status="here")
+    db.session.add(attendance)
+    site._user("board-admin", "master")
+    db.session.commit()
+    site._login("board-admin")
+    path = f"/neostaffing/board/placement/{person.id}"
+    values = board_move_values(site, person, destination, source)
+    assert site.client.post(path, data={**values, "source_assignment_id": secondary.id}).status_code == 403
+    assert site.client.post(path, data={**values, "destination_work_area_id": other_sort_area.id}).status_code == 403
+    assert site.client.post(path, data={**values, "scope_stamp": "other Sort"}).status_code == 409
+    saved = site.client.post(path, data=values)
+    assert saved.status_code == 200, saved.text
+    assert site.client.post(path, data=values).status_code == 409
+    db.session.expire_all()
+    assert not source.active and source.work_area_unit_id == area.id
+    assert secondary.active and secondary.work_area_unit_id == other_sort_area.id
+    assert {row.work_area_unit_id for row in person.work_assignments if row.active} == {
+        destination.id, other_sort_area.id,
+    }
+    assert attendance.status == "here" and attendance.work_area_unit_id == area.id
+    assert person.shift_flow_plan is None
+
+
+def test_board_denies_edits_to_other_scopes_and_watchers(site, monkeypatch):
+    _, _, department, area, outside = site._hierarchy()
+    current = site._night_operation()
+    monkeypatch.setattr(staffing, "current_operations_for_gateway", lambda gateway: [current])
+    person = site._person("BOARD-SCOPED", area)
+    source = StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).one()
+    site._user("board-scope-master", "master")
+    site._user("board-watcher", "watcher")
+    db.session.commit()
+    site._login("board-scope-master")
+    site.client.post("/neostaffing/workspace-scope", data={"unit_id": department.id})
+    path = f"/neostaffing/board/placement/{person.id}"
+    assert f'data-board-area="{outside.id}"' not in site.client.get("/neostaffing/board").text
+    values = board_move_values(site, person, outside, source)
+    assert site.client.post(path, data=values).status_code == 403
+    site._login("board-watcher")
+    board = site.client.get("/neostaffing/board")
+    assert board.status_code == 200 and "data-board-dialog" not in board.text
+    assert site.client.post(path, data=values).status_code == 403
+    db.session.expire_all()
+    assert source.active and source.work_area_unit_id == area.id
 
 
 def test_scope_follows_sort_identity_and_current_authority(site, monkeypatch):

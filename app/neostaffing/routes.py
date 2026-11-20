@@ -37,7 +37,7 @@ from app.services import neostaffing_workspace as workspace
 from app.services.permission_rules import user_can
 
 
-BOARD_VIEW_PERMISSION = "neostaffing.board.view"
+BOARD_VIEW_PERMISSION = workspace.BOARD_VIEW_PERMISSION
 SENIORITY_VIEW_PERMISSION = "neostaffing.seniority.view"
 PEOPLE_VIEW_PERMISSION = "neostaffing.people.view"
 PEOPLE_EDIT_PERMISSION = "neostaffing.people.edit"
@@ -233,11 +233,7 @@ def board():
     selected_coverage = [area for area in coverage if area["shift"]]
     if scope["selected"] and coverage and len(selected_coverage) == len(coverage) and user_can(PEOPLE_VIEW_PERMISSION):
         return redirect(url_for("neostaffing.shift_flow"))
-    from app.services import neostaffing_transfers
-
     can_edit_people = user_can(PEOPLE_EDIT_PERMISSION)
-    destinations = [unit for unit in neostaffing_transfers.destinations()
-                    if unit.id in workspace.authorized_areas(scope)] if can_edit_people else []
     general = [area for area in coverage if not area["shift"]]
     rows = {row["person"].id: row for area in general for row in area["rows"]}
     return _workspace_view(
@@ -245,9 +241,29 @@ def board():
         summary=staffing_service._daily_attendance_summary(rows.values()),
         has_shift=bool(selected_coverage) and user_can(PEOPLE_VIEW_PERMISSION),
         unassigned=workspace.needs_assignment(scope) if user_can(PEOPLE_VIEW_PERMISSION) else [],
-        can_edit_people=can_edit_people, destinations=destinations, unit_path=staffing_service.unit_path,
+        can_edit_people=can_edit_people, scope_stamp=workspace.board_scope_stamp(scope),
+        unit_path=staffing_service.unit_path, person_version=staffing_service.entity_version,
         assignment_version=staffing_service.assignment_service.version,
     )
+
+
+@bp.post("/board/placement/<int:person_id>")
+@neostaffing_app_required(permission_key=BOARD_VIEW_PERMISSION)
+def save_board_placement(person_id):
+    from app.services import neostaffing_transfers as transfers
+
+    try:
+        _, changed = transfers.save_board_placement(person_id, current_user, request.form)
+        db.session.commit()
+    except PermissionError as error:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(error)), 403
+    except (ValueError, SQLAlchemyError) as error:
+        db.session.rollback()
+        status = 409 if isinstance(error, (transfers.TransferConflict, SQLAlchemyError)) else 400
+        return jsonify(ok=False, error=safe_mutation_error(error, "move employee")), status
+    flash("Work Area assignment updated." if changed else "Employee is already in that Work Area.", "success")
+    return jsonify(ok=True)
 
 
 @bp.get("/menu")

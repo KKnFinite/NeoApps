@@ -20,6 +20,7 @@ from app.services.neostaffing_historical_records import enabled as history_enabl
 from app.services.neostaffing_history_retention import history_cutoff
 
 SCOPE_KEYS = ("sort_id", "operation_id", "department_id", "work_area_id")
+BOARD_VIEW_PERMISSION = "neostaffing.board.view"
 
 
 def organization_filters(scope, *, default_sort=True):
@@ -33,6 +34,18 @@ def organization_filters(scope, *, default_sort=True):
 
 def authorized_areas(scope):
     return {unit.id for unit in scope["options"] if unit.unit_type == "work_area"}
+
+
+def general_board_area_ids(scope):
+    units = scope["hierarchy"]["by_id"]
+    return {area_id for area_id in scope["active_areas"]
+            if not staffing.assignment_service.is_shift(units[area_id], units)}
+
+
+def board_scope_stamp(scope):
+    return json.dumps([scope["gateway_code"], getattr(scope["sort"], "id", None),
+                       getattr(scope["operation"], "id", None), getattr(scope["selected"], "id", None)],
+                      separators=(",", ":"))
 
 
 def workspace_scope(user):

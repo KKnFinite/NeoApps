@@ -338,14 +338,18 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
         self.fixture().login(page)
         page.goto(self.fixture.origin + "/neostaffing/board")
         page.get_by_role("button", name="Robin Hayes Here").click()
-        page.locator('[data-board-transfer] select').select_option(str(self.destination_id))
-        page.get_by_role("button", name="Preview permanent transfer").click()
-        preview = page.locator("[data-employee-transfer-dialog]")
+        preview = page.locator("[data-board-dialog]")
         expect(preview).to_be_visible()
+        preview.locator("select").select_option(str(self.destination_id))
         expect(preview.locator('select[name="destination_work_area_id"]')).to_have_value(str(self.destination_id))
         preview.get_by_role("button", name="Cancel").click()
-        page.locator("[data-employee-editor]").get_by_role("button", name="Close").click()
+        expect(preview).not_to_be_visible()
         expect(page.locator(f'[data-board-area="{self.area_id}"] [data-board-person="{self.employee_id}"]')).to_be_visible()
+        page.get_by_role("button", name="Robin Hayes Here").click()
+        preview.get_by_role("button", name="Edit Employee").click()
+        editor = page.locator("[data-employee-editor]")
+        expect(editor.locator('input[name="first_name"]')).to_have_value("Robin")
+        editor.get_by_role("button", name="Close").click()
         page.get_by_role("navigation", name="Mobile Staffing workspaces").get_by_role("link", name="Attendance").click()
         status = page.get_by_role("combobox", name="Attendance for Cameron North")
         for value in ("scheduled_off", ""):
@@ -365,9 +369,94 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
         page.goto(self.fixture.origin + "/neostaffing/board")
         page.get_by_role("button", name="Rene Ames").click()
         page.locator('[data-board-transfer] select').select_option(str(self.destination_id))
-        page.get_by_role("button", name="Preview assignment").click()
-        preview = page.locator("[data-board-assignment]")
-        expect(preview).to_contain_text("Assign Rene Ames")
+        preview = page.locator("[data-board-dialog]")
+        expect(preview).to_contain_text("Rene Ames")
         preview.get_by_role("button", name="Confirm Assignment").click()
         expect(page.locator(f'[data-board-area="{self.destination_id}"]')).to_contain_text("Rene Ames")
         expect(page.locator(".v11-unassigned")).to_have_count(0)
+
+    def test_zz_general_board_columns_drag_and_mobile_tap(self):
+        with self.fixture.app.app_context():
+            department = StaffingUnit.query.filter_by(name="Outbound").one()
+            areas = [StaffingUnit(unit_type="work_area", name=f"Door {i:02}", parent=department,
+                                  display_order=i) for i in range(1, 15)]
+            db.session.add_all(areas)
+            db.session.flush()
+            for i, area in enumerate(areas[:12], 1):
+                if i == 3:
+                    continue
+                for j, first in enumerate(("Ari", "Billie", "Casey", "Ellis", "Frankie", "Jordan", "Parker", "Quinn", "Taylor", "Vee"), 1):
+                    person = staffing.create_person({
+                        "first_name": first, "last_name": f"Roster {i:02}",
+                        "employee_id": f"120{i:02}{j:02}", "classification": "part_time",
+                        "seniority_date": "2020-01-01",
+                    })
+                    staffing.assign_work_area(person, area)
+            unassigned = staffing.create_person({
+                "first_name": "Reese", "last_name": "Roster", "employee_id": "1200000",
+                "classification": "part_time", "seniority_date": "2020-01-01",
+            })
+            db.session.commit()
+            area_ids = [area.id for area in areas]
+            unassigned_id = unassigned.id
+        for engine, width, moving in (
+            ("chromium", 1440, "Ari Roster 01"), ("webkit", 390, "Billie Roster 01"),
+        ):
+            with self.subTest(engine=engine):
+                browser = getattr(self.fixture.pw, engine).launch()
+                self.addCleanup(browser.close)
+                context = browser.new_context(viewport={"width": width, "height": 900 if width > 760 else 844},
+                                              is_mobile=width < 760, has_touch=width < 760)
+                page = context.new_page()
+                self.fixture().login(page)
+                page.goto(self.fixture.origin + "/neostaffing/board")
+                page.evaluate("document.fonts.ready")
+                columns = page.locator("[data-board-area]")
+                self.assertGreaterEqual(columns.count(), 16)
+                self.assertGreaterEqual(page.locator('[data-board-area] .v11-board-person').count(), 115)
+                expect(page.locator(f'.v11-board-rail [data-board-person="{unassigned_id}"]')).to_have_count(1)
+                scroller = page.locator("[data-board-scroll]")
+                self.assertTrue(scroller.evaluate("el => el.scrollWidth > el.clientWidth"))
+                self.assertTrue(columns.evaluate_all("""items => items.every(item =>
+                    item.offsetTop === items[0].offsetTop && item.offsetWidth === items[0].offsetWidth)"""))
+                self.assertTrue(page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
+                expect(columns.filter(has_text="Door 13")).to_contain_text("No assigned employees")
+                origin = page.locator(f'[data-board-area="{area_ids[0]}"]')
+                recipient_id = area_ids[2] if width > 760 else area_ids[12]
+                target = page.locator(f'[data-board-area="{recipient_id}"]')
+                expect(target.locator("header strong")).to_have_text("0")
+                origin_count = int(origin.locator("header strong").inner_text())
+                person = origin.get_by_role("button", name=moving, exact=False)
+                scroller.evaluate("""(el, id) => {
+                    el.scrollLeft = el.querySelector(`[data-board-area="${id}"]`).offsetLeft - el.offsetLeft;
+                }""", area_ids[0])
+                page.screenshot(path=str(self.evidence / f"general-board-{engine}-{width}.png"))
+                if width > 760:
+                    person.drag_to(target.locator("header"))
+                else:
+                    page.get_by_role("button", name="Next work areas").click()
+                    self.assertGreater(scroller.evaluate("el => el.scrollLeft"), 0)
+                    person.tap()
+                    page.locator('[data-board-transfer] select').select_option(str(recipient_id))
+                dialog = page.locator("[data-board-dialog]")
+                expect(dialog).to_be_visible()
+                expect(dialog.locator("select")).to_have_value(str(recipient_id))
+                expect(origin.locator("header strong")).to_have_text(str(origin_count))
+                page.screenshot(path=str(self.evidence / f"general-board-transfer-{engine}-{width}.png"))
+                if width > 760:
+                    stale = page.context.new_page()
+                    stale.goto(self.fixture.origin + "/neostaffing/board")
+                    stale.get_by_role("button", name=moving, exact=False).click()
+                    stale.locator("[data-board-dialog] select").select_option(str(recipient_id))
+                with page.expect_response(lambda response: "/board/placement/" in response.url) as saved:
+                    dialog.get_by_role("button", name="Confirm Transfer").click()
+                self.assertEqual(saved.value.status, 200)
+                expect(target).to_contain_text(moving)
+                expect(target.locator("header strong")).to_have_text("1")
+                expect(origin.locator("header strong")).to_have_text(str(origin_count - 1))
+                if width > 760:
+                    with stale.expect_response(lambda response: "/board/placement/" in response.url) as rejected:
+                        stale.get_by_role("button", name="Confirm Transfer").click()
+                    self.assertEqual(rejected.value.status, 409)
+                    expect(stale.locator("[data-board-error]")).to_contain_text("changed")
+                    expect(stale.locator(f'[data-board-area="{recipient_id}"] header strong')).to_have_text("0")

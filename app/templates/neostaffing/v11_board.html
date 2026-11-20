@@ -1,70 +1,88 @@
 {% extends "neostaffing/v11_shell.html" %}
+{% macro employee(person, area_id='', assignment_id='', status='') %}
+    {% if can_edit_people %}
+        <button type="button" class="v11-board-person" data-board-person="{{ person.id }}"
+                data-label="{{ person.full_name }}" data-source="{{ assignment_id }}" data-area="{{ area_id }}"
+                data-placement-url="{{ url_for('neostaffing.save_board_placement', person_id=person.id) }}"
+                data-person-version="{{ person_version(person) }}" data-assignment-version="{{ assignment_version(person) }}"
+                aria-haspopup="dialog" {% if coverage %}draggable="true"{% endif %}>
+            <strong>{{ person.full_name }}</strong>{% if status %}<small>{{ status }}</small>{% endif %}
+        </button>
+    {% else %}
+        <div class="v11-board-person"><strong>{{ person.full_name }}</strong>{% if status %}<small>{{ status }}</small>{% endif %}</div>
+    {% endif %}
+{% endmacro %}
 {% block workspace_content %}
-{{ heading('Sort Staffing', 'Staffing Board', 'Review staffing and coverage across work areas.') }}
-<div class="v11-board-summary">
-    <span>{{ summary.total_roster }} assigned</span>
-    {% if workspace_scope.operation %}<span>{{ summary.status_counts.get('here', 0) }} HERE</span><span>{{ summary.unmarked }} unmarked</span>{% endif %}
-    {% if unassigned %}<span class="v11-warning">{{ unassigned|length }} needs assignment</span>{% endif %}
-</div>
-{% if has_shift %}<a class="v11-panel v11-shift-entry" href="{{ url_for('neostaffing.shift_flow') }}"><strong>Ramp / Shift <small>Final Door and Ballmat staffing</small></strong><span>Open Shift Flow →</span></a>{% endif %}
-<div class="v11-board-layout" data-workspace-board>
-    <div class="v11-board-grid">
-        {% for area in coverage %}
-        <section class="v11-panel v11-board-area" data-board-area="{{ area.unit.id }}">
-            <header><h2>{{ area.unit.name }}</h2><strong aria-label="{{ area.assigned }} assigned">{{ area.assigned }}</strong>
-            <p>{% if area.here is not none %}{{ area.here }} HERE{% else %}{{ area.assigned }} assigned{% endif %}
-            {% if area.unit.required_headcount is not none %} · {{ area.unit.required_headcount }} required{% endif %}</p></header>
-            {% for row in area.rows %}
-                <button type="button" class="v11-board-person" data-board-person="{{ row.person.id }}"
-                        data-source="{{ row.assignment_id }}" data-label="{{ row.person.full_name }}"
-                        data-area="{{ area.unit.id }}" aria-pressed="false" {% if can_edit_people %}draggable="true"{% endif %}>
-                    <strong>{{ row.person.full_name }}</strong><small>{{ row.status_label }}</small>
-                </button>
-            {% else %}<p>No assigned employees.</p>{% endfor %}
-        </section>
-        {% else %}<div class="v11-panel">No general work areas in this scope.</div>{% endfor %}
-        {% if unassigned %}
-        <section class="v11-panel v11-board-area v11-unassigned" data-board-area="">
-            <h2>Needs Assignment</h2><p>Employees without a current Work Area</p>
-            {% for person in unassigned %}
-            {% if can_edit_people %}
-            <button type="button" class="v11-board-person" data-board-person="{{ person.id }}" data-area=""
-                    data-label="{{ person.full_name }}" data-assignment-url="{{ url_for('neostaffing.people_assign_work_area', person_id=person.id) }}"
-                    data-assignment-version="{{ assignment_version(person) }}" aria-pressed="false" draggable="true">{{ person.full_name }}</button>
-            {% else %}
-            <a class="v11-board-person" href="{{ url_for('neostaffing.people', person_id=person.id, inspect=1, sort_id='', operation_id='', department_id='', work_area_id='', assignment_status='unassigned') }}">{{ person.full_name }}</a>
-            {% endif %}
-            {% endfor %}
-        </section>
-        {% endif %}
+{{ heading('Sort Staffing', 'Staffing Board') }}
+<div class="v11-board-toolbar">
+    <div class="v11-board-summary">
+        <span>{{ summary.total_roster }} assigned</span>
+        {% if workspace_scope.operation %}<span>{{ summary.status_counts.get('here', 0) }} HERE</span><span>{{ summary.unmarked }} unmarked</span>{% endif %}
+        {% if unassigned %}<a class="v11-warning" href="#v11-needs-assignment">{{ unassigned|length }} needs assignment</a>{% endif %}
     </div>
-    <section class="v11-panel v11-board-inspector" aria-label="Staffing Inspector">
-        <h2>Inspector</h2><p data-board-selection aria-live="polite">Select an employee to inspect their assignment.</p>
-        {% if can_edit_people and destinations %}
-        <form data-board-transfer hidden>
-            <label>Destination Work Area
-                <select name="destination" required><option value="">Select destination</option>
-                    {% for unit in destinations %}<option value="{{ unit.id }}">{{ unit_path(unit) }}</option>{% endfor %}
-                </select>
-            </label>
-            <button type="submit">Preview permanent transfer</button>
+    {% if has_shift %}<a class="v11-shift-entry" href="{{ url_for('neostaffing.shift_flow') }}">Open Shift Flow <span aria-hidden="true">→</span></a>{% endif %}
+    {% if coverage %}
+    <div class="v11-board-navigation" data-board-navigation hidden>
+        <button type="button" data-board-scroll-direction="-1" aria-label="Previous work areas" aria-controls="v11-board-roster">‹</button>
+        <button type="button" data-board-scroll-direction="1" aria-label="Next work areas" aria-controls="v11-board-roster">›</button>
+    </div>
+    {% endif %}
+</div>
+<div class="v11-board-layout{% if unassigned %} v11-board-has-rail{% endif %}" data-workspace-board data-scope-stamp="{{ scope_stamp }}">
+    {% if coverage %}
+    <div class="v11-board-scroll" id="v11-board-roster" role="region" aria-label="Work-area roster columns" tabindex="0" data-board-scroll data-roster-scroll>
+        <div class="v11-board-columns">
+            {% for area in coverage %}
+            <section class="v11-board-area" data-board-area="{{ area.unit.id }}" aria-labelledby="v11-board-area-{{ area.unit.id }}">
+                <header title="{{ unit_path(area.unit) }}">
+                    <h2 id="v11-board-area-{{ area.unit.id }}">{{ area.unit.name }}</h2>
+                    <strong aria-label="{{ area.assigned }} assigned">{{ area.assigned }}</strong>
+                </header>
+                <div class="v11-board-members">
+                    {% for row in area.rows %}
+                    {{ employee(row.person, area.unit.id, row.assignment_id, row.status_label) }}
+                    {% else %}<p>No assigned employees</p>{% endfor %}
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}<div class="v11-panel">No general work areas in this scope.</div>{% endif %}
+    {% if unassigned %}
+    <aside class="v11-board-rail v11-unassigned" id="v11-needs-assignment" aria-labelledby="v11-board-rail-title">
+        <header><h2 id="v11-board-rail-title">Needs Assignment</h2><strong>{{ unassigned|length }}</strong></header>
+        <div class="v11-board-members">
+            {% for person in unassigned %}{{ employee(person) }}{% endfor %}
+        </div>
+    </aside>
+    {% endif %}
+    {% if can_edit_people %}
+    <dialog class="v11-panel v11-board-dialog" data-board-dialog aria-labelledby="v11-board-person-title">
+        <h2 id="v11-board-person-title" data-board-name></h2>
+        <p data-board-source></p>
+        {% if coverage %}
+        <form data-board-transfer>
+            {{ csrf_field() }}
+            <label for="v11-board-destination">Destination Work Area</label>
+            <select id="v11-board-destination" name="destination_work_area_id" required>
+                <option value="">Select destination</option>
+                {% for area in coverage %}<option value="{{ area.unit.id }}">{{ unit_path(area.unit) }}</option>{% endfor %}
+            </select>
+            <p class="v11-warning" data-board-error role="alert" hidden></p>
+            <div class="v11-board-dialog-actions">
+                <button type="button" data-board-edit>Edit Employee</button>
+                <button type="button" data-board-cancel>Cancel</button>
+                <button type="submit" class="v11-primary" data-board-save>Confirm Transfer</button>
+            </div>
         </form>
+        {% else %}
+        <div class="v11-board-dialog-actions"><button type="button" data-board-edit>Edit Employee</button>
+            <button type="button" data-board-cancel>Close</button></div>
         {% endif %}
-    </section>
-    {% if can_edit_people and unassigned %}
-    <dialog class="v11-panel v11-assignment-dialog" data-board-assignment aria-labelledby="v11-assign-title">
-        <h2 id="v11-assign-title">Confirm Work Area Assignment</h2>
-        <p data-board-assignment-preview></p>
-        <form method="post">
-            {{ csrf_field() }}<input type="hidden" name="return_board" value="1">
-            <input type="hidden" name="work_area_unit_id"><input type="hidden" name="expected_assignment_version">
-            <button type="button" data-board-assignment-cancel>Cancel</button>
-            <button type="submit">Confirm Assignment</button>
-        </form>
     </dialog>
     {% endif %}
 </div>
-<script defer src="{{ url_for('static', filename='js/neostaffing_v11_board.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+<script defer src="{{ url_for('static', filename='js/neostaffing_v11_board.js', v=config.STATIC_ASSET_VERSION, rev='roster-columns') }}"></script>
 {% endblock %}
 {% block page_overlay %}
 {% if can_edit_people %}{% include "neostaffing/_employee_editor_mount.html" %}{% endif %}
