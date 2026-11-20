@@ -37,11 +37,18 @@
     const boardKey = `neoapps.operational-shell.board.v1:${window.location.pathname}`;
     const boardButtons = Array.from(document.querySelectorAll("[data-operational-board-toggle]"));
     const boardExit = document.querySelector(".operational-board-exit");
+    let readingPosition;
     const setBoardView = (enabled) => {
         if (!boardSupported) return;
         enabled = enabled && !mobile.matches;
+        const changed = body.classList.contains("operational-board-view") !== enabled;
+        if (changed && enabled) readingPosition = [window.scrollX, window.scrollY];
         if (enabled) document.dispatchEvent(new Event("neo:board-enter"));
         body.classList.toggle("operational-board-view", enabled);
+        if (changed) requestAnimationFrame(() => {
+            window.dispatchEvent(new Event("resize"));
+            if (!enabled && readingPosition) window.scrollTo(...readingPosition);
+        });
         if (boardExit) boardExit.hidden = !enabled;
         boardButtons.forEach((button) => {
             button.setAttribute("aria-expanded", String(enabled));
@@ -60,6 +67,7 @@
             const enabled = !body.classList.contains("operational-board-view");
             setBoardView(enabled);
             storage.set(boardKey, enabled ? "on" : "off");
+            (enabled ? boardExit : sidebar?.querySelector("[data-operational-board-toggle]"))?.focus({preventScroll: true});
         }));
     }
     // The <head> boot class prevents Board View chrome from flashing before

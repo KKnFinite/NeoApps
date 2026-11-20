@@ -77,6 +77,69 @@
 
 
 /* Shared operational selects must never fall back to bright native controls. */
+body.operational-shell-page:not(.blueprint-neostaffing) .operational-node-topbar,
+body.operational-shell-page:not(.blueprint-neostaffing) .operational-mobile-header {
+    background: #0d1a22;
+    border-bottom-color: #29434d;
+}
+@media (min-width:901px) {
+    body.operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar {
+        background: #0e1b24;
+        border-right-color: #29434d;
+    }
+    .operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar .motherbrain-desktop-side-link,
+    .operational-shell-page:not(.blueprint-neostaffing) .operational-sidebar-utility {
+        border: 1px solid transparent;
+        border-radius: 7px;
+        background: transparent;
+        color: #c8d6da;
+        font: 600 .85rem/1.3 system-ui,sans-serif;
+        text-transform: none;
+        letter-spacing: normal;
+    }
+    .operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar :is(a,button):focus-visible {
+        outline: 2px solid #83dfd4;
+        outline-offset: -2px;
+    }
+    .operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar :is(.motherbrain-desktop-side-link,.operational-sidebar-utility):hover {
+        background: #1c333d;
+    }
+    .operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar .motherbrain-desktop-side-link.is-active {
+        background: #173a40;
+        border-color: #35646c;
+        box-shadow: inset 3px 0 #56cabf;
+        color: #f0fffd;
+    }
+    /* Several page styles compute gutters independently from the sidebar element. */
+    :is(html.operational-board-view-boot body,body.operational-board-view).operational-shell-page {
+        --operational-topbar-height: 0px;
+        --operational-sidebar-width: 0px;
+        --operational-sidebar-collapsed-width: 0px;
+        --motherbrain-side-nav-width: 0px;
+    }
+    :is(html.operational-board-view-boot body,body.operational-board-view).operational-shell-page > .shell {
+        display: block;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        max-width: none;
+    }
+    :is(html.operational-board-view-boot body,body.operational-board-view).operational-shell-page[data-operational-shell] > .shell > main.content {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        min-height: 100dvh;
+        margin: 0;
+        padding: 40px 8px 8px;
+    }
+    body.operational-board-view > .shell > .content > :is(section, article, .panel) {
+        width: 100%;
+        max-width: none;
+        margin-inline: 0;
+        box-sizing: border-box;
+    }
+}
 body.operational-shell-page select {
     color-scheme: dark;
     background-color: #0d171c !important;

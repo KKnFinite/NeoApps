@@ -109,6 +109,8 @@ class OperationalShellTest(unittest.TestCase):
                 with self.app.test_request_context(path):
                     metadata = resolve_shell_metadata(request, is_authenticated=True)
                     home = url_for(expected['home_endpoint'])
+                    desktop_icon = url_for('static', filename=expected['desktop_icon'])
+                    mobile_icon = url_for('static', filename=expected['locked_icon'])
                 bar = root.one('header', 'operational-node-topbar')
                 identity = bar.one('a', 'operational-node-identity')
                 self.assertEqual(identity.attrs['href'], home)
@@ -121,7 +123,7 @@ class OperationalShellTest(unittest.TestCase):
                 logo = sidebar.one('a', 'operational-sidebar-logo')
                 self.assertEqual(logo.attrs['href'], home)
                 self.assertEqual(logo.text.strip(), '')
-                self.assertEqual(logo.one('img').attrs['src'], '/static/' + expected['desktop_icon'])
+                self.assertEqual(logo.one('img').attrs['src'], desktop_icon)
                 self.assertFalse(sidebar.findall(cls='motherbrain-sidebar-brand-title'))
                 self.assertTrue(sidebar.findall(cls='motherbrain-desktop-side-context'))
                 self.assertTrue(sidebar.findall('nav', 'motherbrain-desktop-side-menu'))
@@ -129,7 +131,7 @@ class OperationalShellTest(unittest.TestCase):
                 self.assertTrue(sidebar.findall('a', href='/portal'))
                 mobile = root.one('header', **{'data-operational-mobile-header': None})
                 self.assertEqual(mobile.one('img').attrs['width'], '34')
-                self.assertEqual(mobile.one('img').attrs['src'], '/static/' + expected['locked_icon'])
+                self.assertEqual(mobile.one('img').attrs['src'], mobile_icon)
                 lite = [link for link in root.findall('link', rel='stylesheet')
                         if '/css/neofontlite.css?' in link.attrs['href']]
                 self.assertEqual(len(lite), 1)
@@ -171,7 +173,7 @@ class OperationalShellTest(unittest.TestCase):
         response = self.client.get("/neoscorpion/fuel-dispatch")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"images/logos/newlogo_scorpion.png", response.data)
+        self.assertIn(b"images/optimized/newlogo_scorpion.webp", response.data)
         self.assertIn(b"data-operational-board-toggle", response.data)
         self.assertIn(b"js/operational_shell.js", response.data)
         self.assertIn(b"operational-board-view-boot", response.data)
@@ -210,10 +212,10 @@ class OperationalShellTest(unittest.TestCase):
                 from tests.html_contracts import document
                 root=document(response)
                 if path=='/neostaffing':
-                    self.assertIn(b'data-operational-shell',response.data)
-                    self.assertTrue(root.findall(**{'data-operational-mobile-header':None}))
+                    self.assertTrue(root.findall(**{'data-staffing-v11':None}))
+                    self.assertFalse(root.findall(**{'data-operational-mobile-header':None}))
                     self.assertFalse(root.findall(**{'data-operational-sidebar':None}))
-                    self.assertTrue(root.findall('nav',**{'aria-label':'NeoStaffing main menu'}))
+                    self.assertTrue(root.findall('nav',**{'aria-label':'Staffing workspaces'}))
                 else:
                     self.assertNotIn(b'data-operational-shell',response.data)
                     self.assertNotIn(b'data-operational-mobile-header',response.data)
@@ -228,7 +230,7 @@ class OperationalShellTest(unittest.TestCase):
             ("/neoermac/settings", False, "Door View"),
             ("/neoscorpion/settings", False, "Fuel Dispatch"),
             ("/neorain/inbound", False, "Outbound"),
-            ("/neosubzero/pretreat", False, "Deice Operations"),
+            ("/neosubzero/pretreat", False, "Deice Dispatch"),
             ("/motherbrain/manage-sort", False, "Master Schedule"),
             ("/neostaffing", True, None), ("/neostaffing/people", False, "Attendance"),
         ):
@@ -236,6 +238,10 @@ class OperationalShellTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 root = document(response)
+                if path.startswith('/neostaffing'):
+                    self.assertTrue(root.one('nav', 'v11-dock').findall('a', href='/neostaffing/menu'))
+                    self.assertTrue(root.one('aside','v11-sidebar').findall('a', href='/neostaffing/people'))
+                    continue
                 menu = root.one(**{'data-drawer-view': 'menu'})
                 if not path.startswith('/neostaffing'):
                     # HOME/NODES remain separate controls, not duplicate menu items.
@@ -243,7 +249,7 @@ class OperationalShellTest(unittest.TestCase):
                     self.assertEqual([el.text.strip() for el in dock.findall('span')], ['Home', 'Nodes', 'Menu'])
                     self.assertTrue(root.one(**{'data-drawer-view': 'nodes'}).findall('a'))
                 utilities = menu.one('section', **{'aria-label': 'Utilities'})
-                self.assertEqual([el.text.strip() for el in utilities.findall('a')], ['NeoPortal'])
+                self.assertEqual([el.text.strip() for el in utilities.findall('a')], ['My Account', 'NeoPortal'])
                 self.assertEqual([el.text.strip() for el in utilities.findall('button')], ['Logout'])
                 logout = utilities.one('form')
                 self.assertEqual(logout.attrs['method'], 'post')
@@ -255,7 +261,7 @@ class OperationalShellTest(unittest.TestCase):
                 self.assertFalse(menu.findall(cls='neo-drawer-user'))
                 self.assertFalse(menu.findall(**{'data-mobile-share-open': None}))
                 if dashboard and not path.startswith('/neostaffing'):
-                    self.assertEqual(labels, ['NeoPortal'])
+                    self.assertEqual(labels, ['My Account', 'NeoPortal'])
                 elif path.startswith('/neostaffing'):
                     self.assertIn('People',labels)
                 else:
@@ -268,6 +274,10 @@ class OperationalShellTest(unittest.TestCase):
                 hrefs = [el.attrs['href'] for el in sidebar.findall('a')]
                 self.assertIn('/rfd', hrefs)
                 self.assertIn('/portal', hrefs)
+                self.assertFalse(sidebar.findall(**{'role':'heading'}))
+                footer = sidebar.one('nav','operational-sidebar-utilities')
+                expected = ['NeoGateway', 'NeoPortal'] + ([] if path.endswith('/settings') else ['Board View'])
+                self.assertEqual([el.text for el in footer.findall('strong')], expected)
                 # Settings never supported Board View; working boards still do.
                 self.assertEqual(bool(sidebar.findall(**{'data-operational-board-toggle': None})), not path.endswith('/settings'))
                 if path.startswith('/motherbrain'):

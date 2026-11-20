@@ -1,6 +1,6 @@
 {# One permission-filtered definition and renderer for every navigation surface. #}
 {% for heading, items in neosubzero_menu_sections() %}
-{% if heading %}<div class="subzero-nav-section" role="heading" aria-level="2" aria-label="{{ heading }}" title="{{ heading }}"><span>{{ heading }}</span></div>{% endif %}
+{% if heading and subzero_nav_mode == 'inline' %}<div class="subzero-nav-section" role="heading" aria-level="2" aria-label="{{ heading }}" title="{{ heading }}"><span>{{ heading }}</span></div>{% endif %}
 {% for label, endpoint, external_url in items %}
 {% set active = endpoint and (request.endpoint == endpoint or (endpoint == 'neosubzero.operations' and request.endpoint in ('neosubzero.pretreat', 'neosubzero.outbound'))) %}
 <a class="{% if subzero_nav_mode == 'desktop' %}motherbrain-desktop-side-link{% endif %}{% if active %} {{ 'active' if subzero_nav_mode == 'inline' else 'is-active' }}{% endif %}" href="{{ external_url if external_url else url_for(endpoint) }}" aria-label="{{ label }}" title="{{ label }}"{% if external_url %} target="_blank" rel="noopener noreferrer"{% endif %}{% if active %} aria-current="page"{% endif %}>{% if subzero_nav_mode == 'desktop' %}<span class="operational-side-link-icon" aria-hidden="true">{{ label[0] }}</span><span class="operational-side-link-label">{{ label }}</span>{% else %}{{ label }}{% endif %}</a>

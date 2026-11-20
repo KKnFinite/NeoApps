@@ -1,0 +1,5 @@
+<nav class="operational-sidebar-utilities" aria-label="Global operational navigation">
+        <a class="operational-sidebar-utility" href="{{ url_for('neomotherbrain.rfd_hub') }}"><span>G</span><strong>NeoGateway</strong></a>
+        <a class="operational-sidebar-utility" href="{{ url_for('auth.portal_dashboard') }}"><span>P</span><strong>NeoPortal</strong></a>
+        {% if operational_shell_supports_board_view %}<button class="operational-sidebar-utility" type="button" data-operational-board-toggle aria-expanded="false"><span>▣</span><strong>Board View</strong></button>{% endif %}
+    </nav>
