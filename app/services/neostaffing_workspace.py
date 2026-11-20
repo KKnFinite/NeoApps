@@ -4,16 +4,19 @@ from datetime import date, timedelta
 import json
 
 from flask import request, session
-from sqlalchemy import func, or_
+from sqlalchemy import JSON, cast, exists, func, or_, select
 
+from app.extensions import db
 from app.models import (
-    SortDateOperation, StaffingDailyAttendance, StaffingPerson, StaffingTimecardSlice,
+    SortDateOperation, StaffingAttendanceOutcome as Outcome, StaffingDailyAttendance, StaffingPerson,
+    StaffingRosterClose as Close, StaffingRosterPlacement as Placement, StaffingTimecardEdit, StaffingTimecardSlice,
     StaffingUnit, StaffingWorkAssignment,
 )
 from app.services import neostaffing as staffing
 from app.services.access_control import user_can_access_app
 from app.services.gateway_matrix import current_gateway_local_datetime
 from app.services.neostaffing_attendance_authority import attendance_authority
+from app.services.neostaffing_historical_records import enabled as history_enabled
 
 SCOPE_KEYS = ("sort_id", "operation_id", "department_id", "work_area_id")
 
@@ -180,10 +183,25 @@ def _retained_sources():
 
 
 def _retained_query(scope, model, day, status):
-    return model.query.join(
+    query = model.query.join(
         SortDateOperation, SortDateOperation.id == model.sort_date_operation_id,
     ).filter(SortDateOperation.gateway_code == scope["gateway_code"], SortDateOperation.sort_date == day,
              model.work_area_unit_id.in_(scope["areas"]), status.in_(staffing.ATTENDANCE_STATUS_LABELS))
+    if history_enabled():
+        query = query.filter(~exists().where(
+            Outcome.sort_date_operation_id == model.sort_date_operation_id, Outcome.person_id == model.person_id,
+        ))
+    return query
+
+
+def _outcomes(scope):
+    return Outcome.query.filter(Outcome.gateway_code == scope["gateway_code"],
+                                Outcome.work_area_id.in_(scope["areas"]), Outcome.status.is_not(None))
+
+
+def _verified_slice_context():
+    return exists().where(StaffingTimecardEdit.slice_id == StaffingTimecardSlice.id,
+                          StaffingTimecardEdit.version == 1, StaffingTimecardEdit.actor_id.is_not(None))
 
 
 def earliest_retained_evidence(scope, person_id=None):
@@ -196,6 +214,11 @@ def earliest_retained_evidence(scope, person_id=None):
         if person_id is not None:
             query = query.filter(model.person_id == person_id)
         minima.append(query.with_entities(func.min(day)).scalar())
+    if history_enabled():
+        outcomes = _outcomes(scope)
+        if person_id is not None:
+            outcomes = outcomes.filter(Outcome.person_id == person_id)
+        minima.append(outcomes.with_entities(func.min(Outcome.sort_date)).scalar())
     return min((value for value in minima if value is not None), default=None)
 
 
@@ -211,13 +234,33 @@ def recorded_attendance(scope, start, end, *, person_id=None, classification="",
         query = _retained_query(scope, model, day, status).filter(day.between(start, end))
         if person_id is not None:
             query = query.filter(model.person_id == person_id)
-        for row in query.all():
+        verified_context = history_enabled() and model is StaffingTimecardSlice and (classification or details)
+        if verified_context:
+            rows = query.add_columns(_verified_slice_context().label("verified_context")).all()
+        else:
+            rows = ((row, True) for row in query.all())
+        for row, verified in rows:
             record_day = row.workday_date if model is StaffingTimecardSlice else row.attendance_date
             record_status = row.attendance_status if model is StaffingTimecardSlice else row.status
             key = (row.sort_date_operation_id, row.person_id)
             if model is StaffingTimecardSlice and (classification or details):
                 snapshots[key] = json.loads(row.context_json)
+                if not verified:
+                    snapshots[key].pop("classification_at_recording", None)
+            if details:
+                snapshots.setdefault(key, {})["operation_id"] = row.sort_date_operation_id
             records[key] = (record_day, row.work_area_unit_id, row.person_id, record_status)
+    if history_enabled():
+        query = _outcomes(scope).filter(Outcome.sort_date.between(start, end))
+        if person_id is not None:
+            query = query.filter(Outcome.person_id == person_id)
+        if classification:
+            query = query.filter(Outcome.classification == classification)
+        for row in query:
+            key = (row.sort_date_operation_id, row.person_id)
+            records[key] = (row.sort_date, row.work_area_id, row.person_id, row.status)
+            snapshots[key] = {"employee": row.employee_name, "classification_at_recording": row.classification,
+                              "operation_id": row.sort_date_operation_id, "sort_name": row.sort_name}
     retained = sorted(
         (value, key) for key, value in records.items()
         if not classification or snapshots.get(key, {}).get("classification_at_recording") == classification
@@ -231,25 +274,83 @@ def attendance_history_people(scope, query, classification, start, end):
     if not query.strip() or not scope["areas"]:
         return []
     people = StaffingPerson.query
-    if classification:
+    historical = history_enabled()
+    if classification and not historical:
         people = people.filter_by(classification=classification)
-    for word in query.strip().split()[:8]:
+    words = query.strip().split()[:8]
+    outcomes = _outcomes(scope).filter(Outcome.sort_date.between(start, end)) if historical else None
+    if historical and classification:
+        outcomes = outcomes.filter_by(classification=classification)
+    for word in words:
         people = people.filter(or_(
             StaffingPerson.first_name.icontains(word, autoescape=True),
             StaffingPerson.last_name.icontains(word, autoescape=True),
             StaffingPerson.employee_id.icontains(word, autoescape=True),
         ))
+        if historical:
+            outcomes = outcomes.filter(or_(Outcome.employee_name.icontains(word, autoescape=True),
+                                           Outcome.employee_id.icontains(word, autoescape=True)))
     current_assignment = StaffingPerson.work_assignments.any(
         StaffingWorkAssignment.active.is_(True)
         & StaffingWorkAssignment.work_area_unit_id.in_(scope["areas"])
     )
     retained_ids = []
     for model, day, status in _retained_sources():
-        retained_ids.append(_retained_query(scope, model, day, status)
-                            .filter(day.between(start, end)).with_entities(model.person_id).statement)
-    return people.filter(or_(current_assignment, *(StaffingPerson.id.in_(ids) for ids in retained_ids))).order_by(
+        if historical and classification and model is not StaffingTimecardSlice:
+            continue
+        retained = _retained_query(scope, model, day, status).filter(day.between(start, end))
+        if historical and classification:
+            # The timecard field is optional. Missing classification stays unknown.
+            json_class = (cast(model.context_json, JSON)["classification_at_recording"].as_string()
+                          if db.session.get_bind().dialect.name == "postgresql"
+                          else func.json_extract(model.context_json, "$.classification_at_recording"))
+            retained = retained.filter(_verified_slice_context(), json_class == classification)
+        retained_ids.append(retained.with_entities(model.person_id).statement)
+    authorized = [StaffingPerson.id.in_(ids) for ids in retained_ids]
+    if not historical or not classification:
+        authorized.append(current_assignment)
+    live_matches = people.filter(or_(*authorized)).order_by(
         StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id,
     ).limit(30).all()
+    if not historical:
+        return live_matches
+    # Pick one matching historical identity per employee, even after a name or ID edit.
+    matches = outcomes.with_entities(
+        Outcome.person_id.label("id"), Outcome.employee_id, Outcome.employee_name.label("full_name"),
+        func.row_number().over(partition_by=Outcome.person_id, order_by=(
+            Outcome.sort_date.desc(), Outcome.sort_date_operation_id.desc())).label("rank"),
+    ).subquery()
+    saved_matches = db.session.execute(
+        select(matches.c.id, matches.c.employee_id, matches.c.full_name).where(matches.c.rank == 1)
+        .order_by(matches.c.full_name, matches.c.id).limit(30)
+    ).all()
+    combined = {person.id: person for person in live_matches}
+    combined.update((person.id, person) for person in saved_matches)
+    return sorted(combined.values(), key=lambda person: (person.full_name.casefold(), person.id))[:30]
+
+
+def _dated_staffing(scope, report_day, classification):
+    """Authoritative close snapshots plus explicit coverage for missing operations."""
+    if not scope["gateway_code"] or not scope["areas"]:
+        return [], set(), set()
+    units = scope["hierarchy"]["by_id"]
+    from app.services.neostaffing_assignments import sort_of
+    sorts = {sort.id: sort for area_id in scope["areas"] if (sort := sort_of(units.get(area_id), units))}
+    normalize = staffing._normalize_staffing_sort_name
+    sort_names = {normalize(sort.name) for sort in sorts.values()}
+    expected = {op_id for op_id, name in SortDateOperation.query.with_entities(
+        SortDateOperation.id, SortDateOperation.sort_name).filter_by(gateway_code=scope["gateway_code"], sort_date=report_day)
+        if normalize(name) in sort_names}
+    captures = Close.query.filter_by(gateway_code=scope["gateway_code"], sort_date=report_day).filter(
+        Close.sort_unit_id.in_(sorts)).all()
+    expected.update(capture.sort_date_operation_id for capture in captures)
+    sealed = {capture.sort_date_operation_id for capture in captures if capture.sealed_at}
+    if not sealed:
+        return [], expected, sealed
+    query = Placement.query.filter(Placement.sort_date_operation_id.in_(sealed), Placement.work_area_id.in_(scope["areas"]))
+    if classification:
+        query = query.filter_by(classification=classification)
+    return query.all(), expected, sealed
 
 
 def reports(scope, args):
@@ -319,26 +420,57 @@ def reports(scope, args):
         groups = defaultdict(dict)
         retained = recorded_attendance(scope, report_day, report_day, classification=classification, details=True)
         named_areas = scope["areas"] if scope["master"] else scope["authority"].work_area_ids
+        dated, expected, sealed = _dated_staffing(scope, report_day, classification) if history_enabled() else ([], set(), set())
+        marks = {(snapshot["operation_id"], person_id, area_id): status
+                 for (_, area_id, person_id, status), snapshot in retained}
+        covered = set()
+        for placement in dated:
+            key = (placement.sort_date_operation_id, placement.person_id, placement.work_area_id)
+            covered.add(key)
+            groups[placement.work_area_id, placement.area_path][key] = {
+                "status": marks.get(key), "person_id": placement.person_id, "assigned": True,
+                "name": placement.employee_name if placement.work_area_id in named_areas else None,
+                "classification": staffing.CLASSIFICATION_LABELS.get(placement.classification),
+            }
         ids = {person_id for (_, area_id, person_id, _), snapshot in retained
                if area_id in named_areas and not snapshot.get("employee")}
         names = {person.id: person.full_name for person in StaffingPerson.query.filter(StaffingPerson.id.in_(ids)).all()} if ids else {}
         for (_, area_id, person_id, status), snapshot in retained:
-            groups[area_id][person_id] = {
-                "status": status,
+            key = (snapshot["operation_id"], person_id, area_id)
+            if key in covered:
+                continue
+            groups[area_id, staffing.unit_path(units[area_id])][key] = {
+                "status": status, "person_id": person_id, "assigned": False,
                 "name": (snapshot.get("employee") or names.get(person_id)) if area_id in named_areas else None,
                 "classification": staffing.CLASSIFICATION_LABELS.get(snapshot.get("classification_at_recording")),
             }
         result["rows"] = [
-            {"name": staffing.unit_path(units[area_id]), "recorded": len(people),
+            {"name": path, "recorded": sum(bool(row["status"]) for row in people.values()),
+             "assigned": len({row["person_id"] for row in people.values() if row["assigned"]}),
              "here": sum(row["status"] == "here" for row in people.values()),
              "people": sorted((row for row in people.values() if row["name"]), key=lambda row: row["name"].casefold())}
-            for area_id, people in groups.items()
+            for (_, path), people in groups.items()
         ]
         result["earliest"] = earliest_retained_evidence(scope)
-        result["coverage"] = (
-            "Totals include only records with classification captured at the time. Older classification detail may be unavailable."
-            if classification else "Headcounts cover recorded attendance. The full historical assigned roster is unavailable."
-        )
+        result["has_roster"] = bool(sealed)
+        result["assigned"] = len({placement.person_id for placement in dated})
+        if sealed and expected == sealed:
+            result["coverage"] = "Complete roster at the configured Sort close. Attendance shows recorded marks only."
+        elif sealed:
+            result["coverage"] = "Partial history. Some Sorts have no finalized roster."
+        elif retained or not history_enabled():
+            result["coverage"] = (
+                "Totals include only records with classification captured at the time. Older classification detail may be unavailable."
+                if classification else "Headcounts cover recorded attendance. The full historical assigned roster is unavailable."
+            )
+        else:
+            result["coverage"] = "No verified roster or retained attendance is available for this scope and date."
+        if sealed:
+            relevant_names = Close.query.with_entities(Close.sort_unit_id).filter(
+                Close.sort_date_operation_id.in_(sealed)).scalar_subquery()
+            result["earliest_roster"] = Close.query.with_entities(func.min(Close.sort_date)).filter(
+                Close.gateway_code == scope["gateway_code"], Close.sealed_at.is_not(None),
+                Close.sort_unit_id.in_(relevant_names)).scalar()
         return result
     result["query"] = args.get("search", "")[:140]
     if not scope["master"]:
@@ -358,10 +490,16 @@ def reports(scope, args):
     selected = next((person for person in result["people"] if person.id == person_id), None)
     if selected:
         result["person"] = selected
-        result["rows"] = recorded_attendance(scope, start, end, person_id=selected.id)
+        retained = recorded_attendance(scope, start, end, person_id=selected.id, classification=classification, details=True)
+        missing = {snapshot["operation_id"] for _, snapshot in retained if "sort_name" not in snapshot}
+        sort_names = dict(SortDateOperation.query.with_entities(SortDateOperation.id, SortDateOperation.sort_name)
+                          .filter(SortDateOperation.id.in_(missing)).all()) if missing else {}
+        result["rows"] = [{"day": day, "status": status,
+                           "sort": snapshot.get("sort_name") or sort_names.get(snapshot["operation_id"], "")}
+                          for (day, _, _, status), snapshot in retained]
         result["earliest"] = earliest_retained_evidence(scope, person_id=selected.id)
         result["coverage"] = (
-            "Dates without a retained record may be outside the attendance and timecard retention windows."
+            "Dates without a retained record may be outside the available attendance history."
             if start < today else "Attendance history shows recorded statuses only."
         )
     return result

@@ -42,21 +42,21 @@
             {% if reports.person %}
                 <h3>{{ reports.person.full_name }}</h3>
                 <ul class="v11-history">
-                    {% for day, area_id, person_id, status in reports.rows %}<li><time datetime="{{ day }}">{{ day.strftime('%b %d, %Y') }}</time><strong class="v11-status" data-mark="{{ status }}">{{ attendance_status_labels[status] }}</strong></li>
+                    {% for row in reports.rows %}<li><time datetime="{{ row.day }}">{{ row.day.strftime('%b %d, %Y') }}{% if row.sort %} · {{ row.sort|title }}{% endif %}</time><strong class="v11-status" data-mark="{{ row.status }}">{{ attendance_status_labels[row.status] }}</strong></li>
                     {% else %}<li>No retained attendance records in this date range.</li>{% endfor %}
                 </ul>
             {% endif %}
         {% elif reports.view == 'staffing' %}
-            {% if reports.rows %}<div class="v11-metrics v11-report-metrics">
-                {{ metric('Recorded marks', reports.rows|sum(attribute='recorded')) }}
+            {% if reports.rows or reports.has_roster %}<div class="v11-metrics v11-report-metrics">
+                {{ metric('Assigned employees', reports.assigned) if reports.has_roster else metric('Recorded marks', reports.rows|sum(attribute='recorded')) }}
                 {{ metric('Work areas', reports.rows|length) }}
             </div>{% endif %}
             <div class="v11-report-areas">
                 {% for row in reports.rows %}<article>
-                    <header><h3>{{ row.name }}</h3><span>{{ row.here }} HERE · {{ row.recorded }} recorded</span></header>
+                    <header><h3>{{ row.name }}</h3><span>{% if reports.has_roster %}{{ row.assigned }} assigned · {% endif %}{{ row.here }} HERE · {{ row.recorded }} recorded</span></header>
                     {% if row.people %}<ul>{% for person in row.people %}<li>
                         <span>{{ person.name }}{% if person.classification %}<small> · {{ person.classification }}</small>{% endif %}</span>
-                        <span class="v11-status" data-mark="{{ person.status }}">{{ attendance_status_labels[person.status] }}</span>
+                        <span class="v11-status" data-mark="{{ person.status or '' }}">{{ attendance_status_labels[person.status] if person.status else 'Unmarked' }}</span>
                     </li>{% endfor %}</ul>{% endif %}
                 </article>
                 {% else %}<p>No retained area headcounts match this report.</p>{% endfor %}
@@ -74,6 +74,7 @@
         {% endif %}
         {% if reports.coverage %}<p class="v11-record-coverage" role="status">{{ reports.coverage }}</p>{% endif %}
         {% if reports.earliest %}<p class="v11-record-coverage">Earliest retained linked record · <time datetime="{{ reports.earliest }}">{{ reports.earliest.strftime('%b %d, %Y') }}</time></p>{% endif %}
+        {% if reports.earliest_roster %}<p class="v11-record-coverage">Earliest finalized roster · <time datetime="{{ reports.earliest_roster }}">{{ reports.earliest_roster.strftime('%b %d, %Y') }}</time></p>{% endif %}
     </section>
 </div>
 {% endblock %}

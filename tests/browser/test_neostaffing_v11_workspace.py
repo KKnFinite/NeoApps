@@ -1,5 +1,5 @@
 """Local synthetic V11 screen evidence and interaction checks."""
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 import unittest
@@ -8,8 +8,8 @@ from playwright.sync_api import expect
 
 from app.extensions import db
 from app.models import (
-    Gateway, SortDateOperation, StaffingDailyAttendance, StaffingLeadershipAssignment,
-    StaffingReportingRelationship, StaffingUnit, User,
+    Gateway, SortDateOperation, StaffingAttendanceOutcome, StaffingDailyAttendance, StaffingLeadershipAssignment,
+    StaffingReportingRelationship, StaffingRosterClose, StaffingRosterPlacement, StaffingUnit, User,
 )
 from app.services import neostaffing as staffing
 from tests.browser import test_neostaffing_shift_roster as shift_fixture
@@ -146,6 +146,59 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
 
     def test_webkit(self):
         self.capture_workspace("webkit", (390, 1440))
+
+    def test_historical_reports_show_sealed_placement_and_individual_marks(self):
+        prior = self.DAY - timedelta(days=7)
+        opened = datetime.combine(prior, datetime.min.time())
+        with self.fixture.app.app_context():
+            sort = StaffingUnit.query.filter_by(unit_type="sort", name="Night").one()
+            gateway = Gateway.query.filter_by(code="RFD").one()
+            operation = SortDateOperation(gateway_id=gateway.id, gateway_code=gateway.code, sort_date=prior, sort_name="night")
+            db.session.add(operation)
+            db.session.flush()
+            db.session.add(StaffingRosterClose(
+                sort_date_operation_id=operation.id, gateway_code="RFD", sort_name="night", sort_date=prior,
+                sort_unit_id=sort.id, opens_at=opened, closes_at=opened + timedelta(hours=8), sealed_at=opened + timedelta(hours=9),
+            ))
+            db.session.flush()
+            db.session.add_all([
+                StaffingRosterPlacement(sort_date_operation_id=operation.id, person_id=self.employee_id,
+                    work_area_id=self.destination_id, area_path="Night / Hub / Outbound / Gate Two",
+                    employee_id="1100011", employee_name="Robin Hayes", classification="part_time"),
+                StaffingAttendanceOutcome(sort_date_operation_id=operation.id, person_id=self.employee_id,
+                    gateway_code="RFD", sort_name="night", sort_unit_id=sort.id, sort_date=prior,
+                    work_area_id=self.destination_id, employee_id="1100011", employee_name="Robin Hayes",
+                    classification="part_time", status="call_in", recorded_at=opened, updated_at=opened),
+            ])
+            db.session.commit()
+        self.fixture.app.config["NEOSTAFFING_HISTORY_ENABLED"] = True
+        try:
+            for engine, width in (("chromium", 1440), ("webkit", 390)):
+                with self.subTest(engine=engine, viewport=width):
+                    browser = getattr(self.fixture.pw, engine).launch()
+                    try:
+                        page = browser.new_page(viewport={"width": width, "height": 900}, is_mobile=width == 390)
+                        self.fixture().login(page)
+                        page.goto(self.fixture.origin + "/neostaffing/reports")
+                        page.get_by_label("Date", exact=True).fill(str(prior))
+                        page.get_by_role("button", name="Run report").click()
+                        expect(page.get_by_role("heading", name="Night / Hub / Outbound / Gate Two")).to_be_visible()
+                        expect(page.get_by_role("heading", name="Night / Hub / Outbound / Gate One")).to_have_count(0)
+                        expect(page.locator(".v11-record-coverage").first).to_contain_text("Complete roster")
+                        page.locator("[data-v11-report-select]").select_option("attendance")
+                        page.get_by_role("searchbox", name="Find employee").fill("1100011")
+                        page.get_by_label("From", exact=True).fill(str(prior))
+                        page.get_by_label("Through", exact=True).fill(str(prior))
+                        page.get_by_role("button", name="Search").click()
+                        page.get_by_role("link", name="Robin Hayes 1100011").click()
+                        expect(page.locator(".v11-history")).to_contain_text("Call In")
+                        expect(page.locator(".v11-history")).to_contain_text("Night")
+                        expect(page.locator(".v11-history")).not_to_contain_text("synthetic retained note")
+                        self.assertTrue(page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
+                    finally:
+                        browser.close()
+        finally:
+            self.fixture.app.config["NEOSTAFFING_HISTORY_ENABLED"] = False
 
     def test_board_transfer_review_and_status_only_autosave(self):
         browser = self.fixture.pw.chromium.launch()

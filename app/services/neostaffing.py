@@ -2042,7 +2042,8 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
         record.updated_by_user_id = user_id
         saved += 1
     _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person,
-                                   hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {})
+                                   hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {},
+                                   source_rows=existing)
     db.session.flush()
     if historical and saved_statuses:
         # Do not re-finalize from today's roster or change the original close
@@ -5020,12 +5021,15 @@ def _validate_attendance_originals(existing, originals):
             raise ValueError("Attendance changed while you were editing. Reload Attendance and review before saving.")
 
 
-def _sync_attendance_accountability(operation, statuses, user_id, assignments, *, hierarchy, timecards):
+def _sync_attendance_accountability(operation, statuses, user_id, assignments, *, hierarchy, timecards, source_rows):
     if not statuses:
         return
     from app.services.gateway_matrix import current_gateway_local_datetime
     from app.services.neostaffing_accountability import sync_attendance_occurrences
     from app.services.neostaffing_timecards import sync_attendance
+    from app.services.neostaffing_historical_records import record_attendance_changes
+
+    record_attendance_changes(operation, statuses, source_rows, assignments, timecards, hierarchy["by_id"])
 
     sync_attendance(operation, statuses, assignments, user_id,
                     as_of=current_gateway_local_datetime().date(), units=hierarchy["by_id"], existing_rows=timecards)
@@ -5228,7 +5232,8 @@ def save_attendance(values, user, *, form_submission=False, return_rows=False, d
         record.updated_by_user_id = user_id
         saved += 1
     _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person,
-                                   hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {})
+                                   hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {},
+                                   source_rows=existing)
     db.session.flush()
     if return_rows:
         result = {"saved": saved, "rows": [current_row(person_id) for person_id in sorted(response_ids)]}

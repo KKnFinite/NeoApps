@@ -122,6 +122,9 @@ from app.models.staffing_accountability import (
     StaffingAccountabilityCoverage, StaffingAccountabilityReconciliation,
 )
 from app.models.staffing_attendance_summary import StaffingAttendanceSummary
+from app.models.staffing_history import (
+    StaffingAttendanceOutcome, StaffingRosterClose, StaffingRosterPlacement, StaffingRosterRevision,
+)
 from app.models.staffing_group import StaffingGroup
 from app.models.staffing_group_membership import StaffingGroupMembership
 from app.models.staffing_notification import StaffingNotification

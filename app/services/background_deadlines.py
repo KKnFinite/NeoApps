@@ -55,6 +55,10 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
     def minimum(column, *where):
         return db.session.scalar(select(func.min(column)).where(*where))
     for gateway_id, code in gateways:
+        if safety and current_app.config.get("NEOSTAFFING_HISTORY_ENABLED") is True and (
+            code.upper() == current_app.config.get("DEFAULT_GATEWAY_CODE", "RFD").upper()
+        ):
+            add(gateway_id, "staffing_history", at)
         if code.upper() == 'RFD':
             from app.services.neostaffing_sheet_sync import next_deadline
             add(gateway_id, 'staffing_sheet', next_deadline(at))
@@ -144,9 +148,10 @@ def perform(gateway_id, kinds):
     from app.services import neoscorpion_spear_decisions as spear, neosubzero_archive as subzero
     from app.services.neostaffing_sheet_sync import drain as staffing_sheet_drain
     from app.services.neostaffing_raiden_sync import drain as staffing_raiden_drain
+    from app.services.neostaffing_historical_records import discover_and_seal
     jobs = [('auto', frost_auto.tick), ('spear', spear.drain),
         ('documents', frost_documents.drain), ('staffing_sheet', staffing_sheet_drain),
-        ('staffing_raiden', staffing_raiden_drain)]
+        ('staffing_raiden', staffing_raiden_drain), ('staffing_history', discover_and_seal)]
     progress = False
     def subzero_job(gateway):
         nonlocal progress

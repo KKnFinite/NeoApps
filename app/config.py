@@ -47,6 +47,7 @@ def resolve_database_uri():
 
 
 class Config:
+    NEOSTAFFING_HISTORY_ENABLED = env_flag("NEOSTAFFING_HISTORY_ENABLED", False)
     NEOSUBZERO_RAMP_ATTENDANCE_ENABLED = env_flag("NEOSUBZERO_RAMP_ATTENDANCE_ENABLED", False)
     NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED = env_flag("NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED", False)
     # Bounded current evidence only; historical analysis/training stays LOCAL.
