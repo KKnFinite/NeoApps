@@ -4,8 +4,11 @@
 {% block title %}{{ planning_title }} | NeoApps{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_mission_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+{% set can_import = user_can("neomotherbrain." ~ mission_type ~ "_planning.run") %}
 <section
-    class="panel centered-command-page manage-sort-sidebar-page planning-page planning-page-{{ mission_type }}"
+    class="mb-planning mb-missions panel centered-command-page manage-sort-sidebar-page planning-page planning-page-{{ mission_type }}"
     data-planning-live-root
     data-state-url="{{ url_for('neomotherbrain.planning_live_state', operation_id=operation.id, mission_type=mission_type) }}"
     data-planning-revision="{{ planning_revision }}"
@@ -24,412 +27,429 @@
     <div class="manage-sort-shell">
         {% include "neomotherbrain/_manage_sort_sidebar.html" %}
         <div class="manage-sort-main">
-            <div class="section-heading">
-                <h1 class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">{{ planning_title }}</h1>
-                <p>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</p>
-            </div>
-            {% include "neonodes/_live_update_status.html" %}
-
-            {% if can_edit %}
-            <div class="action-row planning-local-actions">
+            <header class="mb-heading">
+                <div>
+                    <p>{{ operation.gateway_code|upper }} · {{ operation.sort_name|title }} · {{ operation.sort_date.strftime("%a, %b %d, %Y") }}</p>
+                    <h1>{{ planning_title }}</h1>
+                </div>
+                {% include "neonodes/_live_update_status.html" %}
+            </header>
+            <div class="mb-mission-tools">
+                {% if can_edit %}
                 <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id, mission_type=mission_type) }}">{{ "ADD ARRIVAL" if mission_type == "arrival" else "ADD DEPARTURE" }}</a>
+                {% endif %}
+                <nav class="mb-jumps" aria-label="Planning sections">
+                    {% if can_import or preview %}<a class="alp-desktop-only" href="#alp-import">ALP import</a>{% endif %}
+                    <a href="#planning-review-title" class="mb-review-jump">Planning review<span class="mb-review-flag"> · Unmatched</span></a>
+                    {% if mission_type == "departure" %}<a href="#planning-spares">Spares</a>{% endif %}
+                </nav>
             </div>
-            {% endif %}
+            <section
+                class="planning-mobile-current-list planning-mobile-current-{{ mission_type }}s"
+                aria-label="Mobile current {{ label|lower }} list"
+                {% if mission_type == "arrival" %}data-mobile-arrival-list{% else %}data-mobile-departure-list{% endif %}
+            >
+                <div class="mb-list-head" aria-hidden="true">
+                    <span>Flight</span><span>Tail</span>
+                    {% if mission_type == "arrival" %}<span>Origin</span><span>ETA</span><span>+/−</span>
+                    {% else %}<span>Dest.</span><span>Parking</span><span></span>{% endif %}
+                </div>
+                {% if mission_type == "arrival" %}
+                <div class="planning-mobile-arrival-list" data-live-rows="mobile-missions" role="list" aria-label="Current arrival missions">
+                {% else %}
+                <div class="planning-mobile-departure-list" data-live-rows="mobile-missions" role="list" aria-label="Current departure missions">
+                {% endif %}
+                {% include "neomotherbrain/_planning_mobile_mission_rows.html" %}
+                </div>
+            </section>
 
-            <div class="alp-mobile-only alp-desktop-only-message" role="status">
-                <strong>ALP paste entry is desktop-only.</strong>
-                <span>Planning review rows remain visible below.</span>
-            </div>
+            <section class="mb-section planning-mission-section" aria-labelledby="planning-mission-title">
+                <h2 id="planning-mission-title">CURRENT {{ label|upper }} MISSIONS</h2>
+                <div class="table-wrap">
+                    <table class="data-table planning-mission-table">
+                        <thead>
+                            {% if mission_type == "arrival" %}
+                            <tr>
+                                <th>WAVE</th>
+                                <th>FLIGHT</th>
+                                <th>TAIL</th>
+                                <th>ORIGIN</th>
+                                <th>STA</th>
+                                <th>ETA</th>
+                                <th>+/-</th>
+                                <th>PARKING</th>
+                                <th>STATUS</th>
+                                <th>ACTIONS</th>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <th>WAVE</th>
+                                <th>FLIGHT</th>
+                                <th>TAIL</th>
+                                <th>DESTINATION</th>
+                                <th>STD</th>
+                                <th>PARKING</th>
+                                <th>STATUS</th>
+                                <th>ACTIONS</th>
+                            </tr>
+                            {% endif %}
+                        </thead>
+                        <tbody data-live-rows="missions">
+                            {% include "neomotherbrain/_planning_mission_rows.html" %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
-            <div class="alp-desktop-only">
-                <form class="operation-form" method="post">
-                    <label>
-                        <span>PASTE ALP {{ label|upper }} ROWS</span>
-                        <textarea name="paste_text" rows="10" spellcheck="false" placeholder="Date&#9;Flight&#9;Airport&#9;Tail&#9;Parking&#9;Status&#9;Time">{{ paste_text }}</textarea>
-                    </label>
-                    <p class="muted">
-                        Columns: Date, Flight, Airport, Tail, Parking, Status, Time. Parking and Status are ignored. ALP times are treated as Zulu and previewed in RFD local time.
-                    </p>
-                    <div class="action-row">
-                        <button class="action-button" type="submit" name="alp_action" value="preview">PREVIEW</button>
-                        {% if preview_is_active %}
-                        <button class="action-button" type="submit" name="alp_action" value="apply">APPLY PREVIEW</button>
-                        <button class="action-button action-button-secondary" type="submit" name="alp_action" value="clear">CLEAR PREVIEW</button>
-                        <button class="action-button action-button-secondary" type="submit" name="alp_action" value="cancel">CANCEL PREVIEW</button>
-                        {% endif %}
-                    </div>
-                </form>
-
-                {% if preview %}
-                <div class="metric-grid">
-                    <article class="metric-tile">
-                        <span>MATCHED</span>
-                        <strong>{{ preview.summary.matched }}</strong>
-                    </article>
-                    <article class="metric-tile">
-                        <span>UNMATCHED ALP</span>
-                        <strong>{{ preview.summary.unmatched }}</strong>
-                    </article>
-                    <article class="metric-tile">
-                        <span>MISSING CURRENT</span>
-                        <strong>{{ preview.summary.missing }}</strong>
-                    </article>
-                    <article class="metric-tile">
-                        <span>DUPLICATES</span>
-                        <strong>{{ preview.summary.duplicates }}</strong>
-                    </article>
-                    <article class="metric-tile">
-                        <span>INVALID</span>
-                        <strong>{{ preview.summary.invalid }}</strong>
-                    </article>
-                    {% if preview.applied_count is defined %}
-                    <article class="metric-tile">
-                        <span>APPLIED</span>
-                        <strong>{{ preview.applied_count }}</strong>
-                    </article>
-                    {% endif %}
+            {% if can_import or preview %}
+                <div class="alp-mobile-only alp-desktop-only-message" role="status">
+                    <strong>ALP paste entry is desktop-only.</strong>
+                    <span>Planning review rows remain visible below.</span>
                 </div>
 
-        <h2>MATCHED ROWS</h2>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>LINE</th>
-                        <th>ALP FLIGHT</th>
-                        <th>CURRENT FLIGHT</th>
-                        <th>AIRPORT</th>
-                        <th>TAIL CHANGE</th>
-                        <th>{{ "ETA CHANGE" if mission_type == "arrival" else "TIME CHANGE" }}</th>
-                        <th>ALP UTC</th>
-                        <th>RFD LOCAL</th>
-                        <th>WARNING</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in preview.matched_rows %}
-                    <tr>
-                        <td>{{ row.line_number }}</td>
-                        <td>{{ row.normalized_flight_number }}</td>
-                        <td>{{ row.current_flight_number|upper }}</td>
-                        <td>{{ row.airport }}</td>
-                        <td>{{ row.tail_change }}</td>
-                        <td>{{ row.time_change }}</td>
-                        <td>{{ row.utc_display }}</td>
-                        <td>{{ row.local_display }}</td>
-                        <td>{{ row.warning or "-" }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="9">NO MATCHED ALP ROWS.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <h2>CURRENT OPERATION FLIGHTS MISSING FROM PASTE</h2>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>FLIGHT</th>
-                        <th>KEY</th>
-                        <th>AIRPORT</th>
-                        <th>CURRENT TAIL</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in preview.missing_missions %}
-                    <tr>
-                        <td>{{ row.flight_number|upper }}</td>
-                        <td>{{ row.flight_key }}</td>
-                        <td>{{ row.airport|upper }}</td>
-                        <td>{{ row.tail_number|upper }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="4">NO CURRENT {{ label|upper }} MISSIONS MISSING FROM PASTE.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <h2>DUPLICATE ROWS</h2>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>LINE</th>
-                        <th>FLIGHT</th>
-                        <th>TAIL</th>
-                        <th>RFD LOCAL</th>
-                        <th>REASON</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in preview.duplicate_rows %}
-                    <tr>
-                        <td>{{ row.line_number }}</td>
-                        <td>{{ row.normalized_flight_number }}</td>
-                        <td>{{ row.tail_number }}</td>
-                        <td>{{ row.local_display }}</td>
-                        <td>
-                            {{ row.reason }}
-                            {% if row.reason_detail %}
-                            <br><span class="muted">{{ row.reason_detail }}</span>
+                <details class="mb-disclosure alp-desktop-only" id="alp-import"{% if preview or paste_text %} open{% endif %}>
+                    <summary>ALP import</summary>
+                    {% if can_import %}
+                    <form class="operation-form" method="post" action="#alp-import">
+                        <label>
+                            <span>PASTE ALP {{ label|upper }} ROWS</span>
+                            <textarea name="paste_text" rows="4" spellcheck="false" placeholder="Date&#9;Flight&#9;Airport&#9;Tail&#9;Parking&#9;Status&#9;Time">{{ paste_text }}</textarea>
+                        </label>
+                        <p class="muted">
+                            Columns: Date, Flight, Airport, Tail, Parking, Status, Time. Parking and Status are ignored. ALP times are treated as Zulu and previewed in RFD local time.
+                        </p>
+                        <div class="action-row">
+                            <button class="action-button" type="submit" name="alp_action" value="preview">PREVIEW</button>
+                            {% if preview_is_active %}
+                            <button class="action-button" type="submit" name="alp_action" value="apply">APPLY PREVIEW</button>
+                            <button class="action-button action-button-secondary" type="submit" name="alp_action" value="clear">CLEAR PREVIEW</button>
+                            <button class="action-button action-button-secondary" type="submit" name="alp_action" value="cancel">CANCEL PREVIEW</button>
                             {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="5">NO DUPLICATE ALP FLIGHTS.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <h2>INVALID ROWS</h2>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>LINE</th>
-                        <th>ROW</th>
-                        <th>ERROR</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in preview.invalid_rows %}
-                    <tr>
-                        <td>{{ row.line_number }}</td>
-                        <td>{{ row.raw }}</td>
-                        <td>{{ row.error }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="3">NO INVALID ALP ROWS.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% endif %}
-    </div>
-
-    <section class="planning-review-section" aria-labelledby="planning-review-title">
-        <h2 id="planning-review-title">{{ label|upper }} PLANNING REVIEW</h2>
-        <p class="muted">Unmatched ALP paste rows and unmatched Flight API rows for this current sort operation.</p>
-        <div class="table-wrap">
-            <table class="data-table planning-review-table">
-                <thead>
-                    <tr>
-                        <th>SOURCE</th>
-                        <th>REF</th>
-                        <th>FLIGHT</th>
-                        <th>{% if mission_type == "arrival" %}ORIGIN{% else %}DEST{% endif %}</th>
-                        <th>TAIL</th>
-                        <th>RFD LOCAL</th>
-                        <th>REASON</th>
-                        <th>ACTIONS</th>
-                    </tr>
-                </thead>
-                <tbody data-live-rows="review">
-                    {% include "neomotherbrain/_planning_review_rows.html" %}
-                </tbody>
-            </table>
-        </div>
-    </section>
-
-    {% if mission_type == "departure" %}
-    <section class="planning-spares-section">
-        {% if can_edit %}
-        <form class="operation-form planning-spare-create-form" method="post" action="{{ url_for('neomotherbrain.create_operation_spare', operation_id=operation.id) }}">
-            <h3>CREATE SPARE</h3>
-            <div class="inline-form-grid">
-                <label>
-                    <span>TAIL</span>
-                    <input type="text" name="tail_number" maxlength="32" autocomplete="off" autocapitalize="characters" required>
-                </label>
-                <label>
-                    <span>AC TYPE</span>
-                    <select name="aircraft_type" required>
-                        {% for aircraft_type in standalone_spare_aircraft_type_options %}
-                        <option value="{{ aircraft_type }}">{{ aircraft_type }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label>
-                    <span>PARKING</span>
-                    <select name="position_code">
-                        <option value="">UNPARKED</option>
-                        {% for ramp_name, ramp_code, ramp_positions in parking_positions %}
-                            {% for position in ramp_positions %}
-                            <option value="{{ position }}">{{ position }}</option>
-                            {% endfor %}
-                        {% endfor %}
-                    </select>
-                </label>
-                <label>
-                    <span>SLOT</span>
-                    <select name="lane_number">
-                        <option value="1">SLOT 1</option>
-                        <option value="2">SLOT 2</option>
-                    </select>
-                </label>
-                <button class="action-button" type="submit">CREATE SPARE</button>
-            </div>
-        </form>
-        {% endif %}
-
-        <div class="table-wrap">
-            <table class="data-table planning-spares-table">
-                <thead>
-                    <tr>
-                        <th>TAIL</th>
-                        <th>AC TYPE</th>
-                        <th>TYPE</th>
-                        <th>ARRIVAL / ETA</th>
-                        <th>PARKING</th>
-                        <th>STATUS</th>
-                        <th>ACTIONS</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in spare_rows %}
-                    {% set arrival = row.arrival %}
-                    <tr>
-                        <td>{{ row.tail }}</td>
-                        <td>{{ row.aircraft_type or "-" }}</td>
-                        <td>{{ row.spare_type }}</td>
-                        <td>
-                            {% if arrival %}
-                            {{ arrival.flight_number|upper }} / {{ row.arrival_time or "-" }}
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                        <td>{{ row.assigned_position or "UNPARKED" }}</td>
-                        <td><span class="planning-status-badge is-spare">SPARE</span></td>
-                        <td class="table-actions planning-mission-actions">
-                            {% if can_edit and row.spare_type == "ARRIVAL SPARE" %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.clear_operation_spare', operation_id=operation.id) }}">
-                                <input type="hidden" name="tail_number" value="{{ row.tail }}">
-                                <button class="table-row-button" type="submit">CLEAR SPARE</button>
-                            </form>
-                            {% elif can_edit %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.remove_operation_spare', operation_id=operation.id) }}">
-                                <input type="hidden" name="tail_number" value="{{ row.tail }}">
-                                <button class="table-row-button table-row-delete-button" type="submit">REMOVE SPARE</button>
-                            </form>
-                            {% else %}
-                            <span class="muted">VIEW ONLY</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="7">NO SPARES FOR THIS SORT.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <h3>ARRIVALS WITHOUT DEPARTURE</h3>
-        <div class="table-wrap">
-            <table class="data-table planning-spare-candidates-table">
-                <thead>
-                    <tr>
-                        <th>TAIL</th>
-                        <th>AC TYPE</th>
-                        <th>ARRIVAL</th>
-                        <th>ETA</th>
-                        <th>PARKING</th>
-                        <th>ACTIONS</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in arrival_spare_candidates %}
-                    {% set mission = row.mission %}
-                    <tr>
-                        <td>{{ mission.assigned_tail_number|upper }}</td>
-                        <td>{{ row.aircraft_type or "-" }}</td>
-                        <td>{{ mission.flight_number|upper }}</td>
-                        <td>{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</td>
-                        <td>{{ planning_parking_cell(row, operation) }}</td>
-                        <td class="table-actions planning-mission-actions">
-                            {% if can_edit %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.mark_operation_spare', operation_id=operation.id) }}">
-                                <input type="hidden" name="tail_number" value="{{ mission.assigned_tail_number|upper }}">
-                                <button class="table-row-button" type="submit">MARK SPARE</button>
-                            </form>
-                            {% else %}
-                            <span class="muted">VIEW ONLY</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="6">NO ARRIVAL TAILS WAITING FOR OUTBOUND DECISION.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </section>
-    {% endif %}
-
-    <section
-        class="planning-mobile-current-list planning-mobile-current-{{ mission_type }}s"
-        aria-label="Mobile current {{ label|lower }} list"
-        {% if mission_type == "arrival" %}data-mobile-arrival-list{% else %}data-mobile-departure-list{% endif %}
-    >
-        <div
-            class="planning-mobile-sort-title neo-brand-title"
-            {% if mission_type == "arrival" %}data-mobile-arrival-sort-header{% else %}data-mobile-departure-sort-header{% endif %}
-        >
-            {{ operation.gateway_code|upper }} {{ operation.sort_name|title }} {{ operation.sort_date.strftime("%m-%d-%Y") }}
-        </div>
-        {% if mission_type == "arrival" %}
-        <div class="planning-mobile-arrival-list" data-live-rows="mobile-missions" role="list" aria-label="Current arrival missions">
-        {% else %}
-        <div class="planning-mobile-departure-list" data-live-rows="mobile-missions" role="list" aria-label="Current departure missions">
-        {% endif %}
-        {% include "neomotherbrain/_planning_mobile_mission_rows.html" %}
-        </div>
-    </section>
-
-    <section class="planning-mission-section" aria-labelledby="planning-mission-title">
-        <h2 id="planning-mission-title">CURRENT {{ label|upper }} MISSIONS</h2>
-        <p class="muted">Current sort {{ label|lower }} missions. Mission editing lives here so board screens stay data-view only.</p>
-        <div class="table-wrap">
-            <table class="data-table planning-mission-table">
-                <thead>
-                    {% if mission_type == "arrival" %}
-                    <tr>
-                        <th>WAVE</th>
-                        <th>FLIGHT</th>
-                        <th>TAIL</th>
-                        <th>ORIGIN</th>
-                        <th>STA</th>
-                        <th>ETA</th>
-                        <th>+/-</th>
-                        <th>PARKING</th>
-                        <th>STATUS</th>
-                        <th>ACTIONS</th>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <th>WAVE</th>
-                        <th>FLIGHT</th>
-                        <th>TAIL</th>
-                        <th>DESTINATION</th>
-                        <th>STD</th>
-                        <th>PARKING</th>
-                        <th>STATUS</th>
-                        <th>ACTIONS</th>
-                    </tr>
+                        </div>
+                    </form>
                     {% endif %}
-                </thead>
-                <tbody data-live-rows="missions">
-                    {% include "neomotherbrain/_planning_mission_rows.html" %}
-                </tbody>
-            </table>
-        </div>
-    </section>
+
+                    {% if preview %}
+                    <div class="mb-import-totals">
+                        <article class="mb-total">
+                            <span>MATCHED</span>
+                            <strong>{{ preview.summary.matched }}</strong>
+                        </article>
+                        <article class="mb-total">
+                            <span>UNMATCHED ALP</span>
+                            <strong>{{ preview.summary.unmatched }}</strong>
+                        </article>
+                        <article class="mb-total">
+                            <span>MISSING CURRENT</span>
+                            <strong>{{ preview.summary.missing }}</strong>
+                        </article>
+                        <article class="mb-total">
+                            <span>DUPLICATES</span>
+                            <strong>{{ preview.summary.duplicates }}</strong>
+                        </article>
+                        <article class="mb-total">
+                            <span>INVALID</span>
+                            <strong>{{ preview.summary.invalid }}</strong>
+                        </article>
+                        {% if preview.applied_count is defined %}
+                        <article class="mb-total">
+                            <span>APPLIED</span>
+                            <strong>{{ preview.applied_count }}</strong>
+                        </article>
+                        {% endif %}
+                    </div>
+
+                    {% if preview.matched_rows %}
+                    <h3>MATCHED ROWS</h3>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>LINE</th>
+                                    <th>ALP FLIGHT</th>
+                                    <th>CURRENT FLIGHT</th>
+                                    <th>AIRPORT</th>
+                                    <th>TAIL CHANGE</th>
+                                    <th>{{ "ETA CHANGE" if mission_type == "arrival" else "TIME CHANGE" }}</th>
+                                    <th>ALP UTC</th>
+                                    <th>RFD LOCAL</th>
+                                    <th>WARNING</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview.matched_rows %}
+                                <tr>
+                                    <td>{{ row.line_number }}</td>
+                                    <td>{{ row.normalized_flight_number }}</td>
+                                    <td>{{ row.current_flight_number|upper }}</td>
+                                    <td>{{ row.airport }}</td>
+                                    <td>{{ row.tail_change }}</td>
+                                    <td>{{ row.time_change }}</td>
+                                    <td>{{ row.utc_display }}</td>
+                                    <td>{{ row.local_display }}</td>
+                                    <td>{{ row.warning or "-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if preview.missing_missions %}
+                    <h3>CURRENT OPERATION FLIGHTS MISSING FROM PASTE</h3>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>FLIGHT</th>
+                                    <th>KEY</th>
+                                    <th>AIRPORT</th>
+                                    <th>CURRENT TAIL</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview.missing_missions %}
+                                <tr>
+                                    <td>{{ row.flight_number|upper }}</td>
+                                    <td>{{ row.flight_key }}</td>
+                                    <td>{{ row.airport|upper }}</td>
+                                    <td>{{ row.tail_number|upper }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if preview.duplicate_rows %}
+                    <h3>DUPLICATE ROWS</h3>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>LINE</th>
+                                    <th>FLIGHT</th>
+                                    <th>TAIL</th>
+                                    <th>RFD LOCAL</th>
+                                    <th>REASON</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview.duplicate_rows %}
+                                <tr>
+                                    <td>{{ row.line_number }}</td>
+                                    <td>{{ row.normalized_flight_number }}</td>
+                                    <td>{{ row.tail_number }}</td>
+                                    <td>{{ row.local_display }}</td>
+                                    <td>
+                                        {{ row.reason }}
+                                        {% if row.reason_detail %}
+                                        <br><span class="muted">{{ row.reason_detail }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if preview.invalid_rows %}
+                    <h3>INVALID ROWS</h3>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>LINE</th>
+                                    <th>ROW</th>
+                                    <th>ERROR</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview.invalid_rows %}
+                                <tr>
+                                    <td>{{ row.line_number }}</td>
+                                    <td>{{ row.raw }}</td>
+                                    <td>{{ row.error }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                </details>
+            {% endif %}
+
+            <section class="mb-section planning-review-section" aria-labelledby="planning-review-title">
+                <h2 id="planning-review-title">{{ label|upper }} PLANNING REVIEW</h2>
+                <p class="muted">Unmatched ALP and Flight API records for this Sort.</p>
+                <div class="table-wrap">
+                    <table class="data-table planning-review-table">
+                        <thead>
+                            <tr>
+                                <th>SOURCE</th>
+                                <th>REF</th>
+                                <th>FLIGHT</th>
+                                <th>{% if mission_type == "arrival" %}ORIGIN{% else %}DEST{% endif %}</th>
+                                <th>TAIL</th>
+                                <th>RFD LOCAL</th>
+                                <th>REASON</th>
+                                <th>ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody data-live-rows="review">
+                            {% include "neomotherbrain/_planning_review_rows.html" %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            {% if mission_type == "departure" %}
+            <details class="mb-disclosure planning-spares-section" id="planning-spares">
+                <summary>Spare management · {{ spare_rows|length }} registered</summary>
+                {% if can_edit %}
+                <form class="operation-form planning-spare-create-form" method="post" action="{{ url_for('neomotherbrain.create_operation_spare', operation_id=operation.id) }}">
+                    <h3>CREATE SPARE</h3>
+                    <div class="inline-form-grid">
+                        <label>
+                            <span>TAIL</span>
+                            <input type="text" name="tail_number" maxlength="32" autocomplete="off" autocapitalize="characters" required>
+                        </label>
+                        <label>
+                            <span>AC TYPE</span>
+                            <select name="aircraft_type" required>
+                                {% for aircraft_type in standalone_spare_aircraft_type_options %}
+                                <option value="{{ aircraft_type }}">{{ aircraft_type }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>
+                            <span>PARKING</span>
+                            <select name="position_code">
+                                <option value="">UNPARKED</option>
+                                {% for ramp_name, ramp_code, ramp_positions in parking_positions %}
+                                    {% for position in ramp_positions %}
+                                    <option value="{{ position }}">{{ position }}</option>
+                                    {% endfor %}
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>
+                            <span>SLOT</span>
+                            <select name="lane_number">
+                                <option value="1">SLOT 1</option>
+                                <option value="2">SLOT 2</option>
+                            </select>
+                        </label>
+                        <button class="action-button" type="submit">CREATE SPARE</button>
+                    </div>
+                </form>
+                {% endif %}
+
+                <div class="table-wrap">
+                    <table class="data-table planning-spares-table">
+                        <thead>
+                            <tr>
+                                <th>TAIL</th>
+                                <th>AC TYPE</th>
+                                <th>TYPE</th>
+                                <th>ARRIVAL / ETA</th>
+                                <th>PARKING</th>
+                                <th>STATUS</th>
+                                <th>ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in spare_rows %}
+                            {% set arrival = row.arrival %}
+                            <tr>
+                                <td>{{ row.tail }}</td>
+                                <td>{{ row.aircraft_type or "-" }}</td>
+                                <td>{{ row.spare_type }}</td>
+                                <td>
+                                    {% if arrival %}
+                                    {{ arrival.flight_number|upper }} / {{ row.arrival_time or "-" }}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.assigned_position or "UNPARKED" }}</td>
+                                <td><span class="planning-status-badge is-spare">SPARE</span></td>
+                                <td class="table-actions planning-mission-actions">
+                                    {% if can_edit and row.spare_type == "ARRIVAL SPARE" %}
+                                    <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.clear_operation_spare', operation_id=operation.id) }}">
+                                        <input type="hidden" name="tail_number" value="{{ row.tail }}">
+                                        <button class="table-row-button" type="submit">CLEAR SPARE</button>
+                                    </form>
+                                    {% elif can_edit %}
+                                    <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.remove_operation_spare', operation_id=operation.id) }}">
+                                        <input type="hidden" name="tail_number" value="{{ row.tail }}">
+                                        <button class="table-row-button table-row-delete-button" type="submit">REMOVE SPARE</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="muted">VIEW ONLY</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="7">NO SPARES FOR THIS SORT.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>ARRIVALS WITHOUT DEPARTURE</h3>
+                <div class="table-wrap">
+                    <table class="data-table planning-spare-candidates-table">
+                        <thead>
+                            <tr>
+                                <th>TAIL</th>
+                                <th>AC TYPE</th>
+                                <th>ARRIVAL</th>
+                                <th>ETA</th>
+                                <th>PARKING</th>
+                                <th>ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in arrival_spare_candidates %}
+                            {% set mission = row.mission %}
+                            <tr>
+                                <td>{{ mission.assigned_tail_number|upper }}</td>
+                                <td>{{ row.aircraft_type or "-" }}</td>
+                                <td>{{ mission.flight_number|upper }}</td>
+                                <td>{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</td>
+                                <td>{{ planning_parking_cell(row, operation) }}</td>
+                                <td class="table-actions planning-mission-actions">
+                                    {% if can_edit %}
+                                    <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.mark_operation_spare', operation_id=operation.id) }}">
+                                        <input type="hidden" name="tail_number" value="{{ mission.assigned_tail_number|upper }}">
+                                        <button class="table-row-button" type="submit">MARK SPARE</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="muted">VIEW ONLY</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6">NO ARRIVAL TAILS WAITING FOR OUTBOUND DECISION.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            {% endif %}
         </div>
     </div>
 </section>
+<script nonce="{{ csp_nonce() }}">
+document.querySelector(".mb-mission-tools").addEventListener("click", (event) => {
+    const link = event.target.closest('a[href^="#"]');
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const section = document.getElementById(link.hash.slice(1));
+    if (section instanceof HTMLDetailsElement) section.open = true;
+});
+</script>
 {% include "neomotherbrain/_planning_live_updates.html" %}
 {% endblock %}

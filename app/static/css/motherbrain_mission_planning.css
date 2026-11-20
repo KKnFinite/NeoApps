@@ -1,0 +1,141 @@
+/* Only the current Sort's Arrival and Departure Planning workspace. */
+.mb-missions .mb-mission-tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.mb-missions .mb-mission-tools > .action-button {
+    border-color: #a97770;
+    background: #513833;
+}
+.mb-missions .mb-review-flag { display: none; }
+.mb-missions:has([data-live-rows="review"] [data-live-row]) .mb-review-jump {
+    border-color: #c99b51;
+    color: #ffe2a9;
+}
+.mb-missions:has([data-live-rows="review"] [data-live-row]) .mb-review-flag { display: inline; }
+.mb-missions .manage-sort-main { min-width: 0; }
+.mb-missions :is(.mb-section, .mb-disclosure, #planning-review-title) { scroll-margin-top: 90px; }
+.mb-missions .mb-section h2 { margin-bottom: 8px; }
+.mb-missions .mb-disclosure summary { min-height: 24px; }
+.mb-missions .mb-disclosure h3 { margin: 14px 0 6px; font: 650 .86rem/1.3 system-ui, sans-serif; }
+.mb-missions .table-wrap { max-width: 100%; overflow-x: auto; }
+.mb-missions .data-table { width: 100%; font: 500 .83rem/1.3 system-ui, sans-serif; }
+.mb-missions .data-table :is(th, td) {
+    padding: 7px 6px;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--mb-line);
+}
+.mb-missions .data-table th {
+    color: var(--mb-muted);
+    font: 650 .7rem/1.3 system-ui, sans-serif;
+}
+.mb-missions .planning-mission-table td { white-space: nowrap; }
+.mb-missions .planning-mission-table td:nth-child(2) { font-weight: 750; }
+.mb-missions .planning-mission-table .planning-mission-actions { display: table-cell; white-space: normal; }
+.mb-missions .planning-mission-actions > :is(form, a, button) { margin: 2px 3px 2px 0; }
+.mb-missions .planning-mission-actions .table-row-button,
+.mb-missions .planning-mission-actions > a { font: 650 .71rem/1.2 system-ui, sans-serif; min-height: 29px; }
+.mb-missions .planning-tail-swap-form { display: inline-flex; align-items: center; gap: 4px; }
+.mb-missions .planning-tail-swap-form input.planning-tail-swap-input {
+    min-width: 0;
+    width: 5.5rem;
+    padding-inline: 5px;
+    background: #22313a;
+    border: 1px solid #536571;
+    border-radius: 4px;
+}
+.mb-missions .planning-mission-actions :is(.table-row-button, a) {
+    background: #25353f;
+    border: 1px solid #526570;
+    border-radius: 5px;
+    box-shadow: none;
+}
+.mb-missions .planning-mission-actions .table-row-delete-button { border-color: #99645f; }
+.mb-missions .planning-mission-actions :is(.table-row-button, a):hover { background: #354953; }
+@media (min-width: 761px) and (max-width: 1100px) {
+    .mb-missions .planning-mission-table :is(th, td) { padding-inline: 4px; }
+    .mb-missions .planning-tail-swap-form input.planning-tail-swap-input { width: 4.6rem; }
+    .mb-missions .planning-mission-actions > :is(form, a, button) { margin-inline: 0; }
+}
+.mb-missions .operation-form { width: 100%; max-width: none; margin: 10px 0; }
+.mb-missions .operation-form label { text-align: left; }
+.mb-missions textarea[name="paste_text"] {
+    width: 100%;
+    min-height: 5em;
+    max-width: none;
+    background: #202e37;
+    color: inherit;
+    border: 1px solid #63727b;
+    border-radius: 5px;
+    font: .87rem/1.45 ui-monospace, monospace;
+}
+.mb-missions .operation-form .action-row { justify-content: flex-start; }
+.mb-missions [value="apply"].action-button { border-color: #7da999; background: #25493e; }
+.mb-missions .mb-import-totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding-block: 10px;
+    border-block: 1px solid var(--mb-line);
+}
+.mb-missions .mb-total { display: inline-flex; align-items: baseline; gap: 6px; }
+.mb-missions .mb-total span { color: var(--mb-muted); font-size: .74rem; }
+.mb-missions .mb-total strong { font-variant-numeric: tabular-nums; }
+.mb-missions .planning-review-section > p { margin: 0 0 6px; font-size: .83rem; }
+.mb-missions .mb-list-head { display: none; }
+
+@media (max-width: 760px) {
+    .mb-missions .mb-heading { gap: 4px; }
+    .mb-missions .mb-heading .live-update-status { margin: 0; }
+    .mb-missions .mb-mission-tools .alp-desktop-only { display: none; }
+    .mb-missions .mb-mission-tools a { min-height: 38px; padding-inline: 8px; }
+    .mb-missions .planning-mobile-current-list { width: 100%; margin-bottom: 12px; }
+    .mb-missions .planning-mission-section { display: none; }
+    body.mobile-app-chrome .mb-missions.planning-page .planning-review-section { display: block !important; }
+    .mb-missions .mb-list-head, .mb-missions .planning-mobile-current-list [data-live-row] {
+        display: grid;
+        grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.18fr) minmax(44px, .75fr);
+        align-items: center;
+        gap: 4px;
+        padding-inline: 6px;
+    }
+    .mb-missions .mb-list-head { color: var(--mb-muted); font: 650 .71rem/1.3 system-ui, sans-serif; }
+    .mb-missions .planning-mobile-current-list [data-live-row] {
+        min-height: 40px;
+        border-color: var(--mb-line);
+        border-radius: 5px;
+    }
+    .mb-missions .planning-mobile-current-list [data-live-row]:not(.is-arrival-late) { background: var(--mb-surface); }
+    .mb-missions .planning-mobile-current-list [data-live-row] > :is(strong, span, time) {
+        font: 550 .77rem/1.25 system-ui, sans-serif;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-align: left;
+    }
+    .mb-missions .planning-mobile-current-list [data-live-row] strong { font-weight: 750; }
+    .mb-missions .planning-mobile-current-list strong a { display: grid; align-items: center; min-height: 32px; color: inherit; }
+    .mb-missions .planning-mobile-current-list .planning-mobile-tail-swap-button {
+        min-height: 32px;
+        font: 650 .72rem/1.2 system-ui, sans-serif;
+    }
+    .mb-missions .planning-mobile-departure-row .planning-mobile-tail-swap:has(details[open]) { grid-column: 1 / -1; }
+    .mb-missions .planning-mobile-tail-swap-details[open] { display: flex; align-items: center; gap: 6px; }
+    .mb-missions .planning-mobile-tail-swap-details[open] summary { padding-inline: 8px; }
+    .mb-missions .planning-mobile-current-list .planning-mobile-tail-swap-details[open] form {
+        position: static;
+        flex: 1;
+        width: auto;
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+        background: none;
+    }
+    .mb-missions .planning-review-table { min-width: 38rem; }
+    .mb-missions .planning-review-table:has([data-live-empty-row]) { min-width: 0; }
+    .mb-missions .planning-review-table:has([data-live-empty-row]) thead { display: none; }
+    .mb-missions .planning-spare-create-form .inline-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -1,3 +1,6 @@
+{% macro mobile_flight(mission) %}
+    {% if can_edit %}<a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}" aria-label="Edit {{ mission.flight_number|upper }}">{{ mission.flight_number|upper }}</a>{% else %}{{ mission.flight_number|upper }}{% endif %}
+{% endmacro %}
 {% for row in mission_rows %}
 {% set mission = row.mission %}
 {% set parking = row.parking_context %}
@@ -11,7 +14,7 @@
     aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} origin {{ mission.origin|upper if mission.origin else '-' }} ETA {{ row.eta_time.strftime('%H:%M') if row.eta_time else '-' }} variance {{ row.eta_delta_display }}"
     {% if row.is_late %}data-mobile-arrival-late-row{% endif %}
 >
-    <strong class="planning-mobile-arrival-flight">{{ mission.flight_number|upper }}</strong>
+    <strong class="planning-mobile-arrival-flight">{{ mobile_flight(mission) }}</strong>
     <span class="planning-mobile-arrival-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
     <span class="planning-mobile-arrival-origin">{{ mission.origin|upper if mission.origin else "-" }}</span>
     <time class="planning-mobile-arrival-eta" datetime="{{ row.eta_time.isoformat() if row.eta_time else '' }}">{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</time>
@@ -26,7 +29,7 @@
     data-live-version="{{ mission.updated_at.isoformat(timespec='microseconds') if mission.updated_at else '' }}"
     aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} destination {{ mission.display_destination if mission.destination else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }}"
 >
-    <strong class="planning-mobile-departure-flight">{{ mission.flight_number|upper }}</strong>
+    <strong class="planning-mobile-departure-flight">{{ mobile_flight(mission) }}</strong>
     <span class="planning-mobile-departure-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
     <span class="planning-mobile-departure-destination">{{ mission.display_destination if mission.destination else "-" }}</span>
     <span class="planning-mobile-departure-parking">{{ parking.label|upper if parking and parking.has_tail else "-" }}</span>

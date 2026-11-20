@@ -7167,8 +7167,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("<small>Arrival Planning</small>", html)
         self.assertIn("planning-page planning-page-arrival", html)
         self.assertIn("planning-mobile-current-arrivals", html)
-        self.assertIn("planning-mobile-sort-title neo-brand-title", mobile_list)
-        self.assertIn("RFD Night 07-02-2026", mobile_list)
+        self.assertIn("RFD · Night · Thu, Jul 02, 2026", html)
+        self.assertIn('class="mb-list-head"', mobile_list)
         self.assertIn("planning-mobile-arrival-list", mobile_list)
         self.assertIn("planning-mobile-arrival-row is-arrival-late", mobile_list)
         self.assertIn("data-mobile-arrival-late-row", mobile_list)
@@ -7191,7 +7191,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("planning-mobile-mission-card", mobile_list)
         self.assertNotIn("Arrival Planning", mobile_list)
         self.assertIn(
-            '<h1 class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Arrival Planning</h1>',
+            '<h1>Arrival Planning</h1>',
             html,
         )
         self.assertIn("CURRENT ARRIVAL MISSIONS", html)
@@ -7251,8 +7251,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("planning-page planning-page-departure", html)
         self.assertIn('<small>Departure Planning</small>', html)
         self.assertIn("planning-mobile-current-departures", html)
-        self.assertIn("planning-mobile-sort-title neo-brand-title", mobile_list)
-        self.assertIn("RFD Night 06-01-2026", mobile_list)
+        self.assertIn("RFD · Night · Mon, Jun 01, 2026", html)
+        self.assertIn('class="mb-list-head"', mobile_list)
         self.assertIn("planning-mobile-departure-list", mobile_list)
         self.assertIn("planning-mobile-departure-row", mobile_list)
         self.assertIn("planning-mobile-departure-flight", mobile_list)
