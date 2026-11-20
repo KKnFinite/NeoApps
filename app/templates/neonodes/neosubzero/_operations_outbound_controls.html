@@ -65,6 +65,7 @@
         {{ treatment_form(row, editable, board, row.ramp, compact=true) }}
     {% endif %}
 </section>
+<div class="ops-outbound-detail-actions">
 {% set frost = row.mobile_evidence.get('frost_observation') %}
 {% if frost %}<p class="ops-observation-recorded">{{ 'FROST PRESENT · RECORDED' if frost == 'present' else 'NERVOUS CAPTAIN · RECORDED' }}</p>
 {% elif editable and not row.has_actual_spray and event_status not in ('finished','cleared','negative','not_sprayed') %}
@@ -82,7 +83,7 @@
     </form>
 </details>
 <details class="ops-inline-evidence" data-ops-disclosure="evidence">
-    <summary>PARTICIPATION / AUDITED CORRECTIONS</summary>
+    <summary><span class="ops-mobile-details-only">PARTICIPATION / AUDITED CORRECTIONS</span><span class="ops-desktop-details-only">CORRECTIONS</span></summary>
     {% if row.radio_pending and corrections and user_can('neosubzero.coordinator.edit') %}
     <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-confirm="Undo CLEAR and preserve the recorded spray?">
         {{ mutation_identity(row, board, row.ramp) }}
@@ -92,9 +93,11 @@
     {% endif %}
     {% if event_status in ('finished','cleared') %}{{ treatment_form(row, corrections, board, row.ramp, compact=true, correction=true) }}{% endif %}
     {% if row.has_actual_spray or event_status in ('finished','cleared') %}{{ spray_reason(row, corrections, board, row.ramp, show_observation=false) }}{% endif %}
-    {{ spray_position_forms(row, corrections, board, row.ramp) }}
+    <div data-ops-participation-home>{{ spray_position_forms(row, corrections, board, row.ramp, compact=true) }}</div>
     <a href="{{ url_for('neosubzero.deice_log') }}">DEICE LOG</a>
 </details>
+</div>
+<div data-ops-participation-inline></div>
 {% endif %}
 {% if row.frost_inspection and row.frost_inspection.last %}
 <p class="ops-desktop-inspection-history">{{ row.frost_inspection.last.physical_label }} · {{ row.frost_inspection.last_time }}</p>

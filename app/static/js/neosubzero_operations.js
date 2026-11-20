@@ -247,8 +247,23 @@
                 row.querySelector('[data-ops-expand-details]')?.setAttribute('aria-expanded',String(extra.open));
                 const home = row.querySelector('[data-ops-reason-home]');
                 const reason = row.querySelector('[data-ops-row-reason]');
-                const reasonSlot = desktopInline() ? home : extra.querySelector('[data-ops-reason-detail]') || home;
+                const reasonSlot = !media.matches ? home : extra.querySelector('[data-ops-reason-detail]') || home;
                 if (reason && reason.parentElement !== reasonSlot) reasonSlot.append(reason);
+                const participation = extra.querySelector('.ops-compact-participation');
+                const participationSlot = extra.querySelector(media.matches ? '[data-ops-participation-home]' : '[data-ops-participation-inline]');
+                if (participation && participationSlot && participation.parentElement !== participationSlot) {
+                    participationSlot.append(participation);
+                    if (media.matches && participation.querySelector(dirtyForm)) {
+                        participationSlot.closest('details').open = true;
+                    }
+                }
+                for (const form of extra.querySelectorAll('[data-ops-remove-form]')) {
+                    const slot = form.closest('[data-participant-id]')?.querySelector(media.matches ? '[data-ops-remove-home]' : '[data-ops-remove-inline]');
+                    if (!slot || form.parentElement === slot) continue;
+                    slot.append(form);
+                    const disclosure = slot.closest('details');
+                    if (disclosure && form.matches(dirtyForm)) disclosure.open = true;
+                }
                 const card = accordion(row);
                 const summary = card.querySelector(':scope > summary');
                 if (visual) summary.tabIndex = -1;

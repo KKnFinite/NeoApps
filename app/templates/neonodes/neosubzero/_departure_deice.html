@@ -237,43 +237,56 @@
 <label class="ops-confirm"><input type="checkbox" name="crew_confirmed" value="yes" {% if confirmed %}required{% endif %}>CONFIRM ACTUAL CREW{% if not confirmed %} (otherwise use DUCC crew at END){% endif %}</label>
 {% endmacro %}
 
-{% macro spray_position_forms(row, can_edit, board, selected_ramp='') %}
+{% macro spray_position_forms(row, can_edit, board, selected_ramp='', compact=false) %}
 {% if row.application_passes %}
-<section class="neosubzero-spray-positions" data-subzero-spray-positions>
-<h3>AIRCRAFT PASS PARTICIPATION</h3>
+<section class="neosubzero-spray-positions{% if compact %} ops-compact-participation{% endif %}" data-subzero-spray-positions>
+<h3>{% if compact %}<span class="ops-desktop-details-only">PARTICIPATION</span><span class="ops-mobile-details-only">AIRCRAFT PASS PARTICIPATION</span>{% else %}AIRCRAFT PASS PARTICIPATION{% endif %}</h3>
 {% for pass_row in row.application_passes %}
 <section class="neosubzero-spray-pass{% if pass_row.type in ('Type I', 'Type IV') %} {{ 'type-iv' if pass_row.type == 'Type IV' else 'type-i' }}{% endif %}">
-<header><strong>PASS {{ pass_row.number }} · {{ pass_row.type }}</strong><span>{{ pass_row.start or '—' }}–{{ pass_row.end or '—' }}</span></header>
+<header><strong>PASS {{ pass_row.number }} · {{ pass_row.type }}</strong><span{% if compact %} class="ops-mobile-details-only"{% endif %}>{{ pass_row.start or '—' }}–{{ pass_row.end or '—' }}</span></header>
 {% if pass_row.participation_review %}<p class="ops-review">Official participation missing — confirm actual truck, crew and product through an audited correction. Current staffing is not historical proof.</p>{% endif %}
+{% if compact and not pass_row.participation_review %}
+<p class="ops-pass-crew-note ops-desktop-details-only">{{ 'CREW SNAPSHOT RECORDED' if pass_row.end else 'CREW SNAPSHOT AT END' }}</p>
+{% endif %}
 <div class="neosubzero-spray-position-grid">
 {% for position in pass_row.positions if not position.excluded or position.gallons %}
 <article data-participant-id="{{ position.record.id }}">
-<strong>TRUCK {{ position.truck_number }}</strong>
-<p>{{ position.driver_name or 'DRIVER NOT RECORDED' }} · {{ position.flyer_name or 'FLYER NOT RECORDED' }}</p>
-<small>{{ 'OFFICIAL' if position.official else 'SELECTED FOR END SNAPSHOT' }}{% if not position.selected %} · REMOVED FROM FUTURE PARTICIPATION · APPLIED GALLONS RETAINED{% endif %}</small>
+<strong class="ops-participant-truck" title="Truck {{ position.truck_number }}"><span{% if compact %} class="ops-mobile-details-only"{% endif %}>TRUCK </span>{{ position.truck_number }}</strong>
+<p class="ops-participant-crew"><span title="Driver: {{ position.driver_name or 'Not recorded' }}">{{ position.driver_name or 'DRIVER NOT RECORDED' }}</span> · <span title="Flyer: {{ position.flyer_name or 'Not recorded' }}">{{ position.flyer_name or 'FLYER NOT RECORDED' }}</span></p>
+<small{% if compact %} class="{{ 'ops-mobile-details-only' if position.selected else 'ops-participant-retained' }}"{% endif %}>{{ 'OFFICIAL' if position.official else 'SELECTED FOR END SNAPSHOT' }}{% if not position.selected %} · REMOVED FROM FUTURE PARTICIPATION · APPLIED GALLONS RETAINED{% endif %}</small>
 {% if can_edit and position.official and not position.excluded %}
-<form method="post" action="{{ url_for('neosubzero.spray_gallons_mutate') }}" data-subzero-operational-form>
+<form class="ops-participant-gallons" method="post" action="{{ url_for('neosubzero.spray_gallons_mutate') }}" data-subzero-operational-form>
 {{ participation_identity(row,board,pass_row,position,true) }}
-<label>Gallons<input name="gallons" inputmode="decimal" value="{{ position.gallons }}" placeholder="NOT ENTERED"></label><button>SAVE GALLONS</button>
+<label><span{% if compact %} class="ops-mobile-details-only"{% endif %}>Gallons</span><input name="gallons" aria-label="Gallons" inputmode="decimal" value="{{ position.gallons }}" placeholder="NOT ENTERED"></label><button aria-label="SAVE GALLONS">{% if compact %}<span class="ops-desktop-details-only">SAVE</span><span class="ops-mobile-details-only">SAVE GALLONS</span>{% else %}SAVE GALLONS{% endif %}</button>
 </form>
-{% else %}<p>GALLONS {{ position.gallons or 'NOT ENTERED' }}</p>{% endif %}
+{% else %}<p class="ops-participant-gallons">{% if compact %}<span class="ops-desktop-details-only">{{ position.gallons or '—' }} gal</span><span class="ops-mobile-details-only">GALLONS {{ position.gallons or 'NOT ENTERED' }}</span>{% else %}GALLONS {{ position.gallons or 'NOT ENTERED' }}{% endif %}</p>{% endif %}
 {% if can_edit %}
-<details><summary>PARTICIPANT / CORRECTION</summary>
+<details class="ops-participant-edit"{% if compact %} data-ops-disclosure="participant-{{ position.record.id }}"{% endif %}><summary>{% if compact %}<span class="ops-desktop-details-only">EDIT</span><span class="ops-mobile-details-only">PARTICIPANT / CORRECTION</span>{% else %}PARTICIPANT / CORRECTION{% endif %}</summary>
 <form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>
 {{ participation_identity(row,board,pass_row,position) }}<input type="hidden" name="action" value="correct_participant">
 <label>Truck<input name="truck_number" maxlength="32" value="{{ position.truck_number }}" required></label>
 {{ crew_inputs(position,pass_row.end) }}{{ correction_inputs(pass_row) }}
 {% if pass_row.participation_review %}<label>Actual fluid<input name="fluid_name" maxlength="80" required></label><label>Actual concentration %<input name="concentration_percent" inputmode="numeric" required></label>{% endif %}
 <button>SAVE PARTICIPANT CORRECTION</button></form>
-{% if position.selected %}<form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>
-{{ participation_identity(row,board,pass_row,position) }}{{ correction_inputs(pass_row) }}<button name="action" value="remove_truck">REMOVE TRUCK</button></form>{% endif %}
-</details>{% endif %}
+{% if position.selected %}
+{% if compact %}<div data-ops-remove-home>{% endif %}
+<form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form{% if compact %} data-ops-remove-form{% endif %}>
+{{ participation_identity(row,board,pass_row,position) }}{{ correction_inputs(pass_row) }}<button name="action" value="remove_truck">{% if compact %}<span class="ops-desktop-details-only">REMOVE</span><span class="ops-mobile-details-only">REMOVE TRUCK</span>{% else %}REMOVE TRUCK{% endif %}</button></form>
+{% if compact %}</div>{% endif %}
+{% endif %}
+</details>
+{% if compact and position.selected %}
+    {% if pass_row.end %}<details class="ops-participant-remove ops-desktop-details-only" data-ops-disclosure="remove-participant-{{ position.record.id }}"><summary>REMOVE</summary><div data-ops-remove-inline></div></details>
+    {% else %}<div class="ops-participant-remove ops-desktop-details-only" data-ops-remove-inline></div>{% endif %}
+{% endif %}
+{% endif %}
 </article>
 {% endfor %}
-{% for position in pass_row.implicit %}<article><strong>TRUCK {{ position.truck_number }}</strong><p>{{ position.driver.full_name if position.driver else 'NO DRIVER' }} · {{ position.flyer.full_name if position.flyer else 'NO FLYER' }}</p><small>DUCC PRESELECTED · CREW SNAPSHOT AT END</small>
-{% if can_edit %}<form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>{{ participation_identity(row,board,pass_row,position) }}<button name="action" value="remove_truck">REMOVE TRUCK</button></form>{% endif %}</article>{% endfor %}
+{% for position in pass_row.implicit %}<article><strong class="ops-participant-truck" title="Truck {{ position.truck_number }}"><span{% if compact %} class="ops-mobile-details-only"{% endif %}>TRUCK </span>{{ position.truck_number }}</strong><p class="ops-participant-crew"><span title="Driver: {{ position.driver.full_name if position.driver else 'Unassigned' }}">{{ position.driver.full_name if position.driver else 'NO DRIVER' }}</span> · <span title="Flyer: {{ position.flyer.full_name if position.flyer else 'Unassigned' }}">{{ position.flyer.full_name if position.flyer else 'NO FLYER' }}</span></p><small{% if compact %} class="ops-mobile-details-only"{% endif %}>DUCC PRESELECTED · CREW SNAPSHOT AT END</small>
+{% if compact %}<p class="ops-participant-gallons ops-desktop-details-only">— gal</p>{% endif %}
+{% if can_edit %}<form class="ops-participant-remove" method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>{{ participation_identity(row,board,pass_row,position) }}<button name="action" value="remove_truck">{% if compact %}<span class="ops-desktop-details-only">REMOVE</span><span class="ops-mobile-details-only">REMOVE TRUCK</span>{% else %}REMOVE TRUCK{% endif %}</button></form>{% endif %}</article>{% endfor %}
 </div>
-{% if can_edit %}<details><summary>ADD TRUCK · PASS {{ pass_row.number }}</summary>
+{% if can_edit %}<details class="ops-participant-add"{% if compact %} data-ops-disclosure="add-participant-{{ pass_row.number }}"{% endif %}><summary>{% if compact %}<span class="ops-desktop-details-only">ADD TRUCK</span><span class="ops-mobile-details-only">ADD TRUCK · PASS {{ pass_row.number }}</span>{% else %}ADD TRUCK · PASS {{ pass_row.number }}{% endif %}</summary>
 <form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>
 {{ participation_identity(row,board,pass_row) }}<input type="hidden" name="action" value="add_truck">
 <label>Truck<input name="truck_number" maxlength="32" list="subzero-shared-trucks" required></label>
