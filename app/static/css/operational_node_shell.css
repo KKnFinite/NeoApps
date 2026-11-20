@@ -177,6 +177,17 @@ body.operational-shell-page {
         color: #ecf4f4;
     }
 
+    /* Apply full-screen geometry before deferred JS restores persisted mode. */
+    html.operational-board-view-boot body.operational-shell-page {
+        --operational-sidebar-width: 0px;
+        --operational-topbar-height: 0px;
+    }
+    html.operational-board-view-boot body.operational-shell-page > .shell > .content {
+        width: 100% !important;
+        max-width: none !important;
+        padding: 12px !important;
+        margin: 0 !important;
+    }
     /* Real full-width Board View.  The old mode only hid navigation on some
        pages because the shell still reserved its sidebar/topbar padding. */
     body.operational-shell-page.operational-board-view {
