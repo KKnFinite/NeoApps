@@ -198,6 +198,11 @@ def neostaffing_app_required(minimum_role="watcher", permission_key=None):
     return decorator
 
 
+def _general_staffing_redirect():
+    endpoint = "neostaffing.board" if user_can(BOARD_VIEW_PERMISSION) else "neostaffing.people"
+    return redirect(url_for(endpoint))
+
+
 @bp.post("/workspace-scope")
 @neostaffing_app_required()
 def save_workspace_scope():
@@ -206,9 +211,16 @@ def save_workspace_scope():
         target = "neostaffing.index"
     raw = request.form.get("unit_id", "").strip()
     try:
-        workspace.set_workspace_scope(current_user, int(raw) if raw else None)
+        selected_id = int(raw) if raw else None
+        workspace.set_workspace_scope(current_user, selected_id)
     except ValueError as error:
         flash(str(error), "error")
+    else:
+        if target == "neostaffing.shift_flow":
+            scope = workspace.workspace_scope(current_user)
+            areas = scope["descendants"].get(selected_id, set())
+            if not areas or areas != workspace.shift_board_area_ids(scope, areas):
+                return _general_staffing_redirect()
     filters = {key: request.form[key][:140] for key in WORKSPACE_FILTERS.get(target, ()) if key in request.form}
     return redirect(url_for(target, **filters))
 
@@ -638,6 +650,9 @@ def staffing_groups():
 @bp.route("/shift-flow")
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def shift_flow():
+    scope = workspace.workspace_scope(current_user)
+    if scope["selected"] and not workspace.shift_board_area_ids(scope, scope["active_areas"]):
+        return _general_staffing_redirect()
     from app.services.neostaffing_sheet_sync import status as sheet_sync_status
     context = staffing_service.shift_flow_context(
         request.args.get("phase", "final_door"), request.args.get("side", "east")

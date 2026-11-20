@@ -155,14 +155,19 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
             doors = {unit.name: unit for unit in StaffingUnit.query.filter(
                 StaffingUnit.name.in_(("Door 13", "Door 17"))).all()}
             door_13, door_17 = (doors[name].id for name in ("Door 13", "Door 17"))
+            aviation = StaffingUnit(unit_type="department", name="Aviation Services", parent=doors["Door 13"].parent.parent)
+            deice = StaffingUnit(unit_type="work_area", name="Deice", parent=aviation)
+            db.session.add_all([aviation, deice])
+            db.session.flush()
+            deice_id = deice.id
             people_ids = {}
-            for code, name, door in (("7100001", "Tara", "Door 13"), ("7100002", "Quinn", "Door 13"),
-                                     ("7100003", "Sam", "Door 17")):
+            for code, name, area in (("7100001", "Tara", doors["Door 13"]), ("7100002", "Quinn", doors["Door 13"]),
+                                     ("7100003", "Sam", doors["Door 17"]), ("7100004", "Avery", deice)):
                 person = staffing.create_person({
                     "first_name": name, "last_name": "Test", "employee_id": code, "classification": "part_time",
                     "seniority_date": "2020-01-01",
                 })
-                staffing.assign_work_area(person, doors[door])
+                staffing.assign_work_area(person, area)
                 people_ids[name] = person.id
             db.session.commit()
         for engine, width in (("chromium", 1440), ("webkit", 390)):
@@ -276,6 +281,19 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
                     expect(current).to_have_text("Night / Ramp / Shift / Door 13")
                     expect(row13).to_have_count(2)
                     expect(row17).to_have_count(0)
+
+                    nav.get_by_role("link", name="Board" if mobile else "Staffing Board").click()
+                    expect(page).to_have_url(self.fixture.origin + "/neostaffing/shift-flow")
+                    summary.click()
+                    drill("Night")
+                    drill("Ramp")
+                    drill("Aviation Services")
+                    active_level.get_by_role("button", name="Select Aviation Services").click()
+                    expect(page).to_have_url(self.fixture.origin + "/neostaffing/board")
+                    expect(current).to_have_text("Night / Ramp / Aviation Services")
+                    expect(page.locator("[data-board-area]")).to_have_count(1)
+                    expect(page.locator(f'[data-board-area="{deice_id}"]')).to_contain_text("Avery Test")
+                    expect(page.locator("[data-roster-person]")).to_have_count(0)
 
     def test_historical_reports_show_sealed_placement_and_individual_marks(self):
         prior = self.DAY - timedelta(days=7)

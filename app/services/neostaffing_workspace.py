@@ -36,10 +36,14 @@ def authorized_areas(scope):
     return {unit.id for unit in scope["options"] if unit.unit_type == "work_area"}
 
 
-def general_board_area_ids(scope):
+def shift_board_area_ids(scope, area_ids):
     units = scope["hierarchy"]["by_id"]
-    return {area_id for area_id in scope["active_areas"]
-            if not staffing.assignment_service.is_shift(units[area_id], units)}
+    return {area_id for area_id in area_ids if staffing.assignment_service.is_shift(units[area_id], units)}
+
+
+def general_board_area_ids(scope):
+    areas = scope["active_areas"]
+    return areas - shift_board_area_ids(scope, areas)
 
 
 def board_scope_stamp(scope):

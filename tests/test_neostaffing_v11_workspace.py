@@ -98,6 +98,44 @@ def test_board_denies_edits_to_other_scopes_and_watchers(site, monkeypatch):
     assert source.active and source.work_area_unit_id == area.id
 
 
+def test_switching_scope_from_shift_flow_opens_the_matching_staffing_board(site, monkeypatch):
+    night, _, _, _, _ = site._hierarchy()
+    current = site._night_operation()
+    monkeypatch.setattr(staffing, "current_operations_for_gateway", lambda gateway: [current])
+    ramp = staffing.create_unit({"unit_type": "operation", "name": "Ramp", "parent_id": night.id})
+    shift = staffing.create_unit({"unit_type": "department", "name": "Shift", "parent_id": ramp.id})
+    door = staffing.create_unit({"unit_type": "work_area", "name": "Door 13", "parent_id": shift.id})
+    aviation = staffing.create_unit({"unit_type": "department", "name": "Aviation Services", "parent_id": ramp.id})
+    deice = staffing.create_unit({"unit_type": "work_area", "name": "Deice", "parent_id": aviation.id})
+    shifter = site._person("IN-SHIFT-ROSTER", door)
+    staffing.create_shift_flow_plan(shifter, {"shift_flow_sort_start_work_area_id": door.id}, door)
+    deicer = site._person("IN-AVIATION-ROSTER", deice)
+    site._user("board-scope-switch", "master")
+    db.session.commit()
+    site._login("board-scope-switch")
+
+    def select_scope(unit, endpoint="neostaffing.shift_flow"):
+        return site.client.post("/neostaffing/workspace-scope", data={
+            "endpoint": endpoint, "unit_id": unit.id if unit else "",
+        }, follow_redirects=True)
+
+    shift_page = select_scope(shift, "neostaffing.board")
+    assert shift_page.request.path == "/neostaffing/shift-flow"
+    assert f'data-roster-person="{shifter.id}"' in shift_page.text
+    for unit in (aviation, deice, ramp, None):
+        board = select_scope(unit)
+        assert board.request.path == "/neostaffing/board"
+        assert f'data-board-area="{deice.id}"' in board.text
+        assert f'data-board-person="{deicer.id}"' in board.text
+        assert f'data-board-person="{shifter.id}"' not in board.text
+        assert "data-roster-person=" not in board.text
+    select_scope(aviation, "neostaffing.attendance")
+    bookmarked = site.client.get("/neostaffing/shift-flow", follow_redirects=True)
+    assert bookmarked.request.path == "/neostaffing/board"
+    assert "data-roster-person=" not in bookmarked.text
+    assert select_scope(door).request.path == "/neostaffing/shift-flow"
+
+
 def test_scope_follows_sort_identity_and_current_authority(site, monkeypatch):
     sort, operation, department, area, outside = site._hierarchy()
     current = site._night_operation()
