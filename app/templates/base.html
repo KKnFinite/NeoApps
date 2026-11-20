@@ -51,7 +51,7 @@
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/csp_compatibility.css', v='20261031-csp-v1') }}">
     {% if is_rfd_hub_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/gateway_launcher.css', v=config.STATIC_ASSET_VERSION) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gateway_launcher.css', v=config.STATIC_ASSET_VERSION, rev='aea2ce7a5983') }}">
     {% endif %}
     {% if request.endpoint == 'auth.portal_dashboard' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/portal_navigation.css', v=config.STATIC_ASSET_VERSION) }}">
@@ -71,7 +71,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
     {% endif %}
     {% if uses_operational_shell %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/operational_node_shell.css', v=config.STATIC_ASSET_VERSION, shell='20261106-sidebar-scroll-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/operational_node_shell.css', v=config.STATIC_ASSET_VERSION, rev='152107da4330') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260913-employees-v7') }}">
@@ -909,10 +909,10 @@
     {% if uses_shared_mobile_drawer %}
     <script defer src="{{ url_for('static', filename='js/mobile_drawer.js', v=config.STATIC_ASSET_VERSION, dock='20261110-page-scroll-v1' if request.endpoint == 'neoermac.view_outbound' else none) }}"></script>
     {% endif %}
-    {% if uses_operational_shell %}
     {% set visit = operational_visit_token(current_user, gateway|default(none)) %}
     {% if visit %}<script defer src="{{ url_for('static', filename='js/operational_visit.js', v=config.STATIC_ASSET_VERSION) }}" data-visit="{{ visit }}" data-visit-url="{{ url_for('auth.remember_operational_screen') }}"></script>{% endif %}
-    <script defer src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% if uses_operational_shell %}
+    <script defer src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION, rev='37d7717e8c0d') }}"></script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}
     <script nonce="{{ csp_nonce() }}"

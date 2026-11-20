@@ -1,5 +1,7 @@
 import re
 import unittest
+from hashlib import sha256
+from pathlib import Path
 from datetime import date, datetime, time
 from unittest.mock import patch
 from sqlalchemy import event
@@ -115,6 +117,30 @@ class RaidenTest(unittest.TestCase):
         self.assertNotIn(b"FX101",response.data)
         self.assertIn(b"No active Sort",response.data)
         self.assertEqual(SortDateOperation.query.count(),1)
+
+    def test_returning_browsers_fetch_current_shell_assets(self):
+        for page, files in (("/rfd", ["css/gateway_launcher.css"]),
+                            ("/neoraiden", ["css/operational_node_shell.css", "js/operational_shell.js"])):
+            html = self.client.get(page).text
+            for asset in files:
+                with self.subTest(asset=asset):
+                    content = (Path(self.app.static_folder) / asset).read_bytes().replace(b"\r\n", b"\n")
+                    url = re.search(r'/static/' + re.escape(asset) + r'\?[^"]+', html).group(0)
+                    self.assertIn("rev=" + sha256(content).hexdigest()[:12], url)
+
+    def test_last_screen_on_staffing_and_standalone_routing(self):
+        from app.models import NeoSektorOperationalSetting
+        db.session.add(NeoSektorOperationalSetting(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+                                                   integration_mode="neo_only"))
+        db.session.commit()
+        for path in ("/neostaffing/attendance", "/neosektor/driver-routing"):
+            with self.subTest(path=path):
+                page = self.client.get(path)
+                self.assertEqual(page.status_code, 200)
+                token = re.search(rb'data-visit="([^"]+)"', page.data).group(1).decode()
+                self.assertEqual(self.client.post("/account/operational-screen", data={"visit":token}).status_code, 204)
+                self.assertEqual(self.client.get("/login").location, path)
+        self.assertNotIn(b'data-visit="', self.client.get("/neosektor/driver-routing?tv=1").data)
 
     def test_store_restore_and_fallback_on_revocation(self):
         op = seed_sort(self.gateway)
