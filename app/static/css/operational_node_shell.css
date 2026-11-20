@@ -222,6 +222,7 @@ body.operational-shell-page {
         width: 100%;
         max-width: none;
         min-width: 0;
+        box-sizing: border-box;
     }
     body.operational-shell-page.operational-board-view .operational-board-exit {
         display: grid;
