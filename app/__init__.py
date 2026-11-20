@@ -222,6 +222,8 @@ def register_template_helpers(app):
 
     def current_pwa_manifest_key():
         path = request.path.rstrip("/") or "/"
+        if path == "/neoraiden" or path.startswith("/neoraiden/"):
+            return "neoraiden"
         if path == "/rfd" or path.startswith("/rfd/"):
             return "neogateway"
         if path == "/motherbrain" or path.startswith("/motherbrain/"):
@@ -360,7 +362,8 @@ def register_template_helpers(app):
             from app.neonodes.neoraiden.services import authorized_gateways
             if authorized_gateways(current_user):
                 targets.append(dict(key="raiden", node_word="Raiden", suffix="",
-                    href=url_for("neoraiden.index"), is_current=False, icon_src=None))
+                    href=url_for("neoraiden.index"), is_current=False,
+                    icon_src="images/logos/newlogo_raiden_small.png"))
         return targets
 
     app.jinja_env.filters["local_datetime"] = format_local_datetime
@@ -880,6 +883,18 @@ def _pwa_manifest_definitions():
                 _pwa_icon_src("/static/images/icons/neogateway/pwa/neogateway-icon-192.png", "192x192", "any"),
                 _pwa_icon_src("/static/images/icons/neogateway/pwa/neogateway-icon-512.png", "512x512", "any"),
                 _pwa_icon_src("/static/images/icons/neogateway/pwa/neogateway-maskable-512.png", "512x512", "any maskable"),
+            ],
+        },
+        "neoraiden": {
+            "name": "NeoRaiden",
+            "short_name": "NeoRaiden",
+            "description": "NeoRaiden God Mode — read-only operational overview.",
+            "start_url": "/neoraiden",
+            "theme_color": "#092038",
+            "icons": [
+                _pwa_icon_src("/static/images/icons/neoraiden/pwa/neoraiden-icon-192.png", "192x192", "any"),
+                _pwa_icon_src("/static/images/icons/neoraiden/pwa/neoraiden-icon-512.png", "512x512", "any"),
+                _pwa_icon_src("/static/images/icons/neoraiden/pwa/neoraiden-maskable-512.png", "512x512", "any maskable"),
             ],
         },
         "neostaffing": {

@@ -13,7 +13,8 @@
     "scorpion": "images/logos/newlogo_scorpion.png",
     "rain": "images/logos/newlogo_rain_small.png",
     "subzero": "images/logos/newlogo_subzero_small.png",
-    "reptile": "images/logos/newlogo_reptile_small.png"
+    "reptile": "images/logos/newlogo_reptile_small.png",
+    "raiden": "images/logos/newlogo_raiden_small.png"
 } %}
 
 {% macro node_card(slug, name, descriptor, state="available", action="Launch", name_tier="medium") -%}
@@ -87,7 +88,7 @@
         {% endif %}
 
         {% if can_launch_raiden %}<a class="gateway-node-card gateway-node-raiden" href="{{ url_for('neoraiden.index', gateway=gateway.code, operation_id=selected_operation_id) }}" aria-label="Open NeoRaiden">
-                <span class="gateway-node-card-main"><span class="gateway-node-card-copy">{{ node_label("raiden","Raiden") }}<small>God Mode</small></span></span><span class="gateway-node-action">Launch</span>
+                {{ node_card("raiden", "Raiden", "God Mode", name_tier="short") }}
             </a>{% endif %}
         <div class="gateway-node-grid" aria-label="Operational NeoNodes">
             {% if can_launch_sektor %}<a class="gateway-node-card gateway-node-sektor" href="{{ url_for('neosektor.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neosektor.index') }}" aria-label="Open NeoSektor">{{ node_card("sektor", "Sektor", "Inbound Ops", name_tier="medium") }}</a>{% else %}<article class="gateway-node-card gateway-node-sektor gateway-node-disabled" aria-disabled="true" aria-label="NeoSektor unavailable">{{ node_card("sektor", "Sektor", "Inbound Ops", "disabled", name_tier="medium") }}</article>{% endif %}

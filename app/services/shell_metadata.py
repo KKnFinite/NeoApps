@@ -12,7 +12,9 @@ from app.services.page_assets import page_stylesheets
 NODE_IDENTITIES = {
     "raiden": {
         "name": "NeoRaiden", "word": "Raiden", "home_endpoint": "neoraiden.index",
-        "locked_icon": None, "desktop_icon": None, "icon_alt": "NeoRaiden",
+        "locked_icon": "images/icons/neoraiden/inapp/neoraiden-inapp-128.png",
+        "desktop_icon": "images/logos/newlogo_raiden.png",
+        "icon_alt": "NeoRaiden logo",
     },
     "staffing": {
         "name": "NeoStaffing", "word": "Staffing", "home_endpoint": "neostaffing.index",
