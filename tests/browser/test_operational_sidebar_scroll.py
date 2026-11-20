@@ -71,3 +71,44 @@ class SidebarScrollBrowserTest(unittest.TestCase):
         finally:
             if browser:browser.close()
             F.tearDownClass()
+
+    def test_board_view_reclaims_hidden_shell_space(self):
+        F = fixtures.MobileDrawerBrowserTest
+        F.setUpClass()
+        browser = None
+        try:
+            browser = F.pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 768})
+            F().login(page)
+            page.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1','seen')")
+            for route in ("/neoscorpion/fuel-dispatch", "/motherbrain/manage-sort"):
+                with self.subTest(route=route):
+                    F().ready(page, route)
+                    entry = page.locator(".operational-sidebar-utilities [data-operational-board-toggle]")
+                    expect(entry).to_be_visible()
+                    self.assertEqual(
+                        entry.evaluate("node => node.parentElement.lastElementChild === node"),
+                        True,
+                    )
+                    entry.click()
+                    expect(page.locator("body.operational-board-view")).to_have_count(1)
+                    expect(page.locator(".operational-board-exit")).to_be_visible()
+                    expect(page.locator(".operational-node-topbar")).to_be_hidden()
+                    expect(page.locator(".operational-desktop-sidebar")).to_be_hidden()
+                    geometry = page.evaluate("""() => {
+                        const e = document.querySelector("main.content");
+                        const r = e.getBoundingClientRect();
+                        return { left: r.left, right: r.right, width: innerWidth,
+                            padding: parseFloat(getComputedStyle(e).paddingLeft) };
+                    }""")
+                    self.assertLessEqual(abs(geometry["left"]), 1, geometry)
+                    self.assertGreaterEqual(geometry["right"], geometry["width"] - 1, geometry)
+                    self.assertLessEqual(geometry["padding"], 12.1, geometry)
+                    page.locator(".operational-board-exit").click()
+                    expect(page.locator("body.operational-board-view")).to_have_count(0)
+                    expect(page.locator(".operational-node-topbar")).to_be_visible()
+                    expect(page.locator(".operational-desktop-sidebar")).to_be_visible()
+        finally:
+            if browser:
+                browser.close()
+            F.tearDownClass()
