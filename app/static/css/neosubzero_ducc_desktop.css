@@ -185,7 +185,10 @@
 .blueprint-neosubzero .neosubzero-ucc .ucc-team.is-mirrored { text-align:right; }
 .neosubzero-ucc .ucc-team-controls { display:grid; gap:3px; }
 .neosubzero-ucc :is(.ucc-crew-compact,.ucc-crew-editor-head,.ucc-pill .ucc-crew-field-label) { display:none; }
-.neosubzero-ucc .ucc-pill .ucc-inline-empty { display:none; }
+.neosubzero-ucc .ucc-truck-entry { display:flex; align-items:center; gap:4px; }
+.neosubzero-ucc .ucc-team.is-mirrored .ucc-truck-entry { flex-direction:row-reverse; }
+.neosubzero-ucc .ucc-truck-entry > .ucc-pill { flex:1; min-width:0; }
+.neosubzero-ucc .ucc-crew-position { flex:none; color:#a9c8da; font-size:.68rem; font-weight:700; }
 .neosubzero-ucc[data-ucc-inline-ready="true"] .ucc-legacy-save { display:none; }
 .blueprint-neosubzero .neosubzero-ucc .ucc-team form { display:block; margin:0; }
 .blueprint-neosubzero .neosubzero-ucc .ucc-team .ucc-pill {
@@ -383,7 +386,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
         & .ucc-team .ucc-pill span { overflow-wrap:anywhere; }
         &[data-ucc-crew-editor="true"] {
             & .ucc-team:has(> .ucc-crew-compact) {
-                display:grid; grid-template-rows:[truck] 23px [driver] 23px [flyer] 23px;
+                display:grid; grid-template-rows:[truck] minmax(23px,auto) [driver] minmax(23px,auto) [flyer] minmax(23px,auto);
                 gap:1px; align-items:center; color:#dcecf5;
                 font:500 .73rem/1.24 NeoFontPlain,"Segoe UI",sans-serif;
             }
@@ -396,17 +399,16 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
             & .ucc-team-controls:not(:popover-open) > :not(form[data-ucc-auto-save]:not([data-ucc-assigned])) { display:none; }
             & .ucc-crew-line { display:flex; align-items:center; gap:2px; }
             & .is-mirrored .ucc-crew-line { flex-direction:row-reverse; }
-            & .ucc-crew-line > span,
-            & .ucc-team-controls:not(:popover-open) .ucc-pill > span {
-                min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+            & .ucc-crew-line > .ucc-crew-value {
+                display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2;
+                min-width:0; overflow:hidden; overflow-wrap:anywhere; line-height:1.08;
             }
+            & .ucc-crew-line > .ucc-crew-position { order:-1; }
             & .ucc-crew-line[data-ucc-crew-line="truck"] { font-weight:750; }
             & .ucc-crew-line .is-drop-target { outline:1px dashed #9bd4ee; outline-offset:-1px; }
             & .ucc-team-controls:not(:popover-open) .ucc-pill { min-height:23px; padding-block:3px; }
             & .ucc-team-controls:not(:popover-open) .ucc-pill:has(select[aria-invalid="true"]) { border-color:#ff9c9c; }
             & .ucc-team-controls:not(:popover-open) .ucc-pill:has(select[aria-invalid="true"])::after { content:"!"; color:#ff9c9c; }
-            & .ucc-team-controls:not(:popover-open) .ucc-pill:has(select option[value=""]:checked) [data-ucc-selected-text] { display:none; }
-            & .ucc-team-controls:not(:popover-open) .ucc-pill:has(select option[value=""]:checked) .ucc-inline-empty { display:block; }
             & .ucc-crew-edit {
                 display:grid; place-items:center; flex:none; width:18px; height:18px; padding:0; border:0;
                 border-radius:4px; background:none; color:#acd3e7; cursor:pointer;
@@ -432,6 +434,8 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
                 display:grid; grid-template-columns:4em minmax(0,1fr); align-items:center; gap:5px;
                 padding:0; border:0; background:none; border-radius:0;
             }
+            & .ucc-team-controls:popover-open .ucc-truck-entry { display:block; }
+            & .ucc-team-controls:popover-open .ucc-crew-position { display:none; }
             & .ucc-team-controls:popover-open .ucc-pill::after,
             & .ucc-team-controls:popover-open [data-ucc-selected-text] { display:none; }
             & .ucc-team-controls:popover-open .ucc-crew-field-label { display:block; }
