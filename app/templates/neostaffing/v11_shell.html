@@ -30,7 +30,7 @@
 </button>
 {% endmacro %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION, rev='roster-columns') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION, rev='full-rosters') }}">
 <div class="v11-app" data-staffing-v11>
     <aside class="v11-sidebar">
         <a class="v11-brand" href="{{ url_for('neostaffing.index') }}"><b aria-hidden="true">N</b><span>NeoStaffing<small>Operations{% if workspace_scope.gateway_code %} / {{ workspace_scope.gateway_code }}{% endif %}</small></span></a>

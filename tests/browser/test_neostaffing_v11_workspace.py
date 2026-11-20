@@ -403,20 +403,23 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
             for i, area in enumerate(areas[:12], 1):
                 if i == 3:
                     continue
-                for j, first in enumerate(("Ari", "Billie", "Casey", "Ellis", "Frankie", "Jordan", "Parker", "Quinn", "Taylor", "Vee"), 1):
+                names = ("Ari", "Billie", "Casey", "Ellis", "Frankie", "Jordan", "Parker", "Quinn", "Taylor", "Vee")
+                if i == 1:
+                    names += tuple(f"Roster Member {number:02}" for number in range(1, 12))
+                for j, first in enumerate(names, 1):
                     person = staffing.create_person({
                         "first_name": first, "last_name": f"Roster {i:02}",
                         "employee_id": f"120{i:02}{j:02}", "classification": "part_time",
                         "seniority_date": "2020-01-01",
                     })
                     staffing.assign_work_area(person, area)
-            unassigned = staffing.create_person({
-                "first_name": "Reese", "last_name": "Roster", "employee_id": "1200000",
+            unassigned = [staffing.create_person({
+                "first_name": "Reese", "last_name": f"Roster {number:02}", "employee_id": f"12000{number:02}",
                 "classification": "part_time", "seniority_date": "2020-01-01",
-            })
+            }) for number in range(18)]
             db.session.commit()
             area_ids = [area.id for area in areas]
-            unassigned_id = unassigned.id
+            unassigned_id = unassigned[0].id
         for engine, width, moving in (
             ("chromium", 1440, "Ari Roster 01"), ("webkit", 390, "Billie Roster 01"),
         ):
@@ -448,6 +451,15 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
                 scroller.evaluate("""(el, id) => {
                     el.scrollLeft = el.querySelector(`[data-board-area="${id}"]`).offsetLeft - el.offsetLeft;
                 }""", area_ids[0])
+                rail = page.locator(".v11-board-rail")
+                for roster in (scroller, rail):
+                    self.assertTrue(roster.evaluate("el => el.scrollHeight <= el.clientHeight + 1"))
+                last_member = origin.locator(".v11-board-person").last
+                last_member.scroll_into_view_if_needed()
+                expect(last_member).to_be_in_viewport()
+                self.assertGreater(page.evaluate("scrollY"), 0)
+                self.assertEqual(scroller.evaluate("el => el.scrollTop"), 0)
+                page.evaluate("window.scrollTo(0, 0)")
                 page.screenshot(path=str(self.evidence / f"general-board-{engine}-{width}.png"))
                 if width > 760:
                     person.drag_to(target.locator("header"))

@@ -211,10 +211,9 @@ body:has(.v11-app) > .shell > .content {
 .v11-app .v11-board-navigation button { width: 34px; padding: 0; font-size: 21px; }
 .v11-board-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; min-width: 0; }
 .v11-board-has-rail { grid-template-columns: minmax(0, 1fr) 174px; }
-.v11-board-scroll, .v11-board-rail {
+.v11-board-scroll {
     min-width: 0;
-    max-height: 66dvh;
-    overflow: auto;
+    overflow-x: auto;
     scrollbar-color: var(--v11-border-2) var(--v11-bg);
 }
 .v11-board-scroll:focus-visible { outline: 2px solid var(--v11-teal); outline-offset: 2px; }
@@ -236,9 +235,6 @@ body:has(.v11-app) > .shell > .content {
 .v11-board-area[data-drop-active] { border-color: var(--v11-teal); background: #143330; }
 .v11-board-rail { border-color: #70553b; }
 .v11-board-layout :is(.v11-board-area, .v11-board-rail) > header {
-    position: sticky;
-    top: 0;
-    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -430,9 +426,7 @@ body:has(.v11-app) > .shell > .content {
     .v11-attendance-table tbody tr[data-attendance-empty] td { grid-column: 1 / -1; }
     .v11-attendance-area-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 130px; }
     .v11-report-library { display: none; }
-    .v11-board-scroll { max-height: 57dvh; }
     .v11-board-columns { grid-auto-columns: clamp(132px, 41vw, 154px); min-height: min(34dvh, 295px); }
-    .v11-board-rail { max-height: 33dvh; }
     .v11-app .v11-board-navigation button, .v11-app button.v11-board-person,
     .v11-board-dialog-actions button { min-height: 44px; }
     .v11-report-filters label { flex: 1 1 120px; }
