@@ -1038,6 +1038,7 @@ def _is_lightweight_live_state_request():
     if has_request_context() and request.method in {"GET", "HEAD"} and request.endpoint in {
         "auth.accounts_people", "auth.accounts_requests", "auth.accounts_security", "auth.account_profile", "auth.my_account",
         "auth.view_as_index", "auth.view_as_screen", "auth.view_as_live",
+        "neoraiden.index", "neoraiden.state",
     }:
         # Use the identical legacy projection, without read-side grant backfills.
         return True

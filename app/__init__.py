@@ -356,9 +356,16 @@ def register_template_helpers(app):
                 }
             )
 
+        if request.blueprint != "neoraiden":
+            from app.neonodes.neoraiden.services import authorized_gateways
+            if authorized_gateways(current_user):
+                targets.append(dict(key="raiden", node_word="Raiden", suffix="",
+                    href=url_for("neoraiden.index"), is_current=False, icon_src=None))
         return targets
 
     app.jinja_env.filters["local_datetime"] = format_local_datetime
+    from app.services.operational_navigation import visit_token
+    app.jinja_env.globals["operational_visit_token"] = visit_token
     app.jinja_env.filters["local_time"] = format_local_time
     app.jinja_env.filters["motherbrain_alert_severity"] = format_motherbrain_alert_severity
     app.jinja_env.filters["role_label"] = format_role_label
@@ -1034,6 +1041,7 @@ def register_blueprints(app):
     from app.neomotherbrain import bp as neomotherbrain_bp
     from app.neonodes import bp as neonodes_bp
     from app.neonodes.neoermac import bp as neoermac_bp
+    from app.neonodes.neoraiden import bp as neoraiden_bp
     from app.neonodes.neorain import bp as neorain_bp
     from app.neonodes.neosubzero import bp as neosubzero_bp
     from app.neonodes.neosektor import bp as neosektor_bp
@@ -1046,6 +1054,7 @@ def register_blueprints(app):
     app.register_blueprint(neomotherbrain_bp)
     app.register_blueprint(neonodes_bp, url_prefix="/nodes")
     app.register_blueprint(neoermac_bp, url_prefix="/neoermac")
+    app.register_blueprint(neoraiden_bp, url_prefix="/neoraiden")
     app.register_blueprint(neorain_bp, url_prefix="/neorain")
     app.register_blueprint(neosubzero_bp, url_prefix="/neosubzero")
     app.register_blueprint(neosektor_bp, url_prefix="/neosektor")

@@ -1,7 +1,7 @@
 {% from "_neo_brand.html" import neo_brand_name %}
 <header class="operational-mobile-header" data-operational-mobile-header>
-    {% if is_neostaffing_page %}<span class="operational-mobile-identity" aria-label="NeoStaffing">{% else %}<a class="operational-mobile-identity" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
-        <img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="34" height="34" decoding="async">
+    {% if is_neostaffing_page %}<span class="operational-mobile-identity" aria-label="NeoStaffing">{% else %}<a class="operational-mobile-identity" href="{{ raiden_home_url or url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
+        {% if node_header_logo %}<img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="34" height="34" decoding="async">{% endif %}
         <span><strong class="neo-mobile-product-name">{{ neo_brand_name(node_header_name, node_header_key) }}</strong><small>{{ node_current_label }}</small></span>
     {% if is_neostaffing_page %}</span>{% else %}</a>{% endif %}
     <div class="operational-mobile-actions">

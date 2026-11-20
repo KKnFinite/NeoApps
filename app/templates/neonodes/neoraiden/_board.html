@@ -1,0 +1,21 @@
+{% macro value(v) %}{{ v if v is not none and v != '' else '—' }}{% endmacro %}
+{% if not board.operation_id %}
+<p class="raiden-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
+{% else %}
+<header class="raiden-sort"><h2>{{ board.gateway }} · {{ board.sort_label }}</h2>{% if board.window is not none %}<span>Sort window {{ board.window }} min</span>{% endif %}</header>
+{% for title, rows in (('Arrivals',board.arrivals), ('Departures',board.departures)) %}
+<section class="raiden-section"><h2>{{ title }} <span>{{ rows|length }}</span></h2>
+{% if rows %}
+<table><thead><tr><th>Flight / Tail</th><th>{{ 'From' if title == 'Arrivals' else 'To' }}</th><th>Parking</th><th>Scheduled / Actual</th><th>Status</th>{% if title == 'Departures' %}<th>Fuel / Plan (lb)</th><th>Pure / Mix pull</th><th>Deice</th>{% endif %}</tr></thead>
+<tbody>{% for m in rows %}
+<tr data-mission="{{ m.id }}"><th scope="row"><strong>{{ m.flight }}</strong><small>{{ value(m.tail) }}</small></th>
+<td data-label="Route">{{ value(m.route) }}{% if m.ordinal %} · {{ m.ordinal }}{% endif %}</td><td data-label="Parking">{{ value(m.parking) }}</td>
+<td data-label="Sched / Actual">{{ value(m.planned) }} / {{ value(m.actual) }}{% if m.etd %}<small>ETD {{ m.etd }}</small>{% elif m.eta and not m.actual %}<small>ETA {{ m.eta }}</small>{% endif %}</td><td data-label="Status">{{ value(m.status|replace('_',' ')|title if m.status else none) }}</td>
+{% if title == 'Departures' %}<td data-label="Fuel / Plan">{{ value(m.fuel_status|title if m.fuel_status else none) }} / {{ value(m.planned_fuel) }}</td>
+<td data-label="Pure / Mix">Plan {{ value(m.pure) }} / {{ value(m.mix) }}{% if m.actual_pure or m.actual_mix %}<small>Actual {{ value(m.actual_pure) }} / {{ value(m.actual_mix) }}</small>{% endif %}{% for p in m.pulls %}<small>{{ p.door }} · {{ value(p.pure) }} / {{ value(p.mix) }}</small>{% endfor %}</td>
+<td data-label="Deice">{{ value(m.deice) }}</td>{% endif %}</tr>
+{% endfor %}</tbody></table>{% else %}<p>No {{ title|lower }} recorded.</p>{% endif %}</section>
+{% endfor %}
+<section class="raiden-section"><h2>Staffing</h2>{% if board.marked_here is not none %}<p>Recorded HERE · {{ board.marked_here }}</p>{% endif %}{% for s in board.staffing %}<p><strong>{{ s.area }}</strong> · {{ s.worked }} worked / {{ s.payroll }} on payroll</p>{% else %}<p>Finalized staffing totals unavailable.</p>{% endfor %}</section>
+<p class="raiden-key">— Unavailable · Times local to the mission</p>
+{% endif %}

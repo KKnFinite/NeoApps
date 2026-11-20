@@ -86,6 +86,9 @@
         </article>
         {% endif %}
 
+        {% if can_launch_raiden %}<a class="gateway-node-card gateway-node-raiden" href="{{ url_for('neoraiden.index', gateway=gateway.code, operation_id=selected_operation_id) }}" aria-label="Open NeoRaiden">
+                <span class="gateway-node-card-main"><span class="gateway-node-card-copy">{{ node_label("raiden","Raiden") }}<small>Operations command center</small></span></span><span class="gateway-node-action">Launch</span>
+            </a>{% endif %}
         <div class="gateway-node-grid" aria-label="Operational NeoNodes">
             {% if can_launch_sektor %}<a class="gateway-node-card gateway-node-sektor" href="{{ url_for('neosektor.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neosektor.index') }}" aria-label="Open NeoSektor">{{ node_card("sektor", "Sektor", "Inbound Ops", name_tier="medium") }}</a>{% else %}<article class="gateway-node-card gateway-node-sektor gateway-node-disabled" aria-disabled="true" aria-label="NeoSektor unavailable">{{ node_card("sektor", "Sektor", "Inbound Ops", "disabled", name_tier="medium") }}</article>{% endif %}
             {% if can_launch_ermac %}<a class="gateway-node-card gateway-node-ermac" href="{{ url_for('neoermac.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoermac.index') }}" aria-label="Open NeoErmac">{{ node_card("ermac", "Ermac", "Shift Ops", name_tier="short") }}</a>{% else %}<article class="gateway-node-card gateway-node-ermac gateway-node-disabled" aria-disabled="true" aria-label="NeoErmac unavailable">{{ node_card("ermac", "Ermac", "Shift Ops", "disabled", name_tier="short") }}</article>{% endif %}

@@ -12,7 +12,7 @@
             <nav class="neo-drawer-links neo-drawer-node-links" aria-label="Accessible NeoNodes">
                 {% for target in change_character_targets() %}
                 <a class="neo-drawer-node-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}" href="{{ target.href }}" {% if target.is_current %}aria-current="page"{% endif %}>
-                    <img src="{{ url_for('static', filename=target.icon_src|default('images/icons/' ~ target.key ~ '/icon_192.png')) }}" alt="" width="28" height="28">
+                    {% if target.icon_src is not none %}<img src="{{ url_for('static', filename=target.icon_src|default('images/icons/' ~ target.key ~ '/icon_192.png')) }}" alt="" width="28" height="28">{% endif %}
                     {{ neo_brand(target.node_word, target.key) }}
                     {% if target.suffix %}<small>{{ target.suffix }}</small>{% endif %}
                 </a>
@@ -22,7 +22,7 @@
         <section data-drawer-view="menu" hidden inert>
         <header class="neo-drawer-identity">
             <strong>{{ drawer_name }}</strong>
-            {% if uses_operational_shell %}<img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="48" height="48"><span>{{ node_current_label }}</span>{% endif %}
+            {% if uses_operational_shell %}{% if node_header_logo %}<img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="48" height="48">{% endif %}<span>{{ node_current_label }}</span>{% endif %}
         </header>
         {% if uses_operational_shell and (is_neostaffing_page or request.endpoint != node_home_endpoint) %}
         <nav class="neo-drawer-links" aria-label="{{ node_header_name }} screens">
@@ -65,7 +65,7 @@
         </section>
     </aside>
     <nav class="neo-mobile-bottom {% if uses_operational_shell %}operational-mobile-bottom-nav{% elif is_rfd_hub_page %}gateway-mobile-bottom-nav{% endif %}" aria-label="{{ drawer_name }} mobile navigation">
-        {% if is_neostaffing_page %}<a href="{{ url_for('auth.portal_dashboard') }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z"/></svg><span>NeoPortal</span></a>{% else %}<a href="{{ url_for(drawer_home) }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z"/></svg><span>Home</span></a>{% endif %}
+        {% if is_neostaffing_page %}<a href="{{ url_for('auth.portal_dashboard') }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z"/></svg><span>NeoPortal</span></a>{% else %}<a href="{{ raiden_home_url or url_for(drawer_home) }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z"/></svg><span>Home</span></a>{% endif %}
         <button type="button" data-drawer-nodes aria-controls="neo-mobile-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3ZM14 3h7v7h-7ZM3 14h7v7H3ZM14 14h7v7h-7Z"/></svg><span data-drawer-nodes-label>Nodes</span></button>
         <button type="button" data-drawer-toggle aria-controls="neo-mobile-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18M3 12h18M3 19h18"/></svg><span data-drawer-toggle-label>Menu</span></button>
     </nav>

@@ -11,6 +11,7 @@
 {% set uses_node_desktop_shell = false %}
 {% endif %}
 {% if is_accounts_workspace %}{% set uses_mobile_chrome = false %}{% set show_mobile_bottom_nav = false %}{% endif %}
+{% set raiden_home_url = url_for('neoraiden.index', gateway=gateway.code, operation_id=selected_id) if is_neoraiden_page else none %}
 {% set is_sektor_dashboard = request.endpoint == 'neosektor.index' %}
 {% set uses_shared_mobile_drawer = not staffing_v11|default(false) and (uses_operational_shell or is_rfd_hub_page or is_portal_page or is_neostaffing_page) %}
 {% set is_gateway_typography_page = uses_operational_shell or is_rfd_hub_page or request.blueprint == 'neonodes' or (request.blueprint == 'auth' and request.path.startswith('/motherbrain/')) %}
@@ -170,7 +171,7 @@
         {% elif staffing_v11|default(false) %}
         {% elif uses_operational_shell %}
         <header class="operational-node-topbar" data-operational-topbar>
-            {% if is_neostaffing_page %}<span class="operational-node-identity" aria-label="NeoStaffing">{% else %}<a class="operational-node-identity" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
+            {% if is_neostaffing_page %}<span class="operational-node-identity" aria-label="NeoStaffing">{% else %}<a class="operational-node-identity" href="{{ raiden_home_url or url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
                 <span>{{ neo_brand_name(node_header_name, node_header_key) }}<small>{{ node_current_label }}</small></span>
             {% if is_neostaffing_page %}</span>{% else %}</a>{% endif %}
             {% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}
@@ -192,8 +193,8 @@
         {% elif not public_landing|default(false) and not is_neosektor_driver_page %}
         <header class="topbar">
             {% if uses_node_header %}
-            {% if not is_neorain_page %}
-            {% if is_neostaffing_page %}<span class="motherbrain-header-logo-link" aria-label="NeoStaffing">{% else %}<a class="motherbrain-header-logo-link" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
+            {% if not is_neorain_page and node_header_logo %}
+            {% if is_neostaffing_page %}<span class="motherbrain-header-logo-link" aria-label="NeoStaffing">{% else %}<a class="motherbrain-header-logo-link" href="{{ raiden_home_url or url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
                 <img class="motherbrain-header-logo{% if is_neoermac_page %} neoermac-header-logo{% endif %}{% if is_neosektor_page %} neosektor-header-logo{% endif %}" src="{{ url_for('static', filename=node_header_logo) }}" alt="{{ node_header_alt }}">
             {% if is_neostaffing_page %}</span>{% else %}</a>{% endif %}
             {% endif %}
@@ -523,14 +524,14 @@
                     {% for target in mobile_switch_targets %}
                     <a class="mobile-bottom-switcher-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}" href="{{ target.href }}" role="menuitem" {% if target.is_current %}aria-current="page"{% endif %}>
                         {% set target_icon_src = target.icon_src|default("images/icons/" ~ target.key ~ "/icon_192.png") %}
-                        <img
+                        {% if target_icon_src %}<img
                             class="mobile-bottom-switcher-icon"
                             src="{{ url_for('static', filename=target_icon_src) }}"
                             alt=""
                             loading="lazy"
                             width="26"
                             height="26"
-                        >
+                        >{% endif %}
                         <span class="mobile-bottom-switcher-label neo-menu-text">{{ neo_brand(target.node_word, target.key) }}</span>
                         {% if target.suffix %}<span>{{ target.suffix }}</span>{% endif %}
                     </a>
@@ -909,6 +910,8 @@
     <script defer src="{{ url_for('static', filename='js/mobile_drawer.js', v=config.STATIC_ASSET_VERSION, dock='20261110-page-scroll-v1' if request.endpoint == 'neoermac.view_outbound' else none) }}"></script>
     {% endif %}
     {% if uses_operational_shell %}
+    {% set visit = operational_visit_token(current_user, gateway|default(none)) %}
+    {% if visit %}<script defer src="{{ url_for('static', filename='js/operational_visit.js', v=config.STATIC_ASSET_VERSION) }}" data-visit="{{ visit }}" data-visit-url="{{ url_for('auth.remember_operational_screen') }}"></script>{% endif %}
     <script defer src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}

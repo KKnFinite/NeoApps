@@ -400,6 +400,7 @@ def dashboard():
 @bp.route("/rfd")
 @login_required
 def rfd_hub():
+    from app.neonodes.neoraiden.services import can_open_raiden
     gateway = get_current_gateway()
     if not user_has_gateway_access(current_user, gateway.code):
         return redirect(url_for("auth.access_pending"))
@@ -435,6 +436,7 @@ def rfd_hub():
             user_can_access_node(current_user, gateway.code, "motherbrain")
             and user_can(DASHBOARD_VIEW_PERMISSION)
         ),
+        can_launch_raiden=can_open_raiden(current_user, gateway),
         can_launch_sektor=user_can_access_node(current_user, gateway.code, "sektor"),
         can_launch_ermac=user_can_access_node(current_user, gateway.code, "ermac"),
         can_launch_scorpion=user_can_access_node(current_user, gateway.code, "scorpion"),

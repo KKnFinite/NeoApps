@@ -213,7 +213,7 @@ def login():
 
 
     if current_user.is_authenticated and request.method == "GET":
-        return redirect(url_for(_authenticated_landing_endpoint(current_user)))
+        return redirect(_authenticated_landing_url(current_user))
 
     if request.method == "POST":
         email = request.form.get("email", "").strip()
@@ -271,9 +271,21 @@ def login():
             return redirect(url_for("auth.change_password"))
 
         establish_authenticated_session(session, user)
-        return redirect(url_for(_authenticated_landing_endpoint(user)))
+        return redirect(_authenticated_landing_url(user))
 
     return render_template("auth/login.html")
+
+
+@bp.post("/account/operational-screen")
+@login_required
+def remember_operational_screen():
+    from app.services.operational_navigation import store_visit
+    return ("", 204) if store_visit(current_user, request.form.get("visit", "")) else ("", 403)
+
+
+def _authenticated_landing_url(user):
+    from app.services.operational_navigation import restored_url
+    return restored_url(user) or url_for(_authenticated_landing_endpoint(user))
 
 
 def _authenticated_landing_endpoint(user):
@@ -575,7 +587,7 @@ def change_password():
         db.session.commit()
         establish_authenticated_session(session, current_user)
         flash("Password changed.", "info")
-        return redirect(url_for(_authenticated_landing_endpoint(current_user)))
+        return redirect(_authenticated_landing_url(current_user))
 
     return render_template(
         "auth/change_password.html",

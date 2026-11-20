@@ -779,7 +779,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                         page.set_viewport_size({'width':width,'height':height})
                         self.ready(page, '/rfd')
                         self.assertEqual(page.locator('.gateway-dashboard-hero img').count(),1)
-                        self.assertTrue(page.locator('.gateway-dashboard-hero img').evaluate("e => e.complete && e.naturalWidth>0 && e.currentSrc.includes(innerWidth<=900 ? 'hero_gateway' : 'neo_gateway_red_energy_portal_fade') && getComputedStyle(e).objectFit==='contain'"))
+                        self.assertTrue(page.locator('.gateway-dashboard-hero img').evaluate("e => e.complete && e.naturalWidth>0 && e.currentSrc.includes(innerWidth<=900 ? 'hero_gateway' : 'neo_gateway_red_energy_portal_fade') && getComputedStyle(e).objectFit==='cover'"))
                         self.assertTrue(page.evaluate('''() => [...document.querySelectorAll('.gateway-node-name')].filter(e=>e.getClientRects().length).every(e=>{
                             const range=document.createRange(); range.selectNodeContents(e);
                             const r=range.getBoundingClientRect(), c=e.closest('.gateway-node-card').getBoundingClientRect();
@@ -789,16 +789,15 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                         self.assertEqual(page.locator('.gateway-node-grid > *').count(),6)
                         hero=page.locator('.gateway-dashboard-hero').bounding_box()
                         if width<=900:
-                            self.assertAlmostEqual(hero['width']/hero['height'],3,delta=.01)
+                            self.assertLessEqual(hero['height'], 153)
                             controls=page.locator('.gateway-page-mobile-context')
                             expect(controls).to_be_visible()
                             self.assertLessEqual(hero['y']+hero['height'],controls.bounding_box()['y'])
                             expect(controls.locator('a').first).to_have_attribute('href','/rfd')
                         else:
-                            # Approved desktop artwork is now an absolute
-                            # full-workspace background, not a 300px banner.
-                            self.assertEqual(page.locator('.gateway-dashboard-hero').evaluate('e=>getComputedStyle(e).position'),'absolute')
-                            self.assertGreaterEqual(hero['height'],page.locator('.gateway-node-grid').bounding_box()['height'])
+                            self.assertLessEqual(hero['height'],153)
+                            grid = page.locator('.gateway-node-grid').bounding_box()
+                            self.assertLessEqual(grid['y'] + grid['height'],height)
                             expect(page.locator('[data-gateway-shell-header]')).to_be_visible()
                         page.screenshot(path=str(self.evidence / f'{engine}-gateway-hero-{width}.png'))
                         if width<=900:

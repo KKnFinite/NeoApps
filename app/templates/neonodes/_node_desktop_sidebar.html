@@ -7,7 +7,7 @@
     <div class="motherbrain-desktop-side-context node-desktop-side-context">
         <span class="eyebrow">Current page</span>
         <strong>{{ node_current_label }}</strong>
-        <small>{{ default_gateway.code if default_gateway is defined else "RFD" }} OPERATIONS</small>
+        <small>{{ gateway.code if is_neoraiden_page else (default_gateway.code if default_gateway is defined else "RFD") }} OPERATIONS</small>
     </div>
     <nav class="motherbrain-desktop-side-menu node-desktop-side-menu" aria-label="{{ node_header_name }} menu">
         {% if is_neostaffing_page %}
@@ -30,6 +30,8 @@
         {% for item in neorain_menu_items() %}<a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}"><span class="operational-side-link-icon">{{ item.label[0] }}</span><span class="operational-side-link-label">{{ item.label }}</span></a>{% endfor %}
         {% elif is_neosubzero_page %}
         {% with subzero_nav_mode='desktop' %}{% include 'neonodes/neosubzero/_navigation_items.html' %}{% endwith %}
+        {% elif is_neoraiden_page %}
+        <a class="motherbrain-desktop-side-link is-active" aria-current="page" href="{{ url_for('neoraiden.index', gateway=gateway.code, operation_id=selected_id) }}"><span class="operational-side-link-icon">R</span><span class="operational-side-link-label">Command center</span></a>
         {% elif is_neoreptile_page %}
         <a class="motherbrain-desktop-side-link is-active" href="{{ url_for('neoreptile.index') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Dashboard</span></a>
         {% endif %}

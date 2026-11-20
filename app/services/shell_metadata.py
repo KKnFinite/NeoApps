@@ -10,6 +10,10 @@ from app.services.page_assets import page_stylesheets
 
 
 NODE_IDENTITIES = {
+    "raiden": {
+        "name": "NeoRaiden", "word": "Raiden", "home_endpoint": "neoraiden.index",
+        "locked_icon": None, "desktop_icon": None, "icon_alt": "NeoRaiden",
+    },
     "staffing": {
         "name": "NeoStaffing", "word": "Staffing", "home_endpoint": "neostaffing.index",
         "locked_icon": "images/icons/neostaffing/inapp/neostaffing-inapp-128.png",
@@ -141,6 +145,7 @@ def resolve_shell_metadata(
     is_neoreptile_page = is_authenticated_app and blueprint == "neoreptile"
     is_neosubzero_page = is_authenticated_app and blueprint == "neosubzero"
     is_neorain_page = is_authenticated_app and blueprint == "neorain"
+    is_neoraiden_page = is_authenticated_app and blueprint == "neoraiden"
 
     is_arrival_planning_page = is_motherbrain_page and path.endswith("/alp/arrival")
     is_departure_planning_page = is_motherbrain_page and path.endswith(
@@ -246,7 +251,7 @@ def resolve_shell_metadata(
     )
 
     uses_operational_shell = (
-        is_neostaffing_page
+        is_neoraiden_page or is_neostaffing_page
         or is_motherbrain_page
         or is_neoermac_page
         or is_neoscorpion_page
@@ -269,6 +274,8 @@ def resolve_shell_metadata(
         is_neosubzero_page=is_neosubzero_page,
         is_neorain_page=is_neorain_page,
     )
+    if is_neoraiden_page:
+        node_key = "raiden"
     if is_neostaffing_page:
         node_key = "staffing"
     node_identity = NODE_IDENTITIES[node_key]
@@ -316,6 +323,8 @@ def resolve_shell_metadata(
         or is_neorain_page
     )
     neostaffing_current_label = _neostaffing_label(endpoint)
+    if is_neoraiden_page:
+        node_current_label = "Command center"
     if is_neostaffing_page:
         node_current_label = neostaffing_current_label
     mobile_shell_key = (
@@ -442,6 +451,7 @@ def resolve_shell_metadata(
         "is_neoreptile_page": is_neoreptile_page,
         "is_neosubzero_page": is_neosubzero_page,
         "is_neorain_page": is_neorain_page,
+        "is_neoraiden_page": is_neoraiden_page,
         "uses_operational_shell": uses_operational_shell,
         "uses_node_desktop_shell": uses_node_desktop_shell,
         "operational_shell_supports_board_view": operational_shell_supports_board_view,
