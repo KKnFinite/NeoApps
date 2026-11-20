@@ -183,9 +183,10 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
                     page.goto(self.fixture.origin + "/neostaffing")
                     brand = page.locator(".v11-brand:visible")
                     expect(brand).to_have_count(1)
-                    logo = brand.get_by_role("img", name="NeoApps")
+                    logo = brand.locator("img")
                     expect(logo).to_be_visible()
-                    self.assertTrue(urlsplit(logo.get_attribute("src")).path.endswith("/neoapps-inapp-128.png"))
+                    self.assertTrue(urlsplit(logo.get_attribute("src")).path.endswith(
+                        "/images/icons/neostaffing/inapp/neostaffing-inapp-128.png"))
                     logo.evaluate("img => img.decode()")
                     expect(brand.locator("b")).to_have_count(0)
                     expect(brand.locator(".v11-brand-context")).to_have_text("Operations / RFD")

@@ -31,7 +31,7 @@
 {% endmacro %}
 {% macro workspace_brand(mobile=false) %}
 <a class="v11-brand{% if mobile %} v11-phone-brand{% endif %}" href="{{ url_for('neostaffing.index') }}">
-    <img src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="35" height="35" decoding="async">
+    <img src="{{ url_for('static', filename='images/icons/neostaffing/inapp/neostaffing-inapp-128.png') }}" alt="" width="35" height="35" decoding="async">
     <span>NeoStaffing<small>
         <span class="v11-brand-context">Operations{% if workspace_scope.gateway_code %} / {{ workspace_scope.gateway_code }}{% endif %}</span>
         {% if mobile and workspace_scope.operation %} · {{ workspace_scope.operation.sort_name|title }} Sort · {{ workspace_scope.operation.sort_date.strftime('%b %d') }}{% endif %}
