@@ -305,9 +305,10 @@ body:has(.v11-app) > .shell > .content {
     .v11-report-filters .v11-report-search { flex-basis: 100%; }
     .v11-table th, .v11-table td { padding-inline: 4px; overflow-wrap: anywhere; }
     .v11-org-frame .staffing-reporting-connectors { display: none; }
-    .v11-org-frame .staffing-reporting-canvas { width: auto !important; height: auto !important; }
-    .v11-org-frame .staffing-reporting-branch { position: relative; inset: auto !important; padding: 3px 0; width: auto; }
-    .v11-org-frame .staffing-reporting-branches { margin: 0; padding-left: 10px; width: auto; }
+    .v11-org-frame .staffing-reporting-canvas { padding: 6px; }
+    .v11-org-frame .staffing-reporting-branch { display: block; position: relative; inset: auto !important; padding: 3px 0; min-width: 0; width: auto; }
+    .v11-org-frame .staffing-reporting-branches { display: block; margin: 0; padding-left: 10px; width: auto; min-width: 0; }
+    .v11-org-frame .staffing-reporting-canvas > .staffing-reporting-branches { padding-left: 0; }
     .v11-org-frame .staffing-reporting-card { width: 100%; }
     .v11-org-frame .staffing-reporting-branch > .v11-tree-toggle { left: auto; right: 4px; }
     .v11-org-frame .staffing-reporting-chart { height: auto; min-height: 0; max-height: none; }

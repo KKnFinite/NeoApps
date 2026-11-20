@@ -57,6 +57,8 @@
         const canvas = viewport.querySelector('[data-org-forest]');
         if (!canvas) return;
         const svg = canvas.querySelector('[data-org-connectors]');
+        const workspace = viewport.closest('[data-v11-org]');
+        const compact = workspace && matchMedia('(max-width: 760px)');
         const read = list => [...list.children].map(element => {
             const card = element.querySelector(':scope > .staffing-reporting-card');
             const children = element.querySelector(':scope > .staffing-reporting-branches:not([hidden])');
@@ -67,6 +69,13 @@
         let frame = null, first = true, previousWidth = 0;
         const draw = () => {
             frame = null;
+            if (compact?.matches) {
+                delete canvas.dataset.orgLayout;
+                canvas.style.removeProperty('width');
+                canvas.style.removeProperty('height');
+                previousWidth = viewport.clientWidth;
+                return;
+            }
             const forest = read(canvas.querySelector(':scope > .staffing-reporting-branches'));
             const layout = layoutForest(forest, viewport.clientWidth);
             canvas.style.width = `${layout.width}px`;
@@ -103,7 +112,6 @@
         const schedule = () => {
             if (frame === null) frame = requestAnimationFrame(draw);
         };
-        const workspace = viewport.closest('[data-v11-org]');
         if (workspace) {
             const search = workspace.querySelector('[data-management-search]');
             search.addEventListener('input', () => {
@@ -132,6 +140,7 @@
             });
         }
         schedule();
+        compact?.addEventListener('change', schedule);
         document.fonts?.ready.then(schedule);
         if (typeof ResizeObserver !== 'undefined') {
             const observer = new ResizeObserver(() => {

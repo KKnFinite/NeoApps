@@ -127,6 +127,12 @@ class StaffingWorkspaceBrowserTest(unittest.TestCase):
                                 self.assertLessEqual(bounds["x"] + bounds["width"], inspector["x"])
                             else:
                                 self.assertLessEqual(bounds["y"] + bounds["height"], inspector["y"])
+                        if label == "06-management" and width < 760:
+                            chart = page.locator("[data-org-chart-viewport]")
+                            child = chart.locator(".staffing-reporting-card").filter(has_text="Avery Clarke")
+                            expect(child).to_be_visible()
+                            chart_box, child_box = chart.bounding_box(), child.bounding_box()
+                            self.assertLessEqual(child_box["y"] + child_box["height"], chart_box["y"] + chart_box["height"] + 1)
                         if label == "09-attendance-history":
                             expect(page.get_by_role("searchbox", name="Find employee")).to_be_visible()
                             expect(page.locator(".v11-history")).to_contain_text("Here")
