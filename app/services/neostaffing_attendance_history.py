@@ -235,7 +235,7 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
     if prior_operation.sort_date < correction_start and detail_count:
         from app.services.neostaffing_historical_records import preserve_linked_details
 
-        preserve_linked_details(prior_operation, staffing_sort.id)
+        preserve_linked_details(prior_operation, staffing_sort.id, as_of=local_now.date())
     purged_detail_count = (legacy_or_linked.delete(synchronize_session=False)
                           if prior_operation.sort_date < correction_start else 0)
     if prior_operation.sort_date < correction_start:

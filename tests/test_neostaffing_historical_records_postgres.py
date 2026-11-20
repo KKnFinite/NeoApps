@@ -3,7 +3,7 @@
 import sys
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from threading import Barrier
 
 from sqlalchemy import text
@@ -12,13 +12,17 @@ from app import create_app
 from app.extensions import db
 from app.models import (
     Gateway, SortDateOperation, StaffingAttendanceOutcome, StaffingDailyAttendance, StaffingPerson,
-    StaffingRosterClose, StaffingRosterPlacement, StaffingRosterRevision, StaffingTimecardSlice, StaffingUnit,
+    StaffingRosterClose, StaffingRosterPlacement, StaffingRosterRevision, StaffingTimecardEdit, StaffingTimecardSlice,
+    StaffingUnit,
 )
 from app.services import neostaffing as staffing
 from app.services import neostaffing_historical_records as history
 from app.services.neostaffing_workspace import attendance_history_people, recorded_attendance
+from app.services.neostaffing_history_legacy import audit_or_import_legacy_marks
 from app.services.neostaffing_history_schema import initialize_reporting_history
+from app.services.neostaffing_history_retention import PurgeResult, purge_history_batch
 from tests import test_motherbrain_block_out_authority_postgres as pg
+from tests.test_neostaffing_history_retention import closed, outcome
 
 
 @unittest.skipUnless(pg.URI, "Requires disposable loopback PostgreSQL")
@@ -111,15 +115,17 @@ class StaffingHistoricalRecordsPostgresTest(unittest.TestCase):
         self.app.config["NEOSTAFFING_HISTORY_ENABLED"] = True
         op, person, area = self.operation, self.person, self.original
         day, sort_id = op.sort_date, area.parent.parent_id
-        db.session.add(StaffingTimecardSlice(
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(day, datetime.min.time())
+        slice_row = StaffingTimecardSlice(
             person_id=person.id, sort_date_operation_id=op.id, sort_unit_id=sort_id,
-            work_area_unit_id=area.id, workday_date=day, attendance_status="call_in",
+            work_area_unit_id=area.id, workday_date=day, attendance_status="call_in", version=1,
             context_json='{"employee_id":"HISTORY-1","employee":"Test Person","classification_at_recording":"part_time"}',
-        ))
+        )
+        db.session.add(StaffingTimecardEdit(slice=slice_row, version=1, snapshot_json='{"status":"call_in"}'))
         db.session.commit()
-        assert history.import_available_timecard_marks() == 1
+        assert audit_or_import_legacy_marks(write=True).inserted == 1
         db.session.commit()
-        assert history.import_available_timecard_marks() == 0
+        assert audit_or_import_legacy_marks(write=True).inserted == 0
         scope = {"gateway_code": "RFD", "areas": {area.id}}
         # Missing original actor attribution excludes a speculative classification.
         assert not attendance_history_people(scope, "HISTORY-1", "part_time", day, day)
@@ -133,3 +139,50 @@ class StaffingHistoricalRecordsPostgresTest(unittest.TestCase):
         assert StaffingAttendanceOutcome.query.one().status == "no_call"
         db.session.rollback()
         assert StaffingAttendanceOutcome.query.one().status == "call_in"
+
+    def test_provenance_upgrade_of_existing_table_preserves_records(self):
+        operation_id = self.operation.id
+        db.session.add(outcome(operation_id, self.person.id, self.original.parent.parent_id,
+                               self.original.id, self.operation.sort_date))
+        db.session.commit()
+        db.session.execute(text("""
+            ALTER TABLE staffing_attendance_outcomes DROP COLUMN source_kind, DROP COLUMN source_record_id
+        """))
+        db.session.execute(text("DROP INDEX ix_staffing_attendance_outcome_retention"))
+        db.session.commit()
+        assert not initialize_reporting_history()
+        db.session.commit()
+        mark = StaffingAttendanceOutcome.query.one()
+        assert mark.status == "call_in" and mark.source_kind == "unknown" and mark.source_record_id is None
+
+    def test_concurrent_purge_defers_then_retries_with_bounded_atomic_batches(self):
+        self.app.config.update(NEOSTAFFING_HISTORY_ENABLED=True, NEOSTAFFING_HISTORY_PURGE_ENABLED=True)
+        cutoff, at = date(2026, 2, 28), datetime(2026, 12, 1)
+        sort_id, area_id = self.original.parent.parent_id, self.original.id
+        expired_date = cutoff - timedelta(days=1)
+        db.session.add(closed(800, sort_id, expired_date))
+        db.session.flush()
+        for person in (1, 2):
+            db.session.add(outcome(800, person, sort_id, area_id, expired_date))
+            db.session.add(StaffingRosterPlacement(sort_date_operation_id=800, person_id=person,
+                work_area_id=area_id, area_path="Historical Area", employee_id=str(person),
+                employee_name="Synthetic Employee", classification="part_time"))
+        db.session.commit()
+
+        def concurrent_purge():
+            with self.app.app_context():
+                result = purge_history_batch("RFD", cutoff, at, batch_size=1)
+                db.session.commit()
+                return result
+
+        assert purge_history_batch("RFD", cutoff, at, batch_size=1) == PurgeResult(1, 1, 0, 0)
+        with ThreadPoolExecutor(1) as executor:
+            assert executor.submit(concurrent_purge).result(timeout=10) == PurgeResult()
+            db.session.rollback()
+            assert StaffingAttendanceOutcome.query.count() == StaffingRosterPlacement.query.count() == 2
+            assert db.session.get(StaffingRosterClose, 800).sealed_at is not None
+            assert executor.submit(concurrent_purge).result(timeout=10) == PurgeResult(1, 1, 0, 0)
+            assert executor.submit(concurrent_purge).result(timeout=10) == PurgeResult(1, 1, 1, 0)
+            assert executor.submit(concurrent_purge).result(timeout=10) == PurgeResult()
+        assert StaffingRosterClose.query.count() == 0 and StaffingRosterPlacement.query.count() == 0
+        assert db.session.get(SortDateOperation, self.operation.id)

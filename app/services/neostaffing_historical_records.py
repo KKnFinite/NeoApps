@@ -1,6 +1,5 @@
 """Forward, operation-scoped staffing and individual attendance evidence."""
 
-import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -13,10 +12,12 @@ from app.extensions import db
 from app.models import (
     Gateway, SortDateOperation, SortTimelineSortSetting, StaffingAttendanceOutcome as Outcome,
     StaffingDailyAttendance, StaffingPerson, StaffingRosterClose as Close, StaffingTimecardEdit,
-    StaffingRosterPlacement as Placement, StaffingRosterRevision as Revision, StaffingTimecardSlice,
+    StaffingRosterPlacement as Placement, StaffingRosterRevision as Revision, StaffingTimecardSlice, StaffingUnit,
 )
 from app.services import neostaffing as staffing
 from app.services.gateway_matrix import current_gateway_local_datetime, gateway_timezone
+from app.services.neostaffing_history_legacy import timecard_labels
+from app.services.neostaffing_history_retention import history_cutoff, retention_cutoff
 from app.services.neostaffing_history_schema import ROSTER_HISTORY_LOCK
 
 
@@ -186,7 +187,7 @@ def discover_and_seal(gateway_id, *, at=None):
 
 def record_attendance_changes(operation, statuses, source_rows, assignments, timecards, units):
     """Run inside the authorized attendance transaction, including explicit clears."""
-    if not enabled():
+    if not enabled() or operation.sort_date < history_cutoff():
         return
     now = utcnow()
     rows = []
@@ -199,7 +200,7 @@ def record_attendance_changes(operation, statuses, source_rows, assignments, tim
         sort_id = source.sort_unit_id if source else staffing.assignment_service.sort_of(
             units[assignment.work_area_unit_id], units).id
         slice_row = timecards.get(person_id)
-        captured = (json.loads(slice_row.context_json) if slice_row and
+        captured = (timecard_labels(slice_row.context_json, operation.gateway_code) if slice_row and
                     slice_row.work_area_unit_id == area_id else {})
         classification = None
         if source is not None and source.recorded_at is None:
@@ -211,11 +212,13 @@ def record_attendance_changes(operation, statuses, source_rows, assignments, tim
             employee_name=captured.get("employee") or person.full_name,
             classification=classification, status=status or None,
             recorded_at=(source.recorded_at if source else None) or now, updated_at=now,
+            source_kind="live", source_record_id=source.id if source else None,
         ))
     if rows:
         insert = _insert(Outcome)
         remarked = Outcome.status.is_(None) & insert.excluded.status.is_not(None)
-        capture_fields = ("work_area_id", "employee_id", "employee_name", "classification", "recorded_at")
+        capture_fields = ("work_area_id", "employee_id", "employee_name", "classification", "recorded_at",
+                          "source_kind", "source_record_id")
         immutable = {key: case((remarked, getattr(insert.excluded, key)), else_=getattr(Outcome, key))
                      for key in capture_fields}
         db.session.execute(insert.on_conflict_do_update(
@@ -225,19 +228,22 @@ def record_attendance_changes(operation, statuses, source_rows, assignments, tim
         ), rows)
 
 
-def preserve_linked_details(operation, sort_id):
+def preserve_linked_details(operation, sort_id, *, as_of):
     """Save trusted linked detail before the existing cleanup. Never infer missing marks."""
-    if not enabled():
+    if not enabled() or operation.sort_date < retention_cutoff(as_of):
         return
     detail = StaffingDailyAttendance
     existing = select(Outcome.person_id).where(Outcome.sort_date_operation_id == operation.id)
     linked = db.session.execute(select(detail, StaffingPerson).join(StaffingPerson, StaffingPerson.id == detail.person_id)
+        .join(StaffingUnit, StaffingUnit.id == detail.work_area_unit_id)
         .where(detail.sort_date_operation_id == operation.id, detail.attendance_date == operation.sort_date,
-               detail.sort_unit_id == sort_id, detail.work_area_unit_id.is_not(None), detail.person_id.not_in(existing))).all()
+               detail.sort_unit_id == sort_id, StaffingUnit.unit_type == "work_area",
+               detail.updated_at >= detail.recorded_at, detail.person_id.not_in(existing))).all()
     if not linked:
         return
     timecard = StaffingTimecardSlice
-    contexts = {(person_id, area_id): json.loads(raw) for person_id, area_id, raw in timecard.query.with_entities(
+    contexts = {(person_id, area_id): timecard_labels(raw, operation.gateway_code)
+                for person_id, area_id, raw in timecard.query.with_entities(
         timecard.person_id, timecard.work_area_unit_id, timecard.context_json
     ).join(StaffingTimecardEdit, StaffingTimecardEdit.slice_id == timecard.id).filter(
         timecard.sort_date_operation_id == operation.id, timecard.workday_date == operation.sort_date,
@@ -252,55 +258,7 @@ def preserve_linked_details(operation, sort_id):
             work_area_id=source.work_area_unit_id, employee_id=context.get("employee_id") or person.employee_id,
             employee_name=context.get("employee") or person.full_name, classification=context.get("classification_at_recording"),
             status=source.status, recorded_at=source.recorded_at, updated_at=source.updated_at,
+            source_kind="daily_attendance", source_record_id=source.id,
         ))
     db.session.execute(_insert(Outcome).on_conflict_do_nothing(
         index_elements=["sort_date_operation_id", "person_id"]), rows)
-
-
-def import_available_timecard_marks():
-    """Optional cutover import of surviving, linked timecard marks, in bounded pages."""
-    slice_id = 0
-    copied = 0
-    while True:
-        candidates = StaffingTimecardSlice.query.filter(
-            StaffingTimecardSlice.id > slice_id,
-            StaffingTimecardSlice.attendance_status.in_(staffing.ATTENDANCE_STATUS_LABELS),
-        ).order_by(StaffingTimecardSlice.id).limit(250).all()
-        if not candidates:
-            return copied
-        slice_id = candidates[-1].id
-        operations = {op.id: op for op in SortDateOperation.query.filter(
-            SortDateOperation.id.in_({row.sort_date_operation_id for row in candidates})).all()}
-        seeds = {row.slice_id: row for row in StaffingTimecardEdit.query.filter(
-            StaffingTimecardEdit.version == 1, StaffingTimecardEdit.slice_id.in_({row.id for row in candidates})).all()}
-        details = {(row.sort_date_operation_id, row.person_id): row for row in StaffingDailyAttendance.query.filter(
-            StaffingDailyAttendance.sort_date_operation_id.in_(operations),
-            StaffingDailyAttendance.person_id.in_({row.person_id for row in candidates})).all()}
-        entries = []
-        for row in candidates:
-            operation = operations.get(row.sort_date_operation_id)
-            detail = details.get((row.sort_date_operation_id, row.person_id))
-            if not operation or operation.sort_date != row.workday_date:
-                continue
-            if detail and (detail.attendance_date != row.workday_date or detail.sort_unit_id != row.sort_unit_id
-                           or detail.work_area_unit_id != row.work_area_unit_id):
-                continue  # Rollover preserves authoritative detail with its own attribution.
-            seed = seeds.get(row.id)
-            context = json.loads(row.context_json)
-            if not context.get("employee_id") or not context.get("employee"):
-                continue
-            entries.append(dict(
-                sort_date_operation_id=operation.id, person_id=row.person_id, gateway_code=operation.gateway_code,
-                sort_name=operation.sort_name, sort_date=operation.sort_date, sort_unit_id=row.sort_unit_id,
-                work_area_id=row.work_area_unit_id, employee_id=context["employee_id"], employee_name=context["employee"],
-                # The actorless bootstrap source may have used a later classification.
-                classification=context.get("classification_at_recording") if seed and seed.actor_id is not None else None,
-                status=detail.status if detail else row.attendance_status,
-                recorded_at=detail.recorded_at if detail else seed.recorded_at if seed else row.updated_at,
-                updated_at=detail.updated_at if detail else row.updated_at,
-            ))
-        if entries:
-            statement = _insert(Outcome).on_conflict_do_nothing(
-                index_elements=["sort_date_operation_id", "person_id"],
-            ).returning(Outcome.person_id)
-            copied += len(db.session.scalars(statement, entries).all())

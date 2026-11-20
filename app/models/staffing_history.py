@@ -61,8 +61,13 @@ class StaffingAttendanceOutcome(db.Model):
             "status IS NULL OR status IN (" + ", ".join(repr(value) for value in STAFFING_DAILY_ATTENDANCE_STATUSES) + ")",
             name="ck_staffing_attendance_outcome_status",
         ),
+        db.CheckConstraint(
+            "source_kind IN ('unknown', 'live', 'daily_attendance', 'timecard')",
+            name="ck_staffing_attendance_outcome_source",
+        ),
         db.Index("ix_staffing_attendance_outcome_scope", "gateway_code", "work_area_id", "sort_date"),
         db.Index("ix_staffing_attendance_outcome_person", "person_id", "sort_date"),
+        db.Index("ix_staffing_attendance_outcome_retention", "gateway_code", "sort_date", "sort_date_operation_id", "person_id"),
     )
 
     sort_date_operation_id = db.Column(db.Integer, primary_key=True, autoincrement=False)
@@ -79,3 +84,5 @@ class StaffingAttendanceOutcome(db.Model):
     status = db.Column(db.String(24), nullable=True)
     recorded_at = db.Column(db.DateTime, nullable=False)
     updated_at = db.Column(db.DateTime, nullable=False)
+    source_kind = db.Column(db.String(20), nullable=False, server_default="unknown")
+    source_record_id = db.Column(db.Integer, nullable=True)

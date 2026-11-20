@@ -12,6 +12,7 @@ from app.models import (
 from app.services import neostaffing as staffing
 from app.services import neostaffing_historical_records as history
 from app.services.neostaffing_attendance_history import process_attendance_rollover
+from app.services.neostaffing_history_legacy import audit_or_import_legacy_marks
 from app.services.neostaffing_history_schema import SOURCES
 from tests.test_neostaffing_v11_workspace import site, token  # noqa: F401
 
@@ -207,10 +208,13 @@ def test_cutover_copies_only_verified_linked_timecard_marks_and_is_idempotent(si
     }).status_code == 200
     StaffingDailyAttendance.query.delete()
     db.session.commit()
-    assert history.import_available_timecard_marks() == 1
+    audit = audit_or_import_legacy_marks(write=True)
+    assert audit.timecard == audit.inserted == 1
     db.session.commit()
-    assert history.import_available_timecard_marks() == 0
+    assert audit_or_import_legacy_marks(write=True).inserted == 0
     retained = StaffingAttendanceOutcome.query.one()
     assert (retained.sort_date_operation_id, retained.work_area_id, retained.status, retained.classification) == (
         op.id, area.id, "here", "part_time",
     )
+    assert retained.source_kind == "timecard"
+    assert retained.source_record_id == StaffingTimecardSlice.query.one().id

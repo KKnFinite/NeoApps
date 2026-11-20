@@ -4,12 +4,12 @@ from datetime import date, timedelta
 import json
 
 from flask import request, session
-from sqlalchemy import JSON, cast, exists, func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.extensions import db
 from app.models import (
     SortDateOperation, StaffingAttendanceOutcome as Outcome, StaffingDailyAttendance, StaffingPerson,
-    StaffingRosterClose as Close, StaffingRosterPlacement as Placement, StaffingTimecardEdit, StaffingTimecardSlice,
+    StaffingRosterClose as Close, StaffingRosterPlacement as Placement, StaffingTimecardSlice,
     StaffingUnit, StaffingWorkAssignment,
 )
 from app.services import neostaffing as staffing
@@ -17,6 +17,7 @@ from app.services.access_control import user_can_access_app
 from app.services.gateway_matrix import current_gateway_local_datetime
 from app.services.neostaffing_attendance_authority import attendance_authority
 from app.services.neostaffing_historical_records import enabled as history_enabled
+from app.services.neostaffing_history_retention import history_cutoff
 
 SCOPE_KEYS = ("sort_id", "operation_id", "department_id", "work_area_id")
 
@@ -176,6 +177,8 @@ def report_dates(start, end, fallback):
 
 
 def _retained_sources():
+    if history_enabled():
+        return ()  # Under the new policy, legacy sources must pass the import checks.
     return (
         (StaffingTimecardSlice, StaffingTimecardSlice.workday_date, StaffingTimecardSlice.attendance_status),
         (StaffingDailyAttendance, StaffingDailyAttendance.attendance_date, StaffingDailyAttendance.status),
@@ -183,25 +186,16 @@ def _retained_sources():
 
 
 def _retained_query(scope, model, day, status):
-    query = model.query.join(
+    return model.query.join(
         SortDateOperation, SortDateOperation.id == model.sort_date_operation_id,
     ).filter(SortDateOperation.gateway_code == scope["gateway_code"], SortDateOperation.sort_date == day,
              model.work_area_unit_id.in_(scope["areas"]), status.in_(staffing.ATTENDANCE_STATUS_LABELS))
-    if history_enabled():
-        query = query.filter(~exists().where(
-            Outcome.sort_date_operation_id == model.sort_date_operation_id, Outcome.person_id == model.person_id,
-        ))
-    return query
 
 
 def _outcomes(scope):
     return Outcome.query.filter(Outcome.gateway_code == scope["gateway_code"],
-                                Outcome.work_area_id.in_(scope["areas"]), Outcome.status.is_not(None))
-
-
-def _verified_slice_context():
-    return exists().where(StaffingTimecardEdit.slice_id == StaffingTimecardSlice.id,
-                          StaffingTimecardEdit.version == 1, StaffingTimecardEdit.actor_id.is_not(None))
+                                Outcome.work_area_id.in_(scope["areas"]), Outcome.status.is_not(None),
+                                Outcome.sort_date >= (scope.get("history_floor") or history_cutoff()))
 
 
 def earliest_retained_evidence(scope, person_id=None):
@@ -234,19 +228,12 @@ def recorded_attendance(scope, start, end, *, person_id=None, classification="",
         query = _retained_query(scope, model, day, status).filter(day.between(start, end))
         if person_id is not None:
             query = query.filter(model.person_id == person_id)
-        verified_context = history_enabled() and model is StaffingTimecardSlice and (classification or details)
-        if verified_context:
-            rows = query.add_columns(_verified_slice_context().label("verified_context")).all()
-        else:
-            rows = ((row, True) for row in query.all())
-        for row, verified in rows:
+        for row in query.all():
             record_day = row.workday_date if model is StaffingTimecardSlice else row.attendance_date
             record_status = row.attendance_status if model is StaffingTimecardSlice else row.status
             key = (row.sort_date_operation_id, row.person_id)
             if model is StaffingTimecardSlice and (classification or details):
                 snapshots[key] = json.loads(row.context_json)
-                if not verified:
-                    snapshots[key].pop("classification_at_recording", None)
             if details:
                 snapshots.setdefault(key, {})["operation_id"] = row.sort_date_operation_id
             records[key] = (record_day, row.work_area_unit_id, row.person_id, record_status)
@@ -296,22 +283,14 @@ def attendance_history_people(scope, query, classification, start, end):
     )
     retained_ids = []
     for model, day, status in _retained_sources():
-        if historical and classification and model is not StaffingTimecardSlice:
-            continue
         retained = _retained_query(scope, model, day, status).filter(day.between(start, end))
-        if historical and classification:
-            # The timecard field is optional. Missing classification stays unknown.
-            json_class = (cast(model.context_json, JSON)["classification_at_recording"].as_string()
-                          if db.session.get_bind().dialect.name == "postgresql"
-                          else func.json_extract(model.context_json, "$.classification_at_recording"))
-            retained = retained.filter(_verified_slice_context(), json_class == classification)
         retained_ids.append(retained.with_entities(model.person_id).statement)
     authorized = [StaffingPerson.id.in_(ids) for ids in retained_ids]
     if not historical or not classification:
         authorized.append(current_assignment)
     live_matches = people.filter(or_(*authorized)).order_by(
         StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id,
-    ).limit(30).all()
+    ).limit(30).all() if authorized else []
     if not historical:
         return live_matches
     # Pick one matching historical identity per employee, even after a name or ID edit.
@@ -331,7 +310,7 @@ def attendance_history_people(scope, query, classification, start, end):
 
 def _dated_staffing(scope, report_day, classification):
     """Authoritative close snapshots plus explicit coverage for missing operations."""
-    if not scope["gateway_code"] or not scope["areas"]:
+    if not scope["gateway_code"] or not scope["areas"] or report_day < scope["history_floor"]:
         return [], set(), set()
     units = scope["hierarchy"]["by_id"]
     from app.services.neostaffing_assignments import sort_of
@@ -341,16 +320,18 @@ def _dated_staffing(scope, report_day, classification):
     expected = {op_id for op_id, name in SortDateOperation.query.with_entities(
         SortDateOperation.id, SortDateOperation.sort_name).filter_by(gateway_code=scope["gateway_code"], sort_date=report_day)
         if normalize(name) in sort_names}
-    captures = Close.query.filter_by(gateway_code=scope["gateway_code"], sort_date=report_day).filter(
-        Close.sort_unit_id.in_(sorts)).all()
-    expected.update(capture.sort_date_operation_id for capture in captures)
-    sealed = {capture.sort_date_operation_id for capture in captures if capture.sealed_at}
-    if not sealed:
-        return [], expected, sealed
-    query = Placement.query.filter(Placement.sort_date_operation_id.in_(sealed), Placement.work_area_id.in_(scope["areas"]))
+    placement_scope = [Placement.sort_date_operation_id == Close.sort_date_operation_id,
+                       Placement.work_area_id.in_(scope["areas"]), Close.sealed_at.is_not(None)]
     if classification:
-        query = query.filter_by(classification=classification)
-    return query.all(), expected, sealed
+        placement_scope.append(Placement.classification == classification)
+    # Read metadata and children from a single statement snapshot so the report
+    # cannot combine a pre-purge manifest with post-purge placements.
+    captures = db.session.execute(select(Close, Placement).outerjoin(Placement, and_(*placement_scope)).where(
+        Close.gateway_code == scope["gateway_code"], Close.sort_date == report_day, Close.sort_unit_id.in_(sorts),
+    )).all()
+    expected.update(close.sort_date_operation_id for close, _ in captures)
+    sealed = {close.sort_date_operation_id for close, _ in captures if close.sealed_at}
+    return [placement for _, placement in captures if placement is not None], expected, sealed
 
 
 def reports(scope, args):
@@ -388,6 +369,8 @@ def reports(scope, args):
     result = {"view": view, "classification": classification, "date": today, "scope_args": keys,
               "scope_label": staffing.unit_path(scope["selected"]) if scope["selected"] else "All My Areas",
               "from_date": today, "through_date": today, "rows": [], "query": "", "people": []}
+    if view != "seniority" and history_enabled():
+        scope = {**scope, "history_floor": history_cutoff()}
     if view == "seniority":
         filters = {**organization_filters(scope), "classification": classification}
         filters["active"] = args.get("active", "active")
@@ -470,7 +453,7 @@ def reports(scope, args):
                 Close.sort_date_operation_id.in_(sealed)).scalar_subquery()
             result["earliest_roster"] = Close.query.with_entities(func.min(Close.sort_date)).filter(
                 Close.gateway_code == scope["gateway_code"], Close.sealed_at.is_not(None),
-                Close.sort_unit_id.in_(relevant_names)).scalar()
+                Close.sort_unit_id.in_(relevant_names), Close.sort_date >= scope["history_floor"]).scalar()
         return result
     result["query"] = args.get("search", "")[:140]
     if not scope["master"]:

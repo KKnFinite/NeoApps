@@ -1,6 +1,6 @@
 """Explicit PostgreSQL cutover for the narrowly scoped roster journal."""
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from app.extensions import db
 from app.models import StaffingAttendanceOutcome, StaffingRosterClose, StaffingRosterPlacement, StaffingRosterRevision
@@ -27,6 +27,21 @@ def initialize_reporting_history():
     connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": ROSTER_HISTORY_LOCK})
     for model in (StaffingRosterRevision, StaffingRosterClose, StaffingRosterPlacement, StaffingAttendanceOutcome):
         model.__table__.create(connection, checkfirst=True)
+    # Existing local/staging installations may already have the first schema.
+    # Never guess provenance for a row copied by the older importer.
+    outcome_columns = {column["name"] for column in inspect(connection).get_columns("staffing_attendance_outcomes")}
+    if "source_kind" not in outcome_columns:
+        connection.execute(text("""
+            ALTER TABLE staffing_attendance_outcomes
+            ADD COLUMN source_kind varchar(20) NOT NULL DEFAULT 'unknown'
+                CONSTRAINT ck_staffing_attendance_outcome_source
+                CHECK (source_kind IN ('unknown', 'live', 'daily_attendance', 'timecard'))
+        """))
+    if "source_record_id" not in outcome_columns:
+        connection.execute(text("ALTER TABLE staffing_attendance_outcomes ADD COLUMN source_record_id integer"))
+    for index in StaffingAttendanceOutcome.__table__.indexes:
+        if index.name == "ix_staffing_attendance_outcome_retention":
+            index.create(connection, checkfirst=True)
     if connection.execute(text("SELECT 1 FROM staffing_roster_revisions WHERE kind = 'baseline'")).first():
         return False
     tables = ", ".join(table for table, _, _ in SOURCES)
