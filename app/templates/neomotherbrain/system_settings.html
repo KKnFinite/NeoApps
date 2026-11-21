@@ -3,44 +3,89 @@
 {% block title %}Integrations &amp; Migration | NeoMotherBrain{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page system-settings-page" aria-labelledby="system-settings-title" data-system-settings>
-    <div class="section-heading">
-        <h1 id="system-settings-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Integrations &amp; Migration</h1>
-        <p class="muted">{{ gateway.code }} gateway-wide operational integration settings. <a href="{{ url_for('neomotherbrain.system_settings') }}">Back to System Settings</a></p>
-    </div>
-
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_admin.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="panel mb-planning mb-admin" aria-labelledby="system-settings-title" data-system-settings>
+    <header class="mb-heading"><div><p>{{ gateway.code }} · Administration</p><h1 id="system-settings-title">Integrations &amp; Migration</h1></div>
+        <nav class="mb-jumps"><a href="{{ url_for('neomotherbrain.system_settings') }}">System Settings</a></nav>
+    </header>
+    <nav class="mb-jumps admin-jumps" aria-label="Integration settings">
+        <a href="#google-neo-transition-title">NeoSektor <b>{{ neosektor_status.mode_label }}</b></a>
+        <a href="#neorain-transition-title">NeoRain <b>{{ neorain_status.mode_label }}</b></a>
+        <a href="#google-live-polling-title">Google polling <b>{{ google_live_poll_health.label if google_live_poll_health.enabled else ('ON' if google_live_polling_status.enabled else 'OFF') }}</b></a>
+    </nav>
     <div class="system-settings-sections">
-        <section class="system-settings-section" aria-labelledby="google-neo-transition-title">
-            <div class="system-settings-section-heading">
+        <section class="mb-section" aria-labelledby="google-neo-transition-title">
+            <div class="mb-section-title admin-heading">
                 <div>
-                    <h2 id="google-neo-transition-title">GOOGLE / NEO TRANSITION</h2>
-                    <p>Choose the authoritative source for NeoSektor live counts and bay status.</p>
+                    <h2 id="google-neo-transition-title">NeoSektor</h2>
+                    <p>Live counts and bay status</p>
                 </div>
                 <strong class="system-settings-mode-badge" data-neosektor-mode="{{ neosektor_status.mode }}">{{ neosektor_status.mode_label }}</strong>
             </div>
 
-            <form method="post" class="system-settings-form" data-neosektor-mode-form>
-                <input type="hidden" name="action" value="set_neosektor_mode">
-                <div class="system-settings-mode-options" role="radiogroup" aria-label="NeoSektor integration mode">
-                    {% for mode in neosektor_status.modes %}
-                    <label class="system-settings-mode-option">
-                        <input type="radio" name="integration_mode" value="{{ mode.value }}" {% if mode.value == neosektor_status.mode %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}>
-                        <span>{{ mode.label }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-                <div class="system-settings-mode-help">
-                    <p><strong>GOOGLE PRIMARY:</strong> Google owns the operational cells; Neo settings remain in Neon.</p>
-                    <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> Intended production mode. Neon owns operational state; Google is an explicitly enabled one-way backup mirror.</p>
-                    <p><strong>NEO ONLY:</strong> Neon owns operational state and NeoSektor performs no Google traffic.</p>
-                </div>
-                {% if can_edit_system_settings %}
-                <button class="action-button primary-action" type="submit">SAVE NEOSEKTOR MODE</button>
-                {% else %}
-                <p class="view-only-pill">VIEW ONLY</p>
+            <div class="system-settings-mode-help neosektor-shared-authority-status" data-neosektor-shared-authority="{{ neosektor_shared_authority.authority }}">
+                <p>
+                    <strong>SHARED STANDALONE AUTHORITY:</strong>
+                    {{ neosektor_shared_authority.authority_label }}
+                    {% if neosektor_shared_authority.record_present %}
+                    · generation {{ neosektor_shared_authority.generation }}
+                    {% endif %}
+                </p>
+                {% if neosektor_shared_authority.authority == "standalone_primary" %}
+                <p><strong>STANDBY FENCE ACTIVE:</strong> Neo is fenced from NeoSektor compatibility writes while standalone authority is active.</p>
+                <p>
+                    TAKEOVER: <strong>{{ neosektor_shared_authority.changed_at or "unknown" }}</strong>
+                    {% if neosektor_shared_authority.changed_by %} · {{ neosektor_shared_authority.changed_by }}{% endif %}
+                </p>
+                {% if neosektor_shared_authority.metadata %}
+                <details><summary>Authority metadata</summary><pre>{{ neosektor_shared_authority.metadata|tojson(indent=2) }}</pre></details>
                 {% endif %}
-            </form>
+                <p class="muted">NeoApps does not import standalone operational values or reclaim authority automatically.</p>
+                {% elif neosektor_shared_authority.record_present %}
+                <p>Neo may mirror compatibility cells. Authority changes are not enabled here yet.</p>
+                {% else %}
+                <p>Shared failover control is not activated; legacy Google compatibility remains unchanged.</p>
+                {% endif %}
+                {% if not neosektor_shared_authority.available %}
+                <p class="muted">Authority status is unavailable: {{ neosektor_shared_authority.error }}</p>
+                {% endif %}
+            </div>
 
+            {% if neosektor_status.google_mirror_sync_needed %}
+            <div class="system-settings-warning" data-neosektor-mirror-warning>
+                <strong>GOOGLE MIRROR NEEDS ATTENTION</strong>
+                <p>{{ neosektor_status.google_mirror_last_error or "Google mirror retry is required." }}</p>
+                {% if can_edit_system_settings and neosektor_status.mode == "neo_primary_google_mirror" and neosektor_status.google_mirror_writes_enabled %}
+                <form method="post">
+                    <button class="action-button" type="submit" name="action" value="retry_neosektor_google_mirror">RETRY GOOGLE MIRROR</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+            <details class="admin-change"><summary>Integration mode</summary>
+                <form method="post" class="system-settings-form" data-neosektor-mode-form>
+                    <input type="hidden" name="action" value="set_neosektor_mode">
+                    <div class="system-settings-mode-options" role="radiogroup" aria-label="NeoSektor integration mode">
+                        {% for mode in neosektor_status.modes %}
+                        <label class="system-settings-mode-option">
+                            <input type="radio" name="integration_mode" value="{{ mode.value }}" {% if mode.value == neosektor_status.mode %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}>
+                            <span>{{ mode.label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="system-settings-mode-help">
+                        <p><strong>GOOGLE PRIMARY:</strong> Google owns the operational cells; Neo settings remain in Neon.</p>
+                        <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> Neon owns operational state; Google is an explicitly enabled one-way backup mirror.</p>
+                        <p><strong>NEO ONLY:</strong> Neon owns operational state and NeoSektor performs no Google traffic.</p>
+                    </div>
+                    {% if can_edit_system_settings %}
+                    <button class="action-button primary-action" type="submit">SAVE NEOSEKTOR MODE</button>
+                    {% else %}
+                    <p class="view-only-pill">VIEW ONLY</p>
+                    {% endif %}
+                </form>
+            </details>
             <div class="system-settings-mode-help" data-neosektor-google-mirror-writes>
                 <p>
                     <strong>GOOGLE MIRROR WRITES:</strong>
@@ -66,105 +111,67 @@
                 {% endif %}
             </div>
 
-            <div class="system-settings-mode-help neosektor-shared-authority-status" data-neosektor-shared-authority="{{ neosektor_shared_authority.authority }}">
-                <p>
-                    <strong>SHARED STANDALONE AUTHORITY:</strong>
-                    {{ neosektor_shared_authority.authority_label }}
-                    {% if neosektor_shared_authority.record_present %}
-                    · generation {{ neosektor_shared_authority.generation }}
-                    {% endif %}
-                </p>
-                {% if neosektor_shared_authority.authority == "standalone_primary" %}
-                <p><strong>STANDBY FENCE ACTIVE:</strong> Neo is fenced from NeoSektor compatibility writes while standalone authority is active.</p>
-                <p>
-                    TAKEOVER: <strong>{{ neosektor_shared_authority.changed_at or "unknown" }}</strong>
-                    {% if neosektor_shared_authority.changed_by %} · {{ neosektor_shared_authority.changed_by }}{% endif %}
-                </p>
-                {% if neosektor_shared_authority.metadata %}
-                <p class="muted">AUTHORITY METADATA: <code>{{ neosektor_shared_authority.metadata|tojson }}</code></p>
-                {% endif %}
-                <p class="muted">NeoApps does not import standalone operational values or reclaim authority automatically.</p>
-            {% elif neosektor_shared_authority.record_present %}
-                <p>Neo may mirror compatibility cells. Authority changes are not enabled here yet.</p>
-                {% else %}
-                <p>Shared failover control is not activated; legacy Google compatibility remains unchanged.</p>
-                {% endif %}
-                {% if not neosektor_shared_authority.available %}
-                <p class="muted">Authority status is unavailable: {{ neosektor_shared_authority.error }}</p>
-                {% endif %}
-            </div>
-
-            {% if neosektor_status.google_mirror_sync_needed %}
-            <div class="system-settings-warning" data-neosektor-mirror-warning>
-                <strong>GOOGLE MIRROR NEEDS ATTENTION</strong>
-                <p>{{ neosektor_status.google_mirror_last_error or "Google mirror retry is required." }}</p>
-                {% if can_edit_system_settings and neosektor_status.mode == "neo_primary_google_mirror" and neosektor_status.google_mirror_writes_enabled %}
-                <form method="post">
-                    <button class="action-button" type="submit" name="action" value="retry_neosektor_google_mirror">RETRY GOOGLE MIRROR</button>
-                </form>
-                {% endif %}
-            </div>
-            {% endif %}
         </section>
 
-        <section class="system-settings-section" aria-labelledby="neorain-fuel-source-title" data-neorain-fuel-source>
-            <div class="system-settings-section-heading">
+        <section class="mb-section" aria-labelledby="neorain-transition-title" data-neorain-integration-status>
+            <div class="mb-section-title admin-heading">
                 <div>
-                    <h2 id="neorain-fuel-source-title">RAIN FUEL DATA SOURCE</h2>
-                    <p>Independent from Rain operational milestone authority.</p>
-                </div>
-                <strong class="system-settings-mode-badge">{{ neorain_fuel_status.source_label }}</strong>
-            </div>
-            <form method="post" class="system-settings-form">
-                <input type="hidden" name="action" value="set_neorain_fuel_data_source">
-                <div class="system-settings-mode-options" role="radiogroup" aria-label="Rain fuel data source">
-                    {% for source in neorain_fuel_status.sources %}
-                    <label class="system-settings-mode-option"><input type="radio" name="fuel_data_source" value="{{ source.value }}" {% if source.value == neorain_fuel_status.source %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}><span>{{ source.label }}</span></label>
-                    {% endfor %}
-                </div>
-                <p class="system-settings-mode-help">GOOGLE keeps the legacy Rain fuel display authoritative. NEO shows only final, completed canonical NeoScorpion fuel results.</p>
-                {% if can_edit_system_settings %}<button class="action-button primary-action" type="submit">SAVE RAIN FUEL SOURCE</button>{% else %}<p class="view-only-pill">VIEW ONLY</p>{% endif %}
-            </form>
-        </section>
-
-        <section class="system-settings-section" aria-labelledby="neorain-transition-title" data-neorain-integration-status>
-            <div class="system-settings-section-heading">
-                <div>
-                    <h2 id="neorain-transition-title">NEORAIN GOOGLE / NEO TRANSITION</h2>
-                    <p>Authority for the Rain-owned outbound milestone bundle.</p>
+                    <h2 id="neorain-transition-title">NeoRain</h2>
+                    <p>Night Sort · Outbound milestone authority</p>
                 </div>
                 <strong class="system-settings-mode-badge" data-neorain-mode="{{ neorain_status.mode }}">{{ neorain_status.mode_label }}</strong>
             </div>
-            <form method="post" class="system-settings-form" data-neorain-mode-form>
-                <input type="hidden" name="action" value="set_neorain_mode">
-                <div class="system-settings-mode-options" role="radiogroup" aria-label="NeoRain integration mode">
-                    {% for mode in neorain_status.modes %}
-                    <label class="system-settings-mode-option">
-                        <input type="radio" name="integration_mode" value="{{ mode.value }}" {% if mode.value == neorain_status.mode %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}>
-                        <span>{{ mode.label }}</span>
-                    </label>
-                    {% endfor %}
+            <p class="admin-note">Changing authority may perform a current-sort handoff. eLMAC is outside the Rain bundle.</p>
+            <details class="admin-change"><summary>Integration mode</summary>
+                <form method="post" class="system-settings-form" data-neorain-mode-form>
+                    <input type="hidden" name="action" value="set_neorain_mode">
+                    <div class="system-settings-mode-options" role="radiogroup" aria-label="NeoRain integration mode">
+                        {% for mode in neorain_status.modes %}
+                        <label class="system-settings-mode-option">
+                            <input type="radio" name="integration_mode" value="{{ mode.value }}" {% if mode.value == neorain_status.mode %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}>
+                            <span>{{ mode.label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                <div class="system-settings-mode-help">
+                    {% if neorain_status.mode == "google_primary" %}
+                    <p><strong>GOOGLE PRIMARY:</strong> Google owns Ramp Load Complete, Crew Load Complete, Official Block-Out, and No Return.</p>
+                    {% elif neorain_status.mode == "neo_primary_google_mirror" %}
+                    <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> NeoRain owns those fields and mirrors Neo edits to Google.</p>
+                    {% else %}
+                    <p><strong>NEO ONLY:</strong> NeoRain owns those fields and performs no Rain-specific Google read/write traffic.</p>
+                    {% endif %}
                 </div>
-            <div class="system-settings-mode-help">
-                {% if neorain_status.mode == "google_primary" %}
-                <p><strong>GOOGLE PRIMARY:</strong> Google owns Ramp Load Complete, Crew Load Complete, Official Block-Out, and No Return.</p>
-                {% elif neorain_status.mode == "neo_primary_google_mirror" %}
-                <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> NeoRain owns those fields and mirrors Neo edits to Google.</p>
-                {% else %}
-                <p><strong>NEO ONLY:</strong> NeoRain owns those fields and performs no Rain-specific Google read/write traffic.</p>
-                {% endif %}
-                <p>eLMAC is not part of the Rain bundle. Changing authority may perform a current-sort handoff.</p>
-            </div>
-                {% if can_edit_system_settings %}
-                <button class="action-button primary-action" type="submit">SAVE NEORAIN MODE</button>
-                {% else %}
-                <p class="view-only-pill">VIEW ONLY</p>
-                {% endif %}
-            </form>
+                    {% if can_edit_system_settings %}
+                    <button class="action-button primary-action" type="submit">SAVE NEORAIN MODE</button>
+                    {% else %}
+                    <p class="view-only-pill">VIEW ONLY</p>
+                    {% endif %}
+                </form>
+            </details>
+            <section class="admin-subsection" aria-labelledby="neorain-fuel-source-title" data-neorain-fuel-source>
+                <div class="mb-section-title admin-heading">
+                    <div>
+                        <h2 id="neorain-fuel-source-title">Rain fuel data source</h2>
+                        <p>Independent from Rain operational milestone authority.</p>
+                    </div>
+                    <strong class="system-settings-mode-badge">{{ neorain_fuel_status.source_label }}</strong>
+                </div>
+                <form method="post" class="system-settings-form">
+                    <input type="hidden" name="action" value="set_neorain_fuel_data_source">
+                    <div class="system-settings-mode-options" role="radiogroup" aria-label="Rain fuel data source">
+                        {% for source in neorain_fuel_status.sources %}
+                        <label class="system-settings-mode-option"><input type="radio" name="fuel_data_source" value="{{ source.value }}" {% if source.value == neorain_fuel_status.source %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}><span>{{ source.label }}</span></label>
+                        {% endfor %}
+                    </div>
+                    <p class="system-settings-mode-help">GOOGLE keeps the legacy Rain fuel display authoritative. NEO shows only final, completed canonical NeoScorpion fuel results.</p>
+                    {% if can_edit_system_settings %}<button class="action-button primary-action" type="submit">SAVE RAIN FUEL SOURCE</button>{% else %}<p class="view-only-pill">VIEW ONLY</p>{% endif %}
+                </form>
+            </section>
         </section>
 
-        <section class="system-settings-section" aria-labelledby="google-live-polling-title" data-google-live-polling-control>
-            <div class="system-settings-section-heading">
+        <section class="mb-section" aria-labelledby="google-live-polling-title" data-google-live-polling-control>
+            <div class="mb-section-title admin-heading">
                 <div>
                     <h2 id="google-live-polling-title">GOOGLE LIVE POLLING</h2>
                     <p>Authorizes MotherBrain and Rain live reads during the configured sort window.</p>

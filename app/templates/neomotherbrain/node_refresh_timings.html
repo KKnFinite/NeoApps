@@ -1,37 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Node Refresh Timings | NeoMotherBrain{% endblock %}
 {% block content %}
-<section class="panel centered-command-page system-settings-page" aria-labelledby="refresh-timings-title" data-node-refresh-timings>
-    <div class="section-heading system-settings-child-heading">
-        <div>
-            <h1 id="refresh-timings-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Node Refresh Timings</h1>
-            <p class="muted">Every registered operational live screen has an independent {{ gateway.code }} setting.</p>
-        </div>
-        <a class="action-button" href="{{ url_for('neomotherbrain.system_settings') }}">SYSTEM SETTINGS</a>
-    </div>
-    <div class="system-settings-sections">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_admin.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="panel mb-planning mb-admin" aria-labelledby="refresh-timings-title" data-node-refresh-timings>
+    <header class="mb-heading"><div><p>{{ gateway.code }} · Live screens</p><h1 id="refresh-timings-title">Node Refresh Timings</h1></div>
+        <nav class="mb-jumps"><a href="{{ url_for('neomotherbrain.system_settings') }}">System Settings</a></nav>
+    </header>
+    <p class="admin-note">Each interval applies to one screen during its configured Sort hours.{% if not can_edit_system_settings %} View only.{% endif %}</p>
+    <nav class="mb-jumps admin-jumps" aria-label="Screen groups">
+        {% for group in refresh_groups %}<a href="#refresh-group-{{ group.key }}">{{ group.label }}</a>{% endfor %}
+    </nav>
+    <div>
         {% for group in refresh_groups %}
-        <section class="system-settings-section" aria-labelledby="refresh-group-{{ group.key }}">
-            <div class="system-settings-section-heading"><div><h2 id="refresh-group-{{ group.key }}">{{ group.label }}</h2></div></div>
-            <div class="node-refresh-list">
+        <section class="mb-section admin-timings" aria-labelledby="refresh-group-{{ group.key }}">
+            <h2 id="refresh-group-{{ group.key }}">{{ group.label }}</h2>
+            <div class="admin-timing-list">
                 {% for screen in group.screens %}
                 {% set setting = refresh_values[screen.screen_key] %}
-                <form method="post" class="node-refresh-row" data-refresh-screen="{{ screen.screen_key }}">
+                <form method="post" class="admin-timing-row" data-refresh-screen="{{ screen.screen_key }}">
                     <input type="hidden" name="screen_key" value="{{ screen.screen_key }}">
-                    <div class="node-refresh-identity"><strong>{{ screen.label }}</strong><small>{{ screen.screen_key }}</small></div>
-                    <dl class="node-refresh-state">
+                    <div class="admin-screen"><strong>{{ screen.label }}</strong><small>{{ screen.screen_key }}</small></div>
+                    <dl class="admin-intervals">
                         <div><dt>Configured</dt><dd>{{ setting.configured_label }}</dd></div>
                         <div><dt>Effective</dt><dd>{{ setting.effective_label }}</dd></div>
                         <div><dt>Source</dt><dd>{{ setting.source_label }}</dd></div>
                     </dl>
-                    <label class="sr-only" for="refresh-{{ group.key }}-{{ loop.index }}">{{ screen.label }} refresh interval</label>
-                    <select id="refresh-{{ group.key }}-{{ loop.index }}" name="refresh_interval_seconds" {% if not can_edit_system_settings %}disabled{% endif %}>
+                    <select aria-label="{{ screen.label }} refresh interval" id="refresh-{{ group.key }}-{{ loop.index }}" name="refresh_interval_seconds" {% if not can_edit_system_settings %}disabled{% endif %}>
                         <option value="default" {% if setting.override_seconds is none %}selected{% endif %}>{{ "Screen Default" if screen.default_interval_seconds is not none else "Render Default" }}</option>
                         {% for seconds in live_refresh_allowed_seconds if seconds or screen.allow_off %}
                         <option value="{{ seconds }}" {% if setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
                         {% endfor %}
                     </select>
-                    {% if can_edit_system_settings %}<button class="action-button" type="submit">SAVE</button>{% else %}<span class="view-only-pill">VIEW ONLY</span>{% endif %}
+                    {% if can_edit_system_settings %}<button class="action-button" type="submit" aria-label="Save {{ screen.label }} interval">SAVE</button>{% else %}<span class="view-only-pill">VIEW ONLY</span>{% endif %}
                 </form>
                 {% endfor %}
             </div>

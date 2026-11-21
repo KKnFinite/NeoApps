@@ -2,21 +2,27 @@
 
 {% block title %}Google Current Sort Preview | NeoApps{% endblock %}
 
-{% macro summary_tiles(summary) %}
-    <div class="metric-grid">
-        {% for label, value in summary.items() %}
-            <article class="metric-tile">
-                <span>{{ label|replace('_', ' ')|upper }}</span>
-                <strong>{{ value }}</strong>
-            </article>
+{% macro section_counts(summary) %}
+    <dl class="admin-counts">
+        {% for label, value in summary.items() if value or label in ('received', 'matched', 'valid') %}
+        {% if label != 'safe_to_apply_atomically' %}
+        <div><dt>{{ label|replace('_', ' ') }}</dt><dd>{{ value }}</dd></div>
+        {% endif %}
         {% endfor %}
-    </div>
+    </dl>
+    <details class="admin-all-counts"><summary>All counts and checks</summary>
+        <dl class="admin-counts">
+            {% for label, value in summary.items() %}
+            <div><dt>{{ label|replace('_', ' ') }}</dt><dd>{{ ('Yes' if value else 'No') if value is boolean else value }}</dd></div>
+            {% endfor %}
+        </dl>
+    </details>
 {% endmacro %}
 
 {% macro detail_group(title, rows, category) %}
-    <section class="google-preview-detail-group" data-preview-category="{{ category }}">
-        <h3>{{ title }} <span>({{ rows|length }})</span></h3>
-        {% if rows %}
+    {% if rows %}
+    <details class="admin-differences" data-preview-category="{{ category }}" {% if category in ('inbound-conflicts', 'outbound-conflicts', 'parking-conflicts', 'all-errors') %}open{% endif %}>
+        <summary>{{ title }} <b>{{ rows|length }}</b></summary>
             <div class="table-wrap">
                 <table class="wide-data-table google-preview-detail-table">
                     <thead>
@@ -38,13 +44,17 @@
                                     {% if row.position %}{{ row.position }}{% if row.lane_number %} LANE {{ row.lane_number }}{% endif %}{% endif %}
                                     {% if row.action %}{{ row.action|replace('_', ' ')|upper }}{% endif %}
                                     {% if row.acknowledgment_state %}{{ row.acknowledgment_state|replace('_', ' ')|upper }}{% endif %}
+                                    {% if row.reason %}{{ row.reason }}{% endif %}
+                                    {% if row.proposed_tail or row.proposed_new_tail %}{{ row.current_tail or '—' }} → {{ row.proposed_tail or row.proposed_new_tail }}{% endif %}
+                                    {% if row.field and row.proposed %}{{ row.field|replace('_', ' ') }} · {{ row.current or '—' }} → {{ row.proposed }}{% endif %}
+                                    {% if row.proposed_position %}{{ row.current_position }} · lane {{ row.current_lane_number }} → {{ row.proposed_position }} · lane {{ row.proposed_lane_number }}{% endif %}
                                     {% if row.error %}{{ row.error }}{% endif %}
                                     {% if row.message %}{{ row.message }}{% endif %}
                                     {% if row.code %}{{ row.code|replace('_', ' ')|upper }}{% endif %}
                                 </td>
                                 <td>
                                     <details>
-                                        <summary>VIEW</summary>
+                                        <summary>Full record</summary>
                                         <pre>{{ row|tojson(indent=2) }}</pre>
                                     </details>
                                 </td>
@@ -53,42 +63,40 @@
                     </tbody>
                 </table>
             </div>
-        {% else %}
-            <p class="empty-state">NONE</p>
-        {% endif %}
-    </section>
+    </details>
+    {% endif %}
 {% endmacro %}
 
 {% block content %}
-<section class="panel centered-command-page manage-sort-sidebar-page google-current-sort-preview-page" data-google-current-sort-preview>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_admin.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="panel mb-planning mb-admin manage-sort-sidebar-page" data-google-current-sort-preview>
     {% set manage_sort_sidebar_operation = operation %}
     {% set manage_sort_sidebar_active = "summary" %}
     <div class="manage-sort-shell">
         {% include "neomotherbrain/_manage_sort_sidebar.html" %}
         <div class="manage-sort-main">
-            <div class="section-heading">
-                <h1>GOOGLE CURRENT SORT PREVIEW</h1>
-                <p class="status-badge warning">PREVIEW ONLY &mdash; NO NEO DATA WAS CHANGED</p>
-            </div>
-
-            <dl class="detail-list">
-                <div><dt>OPERATION ID</dt><dd>{{ operation.id }}</dd></div>
-                <div><dt>SORT DATE</dt><dd>{{ operation.sort_date.isoformat() }}</dd></div>
-                <div><dt>GATEWAY</dt><dd>{{ operation.gateway_code }}</dd></div>
-                <div><dt>SORT</dt><dd>{{ operation.sort_name|upper }}</dd></div>
-                <div><dt>READ AT</dt><dd>{{ preview_timestamp.isoformat() if preview_timestamp.isoformat is defined else preview_timestamp }}</dd></div>
-                <div><dt>FINGERPRINT</dt><dd><code>{{ preview.fingerprint }}</code></dd></div>
-            </dl>
-
-            <div class="metric-grid">
-                <article class="metric-tile"><span>WARNINGS</span><strong>{{ preview.warnings|length }}</strong></article>
-                <article class="metric-tile"><span>ERRORS</span><strong>{{ preview.errors|length }}</strong></article>
-            </div>
-
-            <section data-preview-section="inbound">
-                <div class="section-heading"><h2>INBOUND</h2></div>
-                {{ summary_tiles(preview.summary.inbound) }}
-                {{ detail_group('MATCHED ROWS', preview.sections.inbound.matched_rows, 'inbound-matched') }}
+            <header class="mb-heading"><div><p>{{ operation.gateway_code }} · {{ operation.sort_name|title }} Sort · {{ operation.sort_date.isoformat() }}</p>
+                <h1>Google Current Sort Preview</h1></div>
+                <form method="post" action="{{ url_for('neomotherbrain.google_current_sort_preview', operation_id=operation.id) }}">
+                    <button class="action-button" type="submit">READ GOOGLE AGAIN</button>
+                </form>
+            </header>
+            <section class="mb-section admin-read">
+                <div class="mb-section-title"><h2>PREVIEW ONLY &mdash; NO NEO DATA WAS CHANGED</h2>
+                    <span>{{ preview.warnings|length }} warnings · {{ preview.errors|length }} errors</span></div>
+                <p>Read at <time>{{ preview_timestamp.isoformat() if preview_timestamp.isoformat is defined else preview_timestamp }}</time> · Operation #{{ operation.id }}</p>
+                <details><summary>Snapshot fingerprint</summary><code>{{ preview.fingerprint }}</code></details>
+                {{ detail_group('Warnings', preview.warnings, 'all-warnings') }}
+                {{ detail_group('Errors', preview.errors, 'all-errors') }}
+            </section>
+            <nav class="mb-jumps admin-jumps" aria-label="Comparison sections">
+                <a href="#preview-inbound">Inbound</a><a href="#preview-outbound">Outbound</a>
+                <a href="#preview-tail-swaps">Tail swaps</a><a href="#preview-parking">Parking</a>
+            </nav>
+            <section class="mb-section admin-comparison" data-preview-section="inbound" id="preview-inbound">
+                <div class="mb-section-title"><h2>INBOUND</h2></div>
+                {{ section_counts(preview.summary.inbound) }}
                 {{ detail_group('UNMATCHED GOOGLE ROWS', preview.sections.inbound.unmatched_google_rows, 'inbound-unmatched') }}
                 {{ detail_group('MISSING CURRENT MISSIONS', preview.sections.inbound.missing_current_missions, 'inbound-missing') }}
                 {{ detail_group('DUPLICATE ROWS', preview.sections.inbound.duplicate_rows, 'inbound-duplicates') }}
@@ -99,12 +107,12 @@
                 {{ detail_group('TIMING CHANGES', preview.sections.inbound.timing_changes, 'inbound-timing-changes') }}
                 {{ detail_group('STATUS CHANGES', preview.sections.inbound.status_changes, 'inbound-status-changes') }}
                 {{ detail_group('CONFLICTS', preview.sections.inbound.conflicts, 'inbound-conflicts') }}
+                {{ detail_group('MATCHED ROWS', preview.sections.inbound.matched_rows, 'inbound-matched') }}
             </section>
 
-            <section data-preview-section="outbound">
-                <div class="section-heading"><h2>OUTBOUND</h2></div>
-                {{ summary_tiles(preview.summary.outbound) }}
-                {{ detail_group('MATCHED ROWS', preview.sections.outbound.matched_rows, 'outbound-matched') }}
+            <section class="mb-section admin-comparison" data-preview-section="outbound" id="preview-outbound">
+                <div class="mb-section-title"><h2>OUTBOUND</h2></div>
+                {{ section_counts(preview.summary.outbound) }}
                 {{ detail_group('UNMATCHED GOOGLE ROWS', preview.sections.outbound.unmatched_google_rows, 'outbound-unmatched') }}
                 {{ detail_group('MISSING CURRENT MISSIONS', preview.sections.outbound.missing_current_missions, 'outbound-missing') }}
                 {{ detail_group('DUPLICATE ROWS', preview.sections.outbound.duplicate_rows, 'outbound-duplicates') }}
@@ -115,21 +123,21 @@
                 {{ detail_group('TIMING CHANGES', preview.sections.outbound.timing_changes, 'outbound-timing-changes') }}
                 {{ detail_group('STATUS CHANGES', preview.sections.outbound.status_changes, 'outbound-status-changes') }}
                 {{ detail_group('CONFLICTS', preview.sections.outbound.conflicts, 'outbound-conflicts') }}
+                {{ detail_group('MATCHED ROWS', preview.sections.outbound.matched_rows, 'outbound-matched') }}
             </section>
 
-            <section data-preview-section="tail-swaps">
-                <div class="section-heading"><h2>TAIL SWAPS</h2></div>
-                {{ summary_tiles(preview.summary.tail_swaps) }}
+            <section class="mb-section admin-comparison" data-preview-section="tail-swaps" id="preview-tail-swaps">
+                <div class="mb-section-title"><h2>TAIL SWAPS</h2></div>
+                {{ section_counts(preview.summary.tail_swaps) }}
                 {{ detail_group('PENDING', preview.sections.tail_swaps['items']|selectattr('acknowledgment_state', 'equalto', 'pending')|list, 'tail-swaps-pending') }}
                 {{ detail_group('READY TO FINALIZE', preview.sections.tail_swaps['items']|selectattr('acknowledgment_state', 'equalto', 'ready_to_finalize')|list, 'tail-swaps-ready') }}
                 {{ detail_group('INVALID ROWS', preview.sections.tail_swaps.invalid_rows, 'tail-swaps-invalid') }}
                 {{ detail_group('WARNINGS', preview.sections.tail_swaps.warnings, 'tail-swaps-warnings') }}
             </section>
 
-            <section data-preview-section="parking">
-                <div class="section-heading"><h2>PARKING</h2></div>
-                {{ summary_tiles(preview.summary.parking) }}
-                {{ detail_group('VALID ASSIGNMENTS', preview.sections.parking.valid_normalized_assignments, 'parking-valid') }}
+            <section class="mb-section admin-comparison" data-preview-section="parking" id="preview-parking">
+                <div class="mb-section-title"><h2>PARKING</h2></div>
+                {{ section_counts(preview.summary.parking) }}
                 {{ detail_group('DUPLICATE TAIL PLACEMENTS', preview.sections.parking.duplicate_tail_placements, 'parking-duplicate-tails') }}
                 {{ detail_group('DUPLICATE POSITION / LANE OCCUPANCY', preview.sections.parking.duplicate_position_lane_occupancy, 'parking-duplicate-slots') }}
                 {{ detail_group('INVALID TAILS', preview.sections.parking.invalid_tails, 'parking-invalid-tails') }}
@@ -140,16 +148,9 @@
                 {{ detail_group('ASSIGNMENTS TO MOVE', preview.sections.parking.assignments_to_move, 'parking-move') }}
                 {{ detail_group('UNCHANGED ASSIGNMENTS', preview.sections.parking.assignments_unchanged, 'parking-unchanged') }}
                 {{ detail_group('PHYSICAL CONFLICTS', preview.sections.parking.physical_conflicts, 'parking-conflicts') }}
+                {{ detail_group('VALID ASSIGNMENTS', preview.sections.parking.valid_normalized_assignments, 'parking-valid') }}
             </section>
-
-            {{ detail_group('ALL WARNINGS', preview.warnings, 'all-warnings') }}
-
-            <div class="page-actions centered-actions">
-                <form method="post" action="{{ url_for('neomotherbrain.google_current_sort_preview', operation_id=operation.id) }}">
-                    <button class="action-button primary-action" type="submit">READ GOOGLE AGAIN</button>
-                </form>
-                <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">RETURN TO OPERATION</a>
-            </div>
+            <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Return to operation</a>
         </div>
     </div>
 </section>

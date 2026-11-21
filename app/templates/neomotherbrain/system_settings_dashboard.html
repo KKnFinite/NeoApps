@@ -1,33 +1,32 @@
 {% extends "base.html" %}
 {% block title %}System Settings | NeoMotherBrain{% endblock %}
 {% block content %}
-<section class="panel centered-command-page system-settings-page" aria-labelledby="system-settings-title" data-system-settings-dashboard>
-    <div class="section-heading">
-        <h1 id="system-settings-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">System Settings</h1>
-        <p class="muted">{{ gateway.code }} gateway-wide administration.</p>
-    </div>
-    <nav class="system-settings-dashboard" aria-label="System Settings destinations">
-        {% if user_can('neomotherbrain.system_settings.view') %}
-        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.node_refresh_timings') }}"><strong>Node Refresh Timings</strong><span>Per-screen live update cadence.</span></a>
-        {% endif %}
-        {% if user_can('neomotherbrain.permission_rules.view') %}
-        <a class="system-settings-dashboard-card" href="{{ url_for('auth.permission_rules') }}"><strong>Node Permissions</strong><span>Existing capability and role rules.</span></a>
-        {% endif %}
-        {% if user_can('neomotherbrain.system_settings.view') %}
-        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.integration_settings') }}"><strong>Integrations &amp; Migration</strong><span>Google polling and Neo authority controls.</span></a>
-        {% endif %}
-        {% if user_can('neomotherbrain.gateway_matrix.view') %}
-        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.gateway_matrix') }}"><strong>Gateway Matrix</strong><span>Scheduled gateway sort days.</span></a>
-        {% endif %}
-        {% if user_can('neomotherbrain.sort_timeline.view') %}
-        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.sort_timeline') }}"><strong>Sort Timeline</strong><span>Operational and sort windows.</span></a>
-        {% endif %}
-        {% if user_can('neomotherbrain.manage_api.view') %}
-        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.flight_api_test') }}"><strong>Manage API</strong><span>Flight provider review and controls.</span></a>
-        {% endif %}
-        {% if user_can('neoapps.portal_management.view') %}
-        <a class="system-settings-dashboard-card" href="{{ url_for('auth.portal_management') }}"><strong>Portal Manage</strong><span>Users and portal access.</span></a>
-        {% endif %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_admin.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="panel mb-planning mb-admin" aria-labelledby="system-settings-title" data-system-settings-dashboard>
+    <header class="mb-heading"><div><p>{{ gateway.code }} · Administration</p><h1 id="system-settings-title">System Settings</h1></div></header>
+    <nav aria-label="System Settings destinations">
+        {% for purpose, tools in [
+            ('Scheduling and live screens', [
+                ('Gateway Matrix', 'Operating weekdays by Sort', 'neomotherbrain.gateway_matrix', 'neomotherbrain.gateway_matrix.view'),
+                ('Sort Timeline', 'Sort windows and provider budgets', 'neomotherbrain.sort_timeline', 'neomotherbrain.sort_timeline.view'),
+                ('Node Refresh Timings', 'Live update interval by screen', 'neomotherbrain.node_refresh_timings', 'neomotherbrain.system_settings.view')]),
+            ('Data sources', [
+                ('Manage API', 'Flight provider results and matching', 'neomotherbrain.flight_api_test', 'neomotherbrain.manage_api.view'),
+                ('Integrations & Migration', 'Data authority, Google mirrors and polling', 'neomotherbrain.integration_settings', 'neomotherbrain.system_settings.view')]),
+            ('Access', [
+                ('Node Permissions', 'Capabilities and role rules', 'auth.permission_rules', 'neomotherbrain.permission_rules.view'),
+                ('Portal Manage', 'Accounts and application access', 'auth.portal_management', 'neoapps.portal_management.view')])
+        ] %}
+            {% set destinations %}
+                {% for label, description, endpoint, permission in tools if user_can(permission) %}
+                <a href="{{ url_for(endpoint) }}"><strong>{{ label }}</strong><span>{{ description }}</span></a>
+                {% endfor %}
+            {% endset %}
+            {% if destinations|trim %}
+            <section class="mb-section admin-tool-group"><h2>{{ purpose }}</h2><div>{{ destinations }}</div></section>
+            {% endif %}
+        {% endfor %}
     </nav>
 </section>
 {% endblock %}
