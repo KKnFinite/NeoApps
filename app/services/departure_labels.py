@@ -6,7 +6,7 @@ from app.extensions import db
 from app.models import SortDateMission
 from app.services.mission_identity import flight_identity
 from app.services.request_cache import request_cached
-from app.services.sort_date_operations import _planned_datetime_utc, effective_window_minutes_for_mission
+from app.services.sort_date_operations import _planned_datetime_utc, effective_window_minutes_for_mission, normalize_wave
 
 
 def effective_departure_utc(mission, operation):
@@ -29,7 +29,12 @@ def departure_order(mission, operation):
 def departure_occurrences(missions, operation):
     groups = defaultdict(list)
     for mission in missions:
-        if mission.mission_type == "departure" and mission.destination and mission.departure_status != "cancelled":
+        if (
+            mission.mission_type == "departure"
+            and mission.destination
+            and mission.departure_status != "cancelled"
+            and normalize_wave(mission.wave) is not None
+        ):
             groups[mission.destination.strip().upper()].append(mission)
     return {m.id: rank for group in groups.values() if len(group) > 1
             for rank, m in enumerate(sorted(group, key=lambda m: departure_order(m, operation)), 1)}

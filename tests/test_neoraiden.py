@@ -134,8 +134,8 @@ class RaidenTest(unittest.TestCase):
             self.assertEqual(result.status_code, 200)
             with self.app.test_request_context():
                 rows = snapshot(self.user, self.gateway, op)["departures"]
-            self.assertEqual([(r["tail"],r["ordinal"],r["parking"]) for r in rows],
-                             [("N202",1,"B02"),("N101",2,None)])
+            self.assertEqual([(r["tail"], r["route_label"], r["ordinal"], r["parking"]) for r in rows],
+                             [("N202", "OAK", None, "B02"), ("N101", "OAK", None, None)])
             self.assertEqual([len(r["pulls"]) for r in rows], [0,1])
             self.assertEqual(rows[1]["pulls"][0]["pure"],"01:25")
             self.assertIsNone(rows[0]["deice"])
