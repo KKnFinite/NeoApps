@@ -77,7 +77,8 @@
     button.disabled = !root;
     const label = root ? root.getAttribute('aria-label') : '';
     tools.querySelector('[data-rain-reset-selection]').textContent = label;
-    button.title = root ? 'Reset ' + label + ' to Google' : 'Select a time or checkbox to reset it to Google';
+    const target = tools.dataset?.rainResetTarget || 'Google';
+    button.title = root ? 'Reset ' + label + ' to ' + target : 'Select a time or checkbox to reset it to ' + target;
   };
   document.addEventListener('focusin', event => {
     if (event.target.matches('[data-rain-override-time], [data-rain-override-checkbox]') && !event.target.disabled) {

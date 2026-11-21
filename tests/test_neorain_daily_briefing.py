@@ -18,6 +18,8 @@ class DailyBriefingTest(TestCase):
         self.arrival,self.departure=self.f.arrival,self.f.departure
         self.arrival.origin='SDF';self.arrival.destination='RFD'
         self.arrival.wave=self.departure.wave='1'
+        self.arrival.arrival_status = 'arrived'
+        self.departure.departure_status = 'departed'
         self.arrival.actual_block_in_datetime_utc=self.arrival.planned_datetime_utc+timedelta(minutes=15)
         self.departure.actual_block_out_datetime_utc=self.departure.planned_datetime_utc+timedelta(minutes=11)
         db.session.add(NeoRainDelayInfo(sort_date_mission_id=self.departure.id,minutes=11,code='RS',notes='Late inbound'))
@@ -219,8 +221,8 @@ class DailyBriefingTest(TestCase):
             planned=self.departure.planned_datetime_utc-timedelta(days=1), tail=self.departure.assigned_tail_number)
         mission.actual_block_out_datetime_utc = mission.planned_datetime_utc+timedelta(minutes=8)
         db.session.add(NeoRainDelayInfo(sort_date_mission_id=mission.id, minutes=8, code='GL', notes='OTHER SORT ONLY'))
-        # An early/included flight and an explicitly excluded late flight must
-        # not acquire new report lines just because delay records exist.
+        # Early and excluded details are visible only in the detailed version,
+        # and never change the performance summary.
         self.arrival.actual_block_in_datetime_utc = self.arrival.planned_datetime_utc-timedelta(minutes=2)
         db.session.add(NeoRainDelayInfo(sort_date_mission_id=self.arrival.id, minutes=1, code='MX', notes='EARLY ONLY'))
         db.session.commit()
@@ -235,10 +237,12 @@ class DailyBriefingTest(TestCase):
             event.remove(db.session(), 'before_flush', reject_write)
         self.assertIn('Late inbound', current['briefing_detailed'])
         self.assertNotIn('OTHER SORT ONLY', current['briefing_detailed'])
-        self.assertNotIn('EARLY ONLY', current['briefing_detailed'])
+        self.assertIn('UPS1487 — Delay Info: 1 MX - EARLY ONLY', current['briefing_detailed'])
+        self.assertNotIn('EARLY ONLY', current['briefing'])
         self.assertIn('OTHER SORT ONLY', historical['briefing_detailed'])
         self.assertNotIn('Late inbound', historical['briefing_detailed'])
         self.departure.late_metrics_included_override = False; db.session.commit()
         context = briefing_context(self.operation)
-        self.assertEqual(format_briefing(context, include_delay_details=True), format_briefing(context))
+        self.assertNotIn('N948UP +11', format_briefing(context, include_delay_details=True))
+        self.assertIn('UPS948 — Delay Info: 11 RS - Late inbound', format_briefing(context, include_delay_details=True))
         self.assertEqual(NeoRainReportEntry.query.count(), 0)

@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import func, literal, select, union_all
-from sqlalchemy.orm import aliased, joinedload
+from sqlalchemy.orm import aliased, joinedload, selectinload
 
 from app.extensions import db
 from app.models import (
@@ -27,7 +27,8 @@ from app.models import (
     NeoScorpionFuelTankState,
     MotherBrainGoogleIntegrationSetting,
 )
-from app.models import NeoRainOperationalSetting, NeoRainCrewAdminAssignment, NeoRainDelayInfo
+from app.models import NeoRainOperationalSetting, NeoRainCrewAdminAssignment, NeoRainDelayInfo, NeoRainMissionNote
+from app.services.neorain_mission_notes import mission_note_payload
 from app.services.neorain_ground_time_settings import neorain_ground_time_threshold_minutes
 from app.services.neorain_outbound_service_fields import (
     outbound_service_states,
@@ -50,6 +51,7 @@ from app.services.live_collaboration import entity_version
 from app.services.memory_diagnostics import memory_diagnostics
 from app.services.neostaffing import attendance_operation_department_counts
 from app.services.node_refresh import node_auto_refresh_status
+from app.services.neorain_performance import completed_variance_minutes, eligible_for_performance, late_inclusion
 from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data, normalize_wave
 from app.services.time_display import format_local_hhmm
@@ -178,6 +180,8 @@ def neorain_inbound_revision(gateway, *, operation=_OPERATION_UNSET):
         _revision_aggregate("ground_time_setting", NeoRainOperationalSetting, NeoRainOperationalSetting.updated_at, NeoRainOperationalSetting.gateway_id == gateway.id),
         _revision_aggregate("crew_admin", NeoRainCrewAdminAssignment, NeoRainCrewAdminAssignment.updated_at, NeoRainCrewAdminAssignment.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("crew_admin", NeoRainCrewAdminAssignment, NeoRainCrewAdminAssignment.updated_at, NeoRainCrewAdminAssignment.id.is_(None)),
         _revision_aggregate("arrival_delay_info", NeoRainDelayInfo, NeoRainDelayInfo.updated_at, NeoRainDelayInfo.sort_date_mission_id.in_(select(SortDateMission.id).where(criterion, SortDateMission.mission_type == "arrival"))),
+        _revision_aggregate("arrival_mission_notes", NeoRainMissionNote, NeoRainMissionNote.updated_at,
+            NeoRainMissionNote.sort_date_mission_id.in_(select(SortDateMission.id).where(criterion, SortDateMission.mission_type == "arrival"))),
     )).all(), key=lambda row: row.source)
     payload = {"gateway_id": gateway.id, "operation_id": operation_id, "inputs": [{"source": r.source, "row_count": int(r.row_count or 0), "max_id": int(r.max_id or 0), "id_sum": int(r.id_sum or 0), "latest_updated_at": _revision_value(r.latest_updated_at)} for r in rows]}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -285,14 +289,7 @@ def mutate_neorain_arrival_block_in(mission, operation, value):
 
 
 def neorain_late_metrics_inclusion(mission):
-    """Return the effective Neo-owned late-metrics eligibility for one mission."""
-    override = mission.late_metrics_included_override
-    if override is not None:
-        return {"included": bool(override), "source": "override"}
-    return {
-        "included": normalize_wave(mission.wave) in {"1", "2"},
-        "source": "default",
-    }
+    return late_inclusion(mission)
 
 
 def set_neorain_late_metrics_included(mission, included):
@@ -494,6 +491,8 @@ def neorain_outbound_revision(gateway, *, operation=_OPERATION_UNSET):
             SortDateMission.mission_type == "departure",
         ),
         _revision_aggregate("departure_delay_info", NeoRainDelayInfo, NeoRainDelayInfo.updated_at, NeoRainDelayInfo.sort_date_mission_id.in_(select(SortDateMission.id).where(criterion, SortDateMission.mission_type == "departure"))),
+        _revision_aggregate("departure_mission_notes", NeoRainMissionNote, NeoRainMissionNote.updated_at,
+            NeoRainMissionNote.sort_date_mission_id.in_(select(SortDateMission.id).where(criterion, SortDateMission.mission_type == "departure"))),
         _revision_aggregate(
             "parking",
             SortDateParkingAssignment,
@@ -822,6 +821,7 @@ def _outbound_departure_missions(operation):
     return (
         SortDateMission.query.options(
             joinedload(SortDateMission.delay_info_rows),
+            selectinload(SortDateMission.neorain_mission_notes),
             joinedload(SortDateMission.load_planner_person),
             joinedload(SortDateMission.master_flight_schedule).joinedload(
                 MasterFlightSchedule.load_planner_person
@@ -835,7 +835,8 @@ def _outbound_departure_missions(operation):
 def _inbound_arrival_missions(operation):
     if operation is None:
         return []
-    return SortDateMission.query.options(joinedload(SortDateMission.delay_info_rows)).filter_by(
+    return SortDateMission.query.options(joinedload(SortDateMission.delay_info_rows),
+        selectinload(SortDateMission.neorain_mission_notes)).filter_by(
         sort_date_operation_id=operation.id,
         mission_type="arrival", master_retirement=None,
     ).all()
@@ -870,6 +871,7 @@ def _inbound_row(mission, parking_by_tail, departures_by_tail=None, ground_time_
         "sort_time": effective,
         "mission_id": mission.id,
         "version": entity_version(mission),
+        "mission_notes": mission_note_payload(mission),
         "delay_info": tuple({"id": row.id, "minutes": row.minutes, "code": row.code, "notes": row.notes or "", "version": entity_version(row)} for row in mission.delay_info_rows),
     }
 
@@ -933,73 +935,33 @@ def _duration_hhmm(minutes):
 
 
 def _outbound_late_summary(missions):
-    summary = {
-        "first_wave": {"aircraft_late": 0, "late_minutes": 0},
-        "second_wave": {"aircraft_late": 0, "late_minutes": 0},
-        "total": {"aircraft_late": 0, "late_minutes": 0},
-    }
-    for mission in missions:
-        minutes = _departure_variance_minutes(mission)
-        if (
-            minutes is None
-            or minutes <= 0
-            or not neorain_late_metrics_inclusion(mission)["included"]
-        ):
-            continue
-        buckets = ["total"]
-        wave = normalize_wave(mission.wave)
-        if wave == "1":
-            buckets.insert(0, "first_wave")
-        elif wave == "2":
-            buckets.insert(0, "second_wave")
-        for bucket in buckets:
-            summary[bucket]["aircraft_late"] += 1
-            summary[bucket]["late_minutes"] += minutes
-    for values in summary.values():
-        count = values["aircraft_late"]
-        minutes = values["late_minutes"]
-        values["average"] = _late_average_display(minutes, count)
-    return summary
+    return _late_summary(missions)
 
 
 def neorain_inbound_late_summary(operation):
     """Return derived Block-In-versus-STA metrics for current-sort arrivals."""
-    return _inbound_late_summary(_inbound_arrival_missions(operation))
+    return _late_summary(_inbound_arrival_missions(operation))
 
 
 def _inbound_late_summary(missions):
-    summary = {
-        "first_wave": {"aircraft_late": 0, "late_minutes": 0},
-        "second_wave": {"aircraft_late": 0, "late_minutes": 0},
-        "total": {"aircraft_late": 0, "late_minutes": 0},
-    }
+    return _late_summary(missions)
+
+
+def _late_summary(missions):
+    summary = {key: {"aircraft_late": 0, "late_minutes": 0}
+               for key in ("first_wave", "second_wave", "total")}
     for mission in missions:
-        if (
-            mission.actual_block_in_datetime_utc is None
-            or mission.planned_datetime_utc is None
-            or not neorain_late_metrics_inclusion(mission)["included"]
-        ):
+        if not eligible_for_performance(mission):
             continue
-        minutes = int(
-            (mission.actual_block_in_datetime_utc - mission.planned_datetime_utc)
-            .total_seconds()
-            / 60
-        )
-        if minutes <= 0:
+        minutes = completed_variance_minutes(mission)
+        if minutes is None or minutes <= 0:
             continue
-        buckets = ["total"]
-        wave = normalize_wave(mission.wave)
-        if wave == "1":
-            buckets.insert(0, "first_wave")
-        elif wave == "2":
-            buckets.insert(0, "second_wave")
-        for bucket in buckets:
-            summary[bucket]["aircraft_late"] += 1
-            summary[bucket]["late_minutes"] += minutes
-    for values in summary.values():
-        values["average"] = _late_average_display(
-            values["late_minutes"], values["aircraft_late"]
-        )
+        wave_bucket = {"1": "first_wave", "2": "second_wave"}.get(normalize_wave(mission.wave))
+        for key in ("total", wave_bucket) if wave_bucket else ("total",):
+            summary[key]["aircraft_late"] += 1
+            summary[key]["late_minutes"] += minutes
+    for bucket in summary.values():
+        bucket["average"] = _late_average_display(bucket["late_minutes"], bucket["aircraft_late"])
     return summary
 
 
@@ -1114,6 +1076,7 @@ def _outbound_row(
         "sort_time": planned,
         "mission_id": mission.id,
         "version": entity_version(mission),
+        "mission_notes": mission_note_payload(mission),
         "delay_info": tuple({"id": row.id, "minutes": row.minutes, "code": row.code, "notes": row.notes or "", "version": entity_version(row)} for row in mission.delay_info_rows),
     }
 
@@ -1127,22 +1090,12 @@ def _departure_variance(mission):
 
 
 def _arrival_variance(mission):
-    if mission.actual_block_in_datetime_utc is None or mission.planned_datetime_utc is None:
-        return "-"
-    minutes = int(
-        (mission.actual_block_in_datetime_utc - mission.planned_datetime_utc)
-        .total_seconds()
-        / 60
-    )
-    return f"+{minutes}" if minutes > 0 else str(minutes)
+    minutes = completed_variance_minutes(mission)
+    return "-" if minutes is None else f"+{minutes}" if minutes > 0 else str(minutes)
 
 
 def _departure_variance_minutes(mission):
-    scheduled_departure = mission.planned_datetime_utc
-    official_block_out = mission.actual_block_out_datetime_utc
-    if scheduled_departure is None or official_block_out is None:
-        return None
-    return int((official_block_out - scheduled_departure).total_seconds() / 60)
+    return completed_variance_minutes(mission)
 
 
 def _revision_aggregate(source, model, timestamp_column, *criteria):

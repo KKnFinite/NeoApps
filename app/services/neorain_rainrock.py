@@ -3,21 +3,14 @@ from decimal import Decimal
 
 from app.extensions import db
 from app.models import Gateway, NeoRainOperationalSetting, NeoRainReportEntry
-from app.services.neorain_daily_briefing import briefing_context, save_inputs
-from app.services.neorain_reports import report_context, normalize_report_value
+from app.services.neorain_daily_briefing import STAFFING_GROUPS, VOLUME_INPUTS, briefing_context, save_inputs
+from app.services.neorain_reports import _mission_rows, report_context, normalize_report_value
 from app.services.neorain_ground_time_settings import default_planned_fph
 
 
 INPUT_GROUPS = (
-    ('Volume & Performance', (
-        ('planned_volume', 'HPS Volume', 'number'), ('actual_volume', 'Actual Volume', 'number'),
-        ('smalls_percent', 'Smalls Processed', 'percent'), ('planned_fph', 'Planned FPH', 'number'),
-        ('actual_fph', 'Actual FPH', 'number'))),
-    ('Staffing', (
-        ('briefing_ramp_staffing_planned', 'Ramp Payroll', 'number'),
-        ('briefing_ramp_staffing_actual', 'Ramp Worked', 'number'),
-        ('briefing_hub_staffing_planned', 'Hub Payroll', 'number'),
-        ('briefing_hub_staffing_actual', 'Hub Worked', 'number'))),
+    ('Volume & Performance', VOLUME_INPUTS),
+    ('Staffing', tuple(field for _, group in STAFFING_GROUPS for field in group)),
     ('Additional Notes', (('note_1', 'Additional Notes', 'note'),)),
 )
 INPUTS = {key: (label, kind) for _, group in INPUT_GROUPS for key, label, kind in group}
@@ -36,8 +29,9 @@ def set_default_planned_fph(gateway, raw):
 
 
 def dashboard_context(operation, *, current=False):
-    report = report_context(operation, current=current)
-    briefing = briefing_context(operation, current=current)
+    missions = _mission_rows(operation)
+    report = report_context(operation, current=current, missions=missions)
+    briefing = briefing_context(operation, current=current, missions=missions)
     shared = briefing['fields']
     # Only scheduled, included flights participate in the lateness denominator.
     # Still display every flight and its actual/delays in the tables below.
@@ -64,6 +58,10 @@ def dashboard_context(operation, *, current=False):
             item['source'] = 'Saved sort value'
         inputs[key] = item
     report['inputs'] = inputs
+    report['closeout'] = [shared[key] for key in (
+        'briefing_safety', 'briefing_incident', 'briefing_inbound_missorts',
+        'briefing_libs', 'briefing_service', 'briefing_operational_notes',
+    ) if shared[key]['value'] is not None]
     report['notes'] = [inputs['note_1']['value']] if inputs['note_1']['value'] else []
     report['notes'] += [report['fields'][f'note_{n}']['value'] for n in range(2, 6) if report['fields'][f'note_{n}']['value']]
     return report

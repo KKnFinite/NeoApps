@@ -162,8 +162,8 @@ def attempt_once(override_id, generation):
         sort_date_operation_id=row.sort_date_operation_id, mission_type=mission.mission_type).first()
     row.sync_attempted_at = datetime.utcnow()
     try:
-        from app.services.google_rain_integration_mode import rain_integration_mode, NEO_ONLY
-        if rain_integration_mode(mission.sort_date_operation.gateway, mission.sort_name) == NEO_ONLY:
+        from app.services.google_rain_integration_mode import rain_operation_is_native
+        if rain_operation_is_native(mission.sort_date_operation):
             row.sync_status, row.sync_detail = 'NEO_ONLY', 'Google integration is disabled for this sort.'
         elif row.field == 'etd':
             row.sync_status, row.sync_detail = 'NEO_ONLY', 'ETD has no approved Google write range.'
@@ -192,6 +192,10 @@ def refresh_reset(override_id, generation):
     mission = SortDateMission.query.filter_by(id=row.sort_date_mission_id).populate_existing().with_for_update().one()
     row = NeoRainMissionOverride.query.filter_by(id=override_id).populate_existing().with_for_update().one()
     if row.active or row.generation != generation:
+        db.session.rollback()
+        return
+    from app.services.google_rain_integration_mode import rain_operation_is_native
+    if rain_operation_is_native(mission.sort_date_operation):
         db.session.rollback()
         return
     link = SortDateGoogleMissionLink.query.filter_by(sort_date_mission_id=mission.id,

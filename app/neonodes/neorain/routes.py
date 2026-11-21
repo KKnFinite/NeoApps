@@ -360,6 +360,7 @@ def inbound():
         eligible_crew_admins=eligible_neorain_crew_admins(),
         inbound_revision=neorain_inbound_revision(gateway, operation=operation),
         refresh_status=neorain_inbound_refresh_status(gateway, operation=operation),
+        rain_integration_mode=rain_integration_mode(gateway, operation.sort_name) if operation else GOOGLE_PRIMARY,
         **context,
     )
 

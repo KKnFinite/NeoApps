@@ -36,6 +36,12 @@ def rain_integration_mode(gateway=None, sort_name=None, *, setting=None):
     return _normalized_mode(getattr(setting, "rain_integration_mode", None))
 
 
+def rain_operation_is_native(operation):
+    from app.models import Gateway
+    gateway = operation.gateway or Gateway.query.filter_by(code=operation.gateway_code).one_or_none()
+    return gateway is not None and rain_integration_mode(gateway, operation.sort_name) == NEO_ONLY
+
+
 def rain_integration_status(gateway=None, sort_name=None):
     gateway = _resolve_gateway(gateway)
     normalized_sort = _normalize_sort_name(sort_name)

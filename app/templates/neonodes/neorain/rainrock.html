@@ -1,22 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Rainrock | NeoRain{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static',filename='css/neorain_rainrock.css',v='20261021-rainrock-tables-v2') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neorain_rainrock.css',v='native-closeout-v1') }}">
 <main class="rainrock" data-rainrock data-operation="{{ operation.id if operation else '' }}" data-state-url="{{ url_for('neorain.rainrock_state',operation_id=operation.id) if operation else '' }}" data-refresh-ms="{{ config.get('RAINROCK_REFRESH_INTERVAL_MS',60000) if is_current else 0 }}">
   <header class="rainrock-head"><h1>◈ RAINROCK</h1>{% include 'neonodes/neorain/_report_sort_picker.html' %}<span class="rainrock-save-state" data-rainrock-save-status role="status">{{ 'Auto-saves' if can_edit else 'Read-only' }}</span></header>
   {% if report %}
   <form class="rainrock-inputs" action="{{ url_for('neorain.rainrock_inputs',operation_id=operation.id) }}" data-rainrock-inputs data-can-edit="{{ 'true' if can_edit else 'false' }}">
     <h2>SORT INPUTS</h2><div class="rainrock-input-grid">
-    {% for heading,group in input_groups %}<section class="rainrock-input-group"><h3>{{ heading|upper }}</h3>{% if heading == 'Staffing' %}<div class="rainrock-staffing-heads"><strong>Ramp</strong><strong>Hub</strong></div>{% endif %}<div class="rainrock-fields {{ 'rainrock-volume-fields' if loop.index == 1 else 'rainrock-staffing-fields' if loop.index == 2 else 'rainrock-note-fields' }}">
-    {% for key,label,kind in group %}{% set field=report.inputs[key] %}<label for="rainrock-{{ key }}">{{ ('Payroll' if key.endswith('_planned') else 'Worked') if heading == 'Staffing' else label if kind != 'note' else '' }}{% if kind == 'note' %}<textarea id="rainrock-{{ key }}" name="{{ key }}" aria-label="{{ label }}" data-rainrock-field data-version="{{ field.version }}" data-saved-value="{{ field.input_value }}" rows="2" maxlength="2000" placeholder="Sort notes, exceptions or operational remarks…"{% if not can_edit %} readonly{% endif %}>{{ field.input_value }}</textarea>{% else %}<input id="rainrock-{{ key }}" name="{{ key }}" aria-label="{{ label }}" data-rainrock-field data-version="{{ field.version }}" data-saved-value="{{ field.input_value }}" value="{{ field.input_value }}" inputmode="{{ 'decimal' if kind == 'percent' else 'numeric' }}" maxlength="32" placeholder="—" title="{{ field.source }}"{% if not can_edit %} readonly{% endif %}>{% endif %}<small data-field-status="{{ key }}" role="status"></small><button type="button" data-rainrock-use-saved="{{ key }}" hidden>USE SAVED</button></label>{% endfor %}
+    {% for heading,group in input_groups %}<section class="rainrock-input-group"><h3>{{ heading|upper }}</h3><div class="rainrock-fields {{ 'rainrock-volume-fields' if loop.index == 1 else 'rainrock-staffing-fields' if loop.index == 2 else 'rainrock-note-fields' }}">
+    {% for key,label,kind in group %}{% set field=report.inputs[key] %}<label for="rainrock-{{ key }}">{{ label if kind != 'note' else '' }}{% if kind == 'note' %}<textarea id="rainrock-{{ key }}" name="{{ key }}" aria-label="{{ label }}" data-rainrock-field data-version="{{ field.version }}" data-saved-value="{{ field.input_value }}" rows="2" maxlength="2000" placeholder="Sort notes, exceptions or operational remarks…"{% if not can_edit %} readonly{% endif %}>{{ field.input_value }}</textarea>{% else %}<input id="rainrock-{{ key }}" name="{{ key }}" aria-label="{{ label }}" data-rainrock-field data-version="{{ field.version }}" data-saved-value="{{ field.input_value }}" value="{{ field.input_value }}" inputmode="{{ 'decimal' if kind == 'percent' else 'numeric' }}" maxlength="32" placeholder="—" title="{{ field.source }}"{% if not can_edit %} readonly{% endif %}>{% endif %}<small data-field-status="{{ key }}" role="status"></small><button type="button" data-rainrock-use-saved="{{ key }}" hidden>USE SAVED</button></label>{% endfor %}
     </div></section>{% endfor %}</div>
   </form>
-  <div class="rainrock-output-shell"><div class="rainrock-copy-tools"><button type="button" data-rainrock-copy>COPY IMAGE</button><button type="button" data-rainrock-download title="Download complete report as a PNG image">↓ PNG</button><span data-rainrock-copy-status role="status"></span></div>
+  <div class="rainrock-output-shell"><div class="rainrock-copy-tools"><label><input type="checkbox" autocomplete="off" data-rainrock-notes> INCLUDE MISSION NOTES</label><button type="button" data-rainrock-copy>COPY IMAGE</button><button type="button" data-rainrock-download title="Download complete report as a PNG image">↓ PNG</button><span data-rainrock-copy-status role="status"></span></div>
     <div data-rainrock-live>{% include 'neonodes/neorain/_rainrock_report.html' %}</div>
   </div>
   <small class="rainrock-source">{{ report.google_status }} · Sources shown in field tooltips. Missing values are not zero.</small>
   {% else %}<p>No sort selected. Choose an available sort above.</p>{% endif %}
 </main>
 <script src="{{ url_for('static',filename='vendor/html2canvas-1.4.1.min.js') }}" defer></script>
-<script src="{{ url_for('static',filename='js/neorain_rainrock.js',v='20261021-rainrock-v1') }}" defer></script>
+<script src="{{ url_for('static',filename='js/neorain_rainrock.js',v='native-closeout-v1') }}" defer></script>
 {% endblock %}

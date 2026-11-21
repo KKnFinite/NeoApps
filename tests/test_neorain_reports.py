@@ -128,7 +128,7 @@ class NeoRainReportTest(TestCase):
             gateway_code="RFD", sort_name="Night", mission_type="departure",
             mission_source="master", wave="1", flight_number=flight, origin="RFD", destination="SDF",
             timezone="UTC", planned_datetime_utc=datetime(2026, 10, 11, 1, 0),
-            actual_block_out_datetime_utc=actual, departure_status="scheduled",
+            actual_block_out_datetime_utc=actual, departure_status="departed" if actual else "scheduled",
         )
         db.session.add(mission)
         db.session.flush()

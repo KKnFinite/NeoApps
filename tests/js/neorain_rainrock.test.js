@@ -10,6 +10,7 @@ function page(editable=true){
  const status={textContent:'',classList:{toggle(){}}},copyStatus={textContent:''},live={innerHTML:'original'};
  const root={dataset:{operation:'7',stateUrl:'/state?operation_id=7',refreshMs:'60000'},querySelector(s){
   if(s==='[data-rainrock-inputs]')return form;if(s==='[data-rainrock-live]')return live;
+  if(s==='[data-rainrock-notes]')return null;
   if(s==='[data-rainrock-save-status]')return status;if(s==='[data-rainrock-copy-status]')return copyStatus;
   const field=s.match(/\[data-field-status="(.+)"\]/);if(field)return notes[field[1]];
   const button=s.match(/\[data-rainrock-use-saved="(.+)"\]/);if(button)return buttons[button[1]];

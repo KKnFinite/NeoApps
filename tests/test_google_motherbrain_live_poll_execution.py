@@ -309,7 +309,7 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(result, {'status': 'failed', 'operation_id': operation_id})
 
     def test_all_rain_failures_leave_primary_success_durable(self):
-        for failure_at in ('mode', 'fuel', 'reader', 'applier', 'commit'):
+        for failure_at in ('mode', 'reader', 'applier', 'commit'):
             with self.subTest(failure_at=failure_at):
                 self._enable()
                 operation = self._ensure_operation()
@@ -320,10 +320,8 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
                     db.session.expire_all()
                     raise OperationalError('synthetic Rain failure', {}, Exception('offline'))
 
-                target = {
-                    'mode': 'app.services.google_motherbrain_live_poll_execution.rain_integration_mode',
-                    'fuel': 'app.services.neorain_fuel_authority.rain_fuel_data_source',
-                }.get(failure_at)
+                target = ('app.services.google_motherbrain_live_poll_execution.rain_integration_mode'
+                          if failure_at == 'mode' else None)
                 rain_apply = Mock(return_value={})
                 if failure_at == 'reader':
                     rain_reader.side_effect = TimeoutError('Google timeout')

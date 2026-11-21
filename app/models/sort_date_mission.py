@@ -138,6 +138,9 @@ class SortDateMission(db.Model):
         "SortDateCrewAssignment",
         back_populates="sort_date_mission",
     )
+    neorain_mission_notes = db.relationship(
+        "NeoRainMissionNote", order_by="NeoRainMissionNote.id", passive_deletes="all"
+    )
     delay_info_rows = db.relationship(
         "NeoRainDelayInfo", back_populates="mission", cascade="all, delete-orphan"
     )

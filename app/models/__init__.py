@@ -44,6 +44,7 @@ from app.models.neorain_operational_setting import NeoRainOperationalSetting
 from app.models.neorain_load_planner_contact import NeoRainLoadPlannerContact
 from app.models.neorain_crew_admin_assignment import NeoRainCrewAdminAssignment
 from app.models.neorain_delay_info import NeoRainDelayInfo
+from app.models.neorain_mission_note import NeoRainMissionNote
 from app.models.neorain_report_entry import NeoRainReportEntry
 from app.models.neorain_google_rollover_state import NeoRainGoogleRolloverState
 from app.models.neorain_outbound_service_state import NeoRainOutboundServiceState
@@ -208,6 +209,7 @@ __all__ = [
     "NeoRainLoadPlannerContact",
     "NeoRainCrewAdminAssignment",
     "NeoRainDelayInfo",
+    "NeoRainMissionNote",
     "NeoRainReportEntry",
     "NeoRainGoogleRolloverState",
     "NeoRainOutboundServiceState",

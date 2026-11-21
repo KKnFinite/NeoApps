@@ -105,6 +105,7 @@
                 <div><dt>No Return</dt><dd>{{ rain_checkbox(row, 'no_return', 'No Return', row.no_return) }}</dd></div>
                 </dl>
                 {{ delay_info_mobile(row) }}
+                {% with board='outbound' %}{% include "neonodes/neorain/_mission_notes.html" %}{% endwith %}
             </div>
         </article>
         {% endfor %}

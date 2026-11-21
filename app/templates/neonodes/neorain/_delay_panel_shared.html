@@ -1,5 +1,6 @@
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_csp_delay_panel_shared.css', v='20261031-csp-v1') }}">
-<script defer src="{{ url_for('static', filename='js/neorain_delay_info.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_csp_delay_panel_shared.css', v='mission-notes-v1') }}">
+<script defer src="{{ url_for('static', filename='js/neorain_mission_notes.js', v='mission-notes-v1') }}"></script>
+<script defer src="{{ url_for('static', filename='js/neorain_delay_info.js', v=config.STATIC_ASSET_VERSION, rev='mission-notes-v1') }}"></script>
 <script nonce="{{ csp_nonce() }}">
 (() => {
     const initDelayPanels = () => {

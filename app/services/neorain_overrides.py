@@ -113,6 +113,8 @@ def override_is_cleared(row):
 def edit_override(mission, operation, field, raw, actor, *, reset=False, clear=False, confirmed=False):
     from app.neonodes.neorain.services import (_parse_operational_hhmm,
         _mutate_no_return, _advance_departure_status)
+    from app.services.google_rain_integration_mode import rain_operation_is_native
+    native = rain_operation_is_native(operation)
     if field not in FIELDS or mission.mission_type != FIELDS[field][0]:
         raise ValueError('Field does not belong to this mission direction.')
     if mission.sort_date_operation_id != operation.id:
@@ -126,13 +128,24 @@ def edit_override(mission, operation, field, raw, actor, *, reset=False, clear=F
         if not row or not row.active:
             return row, False
         values = row.upstream or {}
+        if native and 'google_rain' in values.values():
+            values = {attr: 'unknown' if attr.endswith('_source') else None for attr in FIELDS[field][1]}
+            if field == 'no_return':
+                values = {'departure_status_source': 'unknown'}
         with operator_projection(db.session):
             for attr, value in values.items():
                 setattr(mission, attr, unpack(attr, value))
+            if native and field in {'no_return', 'official_block_out'} and (
+                    field == 'no_return' and 'departure_status' not in values
+                    or field == 'official_block_out' and not mission.actual_block_out_datetime_utc):
+                from app.services.departure_progress import recompute_departure_status_after_external_clear
+                recompute_departure_status_after_external_clear(mission, 'departed' if field == 'no_return' else 'blocked_out')
             row.active, row.value = False, None
             row.generation += 1
             row.modified_by_user_id, row.modified_at = actor.id, datetime.utcnow()
-            row.sync_status, row.sync_detail = 'RESET', 'Upstream authority restored; no Google write.'
+            row.sync_status = 'RESET'
+            row.sync_detail = ('Native baseline restored; Google integration is disabled for this Sort.'
+                               if native else 'Upstream authority restored; no Google write.')
             mission.updated_at = datetime.utcnow()
             db.session.add(NeoRainOverrideAudit(override_id=row.id, generation=row.generation,
                 action='RESET', actor_user_id=actor.id, before_value=before, after_value=None))
@@ -169,6 +182,8 @@ def edit_override(mission, operation, field, raw, actor, *, reset=False, clear=F
             attrs = FIELDS[field][1]
             setattr(mission, attrs[0], value)
             setattr(mission, attrs[-1], 'neorain')
+            if native and field == 'block_in' and value and mission.arrival_status != 'unloaded':
+                mission.arrival_status = 'arrived'
             if field == 'sta':
                 from zoneinfo import ZoneInfo
                 from datetime import timezone

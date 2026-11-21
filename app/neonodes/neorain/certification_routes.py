@@ -17,7 +17,13 @@ def google_certification():
     field=request.args.get('field')
     if field is None:return render_template('neonodes/neorain/google_certification.html',fields=APPROVED)
     if field not in APPROVED:abort(400)
-    key=(get_current_gateway().id,field)
+    gateway = get_current_gateway()
+    from app.services.google_rain_integration_mode import NEO_ONLY, rain_integration_mode
+    from app.neonodes.neorain.services import current_neorain_outbound_operation
+    operation = current_neorain_outbound_operation(gateway)
+    if rain_integration_mode(gateway, operation.sort_name if operation else None) == NEO_ONLY:
+        return jsonify(field=field, status='BLOCKED', reason='Google integration is disabled for this Sort.')
+    key=(gateway.id,field)
     cache=current_app.extensions.setdefault('neorain_certification_read_cache',{})
     existing=cache.get(key)
     if existing and monotonic()-existing[0]<30:

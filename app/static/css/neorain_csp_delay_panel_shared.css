@@ -327,3 +327,13 @@
         font-size: .748rem;
     }
 }
+
+.neorain-mission-notes { margin-block-start: .65rem; min-width: 0; }
+.neorain-mission-notes h3 { font: inherit; font-weight: 700; margin: 0 0 .35rem; }
+.neorain-mission-note p { white-space: pre-wrap; overflow-wrap: anywhere; margin: .3rem 0; }
+.neorain-mission-notes details { margin-block: .25rem .5rem; }
+.neorain-mission-notes summary { width: fit-content; min-height: 32px; cursor: pointer; }
+.neorain-mission-notes textarea { display: block; width: min(100%, 32rem); color: inherit; background: #152034; }
+.neorain-mission-notes form { margin-block: .3rem; }
+.neorain-mission-notes button { min-height: 32px; }
+.neorain-mission-notes [data-mission-note-error] { display: block; color: #ffb5ac; }

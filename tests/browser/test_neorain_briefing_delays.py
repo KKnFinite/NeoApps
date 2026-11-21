@@ -31,12 +31,14 @@ class BriefingDelayBrowserTest(TestCase):
         ])
         other = case.f.fixture._mission(op, 'UPS777', 'DEN', planned=case.departure.planned_datetime_utc,
                                         tail=case.departure.assigned_tail_number)
+        other.departure_status = 'departed'
         other.actual_block_out_datetime_utc = other.planned_datetime_utc+timedelta(minutes=7)
         old = SortDateOperation(gateway_id=case.f.gateway.id, gateway_code='RFD',
             sort_date=op.sort_date-timedelta(days=1), sort_name='night')
         db.session.add(old); db.session.flush()
         previous = case.f.fixture._mission(old, case.departure.flight_number, 'DEN',
             planned=case.departure.planned_datetime_utc-timedelta(days=1), tail=case.departure.assigned_tail_number)
+        previous.departure_status = 'departed'
         previous.actual_block_out_datetime_utc = previous.planned_datetime_utc+timedelta(minutes=9)
         db.session.add(NeoRainDelayInfo(sort_date_mission_id=previous.id, minutes=9, code='MX', notes='OTHER SORT ONLY'))
         db.session.commit()

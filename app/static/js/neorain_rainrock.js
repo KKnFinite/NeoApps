@@ -5,6 +5,12 @@
   if(!form)return;
   const inputs=[...form.querySelectorAll('[data-rainrock-field]')];
   const live=root.querySelector('[data-rainrock-live]');
+  const notesToggle=root.querySelector('[data-rainrock-notes]');
+  const updateNotes=()=>{
+    if (!notesToggle) return;
+    live.querySelectorAll('[data-rainrock-mission-notes]').forEach(note=>{note.hidden=!notesToggle.checked;});
+  };
+  notesToggle?.addEventListener('change',updateNotes);
   const status=root.querySelector('[data-rainrock-save-status]');
   const copyStatus=root.querySelector('[data-rainrock-copy-status]');
   const editable=form.dataset.canEdit==='true';
@@ -22,6 +28,7 @@
   const apply=(payload,sent=null)=>{
     if(String(payload.operation_id)!==root.dataset.operation)return;
     if(live.innerHTML!==payload.html)live.innerHTML=payload.html;
+    updateNotes();
     inputs.forEach(input=>{
       const field=payload.fields[input.name];if(!field)return;
       const acknowledged=sent&&Object.hasOwn(sent,input.name);

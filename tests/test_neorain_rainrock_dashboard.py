@@ -157,9 +157,10 @@ class RainrockDashboardTest(TestCase):
         row=NeoRainReportEntry(gateway_id=self.f.gateway.id,sort_date_operation_id=self.operation.id,
             sort_date=self.operation.sort_date,sort_name='night',field_name='ramp_planned_payroll',value='315',data_source='manual')
         db.session.add(row);db.session.commit()
-        self.assertEqual(self.state()['fields']['briefing_ramp_staffing_planned']['value'],'315')
+        self.assertEqual(self.state()['fields']['ramp_planned_payroll']['value'],'315')
+        self.assertIsNone(self.state()['fields']['briefing_ramp_staffing_planned']['value'])
         briefing=self.client.get('/neorain/daily-briefing/state?operation_id='+str(self.operation.id)).json
-        self.assertIn('Ramp Staffing: UNAVAILABLE/315',briefing['briefing'])
+        self.assertIn('Ramp Staffing: UNAVAILABLE/UNAVAILABLE',briefing['briefing'])
         self.assertEqual(self.post({'briefing_ramp_staffing_planned':'320'}).status_code,200)
         self.assertEqual(row.value,'315')
         self.assertEqual(self.state()['fields']['briefing_ramp_staffing_planned']['value'],'320')

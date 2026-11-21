@@ -35,12 +35,9 @@
       <div class="briefing-input-row briefing-short-fields">
         {{ briefing_field('briefing_safety', 'Safety') }}
         {{ briefing_field('briefing_incident', 'Incident') }}
-        {{ briefing_field('planned_volume', 'Volume Plan') }}
-        {{ briefing_field('actual_volume', 'Volume Actual') }}
-        {{ briefing_field('briefing_ramp_staffing_actual', 'Ramp Actual') }}
-        {{ briefing_field('briefing_ramp_staffing_planned', 'Ramp Planned') }}
-        {{ briefing_field('briefing_hub_staffing_actual', 'Hub Actual') }}
-        {{ briefing_field('briefing_hub_staffing_planned', 'Hub Planned') }}
+        {% for heading, group in input_groups if heading in ('Volume & Performance', 'Ramp staffing', 'Hub staffing') %}
+          {% for key, label, kind in group %}{{ briefing_field(key, label) }}{% endfor %}
+        {% endfor %}
         {{ briefing_field('briefing_inbound_missorts', 'Inbound Missorts') }}
         {{ briefing_field('briefing_libs', 'LIBs') }}
       </div>
@@ -54,12 +51,12 @@
   <section class="rain-report-panel"><h2>Copy-ready nightly briefing</h2>
     <div class="briefing-copy-controls">
       <button type="button" id="copy-briefing">COPY BRIEFING</button>
-      <label class="briefing-delay-toggle" for="briefing-delay-details"><input type="checkbox" id="briefing-delay-details" autocomplete="off" aria-controls="briefing-text"> INCLUDE DELAY DETAILS <span class="briefing-delay-mode" data-briefing-delay-mode>OFF</span></label>
+      <label class="briefing-delay-toggle" for="briefing-delay-details"><input type="checkbox" id="briefing-delay-details" autocomplete="off" aria-controls="briefing-text"> INCLUDE DELAY / MISSION NOTES <span class="briefing-delay-mode" data-briefing-delay-mode>OFF</span></label>
       <span id="copy-briefing-status" role="status" aria-live="polite"></span>
     </div>
     <pre class="rain-report-briefing" id="briefing-text">{{ briefing }}</pre>
     <script nonce="{{ csp_nonce() }}" type="application/json" data-briefing-reports>{{ {'briefing':briefing,'briefing_detailed':briefing_detailed}|tojson }}</script>
   </section>
 </main>
-<script defer src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='20261021-delay-details-v1') }}"></script>
+<script defer src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='native-closeout-v1') }}"></script>
 {% endblock %}

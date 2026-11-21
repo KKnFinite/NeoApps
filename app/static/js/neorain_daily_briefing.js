@@ -9,9 +9,12 @@
   let reports = initial ? JSON.parse(initial.textContent) :
     {briefing:preview.textContent, briefing_detailed:preview.textContent};
   const renderReport = () => {
-    preview.textContent = toggle?.checked ? reports.briefing_detailed : reports.briefing;
+    const text = toggle?.checked ? reports.briefing_detailed : reports.briefing;
+    if (preview.textContent !== text) {
+      preview.textContent = text;
+      root.querySelector('#copy-briefing-status').textContent = '';
+    }
     if (mode) mode.textContent = toggle.checked ? 'ON' : 'OFF';
-    root.querySelector('#copy-briefing-status').textContent = '';
   };
   if (toggle) {
     toggle.checked = false;

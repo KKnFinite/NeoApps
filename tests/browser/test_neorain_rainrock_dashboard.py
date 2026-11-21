@@ -72,7 +72,7 @@ class RainrockDashboardBrowserTest(TestCase):
             expect(first.locator('td').last).to_have_text('10 RS, 5 GL - '+long_note+'; Second saved remark\nOriginal newline retained')
             self.assertGreater(first.bounding_box()['height'],page.locator('.rainrock-flight-table tbody tr').nth(1).bounding_box()['height']*2)
             expect(page.locator('.rainrock-delay-row')).to_have_count(0)
-            self.assertEqual(page.locator('[data-rainrock-field]').count(),10)
+            self.assertEqual(page.locator('[data-rainrock-field]').count(),14)
             self.assertEqual(page.locator('[data-rainrock-report] input,[data-rainrock-report] button').count(),0)
             self.assertEqual(page.locator('[data-rainrock-flight]').count(),14)
             metrics.append(dict(width=width,summaryTops=page.locator('.rainrock-summary').evaluate_all('es=>es.map(e=>e.getBoundingClientRect().top)'),overflow=False))

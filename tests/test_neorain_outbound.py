@@ -167,6 +167,7 @@ class NeoRainOutboundTest(unittest.TestCase):
             wave="1",
         )
         arrival.eta_datetime_utc = datetime(2026, 8, 30, 0, 30)
+        arrival.arrival_status = "arrived"
         arrival.actual_block_in_datetime_utc = datetime(2026, 8, 30, 1, 1)
         no_wave = self._mission(
             operation,
@@ -189,6 +190,8 @@ class NeoRainOutboundTest(unittest.TestCase):
         second = self._mission(operation, "UPS311", "RFD", planned=datetime(2026, 8, 30, 2, 0), mission_type="arrival", wave="2")
         no_wave = self._mission(operation, "UPS312", "RFD", planned=datetime(2026, 8, 30, 3, 0), mission_type="arrival", wave=None)
         on_time = self._mission(operation, "UPS313", "RFD", planned=datetime(2026, 8, 30, 4, 0), mission_type="arrival", wave="1")
+        for mission in (first, second, no_wave, on_time):
+            mission.arrival_status = "arrived"
         first.actual_block_in_datetime_utc = datetime(2026, 8, 30, 1, 10)
         second.actual_block_in_datetime_utc = datetime(2026, 8, 30, 2, 5)
         no_wave.actual_block_in_datetime_utc = datetime(2026, 8, 30, 3, 15)
@@ -242,6 +245,8 @@ class NeoRainOutboundTest(unittest.TestCase):
             "LAX",
             planned=datetime(2026, 8, 30, 4, 0),
         )
+        for mission in (late, early, exact):
+            mission.departure_status = "departed"
         late.actual_block_out_datetime_utc = datetime(2026, 8, 31, 0, 7)
         early.actual_block_out_datetime_utc = datetime(2026, 8, 30, 1, 56)
         exact.actual_block_out_datetime_utc = datetime(2026, 8, 30, 3, 0)
@@ -288,6 +293,8 @@ class NeoRainOutboundTest(unittest.TestCase):
         wave_one_excluded = self._mission(operation, "UPS322", "ONT", planned=datetime(2026, 8, 30, 3), wave="1")
         wave_two_late = self._mission(operation, "UPS323", "ONT", planned=datetime(2026, 8, 30, 4), wave="2")
         no_wave_late = self._mission(operation, "UPS324", "ONT", planned=datetime(2026, 8, 30, 5), wave=None)
+        for mission in (wave_one_late, wave_one_on_time, wave_one_excluded, wave_two_late, no_wave_late):
+            mission.departure_status = "departed"
         wave_one_late.actual_block_out_datetime_utc = datetime(2026, 8, 30, 1, 1)
         wave_one_on_time.actual_block_out_datetime_utc = datetime(2026, 8, 30, 2)
         wave_one_excluded.actual_block_out_datetime_utc = datetime(2026, 8, 30, 3, 9)

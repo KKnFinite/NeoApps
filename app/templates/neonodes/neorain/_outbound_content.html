@@ -6,7 +6,7 @@
 {% else %}
 {% macro milestone_cell(row, field, label) -%}<td data-label="{{ label }}" data-neorain-field-cell="{{ field }}">{{ rain_time(row, field, label, row[field]) }}</td>{%- endmacro %}
 {% macro delay_info_toggle(row) -%}
-<button type="button" class="neorain-delay-toggle" data-neorain-delay-toggle aria-label="Delay Info for {{ row.flight_number }}" aria-expanded="false" aria-controls="delay-info-{{ row.mission_id }}">DELAY ({{ row.delay_info|length }})</button>
+<button type="button" class="neorain-delay-toggle" data-neorain-delay-toggle aria-label="Delay Info for {{ row.flight_number }} and Mission Notes" aria-expanded="false" aria-controls="delay-info-{{ row.mission_id }}">DELAY ({{ row.delay_info|length }}) / NOTES</button>
 {%- endmacro %}
 {% macro delay_info_panel(row) -%}
 <tr id="delay-info-{{ row.mission_id }}" class="neorain-delay-panel-row" data-neorain-delay-panel data-neorain-delay-mission-id="{{ row.mission_id }}" hidden>
@@ -43,6 +43,7 @@
                 {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
             </div>
             {% endif %}
+            {% with board='outbound' %}{% include "neonodes/neorain/_mission_notes.html" %}{% endwith %}
         </div>
     </td>
 </tr>

@@ -241,14 +241,7 @@ def _run_google_rain_best_effort(
             gateway or operation.gateway,
             operation.sort_name,
         )
-        from app.services.neorain_fuel_authority import (
-            RAIN_FUEL_SOURCE_GOOGLE,
-            rain_fuel_data_source,
-        )
-        fuel_google = rain_fuel_data_source(
-            gateway or operation.gateway, operation.sort_name
-        ) == RAIN_FUEL_SOURCE_GOOGLE
-        if mode == NEO_ONLY and not fuel_google:
+        if mode == NEO_ONLY:
             return {
                 "status": "skipped_neo_authoritative",
                 "mode": mode,

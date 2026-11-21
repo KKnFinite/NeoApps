@@ -15,7 +15,7 @@ import time
 
 from flask import current_app
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
 from app.models import Gateway, NeoRainReportEntry, SortDateMission, StaffingAttendanceSummary, StaffingUnit
@@ -24,6 +24,8 @@ from app.services.google_motherbrain_sheets import (
     _configured_reader_inputs, _create_gspread_client, _google_call,
 )
 from app.services.time_display import format_local_hhmm
+from app.services.google_rain_integration_mode import rain_operation_is_native
+from app.services.neorain_performance import completed_actual, completed_variance_minutes, eligible_for_performance, mission_cancelled
 
 
 RFD_RECAP_SPREADSHEET_ID = "1oDK5jGcF58QYx5CYQmdcG2A2fQlCIkdxk-zrP9hyu5s"
@@ -122,8 +124,10 @@ def read_google_recap():
 
 def snapshot_current_google(operation):
     """Refresh only the selected current sort; historical snapshots never drift."""
-    if str(operation.gateway_code or "").upper() != "RFD":
-        return "RFD Recap does not apply to this gateway"
+    if rain_operation_is_native(operation):
+        return "Native NeoRain"
+    if str(operation.gateway_code or "").upper() != "RFD" or operation.sort_name.casefold() != "night":
+        return "RFD Recap applies only to RFD Night Sorts"
     try:
         response = read_google_recap()
     except Exception:
@@ -158,8 +162,9 @@ def snapshot_current_google(operation):
                 source_report_date=report_date,
             ))
             changed = True
-        elif row.value != value:
+        elif row.value != value or row.source_report_date != report_date:
             row.value = value
+            row.source_report_date = report_date
             row.version += 1
             changed = True
     if changed:
@@ -195,11 +200,13 @@ def _canonical_hub_working(operation, *, current=False):
 
 
 def resolved_report_fields(operation, *, current=False):
-    google_status = "Historical Google snapshot only"
-    if current:
+    native = rain_operation_is_native(operation)
+    google_status = "Native NeoRain" if native else "Historical Google snapshot only"
+    if current and not native:
         google_status = snapshot_current_google(operation)
     rows = NeoRainReportEntry.query.filter_by(sort_date_operation_id=operation.id).all()
     entries = {(row.field_name, row.data_source): row for row in rows}
+    gateway_id = _report_gateway_id(operation)
     neo = {"hub_actual_working": _canonical_hub_working(operation, current=current)}
     result = {}
     for field, (label, _cell, kind) in REPORT_FIELDS.items():
@@ -208,7 +215,13 @@ def resolved_report_fields(operation, *, current=False):
             result[field] = {"label": label, "value": str(canonical), "source": "NeoStaffing", "editable": False, "version": None}
             continue
         manual = entries.get((field, "manual"))
-        google = entries.get((field, "google"))
+        google = entries.get((field, "google")) if not native else None
+        if google and (google.source_report_date != operation.sort_date
+                       or google.sort_name.casefold() != operation.sort_name.casefold()
+                       or google.gateway_id != gateway_id
+                       or operation.gateway_code.upper() != "RFD"
+                       or operation.sort_name.casefold() != "night"):
+            google = None
         row = (manual if manual and manual.value else None) or (google if google and google.value else None)
         result[field] = {
             "label": label, "value": row.value if row else None,
@@ -256,7 +269,8 @@ def save_report_entry(operation, field, value, expected_version, user_id, *, cur
 
 
 def _mission_rows(operation):
-    missions = (SortDateMission.query.options(joinedload(SortDateMission.delay_info_rows))
+    missions = (SortDateMission.query.options(joinedload(SortDateMission.delay_info_rows),
+                    selectinload(SortDateMission.neorain_mission_notes))
                 .filter_by(sort_date_operation_id=operation.id).all())
     inbound = sorted((mission for mission in missions if mission.mission_type == "arrival"),
                      key=lambda mission: (mission.planned_datetime_utc or datetime.max, mission.id))
@@ -265,48 +279,39 @@ def _mission_rows(operation):
     return inbound, outbound
 
 
-def report_context(operation, *, current=False):
-    # Import after the NeoRain blueprint is registered; its package imports routes.
-    from app.neonodes.neorain.services import (
-        _inbound_late_summary, _outbound_late_summary, neorain_late_metrics_inclusion,
-    )
-    fields, google_status = resolved_report_fields(operation, current=current)
-    inbound, outbound = _mission_rows(operation)
-    inbound_rows = [{
-        "mission_id": m.id,
-        "flight": m.flight_number, "tail": m.assigned_tail_number, "place": m.origin,
-        "scheduled": format_local_hhmm(m.planned_datetime_utc, m.timezone or None),
-        "actual": format_local_hhmm(m.actual_block_in_datetime_utc, m.timezone or None),
-        "variance": _variance(m.actual_block_in_datetime_utc, m.planned_datetime_utc),
-        "delay_details": tuple(sorted(m.delay_info_rows, key=lambda row: row.id)),
-    } for m in inbound]
-    outbound_rows = [{
-        "mission_id": m.id,
-        "flight": m.flight_number, "tail": m.assigned_tail_number, "place": m.destination,
-        "scheduled": format_local_hhmm(m.planned_datetime_utc, m.timezone or None),
-        "actual": format_local_hhmm(m.actual_block_out_datetime_utc, m.timezone or None),
-        "variance": _variance(m.actual_block_out_datetime_utc, m.planned_datetime_utc),
-        "delay_details": tuple(sorted(m.delay_info_rows, key=lambda row: row.id)),
-        "delays": tuple((row.code, row.notes or "") for row in sorted(m.delay_info_rows, key=lambda row: row.id)),
-    } for m in outbound]
-    inbound_summary = _inbound_late_summary(inbound)["total"]
-    outbound_summary = _outbound_late_summary(outbound)["total"]
-    return {
-        "operation": operation, "fields": fields, "google_status": google_status,
-        "inbound_rows": inbound_rows, "outbound_rows": outbound_rows,
-        "inbound_late": inbound_summary, "outbound_late": outbound_summary,
-        "eligible_inbound": sum(neorain_late_metrics_inclusion(m)["included"] and m.planned_datetime_utc is not None for m in inbound),
-        "eligible_outbound": sum(neorain_late_metrics_inclusion(m)["included"] and m.planned_datetime_utc is not None for m in outbound),
-        "recorded_inbound": sum(neorain_late_metrics_inclusion(m)["included"] and m.actual_block_in_datetime_utc is not None for m in inbound),
-        "recorded_outbound": sum(neorain_late_metrics_inclusion(m)["included"] and m.actual_block_out_datetime_utc is not None for m in outbound),
+def _report_row(mission, *, arrival):
+    row = {
+        "mission_id": mission.id,
+        "flight": mission.flight_number,
+        "cancelled": mission_cancelled(mission),
+        "mission_notes": tuple(note.text for note in mission.neorain_mission_notes),
     }
+    if row["cancelled"]:
+        return row
+    actual = completed_actual(mission)
+    minutes = completed_variance_minutes(mission)
+    delays = tuple(sorted(mission.delay_info_rows, key=lambda item: item.id))
+    return dict(row, tail=mission.assigned_tail_number, place=mission.origin if arrival else mission.destination,
+        scheduled=format_local_hhmm(mission.planned_datetime_utc, mission.timezone or None),
+        actual=format_local_hhmm(actual, mission.timezone or None),
+        variance="—" if minutes is None else f"+{minutes}" if minutes > 0 else str(minutes),
+        delay_details=delays, delays=tuple((item.code, item.notes or "") for item in delays))
 
 
-def _variance(actual, planned):
-    if actual is None or planned is None:
-        return "—"
-    minutes = int((actual - planned).total_seconds() / 60)
-    return f"+{minutes}" if minutes > 0 else str(minutes)
+def report_context(operation, *, current=False, missions=None):
+    from app.neonodes.neorain.services import _inbound_late_summary, _outbound_late_summary
+
+    fields, google_status = resolved_report_fields(operation, current=current)
+    inbound, outbound = missions if missions is not None else _mission_rows(operation)
+    report = {"operation": operation, "fields": fields, "google_status": google_status}
+    for side, rows, summary in (("inbound", inbound, _inbound_late_summary),
+                                ("outbound", outbound, _outbound_late_summary)):
+        eligible = [mission for mission in rows if eligible_for_performance(mission)]
+        report[side + "_rows"] = [_report_row(mission, arrival=side == "inbound") for mission in rows]
+        report[side + "_late"] = summary(rows)["total"]
+        report["eligible_" + side] = len(eligible)
+        report["recorded_" + side] = sum(completed_actual(mission) is not None for mission in eligible)
+    return report
 
 
 def briefing_text(report):
@@ -327,8 +332,11 @@ def briefing_text(report):
     ]
     if report["recorded_inbound"] < report["eligible_inbound"] or report["recorded_outbound"] < report["eligible_outbound"]:
         lines.append("    ○ IN PROGRESS — some actual Block-In/Block-Out times are not recorded")
+    for row in report["inbound_rows"] + report["outbound_rows"]:
+        if row["cancelled"]:
+            lines.append(f"{row['flight']} — CANCELLED")
     for row in report["outbound_rows"]:
-        if not row["actual"]:
+        if row["cancelled"] or not row["actual"]:
             continue
         flight = re.sub(r"^UPS0+(?=\d)", "UPS", row["flight"] or "", flags=re.IGNORECASE)
         details = f"{flight} {report['operation'].gateway_code}-{row['place'] or '—'} ATD: {row['actual']}"
