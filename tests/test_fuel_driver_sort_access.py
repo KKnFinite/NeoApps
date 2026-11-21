@@ -154,7 +154,7 @@ class FuelDriverSortAccessTest(TestCase):
             before=(NeoScorpionTruckDriver.query.filter_by(driver_user_id=driver.id).one().fuel_truck_id,
                 self.selection.current_gallons,NeoScorpionFuelingEvent.query.count())
             with self.assertRaisesRegex(ValueError,'release active truck claims'):
-                decide(driver.id,review_token(driver),'vendor_supervisor','approved','1234567','yes',None,[],{},'')
+                decide(driver.id,review_token(driver),'vendor_supervisor','approved','1234567','yes',None,'')
             self.assertEqual(current_type(driver),'fuel_driver')
             self.assertEqual(before,(NeoScorpionTruckDriver.query.filter_by(driver_user_id=driver.id).one().fuel_truck_id,
                 self.selection.current_gallons,NeoScorpionFuelingEvent.query.count()))

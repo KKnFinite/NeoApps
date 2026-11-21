@@ -149,7 +149,7 @@ def application_decision_reason(outcome, reason):
     reason = str(reason or "").strip()
     if len(reason) > 2000:
         raise ValueError("Decision reason must be at most 2000 characters.")
-    if outcome not in {"approved", "denied"} and len(reason) < 3:
+    if outcome not in {"approved", "denied", "change_role"} and len(reason) < 3:
         raise ValueError("Enter a decision reason of 3–2000 characters.")
     return reason
 

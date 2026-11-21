@@ -47,8 +47,8 @@
     {% endfor %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/interaction_states.css', v=config.STATIC_ASSET_VERSION) }}">
     {% if request.blueprint == 'auth' %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/accounts.css', v=config.STATIC_ASSET_VERSION) }}">
-    <script defer src="{{ url_for('static', filename='js/accounts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accounts.css', v=config.STATIC_ASSET_VERSION ~ '-app-access-2') }}">
+    <script defer src="{{ url_for('static', filename='js/accounts.js', v=config.STATIC_ASSET_VERSION ~ '-app-access-2') }}"></script>
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/csp_compatibility.css', v='20261031-csp-v1') }}">
     {% if is_rfd_hub_page %}

@@ -19,15 +19,25 @@
 </section>
 {% elif profile_tab == 'access' %}
 {% include 'auth/accounts/_account_type.html' %}
-<section class="aa-section"><h3>Application access</h3><p class="aa-muted">Current grants remain authoritative. NeoBid is unavailable for new requests or approvals.</p>
-{% for row in app_access_rows %}{% set access=row.access %}{% set pending=attempts|selectattr('app_code','equalto',row.app.code)|selectattr('state','equalto','pending')|list %}
-<article class="aa-scope"><div><h4>{{ row.app.name }}</h4><p>{{ access.status|title if access else 'No entitlement' }}{% if access and not access.is_active %} · Inactive{% endif %}{% if access %} · {{ access.role|role_label }}{% endif %}{% if pending %} · New request pending{% endif %}</p>{% if pending %}<p class="aa-reason">{{ pending[0].reason }}</p>{% endif %}</div>
-{% if can_edit_access and not row.app.coming_soon and not target_user.scorpion_vendor and not (driver_identity and driver_identity.requested_driver) and target_user.id != current_user.id and (access or pending or (row.app.code == 'neogateway' and membership and membership.status == 'pending')) %}
-<form class="aa-scope-form" method="post" action="{{ url_for('auth.account_action', user_id=target_user.id, action='application') }}">{{ csrf_field() }}<input type="hidden" name="review_token" value="{{ review }}"><input type="hidden" name="app_code" value="{{ row.app.code }}">
-<label><span>Role</span><select name="role">{% for role in role_choices %}<option value="{{ role }}" {% if (access.role if access else 'watcher') == role %}selected{% endif %}>{{ role|role_label }}</option>{% endfor %}</select></label>
-<label class="aa-reason"><span>Decision reason (optional for approval/denial)</span><input name="reason" maxlength="2000"></label>
+<section class="aa-section aa-app-access"><h3>Application access</h3>
+{% for row in app_access_rows %}
+{% set access=row.access %}
+<article class="aa-scope" aria-label="{{ row.app.name }}">
+<div><h4>{{ row.app.name }}</h4><p><strong class="aa-state{% if row.approved %} ok{% endif %}">{{ row.status }}</strong>{% if row.approved %} · {{ access.role|role_label }}{% endif %}</p>
+{% if row.pending and row.status != 'Pending' %}<p>Request pending</p>{% endif %}
+{% if row.attempt %}<p class="aa-reason">{{ row.attempt.reason }}</p>{% endif %}
+{% if row.app.coming_soon %}<small>Unavailable for new access</small>{% endif %}</div>
+{% if can_edit_access and not row.app.coming_soon and not target_user.scorpion_vendor and not (driver_identity and driver_identity.requested_driver) and target_user.id != current_user.id and (access or row.pending or can_decide_account_type) %}
+<form class="aa-scope-form" method="post" action="{{ url_for('auth.account_action', user_id=target_user.id, action='application') }}">{{ csrf_field() }}
+<input type="hidden" name="review_token" value="{{ review }}"><input type="hidden" name="app_code" value="{{ row.app.code }}">
+<label><span>Application role</span><select name="role">{% for role in role_choices %}<option value="{{ role }}" {% if (access.role if row.approved else 'watcher') == role %}selected{% endif %}>{{ role|role_label }}</option>{% endfor %}</select></label>
+<label class="aa-reason"><span>{{ 'Reason (required to revoke)' if row.approved else 'Decision reason (optional)' }}</span><input name="reason" maxlength="2000"></label>
 {% if not target_user.email_verified_at %}<label class="aa-check"><input name="bypass_email_verification" value="1" type="checkbox"><span>Explicitly approve without verifying email</span></label>{% endif %}
-<div class="aa-actions"><button class="aa-button" name="outcome" value="approved" type="submit">Approve / save role</button><button class="aa-button secondary" name="outcome" value="denied" type="submit">Deny</button>{% if access and access.status == 'approved' and access.is_active %}<button class="aa-button danger" name="outcome" value="revoked" type="submit" data-confirm-message="Revoke this application's access?">Revoke</button>{% endif %}</div></form>{% endif %}</article>{% endfor %}
+<div class="aa-actions">
+{% if row.approved %}<button class="aa-button secondary" name="outcome" value="change_role">Change role</button><button class="aa-button danger" name="outcome" value="revoked" data-confirm-message="Revoke this application's access?">Revoke</button>{% endif %}
+{% if not row.approved or row.pending %}<button class="aa-button" name="outcome" value="approved">{{ 'Approve request' if row.approved else 'Approve' if row.pending else 'Grant access' }}</button>{% endif %}
+{% if row.pending %}<button class="aa-button secondary" name="outcome" value="denied">Deny</button>{% endif %}
+</div></form>{% endif %}</article>{% endfor %}
 </section>
 <section class="aa-section"><h3>{{ gateway.code }} gateway &amp; NeoNodes</h3><p class="aa-muted">Gateway membership: {{ membership.status if membership else 'None' }}{% if membership and not membership.is_active %} · Inactive{% endif %}. Existing inherited mappings are preserved until an explicit change.</p>
 {% for row in node_rows %}<article class="aa-node"><div><strong>{{ row.node.name }}</strong><small>{{ row.effective_role|role_label }} · {{ 'Explicit grant' if row.override else 'Inherited / legacy' }}</small></div>

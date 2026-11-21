@@ -150,6 +150,31 @@ def accounts_security():
     return render_template("auth/accounts/security.html", page=events, **_tabs("security"))
 
 
+def _inherited_app_access(target, code, membership):
+    from app.services.account_scope_runtime import scoped_active
+    from app.services.access_control import _legacy_neogateway_app_access
+    if code == "neogateway" and not target.scorpion_vendor and not scoped_active():
+        return _legacy_neogateway_app_access(target, membership)
+    return None
+
+
+def _application_review(access, attempt, membership):
+    approved = bool(access and access.status == "approved" and access.is_active)
+    gateway_request = bool(membership and membership.status == "pending" and membership.is_active)
+    pending = bool(attempt or gateway_request or (access and access.status == "pending" and access.is_active))
+    if approved:
+        status = "Approved"
+    elif access and not access.is_active and access.status == "approved":
+        status = "Revoked"
+    elif access and not access.is_active:
+        status = "Inactive"
+    elif access and access.status == "denied":
+        status = "Denied"
+    else:
+        status = "Pending" if pending else "No access"
+    return dict(approved=approved, pending=pending, status=status, attempt=attempt)
+
+
 def _profile(user_id, status=200, error=None):
     target = db.get_or_404(User, user_id)
     from app.services.account_deletion import receipt, can_delete
@@ -159,6 +184,12 @@ def _profile(user_id, status=200, error=None):
     gateway = get_current_gateway()
     membership = GatewayMembership.query.filter_by(user_id=target.id, gateway_id=gateway.id).first()
     app_rows = legacy._portal_app_access_rows(target)
+    open_requests = {a.app_code: a for a in AccountAccessRequest.query.filter_by(user_id=target.id, state="pending")}
+    for row in app_rows:
+        code = row["app"]["code"]
+        if row["access"] is None:
+            row["access"] = _inherited_app_access(target, code, membership)
+        row.update(_application_review(row["access"], open_requests.get(code), membership if code == "neogateway" else None))
     attempts = AccountAccessRequest.query.filter_by(user_id=target.id).order_by(AccountAccessRequest.id.desc()).limit(40).all()
     events = AccountSecurityEvent.query.filter_by(subject_user_id=target.id).order_by(AccountSecurityEvent.id.desc()).limit(40).all()
     from app.services.fuel_driver_accounts import identity_verified
@@ -194,9 +225,10 @@ def account_type_decision(user_id):
     if not administrator(current_user):abort(403)
     db.get_or_404(User,user_id)
     try:
+        if 'app_codes' in request.form or any(key.startswith('role_') for key in request.form):
+            raise ValueError('This form has changed. Reload and manage each application in Application access.')
         decide(user_id,request.form.get('review_token',''),request.form.get('account_type'),request.form.get('outcome'),
             request.form.get('employee_id'),request.form.get('identity_confirmed'),request.form.get('staffing_person_id'),
-            request.form.getlist('app_codes'),{app['code']:request.form.get('role_'+app['code'],'watcher') for app in available_applications()},
             request.form.get('reason',''))
         db.session.commit()
     except PermissionError:
@@ -261,33 +293,60 @@ def account_action(user_id, action):
             pending = AccountAccessRequest.query.filter_by(user_id=target.id, app_code=code, state="pending").first()
             if current_user.id == target.id:
                 raise ValueError("You cannot decide your own application access.")
-            if outcome in {"approved", "denied"}:
+            from app.services.account_security import guard_app_role_change
+            from app.services.account_types import administrator
+            if driver_identity_pending(target):
+                raise ValueError("Review the requested restricted account type first.")
+            membership = legacy._current_gateway_membership_for_user(target, get_current_gateway()) if code == "neogateway" else None
+            if not access and _inherited_app_access(target, code, membership):
+                from app.services.access_control import ensure_user_app_access
+                access = ensure_user_app_access(target, code)
+            state = _application_review(access, pending, membership)
+            if outcome == "change_role":
+                if not state["approved"] or not target.is_active:
+                    raise ValueError("Only an active account with approved access can change application roles.")
+                role = request.form.get("role")
+                if role not in legacy.ROLE_CHOICES:
+                    raise ValueError("Choose a valid application role.")
+                guard_app_role_change(target, access, role)
+                if not target.email_verified_at:
+                    if not legacy._email_verification_bypass_requested():
+                        raise ValueError("Email not verified yet.")
+                    reason = legacy._approval_notes_with_verification_bypass(reason, True)
+                previous_role = access.role
+                access.role = role
+                record_security_change("application_role_changed", target, app_code=code,
+                    before=previous_role, after=role, reason=reason)
+            elif outcome in {"approved", "denied"}:
+                if state["approved"] and not state["pending"]:
+                    raise ValueError("Access is already approved. Use Change role or Revoke.")
+                if not state["pending"] and (outcome == "denied" or not (access or administrator(actor) and target.role != "grandmaster")):
+                    raise ValueError("No pending application request exists for this account.")
+                before = {"status": access.status, "role": access.role, "active": access.is_active} if access else None
                 if not access:
-                    membership = legacy._current_gateway_membership_for_user(target, get_current_gateway()) if code == "neogateway" else None
-                    if not pending and not (membership and membership.status == "pending"):
-                        raise ValueError("No application request exists for this account.")
                     access = PortalAppAccess(user_id=target.id, app_code=code, role="watcher", status="pending", is_active=True)
                     db.session.add(access)
                     db.session.flush()
-                before = {"status": access.status, "role": access.role, "active": access.is_active}
                 if outcome == "approved":
                     if not target.is_active:
                         raise ValueError("An inactive account cannot be approved.")
-                    legacy._approve_portal_app_access(access, request.form.get("role", access.role), reason,
-                        bypass_email_verification=legacy._email_verification_bypass_requested())
+                    if not state["approved"] or code == "neogateway" and not legacy._membership_is_approved_active(membership):
+                        legacy._approve_portal_app_access(access, access.role if state["approved"] else request.form.get("role", "watcher"), reason,
+                            bypass_email_verification=legacy._email_verification_bypass_requested())
+                    else:
+                        guard_app_role_change(target, access, access.role)
                 else:
+                    guard_app_role_change(target, access, access.role, granting=False)
                     legacy._deny_portal_app_access(access, reason)
                 close_open_attempt(target, code, outcome, reason)
                 record_security_change("application_access_changed", target, app_code=code, before=before,
                     after={"status": access.status, "role": access.role, "active": access.is_active}, reason=reason)
-            elif outcome == "revoked" and access:
-                from app.services.account_security import guard_app_role_change
+            elif outcome == "revoked" and state["approved"]:
                 guard_app_role_change(target, access, access.role, granting=False)
                 if code == "neogateway":
                     from app.services.account_scope_runtime import revoke_gateway_ranks
                     revoke_gateway_ranks(target.id,reason)
                     legacy._guard_last_grandmaster_gateway_change(target)
-                    membership = legacy._current_gateway_membership_for_user(target, get_current_gateway())
                     if membership:
                         membership.is_active = False
                 access.is_active = False

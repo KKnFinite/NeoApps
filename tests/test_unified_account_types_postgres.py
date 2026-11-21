@@ -31,8 +31,7 @@ class UnifiedAccountTypesPostgresTest(TestCase):
     def decision(self,actor,target,token,kind='vendor_supervisor'):
         def save():
             user=db.session.get(User,target)
-            return service.decide(target,token,kind,'approved',user.employee_id,'yes',None,
-                ['neostaffing'],{'neostaffing':'operator'},'').id
+            return service.decide(target,token,kind,'approved',user.employee_id,'yes',None,'').id
         return self.run_as(actor,save)
 
     def test_competing_types_from_same_review_commit_one_decision(self):

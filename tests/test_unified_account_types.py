@@ -23,7 +23,7 @@ class UnifiedAccountTypesTest(TestCase):
         token=extra.pop('review_token',None) or self.review(tab='access')
         return self.client.post(f'/accounts/people/{self.target.id}/account-type?tab=access',data={
             'review_token':token,'account_type':kind,'outcome':'approved','employee_id':'1234567',
-            'identity_confirmed':'yes','app_codes':['neostaffing'],'role_neostaffing':'operator',**extra})
+            'identity_confirmed':'yes',**extra})
 
     def test_all_signup_types_are_requests_not_self_granted_authority(self):
         with patch('app.auth.routes.email_service.send_email_verification',return_value={'sent':False}):
@@ -59,7 +59,7 @@ class UnifiedAccountTypesTest(TestCase):
                 self.assertEqual((self.target.id,self.target.password_hash),(target_id,password))
                 self.assertGreater(self.target.auth_session_version,session);session=self.target.auth_session_version
                 if kind=='full':
-                    self.assertTrue(PortalAppAccess.query.filter_by(user_id=target_id,app_code='neostaffing',status='approved',is_active=True).count())
+                    self.assertFalse(PortalAppAccess.query.filter_by(user_id=target_id,status='approved',is_active=True).count())
                 else:
                     self.assertFalse(PortalAppAccess.query.filter_by(user_id=target_id,status='approved',is_active=True).count())
                     self.assertFalse(GatewayNodeRole.query.join(GatewayMembership).filter(GatewayMembership.user_id==target_id,GatewayNodeRole.is_active.is_(True)).count())
@@ -103,7 +103,95 @@ class UnifiedAccountTypesTest(TestCase):
         self.login(self.target)
         self.assertEqual(self.client.post(f'/accounts/people/{self.backup.id}/account-type',data={}).status_code,403)
         self.login(self.admin)
-        self.assertEqual(self.client.post(f'/accounts/people/{self.admin.id}/account-type',data={'account_type':'full','outcome':'approved','app_codes':'neostaffing','review_token':self.review(self.admin)}).status_code,400)
+        self.assertEqual(self.client.post(f'/accounts/people/{self.admin.id}/account-type',data={'account_type':'full','outcome':'approved','review_token':self.review(self.admin)}).status_code,400)
+
+    def test_save_identity_preserves_exact_grants_then_manage_only_one_application(self):
+        self.login(self.admin)
+        def rows(model):
+            return [tuple(row) for row in db.session.execute(model.__table__.select().order_by(model.id))]
+        protected = (GatewayMembership, GatewayNodeRole)
+        before = {model: rows(model) for model in (*protected, PortalAppAccess)}
+        self.assertEqual(self.decide('full').status_code, 302)
+        self.assertEqual({model: rows(model) for model in before}, before)
+        gateway = PortalAppAccess.query.filter_by(user_id=self.target.id, app_code='neogateway').one()
+        original = tuple(db.session.execute(PortalAppAccess.__table__.select().where(PortalAppAccess.id==gateway.id)).one())
+        def change(code, outcome, role='operator', reason=''):
+            return self.action('application', dict(app_code=code, outcome=outcome, role=role, reason=reason))
+        self.assertEqual(change('neostaffing','approved').status_code, 302)
+        staffing = PortalAppAccess.query.filter_by(user_id=self.target.id,app_code='neostaffing').one()
+        self.assertEqual((staffing.status,staffing.role), ('approved','operator'))
+        receipt = AccountSecurityEvent.query.filter_by(subject_user_id=self.target.id,action='application_access_changed').one()
+        self.assertIsNone(receipt.details['before'])
+        self.assertEqual(change('neostaffing','denied').status_code, 400)
+        self.assertEqual(change('neostaffing','approved','master').status_code, 400)
+        approval = (staffing.approved_at, staffing.approved_by_user_id)
+        token = self.review(tab='access')
+        self.assertEqual(change('neostaffing','change_role','simulator').status_code,302)
+        self.assertEqual(staffing.role,'simulator')
+        self.assertEqual((staffing.approved_at, staffing.approved_by_user_id),approval)
+        self.assertEqual(self.decide('full',review_token=token).status_code,409)
+        self.assertEqual(change('neostaffing','revoked').status_code,400)
+        self.assertEqual(change('neostaffing','revoked',reason='Duties ended').status_code,302)
+        self.assertFalse(staffing.is_active)
+        self.assertIn(b'Revoked',self.client.get(f'/accounts/people/{self.target.id}?tab=access').data)
+        self.assertEqual(original,tuple(db.session.execute(PortalAppAccess.__table__.select().where(PortalAppAccess.id==gateway.id)).one()))
+        self.assertEqual({model:rows(model) for model in protected},{model:before[model] for model in protected})
+        self.assertEqual(AccountSecurityEvent.query.filter_by(subject_user_id=self.target.id,action='application_role_changed').count(),1)
+
+    def test_full_account_review_keeps_open_requests_until_individual_decision(self):
+        self.login(self.admin)
+        access = PortalAppAccess.query.filter_by(user_id=self.target.id,app_code='neogateway').one()
+        access.status = 'pending'
+        from uuid import uuid4
+        attempt = AccountAccessRequest(user_id=self.target.id,app_code='neogateway',reason='Gateway duties',request_key=str(uuid4()))
+        db.session.add(attempt)
+        db.session.commit()
+        self.assertEqual(self.decide('full',outcome='denied').status_code,400)
+        self.assertEqual(self.decide('full').status_code,302)
+        self.assertEqual((attempt.state,access.status),('pending','pending'))
+        self.assertEqual(self.action('application',dict(app_code='neogateway',role='operator',outcome='approved')).status_code,302)
+        self.assertEqual((attempt.state,access.status,access.role),('approved','approved','operator'))
+
+    def test_gateway_request_denial_cannot_revoke_existing_entitlement_or_node_grants(self):
+        self.login(self.admin)
+        gateway = PortalAppAccess.query.filter_by(user_id=self.target.id,app_code='neogateway').one()
+        membership = GatewayMembership.query.filter_by(user_id=self.target.id).one()
+        membership.status = 'pending'
+        db.session.commit()
+        def nodes():
+            return [tuple(row) for row in db.session.execute(GatewayNodeRole.__table__.select().order_by(GatewayNodeRole.id))]
+        prior = nodes()
+        entitlement = (gateway.role, gateway.approved_at)
+        self.assertEqual(self.action('application',dict(app_code='neogateway',outcome='denied')).status_code,302)
+        self.assertEqual((gateway.status,gateway.is_active,gateway.role,gateway.approved_at),('approved',True,*entitlement))
+        self.assertEqual(membership.status,'denied')
+        self.assertEqual(nodes(),prior)
+
+    def test_legacy_gateway_membership_is_displayed_without_creating_an_app_grant(self):
+        self.login(self.admin)
+        access = PortalAppAccess.query.filter_by(user_id=self.target.id,app_code='neogateway')
+        db.session.delete(access.one())
+        db.session.commit()
+        page = self.client.get(f'/accounts/people/{self.target.id}?tab=access')
+        self.assertIn(b'>Approved</strong>',page.data)
+        self.assertIsNone(access.first())
+        self.assertEqual(self.decide('full').status_code,302)
+        self.assertIsNone(access.first())
+        self.assertEqual(self.action('application',dict(app_code='neogateway',outcome='change_role',role='operator')).status_code,302)
+        self.assertEqual(access.one().role,'operator')
+
+    def test_legacy_combined_forms_cannot_silently_disable_approved_access(self):
+        from tests.test_account_security_phase1 import identity_form
+        self.login(self.admin)
+        access = PortalAppAccess.query.filter_by(user_id=self.target.id,app_code='neogateway').one()
+        membership = GatewayMembership.query.filter_by(user_id=self.target.id).one()
+        for fields in [dict(app_status_neogateway='approved'), dict(membership_status='approved')]:
+            data = {**identity_form(self.target, self.target.email), **fields}
+            result = self.client.post(f'/admin/users/{self.target.id}/edit',data=data)
+            self.assertEqual(result.status_code,400)
+            self.assertIn(b'Use Revoke',result.data)
+            self.assertTrue(access.is_active)
+            self.assertTrue(membership.is_active)
 
     def test_identity_duplicate_and_failed_audit_roll_back_every_grant(self):
         self.login(self.admin)
@@ -159,10 +247,10 @@ class ScopedUnifiedAccountTypesTest(TestCase):
         inherited=[(r.id,r.role,r.is_active) for r in GatewayNodeRole.query.join(GatewayMembership).filter(GatewayMembership.user_id==self.inherited.id).all()]
         for kind in ('vendor_supervisor','fuel_driver','full'):
             self.as_user(self.root)
-            types.decide(self.target.id,review_token(self.target),kind,'approved',self.target.employee_id,'yes',None,['neostaffing'],{'neostaffing':'operator'},'')
+            types.decide(self.target.id,review_token(self.target),kind,'approved',self.target.employee_id,'yes',None,'')
             db.session.commit()
             self.assertEqual(types.current_type(self.target),kind)
         self.assertEqual(inherited,[(r.id,r.role,r.is_active) for r in GatewayNodeRole.query.join(GatewayMembership).filter(GatewayMembership.user_id==self.inherited.id).all()])
         self.as_user(self.master)
         with self.assertRaises(PermissionError):
-            types.decide(self.target.id,review_token(self.target),'vendor_supervisor','approved',self.target.employee_id,'yes',None,[],{},'')
+            types.decide(self.target.id,review_token(self.target),'vendor_supervisor','approved',self.target.employee_id,'yes',None,'')

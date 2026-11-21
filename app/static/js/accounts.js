@@ -38,9 +38,7 @@
     const type = form.elements.account_type, identity = form.elements.employee_id;
     const sync = () => {
       const restricted = type.value !== "full";
-      const apps = form.querySelector("[data-account-applications]");
-      apps.hidden = restricted;
-      apps.querySelectorAll("input,select").forEach((input) => { input.disabled = restricted; });
+      form.querySelector("[data-conversion-notice]").hidden = !(restricted && form.dataset.currentType === "full");
       identity.value = identity.value.trim();
       identity.required = restricted;
       if (restricted || identity.value !== identity.dataset.original) identity.pattern = "(?:[0-9]{7}|[0-9]{10})";

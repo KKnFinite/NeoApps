@@ -71,10 +71,10 @@ class FuelDriverPhase4BrowserTest(TestCase):
                                 form=page.locator('[data-account-approval]')
                                 form.locator('[name=account_type]').select_option('fuel_driver')
                                 form.locator('[name=identity_confirmed]').check()
-                                expect(form.locator('[data-account-applications]')).to_be_hidden()
+                                expect(form.locator('[name=app_codes], select[name^=role]')).to_have_count(0)
                                 self.assertEqual(page.locator('[name=company_id]').count(),0)
                                 self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
-                                with page.expect_navigation(wait_until='domcontentloaded'):form.get_by_role('button',name='Approve / save account').click()
+                                with page.expect_navigation(wait_until='domcontentloaded'):form.get_by_role('button',name='Approve account type').click()
                                 workspace.AccountsWorkspaceBrowserTest.login(page,origin,email)
                                 expect(page.get_by_text('AWAITING DISPATCHER APPROVAL',exact=True)).to_be_visible()
                                 self.assertEqual(page.get_by_text('N444UP',exact=True).count(),0)
@@ -99,7 +99,7 @@ class FuelDriverPhase4BrowserTest(TestCase):
                                     supervisor.employee_id=str(2000000+(0 if engine=='chromium' else 100)+width)
                                     db.session.commit()
                                     from app.services.account_types import decide
-                                    decide(supervisor.id,review_token(supervisor),'vendor_supervisor','approved',supervisor.employee_id,'yes',None,[],{},'')
+                                    decide(supervisor.id,review_token(supervisor),'vendor_supervisor','approved',supervisor.employee_id,'yes',None,'')
                                     db.session.commit();supervisor_id=supervisor.id
                                 workspace.AccountsWorkspaceBrowserTest.login(page,origin,'super-'+prefix+'@example.test')
                                 expect(page.get_by_role('heading',name='SUPERVISOR VIEW',exact=True)).to_be_visible()
@@ -109,9 +109,10 @@ class FuelDriverPhase4BrowserTest(TestCase):
                                 if engine=='chromium':page.screenshot(path=str(evidence/f'supervisor-{prefix}.png'),full_page=True)
                                 # A canonical subtype decision invalidates the already-open Supervisor session.
                                 review.goto(origin+f'/accounts/people/{supervisor_id}?tab=access')
+                                review.get_by_text('Edit account type or identity', exact=True).click()
                                 change=review.locator('[data-account-approval]')
                                 change.locator('[name=account_type]').select_option('fuel_driver')
-                                with review.expect_navigation(wait_until='domcontentloaded'):change.get_by_role('button',name='Approve / save account').click()
+                                with review.expect_navigation(wait_until='domcontentloaded'):change.get_by_role('button',name='Save account type & identity').click()
                                 page.goto(origin+'/neoscorpion/driver/supervisor')
                                 expect(page.locator('[name=email]')).to_be_visible()
                                 self.assertEqual(page.get_by_text('N444UP',exact=False).count(),0)

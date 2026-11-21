@@ -1239,6 +1239,8 @@ def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
             user_id=target_user.id,
             app_code=app_code,
         ).first()
+        if access and access.status == "approved" and access.is_active and (status != "approved" or not is_active):
+            raise ValueError("Use Revoke in Application access to remove an approved grant.")
         role_value = request.form.get(f"app_role_{app_code}")
         if role_value is None:
             role_value = access.role if access else "watcher"
@@ -1315,6 +1317,18 @@ def _approve_portal_app_access(
 def _deny_portal_app_access(access, notes):
     if not access:
         raise ValueError("App access request was not found.")
+    if access.status == "approved" and access.is_active:
+        from app.models import AccountAccessRequest
+        from app.services.accounts_workspace import close_open_attempt
+        membership = _current_gateway_membership_for_user(access.user, get_current_gateway()) if access.app_code == "neogateway" else None
+        pending_gateway = membership and membership.is_active and membership.status == "pending"
+        if not pending_gateway and not AccountAccessRequest.query.filter_by(user_id=access.user_id, app_code=access.app_code, state="pending").first():
+            raise ValueError("Use explicit revocation to remove approved application access.")
+        guard_app_role_change(access.user, access, access.role, granting=False)
+        if pending_gateway:
+            _deny_membership(membership, notes, preserve_app=True)
+        close_open_attempt(access.user, access.app_code, "denied", notes)
+        return
 
     if access.app_code == "neogateway":
         from app.services.account_scope_runtime import revoke_gateway_ranks
@@ -1587,6 +1601,8 @@ def _apply_gateway_membership_edit_form(
     if not membership:
         membership = ensure_user_gateway_membership(target_user, gateway)
 
+    if membership.status == "approved" and membership.is_active and (status != "approved" or not is_active):
+        raise ValueError("Use Revoke in Application access to remove approved gateway access.")
     if status != "approved" or not is_active:
         _guard_last_grandmaster_gateway_change(target_user)
 
@@ -2336,7 +2352,7 @@ def _approve_membership(
     close_open_attempt(membership.user, "neogateway", "approved", notes)
 
 
-def _deny_membership(membership, notes):
+def _deny_membership(membership, notes, *, preserve_app=False):
     if not membership:
         raise ValueError("Gateway membership request was not found.")
 
@@ -2350,7 +2366,7 @@ def _deny_membership(membership, notes):
     membership.approval_notes = None
     membership.approval_email_sent_at = None
 
-    if membership.gateway and membership.gateway.code == get_current_gateway().code:
+    if not preserve_app and membership.gateway and membership.gateway.code == get_current_gateway().code:
         app_access = ensure_user_app_access(membership.user, "neogateway")
         app_access.status = "denied"
         app_access.is_active = True

@@ -6,3 +6,13 @@
 
 .accounts-workspace-page .shell{width:100%;max-width:none;margin:0;padding:0}.accounts-workspace-page .content{padding:0;max-width:none;margin:0}.aa-platform-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:15px 24px;border-bottom:1px solid #33465d;background:#101926;color:#e9f0f8;font-family:system-ui,sans-serif}.aa-platform-brand{text-decoration:none;font-size:23px;font-weight:750}.aa-platform-header nav{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.aa-platform-header nav a{color:#c7d6e8;font-size:13px;text-decoration:none}.aa-platform-header form{margin:0}.aa-platform-header button{border:1px solid #42556e;border-radius:6px;background:transparent;color:#e9f0f8;font-family:inherit;font-size:12px;min-height:36px;padding:6px 12px;letter-spacing:0}.aa-platform-header a:focus-visible,.aa-platform-header button:focus-visible{outline:2px solid #8acbff;outline-offset:3px}
 @media(max-width:480px){.aa-platform-header{padding:12px;gap:8px}.aa-platform-header nav{gap:10px}.aa-platform-header nav a{font-size:11px}.aa-platform-header .aa-platform-brand{font-size:19px}}
+/* Access & Roles keeps the account editor secondary to individual entitlements. */
+.aa-account-type details { margin-top: 8px; }
+.aa-account-type summary { cursor: pointer; padding: 8px 0; font-size: 14px; }
+.aa-account-type details[open] form { margin-top: 12px; }
+.aa-account-type [data-conversion-notice] { color: #ffc68d; }
+.aa-workspace .aa-app-access .aa-scope { gap: 10px; padding: 12px 0; }
+@media (max-width: 600px) {
+  .aa-app-access .aa-scope-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 8px; }
+  .aa-app-access .aa-scope-form .aa-actions, .aa-app-access .aa-scope-form .aa-check { grid-column: 1 / -1; }
+}
