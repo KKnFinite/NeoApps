@@ -4,12 +4,17 @@
 {% block title %}{{ "EDIT" if mode == "edit" else "ADD" }} MISSION | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel compact-panel centered-command-page">
+{% if not neorain_form %}<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">{% endif %}
+<section class="{% if not neorain_form %}mb-planning {% endif %}panel compact-panel centered-command-page">
+    {% if neorain_form %}
     <div class="section-heading">
         <h1>{{ "EDIT" if mode == "edit" else "ADD" }} MISSION</h1>
     </div>
+    {% else %}<header class="mb-heading"><div><p>{{ operation.gateway_code }} · {{ operation.sort_name|title }} Sort · {{ operation.sort_date }}</p><h1>{{ "Edit" if mode == "edit" else "Add" }} Mission</h1></div></header>{% endif %}
 
     <form class="operation-form" method="post">
+        {% set view_only = not neorain_form and not user_can('neomotherbrain.manage_sort.edit') %}
+        {% if view_only %}<fieldset class="mb-fields mb-readonly" disabled><legend>View only</legend>{% endif %}
         {% if neorain_form %}<input type="hidden" name="operation_id" value="{{ operation.id }}">
         <label><span>Parking (optional)</span><input name="parking_position" maxlength="8" placeholder="Leave unchanged"></label>{% endif %}
         {% if return_endpoint %}
@@ -123,6 +128,7 @@
             <button class="action-button" type="submit">{{ "SAVE" if mode == "edit" else "CREATE" }}</button>
             <a class="action-button action-button-secondary" href="{{ url_for(return_endpoint) if return_endpoint else url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">{{ "BACK TO NEO RAIN" if return_endpoint else "BACK TO OPERATION" }}</a>
         </div>
+        {% if view_only %}</fieldset>{% endif %}
     </form>
 </section>
 {{ military_time_script()|safe }}

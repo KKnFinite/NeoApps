@@ -3,10 +3,9 @@
 {% block title %}Operations | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page">
-    <div class="section-heading">
-        <h1>NIGHTLY OPERATIONS</h1>
-    </div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="mb-planning mb-nightly panel centered-command-page">
+    <header class="mb-heading"><h1>Nightly Operations</h1></header>
 
     <div class="table-wrap">
         <table class="data-table">
@@ -24,12 +23,12 @@
             <tbody>
                 {% for operation in operations %}
                 <tr>
-                    <td>{{ operation.sort_date }}</td>
-                    <td>{{ operation.gateway_code }}</td>
-                    <td>{{ operation.sort_name }}</td>
-                    <td>{{ operation.window_minutes ~ " MIN" if operation.window_minutes is not none else "TBD" }}</td>
-                    <td>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</td>
-                    <td>{{ operation.missions|length }}</td>
+                    <td data-label="Sort date">{{ operation.sort_date }}</td>
+                    <td data-label="Gateway">{{ operation.gateway_code }}</td>
+                    <td data-label="Sort">{{ operation.sort_name }}</td>
+                    <td data-label="Global window">{{ operation.window_minutes ~ " MIN" if operation.window_minutes is not none else "TBD" }}</td>
+                    <td data-label="Generated">{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</td>
+                    <td data-label="Missions">{{ operation.missions|length }}</td>
                     <td class="table-actions">
                         {% if user_can("neomotherbrain.manage_sort.view") %}<a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OVERVIEW</a>{% endif %}
                         {% if user_can("neomotherbrain.arrival_planning.view") %}<a href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVALS</a>{% endif %}

@@ -181,15 +181,14 @@
 {% endmacro %}
 
 {% block content %}
-<section class="panel master-schedule-panel">
-    <div class="section-heading">
-        <h1>{{ page_title }}</h1>
-        {% if is_bulk_edit %}
-        <p class="muted">EDIT MULTIPLE RECURRING SCHEDULE ROWS AND SAVE ALL CHANGES AT ONCE.</p>
-        {% endif %}
-    </div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="mb-planning panel master-schedule-panel">
+    <header class="mb-heading"><div><p>{{ gateway.code }} · Master Schedule</p><h1>{{ page_title|title }}</h1></div></header>
+    {% if is_bulk_edit %}<p class="muted">Save changes to recurring flights together.</p>{% endif %}
 
     <form class="{{ 'master-schedule-single-form' if is_single_entry else 'master-schedule-bulk-form' }}" method="post" data-next-row-index="{{ rows|length }}" data-current-gateway-code="{{ gateway.code }}">
+        {% set view_only = not user_can('neomotherbrain.master_schedule.edit') %}
+        {% if view_only %}<fieldset class="mb-fields mb-readonly" disabled><legend>View only</legend>{% endif %}
         {% if is_single_entry %}
         {{ single_entry_form(rows[0]) }}
         <div class="action-row">
@@ -234,6 +233,7 @@
             <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">BACK TO MASTER SCHEDULE</a>
         </div>
         {% endif %}
+        {% if view_only %}</fieldset>{% endif %}
     </form>
 </section>
 

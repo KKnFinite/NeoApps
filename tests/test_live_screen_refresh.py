@@ -181,6 +181,18 @@ class LiveScreenRefreshTest(unittest.TestCase):
         self.assertEqual(status["window_end_local"], "05:00")
         self.assertEqual(status["window_label"], "14:00-05:00")
 
+    def test_wider_ops_hours_cannot_start_screen_refresh_outside_physical_sort(self):
+        self.sort_setting.sort_window_start_local = time(21)
+        self.sort_setting.sort_window_end_local = time(5)
+        self.sort_setting.ops_window_start_local = time(19)
+        self.sort_setting.ops_window_end_local = time(7)
+        db.session.commit()
+
+        for now in (datetime(2026, 8, 10, 20, 59), datetime(2026, 8, 11, 5)):
+            with self.subTest(now=now):
+                status = node_auto_refresh_status(self.gateway, operation=self.operation, now=now)
+                self.assertFalse(status["auto_refresh_enabled"])
+
     def test_sort_window_refresh_keeps_historical_operation_inactive(self):
         status = sort_window_auto_refresh_status(
             self.gateway,

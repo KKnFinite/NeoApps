@@ -3,15 +3,18 @@
 {% block title %}Arrival Board | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel">
-    <div class="section-heading">
-        <h1>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</h1>
-    </div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="mb-planning panel">
+    <header class="mb-heading"><div><p>{{ operation.gateway_code }} · {{ operation.sort_name|title }} Sort · {{ operation.sort_date }}</p><h1>Arrival Board</h1></div></header>
 
-    <div class="action-row">
+    <div class="action-row mb-actions">
         <a class="action-button alp-desktop-only" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='arrival') }}">ARRIVAL PLANNING</a>
+        {% if user_can('neomotherbrain.manage_sort.view') %}
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OPERATION OVERVIEW</a>
+        {% endif %}
+        {% if user_can('neomotherbrain.departure_planning.view') %}
         <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURE BOARD</a>
+        {% endif %}
     </div>
 
     <div class="table-wrap">

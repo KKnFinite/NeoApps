@@ -3,13 +3,14 @@
 {% block title %}Generate Operation | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel compact-panel centered-command-page">
-    <div class="section-heading">
-        <h1>GENERATE OPERATION</h1>
-        <p class="muted">USES ACTIVE MASTER FLIGHT SCHEDULE RECORDS FOR {{ form.gateway_code }} MATCHING SORT AND ACTIVE DAY.</p>
-    </div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="mb-planning panel compact-panel centered-command-page">
+    <header class="mb-heading"><div><p>{{ form.gateway_code }}</p><h1>Generate Operation</h1></div></header>
+    <p class="muted">Uses active master flights scheduled for the selected Sort date.</p>
 
     <form class="operation-form" method="post">
+        {% set view_only = not user_can('neomotherbrain.manage_sort.edit') %}
+        {% if view_only %}<fieldset class="mb-fields mb-readonly" disabled><legend>View only</legend>{% endif %}
         <label>
             <span>SORT DATE</span>
             <input type="date" name="sort_date" value="{{ form.sort_date }}" required>
@@ -28,6 +29,7 @@
             <button class="action-button" type="submit">GENERATE</button>
             <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">NIGHTLY OPERATIONS</a>
         </div>
+        {% if view_only %}</fieldset>{% endif %}
     </form>
 </section>
 {% endblock %}

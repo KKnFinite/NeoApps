@@ -3,21 +3,22 @@
 {% block title %}{{ master_schedule.flight_number|upper }} | Master Schedule{% endblock %}
 
 {% block content %}
-<section class="panel">
-    <div class="section-heading">
-        <h1>{{ master_schedule.flight_number|upper }}</h1>
-    </div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="mb-planning panel">
+    <header class="mb-heading"><div><p>{{ master_schedule.gateway_code }} · {{ master_schedule.sort_name|title }} Sort · Master Schedule</p><h1>{{ master_schedule.flight_number|upper }}</h1></div></header>
 
-    <div class="action-row">
+    <div class="action-row mb-actions">
+        {% if user_can('neomotherbrain.master_schedule.edit') %}
         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=master_schedule.id) }}">
             <input type="hidden" name="version_{{ master_schedule.id }}" value="{{ master_schedule.updated_at.isoformat() }}">
             <input type="hidden" name="desired_active" value="{{ 0 if master_schedule.active else 1 }}">
             <button class="action-button" type="submit">{{ "DEACTIVATE" if master_schedule.active else "ACTIVATE" }}</button>
         </form>
+        {% endif %}
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">BACK TO MASTER SCHEDULE</a>
     </div>
 
-    <dl class="detail-list">
+    <dl class="detail-list manage-sort-detail-list">
         <div>
             <dt>STATUS</dt>
             <dd>{{ "Active" if master_schedule.active else "Inactive" }}</dd>

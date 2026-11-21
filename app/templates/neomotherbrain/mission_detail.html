@@ -3,20 +3,21 @@
 {% block title %}{{ mission.flight_number|upper }} | Mission{% endblock %}
 
 {% block content %}
-<section class="panel">
-    <div class="section-heading">
-        <h1>{{ mission.flight_number|upper }}</h1>
-    </div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="mb-planning panel">
+    <header class="mb-heading"><div><p>{{ operation.gateway_code }} · {{ operation.sort_name|title }} Sort · {{ operation.sort_date }}</p><h1>{{ mission.flight_number|upper }}</h1></div></header>
 
-    <div class="action-row">
+    <div class="action-row mb-actions">
+        {% if user_can('neomotherbrain.manage_sort.edit') %}
         <a class="action-button" href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT MISSION</a>
         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.delete_mission', operation_id=operation.id, mission_id=mission.id) }}">
             <button class="action-button" type="submit">DELETE MISSION</button>
         </form>
+        {% endif %}
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">BACK TO OPERATION</a>
     </div>
 
-    <dl class="detail-list">
+    <dl class="detail-list manage-sort-detail-list">
         <div>
             <dt>MISSION TYPE</dt>
             <dd>{{ mission.mission_type|title }}</dd>
