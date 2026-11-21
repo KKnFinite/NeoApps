@@ -866,13 +866,15 @@ def flight_api_test():
         replay_payload=replay_payload,
         auto_poll_status=auto_poll_status,
         can_trigger_auto_poll=user_can(FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION),
+        can_run_api=user_can(MANAGE_API_RUN_PERMISSION),
+        can_edit_review=user_can(FLIGHT_API_REVIEW_EDIT_PERMISSION),
+        entity_version=entity_version,
         flight_api_auto_poll_client_header=FLIGHT_API_AUTO_POLL_CLIENT_HEADER,
         flight_api_auto_poll_client_version=FLIGHT_API_AUTO_POLL_CLIENT_VERSION,
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
         flight_api_provider_time=flight_api_provider_time_utc,
         format_flight_api_time=format_flight_api_local_time,
-        **_flight_api_auto_poll_timer_context(gateway, operation=selected_operation),
     )
 
 

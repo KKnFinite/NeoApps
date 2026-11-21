@@ -1,0 +1,11 @@
+<strong class="api-flight-id">{{ item.flight_number|upper }}</strong>
+<span class="api-route">{{ item.mission_type|upper }} · {{ item.origin or "-" }} / {{ item.destination or "-" }}</span>
+<details><summary aria-label="Flight details for {{ item.flight_number }}">Flight details</summary>
+    <dl class="api-flight-details">
+        <dt>Callsign</dt><dd>{{ item.call_sign or "-" }}</dd>
+        <dt>Cores tried</dt><dd>{{ item.normalized_cores_tried|default("-", true) }}</dd>
+        <dt>Tail</dt><dd>{{ item.tail_number or "-" }}</dd>
+        <dt>Aircraft</dt><dd>{{ item.aircraft_model or "-" }}</dd>
+        <dt>Provider status</dt><dd>{{ item.api_status or "-" }}</dd>
+    </dl>
+</details>

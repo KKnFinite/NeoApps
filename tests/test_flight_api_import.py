@@ -3551,20 +3551,15 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Manage API", response.data)
         self.assertNotIn(b"FLIGHT API TEST</h1>", response.data)
-        self.assertIn(b"NO SCHEDULED POLLING IS ENABLED", response.data)
+        self.assertNotIn(b"NO SCHEDULED POLLING IS ENABLED", response.data)
         self.assertIn(b"Sort Flight Lookup Window", response.data)
         self.assertIn(b"Flight API requests pull arrivals/departures for the full sort start-to-end time.", response.data)
         self.assertIn(b"API Polling Window", response.data)
         self.assertIn(b"Automatic API polling may run only during this window.", response.data)
         self.assertIn(b"Ops / Node Online Window", response.data)
         self.assertIn(b"Nodes and live screens auto-refresh only during this window.", response.data)
-        self.assertIn(b"AUTO POLL TRIGGER ENDPOINT", response.data)
-        self.assertIn(b"Passive only. Scheduled/page-timer polling is not active yet.", response.data)
-        self.assertIn(
-            b"Scheduled auto polling is not active yet. This shows when the next automatic poll would be eligible once scheduling is enabled.",
-            response.data,
-        )
-        self.assertIn(b"TEST AUTO POLL TRIGGER ONCE", response.data)
+        self.assertIn(b"Check auto-poll once", response.data)
+        self.assertIn(b"The auto-poll check pulls data only if the current Sort is eligible.", response.data)
         self.assertIn(b"data-auto-poll-result", response.data)
         self.assertIn(b'data-auto-poll-field="eligible"', response.data)
         self.assertIn(b'data-auto-poll-field="review_added"', response.data)
@@ -3599,11 +3594,46 @@ class FlightApiTestPageTest(unittest.TestCase):
             neomotherbrain_routes.user_can = original_user_can
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b"TEST AUTO POLL TRIGGER ONCE", response.data)
-        self.assertIn(
-            b"Your current permissions do not allow triggering the passive auto-poll check.",
-            response.data,
-        )
+        self.assertNotIn(b"Check auto-poll once", response.data)
+        self.assertNotIn(b'data-endpoint="/motherbrain/flight-api-auto-poll/check"', response.data)
+
+    def test_view_only_manage_api_cannot_run_pull_or_replay(self):
+        from unittest.mock import patch
+        allowed = neomotherbrain_routes.user_can
+
+        def can_view(permission, *args, **kwargs):
+            return permission != neomotherbrain_routes.MANAGE_API_RUN_PERMISSION and allowed(permission, *args, **kwargs)
+
+        with patch.object(neomotherbrain_routes, "user_can", side_effect=can_view), \
+             patch.object(neomotherbrain_routes, "run_flight_api_import") as pull, \
+             patch.object(neomotherbrain_routes, "run_flight_api_replay") as replay:
+            page = self.client.get("/motherbrain/flight-api-test")
+            self.assertEqual(page.status_code, 200)
+            self.assertNotIn(b'name="flight_api_action"', page.data)
+            for action in ("pull", "replay"):
+                result = self.client.post("/motherbrain/flight-api-test", data={"flight_api_action": action})
+                self.assertEqual(result.status_code, 302)
+            pull.assert_not_called()
+            replay.assert_not_called()
+
+    def test_both_queue_views_send_version_and_reject_stale_decisions(self):
+        from app.services.live_collaboration import entity_version
+        operation = self._review_operation()
+        item = self._review_item(operation)
+        version = entity_version(item)
+        for path in ("flight-api-test", "flight-api-review"):
+            response = self.client.get(f"/motherbrain/{path}?operation_id={operation.id}")
+            self.assertIn(f'name="expected_version" value="{version}"'.encode(), response.data)
+        item.tail_number = "N123UP"
+        db.session.commit()
+        for action in ("add", "ignore"):
+            response = self.client.post(f"/motherbrain/flight-api-review/{item.id}/{action}",
+                data={"operation_id": operation.id, "expected_version": version},
+                headers={"Accept": "application/json"})
+            self.assertEqual(response.status_code, 409)
+        db.session.refresh(item)
+        self.assertEqual(item.review_status, "pending")
+        self.assertIsNone(item.accepted_mission_id)
 
     def test_flight_api_test_page_trigger_script_has_no_automatic_timer(self):
         template = Path("app/templates/neomotherbrain/flight_api_test.html").read_text()
@@ -3613,7 +3643,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertNotIn("setInterval", template)
         self.assertNotIn("setTimeout", template)
 
-    def test_auto_poll_page_timer_renders_visible_widget_only_on_manage_api(self):
+    def test_manage_api_is_manual_while_operational_pages_keep_eligible_driver(self):
         operation, _settings = self._setup_auto_poll_operation()
 
         manage_api_response = self.client.get(
@@ -3629,12 +3659,13 @@ class FlightApiTestPageTest(unittest.TestCase):
         ]
 
         self.assertEqual(manage_api_response.status_code, 200)
-        self.assertIn(b"flight-api-auto-poll-widget", manage_api_response.data)
-        self.assertIn(b"data-flight-api-auto-poll-timer", manage_api_response.data)
+        self.assertNotIn(b"flight-api-auto-poll-widget", manage_api_response.data)
+        self.assertIn(b"flight-api-auto-poll-driver", self.client.get("/motherbrain/flight-api-review").data)
+        self.assertNotIn(b"data-flight-api-auto-poll-timer", manage_api_response.data)
         self.assertIn(b"/motherbrain/flight-api-auto-poll/check", manage_api_response.data)
         self.assertIn(b"data-client-header", manage_api_response.data)
         self.assertIn(b"data-client-version", manage_api_response.data)
-        self.assertIn(b"AUTO POLL", manage_api_response.data)
+        self.assertIn(b"Check auto-poll once", manage_api_response.data)
 
         for response in passive_or_plain_responses:
             self.assertEqual(response.status_code, 200)
@@ -3677,8 +3708,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         if b"data-flight-api-auto-poll-timer" in sort_timeline_response.data:
             self.assertIn(b"flight-api-auto-poll-driver", sort_timeline_response.data)
 
-        self.assertIn(b"flight-api-auto-poll-widget", api_test_response.data)
-        self.assertIn(b"data-flight-api-auto-poll-timer", api_test_response.data)
+        self.assertNotIn(b"flight-api-auto-poll-widget", api_test_response.data)
+        self.assertNotIn(b"data-flight-api-auto-poll-timer", api_test_response.data)
         self.assertIn(b"data-auto-poll-trigger", api_test_response.data)
 
     def test_auto_poll_timer_script_uses_only_passive_endpoint_and_no_secrets(self):
@@ -4015,7 +4046,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"tail updated", response.data)
         self.assertIn(b"NON-UPS IGNORED ARRIVALS", response.data)
         self.assertIn(b"NON-UPS IGNORED DEPARTURES", response.data)
-        self.assertIn(b"CORES TRIED", response.data)
+        self.assertIn(b"<summary>Cores tried</summary>0456</details>", response.data)
         self.assertIn(b"999", response.data)
         self.assertIn(b"no matching mission", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)

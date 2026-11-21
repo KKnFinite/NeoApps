@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Flight API Review | NeoApps{% endblock %}
+{% block title %}Unmatched Queue | NeoApps{% endblock %}
 
 {% macro dt(value) -%}
 {{ value.strftime("%Y-%m-%d %H:%M") if value else "-" }}
@@ -10,7 +10,9 @@
 {%- endmacro %}
 
 {% block content %}
-<section class="panel centered-command-page manage-sort-sidebar-page flight-api-review-page" aria-labelledby="flight-api-review-title">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_api.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="panel mb-planning mb-api manage-sort-sidebar-page flight-api-review-page" aria-labelledby="flight-api-review-title">
     {% if selected_operation %}
     {% set manage_sort_sidebar_operation = selected_operation %}
     {% set manage_sort_sidebar_active = "unmatched-queue" %}
@@ -18,12 +20,11 @@
         {% include "neomotherbrain/_manage_sort_sidebar.html" %}
         <div class="manage-sort-main">
     {% endif %}
-            <div class="section-heading">
-                <h1 id="flight-api-review-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Unmatched Queue</h1>
-                <p class="muted">UNMATCHED UPS FLIGHTS FOR THE CURRENT SORT OPERATION.</p>
-            </div>
-
-    <form class="operation-form inline-operation-form" method="get">
+    <header class="mb-heading">
+        <div><p>{{ gateway.code }}{% if selected_operation %} · {{ selected_operation.sort_name|title }} Sort · {{ selected_operation.sort_date }}{% endif %}</p>
+            <h1 id="flight-api-review-title">Unmatched Queue</h1></div>
+    </header>
+    <form class="api-actions mb-section" method="get">
         {% if mission_type_filter %}
         <input type="hidden" name="mission_type" value="{{ mission_type_filter }}">
         {% endif %}
@@ -40,42 +41,17 @@
         <button class="action-button" type="submit" {% if not operations %}disabled{% endif %}>OPEN REVIEW QUEUE</button>
     </form>
 
-    {% if selected_operation %}
-    <section class="status-grid" aria-label="Flight API review queue status">
-        <article class="status-card">
-            <span>CURRENT SORT</span>
-            <strong>{{ selected_operation.sort_name|upper }} {{ selected_operation.sort_date }}</strong>
-        </article>
-        <article class="status-card">
-            <span>PENDING UNMATCHED UPS</span>
-            <strong>{{ pending_review_items|length }}</strong>
-        </article>
-        <article class="status-card">
-            <span>REVIEW ACTIONS</span>
-            <strong>{{ "ENABLED" if can_edit else "VIEW ONLY" }}</strong>
-        </article>
-    </section>
-    {% else %}
-    <p class="muted centered-empty-message">No current sort operation is available.</p>
-    {% endif %}
-
-    <section class="table-wrap" aria-labelledby="flight-api-review-table-title">
-        <h2 id="flight-api-review-table-title">UNMATCHED{% if mission_type_filter %} {{ mission_type_filter|upper }}{% endif %} UPS REVIEW QUEUE</h2>
+    <section class="mb-section api-queue" aria-labelledby="flight-api-review-table-title">
+        <div class="mb-section-title">
+            <h2 id="flight-api-review-table-title">Pending review · {{ pending_review_items|length }}</h2>
+            <span>{{ mission_type_filter|title if mission_type_filter else 'Arrivals and departures' }}{% if not can_edit %} · VIEW ONLY{% endif %}</span>
+        </div>
+        {% if not selected_operation %}<p>No current sort operation is available.</p>{% endif %}
         <table class="data-table">
-            <thead>
-                <tr>
-                    <th>TYPE</th>
-                    <th>FLIGHT / CALLSIGN</th>
-                    <th>CORES TRIED</th>
-                    <th>ORIGIN / DEST</th>
-                    <th>OPERATIONAL TIME</th>
-                    <th>TAIL</th>
-                    <th>AC TYPE</th>
-                    <th>PROVIDER STATUS</th>
-                    <th>REASON</th>
-                    <th>ACTIONS</th>
-                </tr>
-            </thead>
+            <thead><tr>
+                <th scope="col">Flight / route</th><th scope="col">Operational time</th>
+                <th scope="col">Reason for review</th><th scope="col">Actions</th>
+            </tr></thead>
             <tbody>
                 {% for row in pending_review_item_rows %}
                 {% set item = row.item %}
@@ -83,14 +59,9 @@
                 {% set operational_time = flight_api_operational_time(item, sort_timeline_settings) %}
                 {% set provider_time = flight_api_provider_time(item) %}
                 <tr>
-                    <td>{{ item.mission_type|upper }}</td>
                     <td>
-                        <strong>{{ item.flight_number|upper }}</strong>
-                        <br>
-                        <span class="muted">{{ item.call_sign or "-" }}</span>
+                        {% include "neomotherbrain/_flight_api_review_identity.html" %}
                     </td>
-                    <td>{{ item.normalized_cores_tried|default("-", true) }}</td>
-                    <td>{{ item.origin or "-" }} / {{ item.destination or "-" }}</td>
                     <td>
                         {% if item.mission_type == "departure" %}
                         <span class="flight-api-time-stack">
@@ -112,10 +83,7 @@
                         {% endif %}
                         {% endif %}
                     </td>
-                    <td>{{ item.tail_number or "-" }}</td>
-                    <td>{{ item.aircraft_model or "-" }}</td>
-                    <td>{{ item.api_status or "-" }}</td>
-                    <td>
+                    <td class="api-reason">
                         {{ item.review_reason|default("-", true) }}
                         {% if row.reason_detail %}
                         <br><span class="muted">{{ row.reason_detail }}</span>
@@ -142,7 +110,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="10">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
+                    <td colspan="4">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
                 </tr>
                 {% endfor %}
             </tbody>

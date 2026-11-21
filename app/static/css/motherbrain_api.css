@@ -1,0 +1,109 @@
+/* Manage API and Unmatched Queue page bodies. */
+.mb-api .manage-sort-main, .mb-api .table-wrap { min-width: 0; }
+.mb-api .api-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 8px;
+}
+.mb-api .api-actions label, .mb-api .api-replay label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    color: var(--mb-muted);
+    font: 600 .8rem/1.3 system-ui, sans-serif;
+}
+.mb-api :is(select, textarea) {
+    max-width: 100%;
+    min-height: 36px;
+    padding: 6px 9px;
+    border: 1px solid #526570;
+    border-radius: 5px;
+    background: #172229;
+    color: #eff5f7;
+}
+.mb-api .api-primary { background: #23564f; border-color: #4a958a; }
+.mb-api .api-readiness {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 24px;
+    margin: 0 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--mb-line);
+}
+.mb-api dt, .mb-api .status-card > span:first-child {
+    color: var(--mb-muted);
+    font: 550 .75rem/1.35 system-ui, sans-serif;
+}
+.mb-api dd { margin: 3px 0 0; font-variant-numeric: tabular-nums; }
+.mb-api .api-readiness dd { font-weight: 650; }
+.mb-api :is(.muted, .api-route) { color: var(--mb-muted); }
+.mb-api p { margin: 7px 0; font-size: .86rem; }
+.mb-api .api-feedback { padding-inline-start: 8px; border-inline-start: 3px solid #ebb879; }
+.mb-api summary { cursor: pointer; }
+.mb-api .auto-poll-trigger-result[hidden] { display: none; }
+.mb-api .api-replay .operation-form { display: grid; justify-items: start; gap: 8px; }
+.mb-api .api-replay label:has(textarea), .mb-api textarea { width: 100%; }
+.mb-api textarea { resize: vertical; font: .86rem/1.4 monospace; }
+.mb-api .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(175px,100%), 1fr));
+    gap: 0 14px;
+    margin-block: 8px;
+}
+.mb-api .status-card {
+    display: grid;
+    align-content: start;
+    gap: 3px;
+    padding: 7px 0;
+    border: 0;
+    border-top: 1px solid var(--mb-line);
+    border-radius: 0;
+    background: none;
+    text-align: start;
+    overflow-wrap: anywhere;
+}
+.mb-api .status-card strong { color: inherit; font: 600 .85rem/1.4 system-ui, sans-serif; }
+.mb-api pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mb-api .table-wrap { max-width: 100%; overflow-x: auto; }
+.mb-api .data-table { width: 100%; border-collapse: collapse; font: .86rem/1.35 system-ui, sans-serif; }
+.mb-api .data-table :is(th, td) {
+    padding: 7px 8px;
+    text-align: start;
+    vertical-align: top;
+    border-bottom: 1px solid var(--mb-line);
+}
+.mb-api .data-table th { color: var(--mb-muted); font: 650 .74rem/1.35 system-ui, sans-serif; }
+.mb-api h3 { margin: 10px 0 4px; color: inherit; font: 650 .9rem/1.35 system-ui, sans-serif; }
+.mb-api .flight-api-last-poll-groups { display: grid; grid-template-columns: minmax(0,1fr); gap: 8px; }
+.mb-api .flight-api-last-poll-table { min-width: 32rem; table-layout: auto; }
+.mb-api .api-queue .data-table { min-width: 0; margin-top: 6px; }
+.mb-api .api-flight-id { font-size: 1rem; }
+.mb-api .api-route { display: block; font-size: .78rem; }
+.mb-api .api-queue details { margin-top: 4px; }
+.mb-api .api-queue summary { color: #b9dbed; font-size: .8rem; }
+.mb-api .api-flight-details { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; margin: 6px 0; }
+.mb-api .api-flight-details dd { margin: 0; }
+.mb-api .api-queue .table-actions { text-align: start; }
+.mb-api .table-row-button { min-height: 34px; margin: 2px 0; padding: 4px 8px; }
+@media (min-width: 1650px) {
+    .mb-api .flight-api-last-poll-groups { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 600px) {
+    .mb-api .api-readiness { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .mb-api .api-actions :is(button, select), .mb-api .api-queue :is(button, summary) { min-height: 42px; }
+    .mb-api .api-queue summary { display: list-item; align-content: center; }
+    .mb-api .api-queue :is(table, tbody) { display: block; }
+    .mb-api .api-queue thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .mb-api .api-queue tr {
+        display: grid;
+        grid-template-columns: minmax(0,1.15fr) minmax(0,1fr);
+        gap: 5px 8px;
+        padding: 9px 0;
+        border-top: 1px solid var(--mb-line);
+    }
+    .mb-api .api-queue td { display: block; padding: 0; border: 0; white-space: normal; overflow-wrap: anywhere; }
+    .mb-api .api-queue :is(.api-reason, .table-actions, [colspan]) { grid-column: 1 / -1; }
+    .mb-api .api-queue .table-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .mb-api .api-reason::before { content: "Review reason · "; color: var(--mb-muted); }
+}
