@@ -586,6 +586,55 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
                     GOOGLE_MOTHERBRAIN_MISSION_SOURCE,
                 )
 
+    def test_explicit_cancellation_before_first_tail_import_preserves_canonical_flight(self):
+        mission = self._mission("arrival", "UPS0555", tail=None, origin="MSP", arrival_status="scheduled")
+        db.session.commit()
+        unrelated = self._apply_arrivals(self._inbound(4, "753", "N457UP"))
+        db.session.commit()
+        other_id = unrelated["results"][0]["mission_id"]
+
+        result = self._apply_arrivals(self._inbound(4, "555", "", origin="", status="CNL", operational="invalid"))
+        db.session.commit()
+        self.assertEqual(result["results"][0]["mission_id"], mission.id)
+        self.assertEqual(mission.flight_number, "UPS0555")
+        self.assertEqual(mission.origin, "MSP")
+        self.assertIsNone(mission.assigned_tail_number)
+        self.assertEqual(mission.arrival_status, "cancelled")
+        self.assertEqual(db.session.get(SortDateMission, other_id).flight_number, "UPS0753")
+        link = SortDateGoogleMissionLink.query.filter_by(source_row=4).one()
+        self.assertEqual((link.sort_date_mission_id, link.last_status_raw), (mission.id, "CNL"))
+
+    def test_unmatched_cancellation_without_tail_cannot_rename_or_create_a_mission(self):
+        first = self._apply_arrivals(self._inbound(4, "753", "N457UP"))
+        db.session.commit()
+        rejected = self._apply_arrivals(self._inbound(4, "555", "", status="CANCELED"))
+        db.session.commit()
+        self.assertEqual(rejected["applied_count"], 0)
+        self.assertEqual(SortDateMission.query.count(), 1)
+        mission = db.session.get(SortDateMission, first["results"][0]["mission_id"])
+        self.assertEqual(mission.flight_number, "UPS0753")
+        self.assertNotEqual(mission.arrival_status, "cancelled")
+
+    def test_cancellation_after_import_keeps_actual_and_stale_completion_does_not_reopen(self):
+        first = self._apply_arrivals(self._inbound(4, "555", "N457UP", status="ARR", operational="23:40"))
+        db.session.commit()
+        mission = db.session.get(SortDateMission, first["results"][0]["mission_id"])
+        block_in = mission.actual_block_in_datetime_utc
+        self._apply_arrivals(self._inbound(4, "555", "CANX", status="CNL", operational="23:59"))
+        db.session.commit()
+        self.assertEqual(mission.arrival_status, "cancelled")
+        self.assertEqual(mission.assigned_tail_number, "N457UP")
+        self.assertEqual(mission.actual_block_in_datetime_utc, block_in)
+        for status, expected in (("ARR", "cancelled"), ("DEP", "en_route"), ("ARR", "en_route")):
+            self._apply_arrivals(self._inbound(4, "555", "N457UP", status=status))
+            db.session.commit()
+            self.assertEqual(mission.arrival_status, expected)
+            self.assertEqual(mission.actual_block_in_datetime_utc, block_in)
+        self._apply_arrivals(self._inbound(4, "555", "N457UP", status="ARR", operational="23:45"))
+        db.session.commit()
+        self.assertEqual(mission.arrival_status, "arrived")
+        self.assertEqual(mission.actual_block_in_datetime_utc, datetime(2026, 8, 8, 4, 45))
+
     def test_cancelled_ignores_u_and_reverses_to_live_states(self):
         result = self._apply_arrivals(
             self._inbound(4, "947", "N457UP", status="CNL", operational="23:40")
@@ -1061,22 +1110,21 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
             "loading",
         )
 
-    def test_blank_google_u_never_regresses_cancelled(self):
+    def test_google_u_cannot_reopen_or_erase_cancelled_departure(self):
         mission = self._mission("departure", "UPS0755", tail="N755UP", destination="SDF")
         mission.actual_block_out_datetime_utc = datetime(2026, 8, 8, 6, 35)
         mission.actual_block_out_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
         mission.departure_status = "cancelled"
         db.session.commit()
 
-        self._apply_departures(
-            self._outbound(4, "755", "N755UP", operational=""),
-            now=datetime(2026, 8, 8, 7, 0),
-        )
-        db.session.commit()
-
-        mission = db.session.get(SortDateMission, mission.id)
-        self.assertIsNone(mission.actual_block_out_datetime_utc)
-        self.assertEqual(mission.departure_status, "cancelled")
+        for value in ("", "01:45"):
+            self._apply_departures(
+                self._outbound(4, "755", "N755UP", operational=value),
+                now=datetime(2026, 8, 8, 7, 0),
+            )
+            db.session.commit()
+            self.assertEqual(mission.actual_block_out_datetime_utc, datetime(2026, 8, 8, 6, 35))
+            self.assertEqual(mission.departure_status, "cancelled")
 
     def test_real_downstream_departure_statuses_are_not_downgraded(self):
         statuses = (

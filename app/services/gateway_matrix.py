@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import current_app, has_request_context, request
@@ -309,19 +309,40 @@ def operation_is_active_at(operation, local_now, gateway=None):
     return bool(start_local and end_local and start_local <= local_now < end_local)
 
 
-def sort_lookup_window_for_operation(operation, gateway=None, *, require_configured=False):
+def sort_lookup_window_for_operation(operation, gateway=None):
     sort_setting = _sort_timeline_sort_setting(gateway or operation.gateway, operation.sort_name)
     start_time = sort_setting.sort_window_start_local if sort_setting else None
     end_time = sort_setting.sort_window_end_local if sort_setting else None
-    if require_configured and (not start_time or not end_time or start_time == end_time):
-        return None, None
     start_time = start_time or time(0, 0)
     end_time = end_time or time(23, 59)
-    start_local = datetime.combine(operation.sort_date, start_time)
-    end_local = datetime.combine(operation.sort_date, end_time)
+    return _sort_window_for_date(operation.sort_date, start_time, end_time)
+
+
+def _sort_window_for_date(sort_date, start_time, end_time):
+    start_local = datetime.combine(sort_date, start_time)
+    end_local = datetime.combine(sort_date, end_time)
     if end_local <= start_local:
         end_local += timedelta(days=1)
     return start_local, end_local
+
+
+def configured_sort_window_utc(gateway, sort_date, sort_name, zone, *, sort_setting=None):
+    """Explicit Sort Timeline hours, with no fallback for ambiguous configuration."""
+    setting = sort_setting or _sort_timeline_sort_setting(gateway, sort_name)
+    start_time = getattr(setting, "sort_window_start_local", None)
+    end_time = getattr(setting, "sort_window_end_local", None)
+    if not start_time or not end_time or start_time == end_time:
+        return None, None
+    start, end = _sort_window_for_date(sort_date, start_time, end_time)
+    start_utc = start.replace(tzinfo=zone).astimezone(timezone.utc)
+    end_utc = end.replace(tzinfo=zone).astimezone(timezone.utc)
+    if (
+        start_utc >= end_utc
+        or start_utc.astimezone(zone).replace(tzinfo=None) != start
+        or end_utc.astimezone(zone).replace(tzinfo=None) != end
+    ):
+        return None, None
+    return start_utc, end_utc
 
 
 def ops_window_for_operation(operation, gateway=None):

@@ -117,7 +117,7 @@ def _performance(missions, *, arrival):
         row = dict(mission_id=mission.id, flight=flight_identity(mission.flight_number),
                    notes=[note.text for note in mission.neorain_mission_notes])
         if mission_cancelled(mission):
-            cancelled.append(row)
+            cancelled.append({**row, "flight": mission.flight_number})
             continue
         minutes = completed_variance_minutes(mission) if mission.id in eligible_ids else None
         row['delays'] = [dict(code=delay.code, minutes=delay.minutes, notes=delay.notes or '')

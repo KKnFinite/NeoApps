@@ -121,6 +121,9 @@ class RainrockDashboardBrowserTest(TestCase):
                     expect(page.locator('[data-field-status="note_1"]')).to_have_text('')
                     note.fill(values['note_1']);page.locator('h1').click()
                     expect(page.locator('[data-rainrock-save-status]')).to_have_text('Auto-saves')
+                    # Live updates were exercised above. Keep their DOM replacement
+                    # from detaching table nodes during browser geometry assertions.
+                    page.route("**/neorain/rainrock/state?*automatic=1", lambda route: route.fulfill(status=204))
                     for width,height in ((1920,1080),(1440,900),(390,844),(375,568)):
                         page.set_viewport_size({'width':width,'height':height});assert_layout(page,width);screenshot(page,str(width))
                         if width<700:
@@ -129,6 +132,7 @@ class RainrockDashboardBrowserTest(TestCase):
                                 self.assertTrue(region.evaluate('e=>{const c=e.querySelector("tbody tr td:last-child").getBoundingClientRect(),r=e.getBoundingClientRect();return c.right<=r.right+1&&c.left>=r.left-1;}'))
                             screenshot(page,str(width)+'-delays')
                             page.locator('.rainrock-table-scroll').evaluate_all('es=>es.forEach(e=>e.scrollLeft=0)')
+                    page.unroute("**/neorain/rainrock/state?*automatic=1")
                     with page.expect_download(timeout=20000) as d:page.locator('[data-rainrock-download]').click()
                     mobile_path=EVIDENCE/f'{engine}-mobile-export.png';d.value.save_as(mobile_path)
                     with Image.open(mobile_path) as img:

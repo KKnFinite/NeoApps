@@ -52,9 +52,9 @@ from app.services.live_collaboration import entity_version
 from app.services.memory_diagnostics import memory_diagnostics
 from app.services.neostaffing import attendance_operation_department_counts
 from app.services.gateway_matrix import (
+    configured_sort_window_utc,
     current_gateway_local_datetime,
     gateway_timezone,
-    sort_lookup_window_for_operation,
 )
 from app.services.neorain_performance import completed_variance_minutes, eligible_for_performance, late_inclusion
 from app.services.operation_scope import current_operational_sort_operation
@@ -460,20 +460,12 @@ def neorain_refresh_status(gateway, operation, *, is_current):
     }
     if operation is None or not is_current or operation.archived_at_utc is not None:
         return status
-    start, end = sort_lookup_window_for_operation(operation, gateway, require_configured=True)
-    if start is None or end is None:
-        return status
     try:
         zone = ZoneInfo(gateway_timezone(gateway))
-    except ZoneInfoNotFoundError:
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
         return status
-
-    start_utc = start.replace(tzinfo=zone).astimezone(timezone.utc)
-    end_utc = end.replace(tzinfo=zone).astimezone(timezone.utc)
-    if (
-        start_utc.astimezone(zone).replace(tzinfo=None) != start
-        or end_utc.astimezone(zone).replace(tzinfo=None) != end
-    ):
+    start_utc, end_utc = configured_sort_window_utc(gateway, operation.sort_date, operation.sort_name, zone)
+    if start_utc is None:
         return status
     now = current_gateway_local_datetime(gateway).replace(tzinfo=zone).astimezone(timezone.utc)
     if start_utc <= now < end_utc:

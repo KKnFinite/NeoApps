@@ -1,3 +1,4 @@
+from datetime import date, datetime
 import re
 import unittest
 from unittest.mock import patch
@@ -17,6 +18,7 @@ from app.services.google_rain_integration_mode import (
 )
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
+from tests.test_neorain_sort_refresh import configure_sort_window
 
 
 class NeoRainSystemSettingsTest(unittest.TestCase):
@@ -38,6 +40,8 @@ class NeoRainSystemSettingsTest(unittest.TestCase):
         self.gateway = ensure_default_gateway_and_nodes()
         ensure_default_permission_rules()
         db.session.commit()
+        configure_sort_window(self.gateway, date(2026, 11, 19))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 11, 19, 20, 59)
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -75,6 +79,19 @@ class NeoRainSystemSettingsTest(unittest.TestCase):
         )
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(rain_integration_mode(self.gateway, "night"), GOOGLE_PRIMARY)
+
+    def test_grandmaster_cannot_change_mode_through_either_url_during_sort(self):
+        self._login("grandmaster")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 11, 20, 0, 30)
+        for url in ("/motherbrain/system-settings", "/motherbrain/system-settings/integrations"):
+            with self.subTest(url=url):
+                with patch("app.services.google_motherbrain_live_poll_execution.google_motherbrain_live_poll_preflight",
+                           return_value={"status": "eligible"}):
+                    response = self.client.post(url, data={"action": "set_neorain_mode", "integration_mode": NEO_ONLY})
+                self.assertEqual(response.status_code, 400)
+                self.assertNotIn(b"data-google-live-poll-heartbeat", response.data)
+                self.assertIn(b"cannot change during configured Sort operating hours", response.data)
+                self.assertEqual(rain_integration_mode(self.gateway, "night"), GOOGLE_PRIMARY)
 
     def test_transition_failure_is_safe_and_keeps_previous_mode(self):
         self._login("grandmaster")

@@ -1,34 +1,26 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 import unittest
 from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import Gateway, SortDateMission, SortDateOperation, NeoRainMissionOverride, User
+from app.models import Gateway, GatewaySortMatrix, SortDateMission, SortDateOperation
 from app.services.google_rain_integration_mode import (
-    GOOGLE_PRIMARY,
-    NEO_ONLY,
-    NEO_PRIMARY_GOOGLE_MIRROR,
-    RainIntegrationTransitionError,
-    change_rain_integration_mode,
-    rain_integration_mode,
-    set_rain_integration_mode,
+    GOOGLE_PRIMARY, NEO_ONLY, NEO_PRIMARY_GOOGLE_MIRROR,
+    RainIntegrationTransitionError, RainIntegrationWindowError,
+    change_rain_integration_mode, rain_integration_mode, set_rain_integration_mode,
 )
+from tests.test_neorain_sort_refresh import configure_sort_window
 
 
 class GoogleRainIntegrationModeTransitionTest(unittest.TestCase):
     def setUp(self):
-        config = type(
-            "GoogleRainIntegrationModeTransitionTestConfig",
-            (),
-            {
-                "SECRET_KEY": "google-rain-transition-test-secret",
-                "TESTING": True,
-                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-                "SQLALCHEMY_TRACK_MODIFICATIONS": False,
-                "DEFAULT_GATEWAY_TIMEZONE": "America/Chicago",
-            },
-        )
+        config = type("TransitionConfig", (), {
+            "SECRET_KEY": "test",
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "DEFAULT_GATEWAY_TIMEZONE": "America/Chicago",
+        })
         self.app = create_app(config)
         self.context = self.app.app_context()
         self.context.push()
@@ -37,278 +29,119 @@ class GoogleRainIntegrationModeTransitionTest(unittest.TestCase):
         db.session.add(self.gateway)
         db.session.flush()
         self.operation = SortDateOperation(
-            gateway_id=self.gateway.id,
-            gateway_code=self.gateway.code,
-            sort_name="night",
-            sort_date=date(2026, 8, 29),
+            gateway_id=self.gateway.id, gateway_code="RFD", sort_name="night", sort_date=date(2026, 8, 29),
         )
         db.session.add(self.operation)
         db.session.flush()
-        self.mission = SortDateMission(
-            sort_date_operation_id=self.operation.id,
-            sort_date=self.operation.sort_date,
-            gateway_code=self.gateway.code,
-            sort_name=self.operation.sort_name,
-            mission_type="departure",
-            mission_source="master",
-            flight_number="UPS0910",
-            origin="RFD",
-            destination="LAX",
-            timezone="America/Chicago",
-            planned_datetime_local=datetime(2026, 8, 30, 2, 24),
-            departure_status="scheduled",
-        )
-        db.session.add(self.mission)
-        db.session.commit()
+        db.session.add(SortDateMission(
+            sort_date_operation_id=self.operation.id, sort_date=self.operation.sort_date, gateway_code="RFD",
+            sort_name="night", mission_type="departure", mission_source="master", flight_number="UPS0910",
+            origin="RFD", destination="LAX", timezone="America/Chicago", departure_status="departed",
+            ramp_load_completed_at_utc=datetime(2026, 8, 30, 7, 25), ramp_load_completed_source="neorain",
+            actual_block_out_datetime_utc=datetime(2026, 8, 30, 8, 5), actual_block_out_source="neorain",
+        ))
+        self.night, _ = configure_sort_window(self.gateway, self.operation.sort_date)
+        self.now(datetime(2026, 8, 29, 20, 59))
+        for target, attr in (
+            ("app.services.google_rain_sheets.read_google_rain_outbound_milestones", "reader"),
+            ("app.services.google_rain_sheets.write_google_rain_departure_milestone", "writer"),
+            ("app.services.google_rain_live_milestones.apply_google_rain_departure_milestones", "applier"),
+        ):
+            context = patch(target, side_effect=AssertionError("A mode change cannot call Google or apply milestones."))
+            setattr(self, attr, context.start())
+            self.addCleanup(context.stop)
 
     def tearDown(self):
+        self.reader.assert_not_called()
+        self.writer.assert_not_called()
+        self.applier.assert_not_called()
         db.session.remove()
         db.drop_all()
         self.context.pop()
 
-    def test_google_primary_to_neo_imports_before_switching(self):
-        self.mission.elmac_completed_at_utc = datetime(2026, 8, 30, 6, 0)
-        self.mission.elmac_completed_source = "google_rain"
-        db.session.commit()
+    def now(self, when):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = when
 
-        with self._current_operation(), patch(
-            "app.services.google_rain_sheets.read_google_rain_outbound_milestones",
-            return_value=[
-                self._row(
-                    ramp_load_complete="2:22",
-                    crew_load_complete="2:24",
-                    block="2:29",
-                    no_return="TRUE",
-                )
-            ],
-        ) as reader:
-            status = change_rain_integration_mode(
-                self.gateway,
-                "night",
-                NEO_PRIMARY_GOOGLE_MIRROR,
-            )
+    def change(self, mode):
+        return change_rain_integration_mode(self.gateway, "night", mode)
 
-        self.assertEqual(rain_integration_mode(self.gateway, "night"), NEO_PRIMARY_GOOGLE_MIRROR)
-        self.assertTrue(status["handoff_performed"])
-        self.assertEqual(status["handoff_direction"], "google_to_neo")
-        reader.assert_called_once_with()
-        self.assertEqual(self.mission.ramp_load_completed_source, "google_rain")
-        self.assertEqual(self.mission.crew_load_completed_source, "google_rain")
-        self.assertEqual(self.mission.actual_block_out_source, "google_rain")
-        self.assertEqual(self.mission.departure_status, "departed")
-        self.assertEqual(self.mission.departure_status_source, "google_rain")
-        self.assertEqual(self.mission.elmac_completed_at_utc, datetime(2026, 8, 30, 6, 0))
-        self.assertEqual(self.mission.elmac_completed_source, "google_rain")
+    def facts(self):
+        table = SortDateMission.__table__
+        return db.session.execute(table.select().order_by(table.c.id)).all()
 
-    def test_failed_google_to_neo_import_rolls_back_state_and_mode(self):
-        original_timestamp = self.mission.ramp_load_completed_at_utc
-
-        def failing_apply(*_args, **_kwargs):
-            self.mission.ramp_load_completed_at_utc = datetime(2026, 8, 30, 7, 0)
-            self.mission.ramp_load_completed_source = "google_rain"
-            db.session.flush()
-            raise RuntimeError("apply failed")
-
-        with self._current_operation(), patch(
-            "app.services.google_rain_sheets.read_google_rain_outbound_milestones",
-            return_value=[self._row(ramp_load_complete="2:00")],
-        ), patch(
-            "app.services.google_rain_live_milestones.apply_google_rain_departure_milestones",
-            side_effect=failing_apply,
+    def test_opening_midnight_and_last_minute_block_every_authority_change(self):
+        before = self.facts()
+        for current, new in (
+            (GOOGLE_PRIMARY, NEO_ONLY), (NEO_ONLY, GOOGLE_PRIMARY),
+            (NEO_ONLY, NEO_PRIMARY_GOOGLE_MIRROR), (NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY),
         ):
-            with self.assertRaises(RainIntegrationTransitionError):
-                change_rain_integration_mode(self.gateway, "night", NEO_ONLY)
+            set_rain_integration_mode(self.gateway, "night", current)
+            db.session.commit()
+            for now in (datetime(2026, 8, 29, 21), datetime(2026, 8, 30), datetime(2026, 8, 30, 4, 59)):
+                with self.subTest(current=current, new=new, now=now):
+                    self.now(now)
+                    with patch("app.services.google_rain_integration_mode.ensure_rain_integration_setting") as initializer:
+                        with self.assertRaisesRegex(RainIntegrationWindowError, "Sort operating hours"):
+                            self.change(new)
+                        initializer.assert_not_called()
+                    self.assertEqual(rain_integration_mode(self.gateway, "night"), current)
+                    self.assertEqual(self.facts(), before)
 
-        db.session.expire_all()
-        mission = db.session.get(SortDateMission, self.mission.id)
-        self.assertEqual(mission.ramp_load_completed_at_utc, original_timestamp)
-        self.assertEqual(mission.ramp_load_completed_source, "unknown")
+    def test_wider_ops_and_planning_do_not_block_safe_gap_and_rollback(self):
+        before = self.facts()
+        for when, mode in (
+            (datetime(2026, 8, 29, 20, 59), NEO_ONLY),
+            (datetime(2026, 8, 30, 5), GOOGLE_PRIMARY),
+            (datetime(2026, 8, 30, 5, 1), NEO_PRIMARY_GOOGLE_MIRROR),
+            (datetime(2026, 8, 30, 6), NEO_ONLY),
+        ):
+            self.now(when)
+            status = self.change(mode)
+            self.assertEqual(status["mode"], mode)
+            self.assertFalse(status["handoff_performed"])
+            self.assertEqual(self.facts(), before)
+
+    def test_missing_partial_equal_and_nonexistent_dst_boundaries_fail_closed(self):
+        for start, end in ((None, time(5)), (time(21), None), (time(21), time(21))):
+            self.night.sort_window_start_local, self.night.sort_window_end_local = start, end
+            db.session.commit()
+            with self.assertRaisesRegex(RainIntegrationWindowError, "valid operating hours"):
+                self.change(NEO_ONLY)
+        self.now(datetime(2026, 3, 8, 8))
+        self.night.sort_window_start_local, self.night.sort_window_end_local = time(2, 30), time(5)
+        db.session.commit()
+        with self.assertRaisesRegex(RainIntegrationWindowError, "valid operating hours"):
+            self.change(NEO_ONLY)
+        db.session.delete(self.night)
+        db.session.commit()
+        with self.assertRaisesRegex(RainIntegrationWindowError, "valid operating hours"):
+            self.change(NEO_ONLY)
         self.assertEqual(rain_integration_mode(self.gateway, "night"), GOOGLE_PRIMARY)
 
-    def test_neo_modes_switch_without_google_io(self):
-        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
-        with patch(
-            "app.services.google_rain_integration_mode.current_operational_sort_operation"
-        ) as current_operation, patch(
-            "app.services.google_rain_sheets.read_google_rain_outbound_milestones"
-        ) as reader, patch(
-            "app.services.google_rain_live_milestones.apply_google_rain_departure_milestones"
-        ) as applier, patch(
-            "app.services.google_rain_sheets.write_google_rain_departure_milestone"
-        ) as writer:
-            first = change_rain_integration_mode(self.gateway, "night", NEO_ONLY)
-            second = change_rain_integration_mode(
-                self.gateway,
-                "night",
-                NEO_PRIMARY_GOOGLE_MIRROR,
-            )
+    def test_active_schedule_without_an_operation_is_still_protected(self):
+        self.now(datetime(2026, 8, 30, 13))
+        day = next(setting for setting in self.night.timeline_settings.sort_settings if setting.sort_name == "day")
+        day.sort_window_start_local, day.sort_window_end_local = time(10), time(15)
+        db.session.add(GatewaySortMatrix(gateway_id=self.gateway.id, gateway_code="RFD", day_of_week="sunday",
+                                        sort_name="day", is_active=True))
+        db.session.commit()
+        with self.assertRaisesRegex(RainIntegrationWindowError, "Sort operating hours"):
+            self.change(NEO_ONLY)
+        self.assertEqual(SortDateOperation.query.count(), 1)
 
-        self.assertFalse(first["handoff_performed"])
-        self.assertFalse(second["handoff_performed"])
-        current_operation.assert_not_called()
-        reader.assert_not_called()
-        applier.assert_not_called()
-        writer.assert_not_called()
-        self.assertEqual(rain_integration_mode(self.gateway, "night"), NEO_PRIMARY_GOOGLE_MIRROR)
-
-    def test_same_mode_is_a_read_only_no_op(self):
-        with patch(
-            "app.services.google_rain_integration_mode.current_operational_sort_operation"
-        ) as current_operation, patch(
-            "app.services.google_rain_sheets.read_google_rain_outbound_milestones"
-        ) as reader:
-            status = change_rain_integration_mode(
-                self.gateway,
-                "night",
-                GOOGLE_PRIMARY,
-            )
-
+    def test_same_mode_in_sort_is_a_read_only_no_op(self):
+        self.now(datetime(2026, 8, 29, 21))
+        status = self.change(GOOGLE_PRIMARY)
         self.assertEqual(status["mode"], GOOGLE_PRIMARY)
         self.assertFalse(status["persisted"])
-        self.assertFalse(status["handoff_performed"])
-        current_operation.assert_not_called()
-        reader.assert_not_called()
 
-    def test_neo_to_google_replaces_and_clears_neorain_owned_values(self):
-        self._set_mode(NEO_ONLY)
-        self.mission.ramp_load_completed_at_utc = datetime(2026, 8, 30, 6, 50)
-        self.mission.ramp_load_completed_source = "neorain"
-        self.mission.crew_load_completed_at_utc = datetime(2026, 8, 30, 7, 0)
-        self.mission.crew_load_completed_source = "neorain"
-        self.mission.actual_block_out_datetime_utc = datetime(2026, 8, 30, 7, 10)
-        self.mission.actual_block_out_source = "neorain"
-        self.mission.departure_status = "departed"
-        self.mission.departure_status_source = "neorain"
-        db.session.commit()
-
-        with self._current_operation(), patch(
-            "app.services.google_rain_sheets.read_google_rain_outbound_milestones",
-            return_value=[
-                self._row(
-                    ramp_load_complete="2:30",
-                    crew_load_complete="",
-                    block="",
-                    no_return="FALSE",
-                )
-            ],
-        ):
-            status = change_rain_integration_mode(
-                self.gateway,
-                "night",
-                GOOGLE_PRIMARY,
-            )
-
-        self.assertEqual(status["handoff_direction"], "neo_to_google")
-        self.assertEqual(self.mission.ramp_load_completed_at_utc, datetime(2026, 8, 30, 7, 30))
-        self.assertEqual(self.mission.ramp_load_completed_source, "google_rain")
-        self.assertIsNone(self.mission.crew_load_completed_at_utc)
-        self.assertEqual(self.mission.crew_load_completed_source, "unknown")
-        self.assertIsNone(self.mission.actual_block_out_datetime_utc)
-        self.assertEqual(self.mission.actual_block_out_source, "unknown")
-        self.assertEqual(self.mission.departure_status, "ramp_load_complete")
-        self.assertEqual(self.mission.departure_status_source, "unknown")
+    def test_failed_commit_rolls_back_complete_transaction_and_mode(self):
+        before = self.facts()
+        def failing_commit():
+            db.session.flush()
+            raise RuntimeError("private exception")
+        with patch.object(db.session, "commit", side_effect=failing_commit):
+            with self.assertRaisesRegex(RainIntegrationTransitionError, "previous mode remains active"):
+                self.change(NEO_ONLY)
         self.assertEqual(rain_integration_mode(self.gateway, "night"), GOOGLE_PRIMARY)
-
-    def test_reverse_handoff_preserves_foreign_owned_values(self):
-        self._set_mode(NEO_ONLY)
-        manual_time = datetime(2026, 8, 30, 7, 10)
-        self.mission.ramp_load_completed_at_utc = manual_time
-        self.mission.ramp_load_completed_source = "manual"
-        self.mission.crew_load_completed_at_utc = datetime(2026, 8, 30, 7, 0)
-        self.mission.crew_load_completed_source = "neorain"
-        self.mission.actual_block_out_datetime_utc = manual_time
-        self.mission.actual_block_out_source = "manual"
-        self.mission.departure_status = "departed"
-        self.mission.departure_status_source = "manual"
-        # Current authority is an explicit operator override, not a legacy
-        # source-string label. Preserve that same intentional Neo ownership.
-        actor = User(username='handoff-fixture-operator', role='grandmaster', password_hash='fixture-no-login')
-        db.session.add(actor)
-        db.session.flush()
-        for field, timestamp_attr, source_attr in (
-            ('ramp_load_complete', 'ramp_load_completed_at_utc', 'ramp_load_completed_source'),
-            ('official_block_out', 'actual_block_out_datetime_utc', 'actual_block_out_source'),
-        ):
-            db.session.add(NeoRainMissionOverride(gateway_id=self.gateway.id,
-                sort_date_operation_id=self.operation.id, sort_date_mission_id=self.mission.id,
-                field=field, active=True, generation=1, modified_by_user_id=actor.id,
-                value={timestamp_attr: manual_time.isoformat(), source_attr: 'manual'},
-                upstream={}, sync_status='NEO_ONLY'))
-        db.session.commit()
-
-        with self._current_operation(), patch(
-            "app.services.google_rain_sheets.read_google_rain_outbound_milestones",
-            return_value=[
-                self._row(
-                    ramp_load_complete="",
-                    crew_load_complete="",
-                    block="",
-                    no_return="FALSE",
-                )
-            ],
-        ):
-            change_rain_integration_mode(self.gateway, "night", GOOGLE_PRIMARY)
-
-        self.assertEqual(self.mission.ramp_load_completed_at_utc, manual_time)
-        self.assertEqual(self.mission.ramp_load_completed_source, "manual")
-        self.assertIsNone(self.mission.crew_load_completed_at_utc)
-        self.assertEqual(self.mission.actual_block_out_datetime_utc, manual_time)
-        self.assertEqual(self.mission.actual_block_out_source, "manual")
-        self.assertEqual(self.mission.departure_status, "departed")
-        self.assertEqual(self.mission.departure_status_source, "manual")
-
-    def test_failed_reverse_handoff_keeps_previous_neo_mode(self):
-        self._set_mode(NEO_ONLY)
-        with self._current_operation(), patch(
-            "app.services.google_rain_sheets.read_google_rain_outbound_milestones",
-            side_effect=RuntimeError("read failed"),
-        ):
-            with self.assertRaises(RainIntegrationTransitionError):
-                change_rain_integration_mode(
-                    self.gateway,
-                    "night",
-                    GOOGLE_PRIMARY,
-                )
-
-        self.assertEqual(rain_integration_mode(self.gateway, "night"), NEO_ONLY)
-
-    def test_no_current_operation_persists_mode_without_google_or_creation(self):
-        operation_count = SortDateOperation.query.count()
-        with patch(
-            "app.services.google_rain_integration_mode.current_operational_sort_operation",
-            return_value=None,
-        ), patch(
-            "app.services.google_rain_sheets.read_google_rain_outbound_milestones"
-        ) as reader, patch(
-            "app.services.google_rain_live_milestones.apply_google_rain_departure_milestones"
-        ) as applier:
-            status = change_rain_integration_mode(self.gateway, "night", NEO_ONLY)
-
-        self.assertEqual(status["mode"], NEO_ONLY)
-        self.assertFalse(status["handoff_performed"])
-        reader.assert_not_called()
-        applier.assert_not_called()
-        self.assertEqual(SortDateOperation.query.count(), operation_count)
-
-    def _set_mode(self, mode):
-        set_rain_integration_mode(self.gateway, "night", mode)
-        db.session.commit()
-
-    def _current_operation(self):
-        return patch(
-            "app.services.google_rain_integration_mode.current_operational_sort_operation",
-            return_value=self.operation,
-        )
-
-    def _row(self, **values):
-        return {
-            "sheet_row": 3,
-            "flight_number": self.mission.flight_number,
-            "destination": self.mission.destination,
-            "std": "2:24",
-            **values,
-        }
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(self.facts(), before)

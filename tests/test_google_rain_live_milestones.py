@@ -399,8 +399,12 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertIsNone(mission.crew_load_completed_at_utc)
         self.assertEqual(mission.departure_status, "blocked_out")
 
-    def test_cancelled_mission_is_not_uncancelled(self):
+    def test_cancelled_mission_retains_original_milestone_evidence(self):
         mission = self._mission("UPS0910", "LAX", status="cancelled")
+        prior = datetime(2026, 8, 11, 7, 25)
+        mission.actual_block_out_datetime_utc = prior
+        mission.actual_block_out_source = "neorain"
+        db.session.commit()
 
         self._apply(
             self._row(
@@ -412,7 +416,10 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         )
 
         self.assertEqual(mission.departure_status, "cancelled")
-        self.assertEqual(mission.actual_block_out_source, GOOGLE_RAIN_SOURCE)
+        self.assertEqual(mission.actual_block_out_datetime_utc, prior)
+        self.assertEqual(mission.actual_block_out_source, "neorain")
+        self.assertIsNone(mission.ramp_load_completed_at_utc)
+        self.assertIsNone(mission.crew_load_completed_at_utc)
 
     def _apply(self, *rows):
         result = apply_google_rain_departure_milestones(self.operation, rows=rows)

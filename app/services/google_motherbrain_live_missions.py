@@ -60,6 +60,8 @@ GOOGLE_ARRIVAL_STATUS_MAP = {
     "ARRIVED": "arrived",
     "CNL": "cancelled",
     "CANCELLED": "cancelled",
+    "CANCELED": "cancelled",
+    "CANX": "cancelled",
 }
 GOOGLE_SPECIAL_ARRIVAL_STATUSES = {"HERE", "HOT", "SPARE"}
 GOOGLE_NATIVE_BLOCK_OUT_SOURCES = {
@@ -277,11 +279,6 @@ def apply_google_motherbrain_live_mission_batch(
 def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, missions, flights, opposite_flights):
     if not row["sheet_row"]:
         raise GoogleMotherBrainMissionError("Google sheet row must be a positive integer.")
-    if not row["effective_tail"]:
-        if row["raw_effective_tail"]:
-            raise GoogleMotherBrainMissionError("Effective tail is invalid.")
-        raise GoogleMotherBrainMissionError("Effective tail is required.")
-
     link = links.get((row["source_sheet"], row["sheet_row"]))
     linked = _linked_mission(link, missions)
     mission = linked
@@ -303,6 +300,20 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
               and not is_hot_placeholder_mission(linked)):
             # A numbered outbound moving into an occupied sheet row is a separate flight.
             mission = None
+
+    explicit_inbound_cancel = mission_type == "arrival" and GOOGLE_ARRIVAL_STATUS_MAP.get(row["status_raw"]) == "cancelled"
+    if explicit_inbound_cancel:
+        if len(matches) > 1:
+            raise GoogleMotherBrainMissionError("Multiple current-sort missions share this flight number.")
+        if matches:
+            return _apply_existing_arrival_cancellation(operation, matches[0], link, row, applied_at)
+        # A moved sheet row cannot cancel or rename the mission previously linked to it.
+        mission = None
+
+    if not row["effective_tail"]:
+        if row["raw_effective_tail"]:
+            raise GoogleMotherBrainMissionError("Effective tail is invalid.")
+        raise GoogleMotherBrainMissionError("Effective tail is required.")
 
     opposite = opposite_flights.get(flight_identity(row["flight_number"]),[])
     if not matches and opposite:
@@ -390,6 +401,8 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
             lock_current_departure_for_google_import(operation, mission)
         if mission.master_retirement:
             raise GoogleMotherBrainMissionError("Mission retired by Master Schedule.")
+        if mission_type == "departure" and mission.departure_status == "cancelled":
+            return _record_status_only_row(operation, mission, link, row, applied_at, "Cancelled departure preserved.")
         if is_hot_placeholder_mission(mission):
             mission.mission_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
         mission.flight_number = row["flight_number"]
@@ -445,6 +458,32 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
         "pending_tail_number": link.pending_tail_number,
         "rebound_from_mission_id": linked.id if linked is not None and linked.id != mission.id else None,
     }, link, mission
+
+
+def _apply_existing_arrival_cancellation(operation, mission, link, row, applied_at):
+    mission = SortDateMission.query.filter_by(
+        id=mission.id, sort_date_operation_id=operation.id, mission_type="arrival",
+    ).populate_existing().with_for_update().one_or_none()
+    if mission is None or flight_identity(mission.flight_number) != flight_identity(row["flight_number"]):
+        raise GoogleMotherBrainMissionError("Arrival identity changed during Google cancellation; retry with fresh rows.")
+    if mission.master_retirement:
+        raise GoogleMotherBrainMissionError("Mission retired by Master Schedule.")
+    mission.arrival_status = _arrival_status_after_update(mission.arrival_status, "cancelled")
+    reason = "Unloaded arrival preserved." if mission.arrival_status == "unloaded" else "Explicit arrival cancellation applied."
+    return _record_status_only_row(operation, mission, link, row, applied_at, reason)
+
+
+def _record_status_only_row(operation, mission, link, row, applied_at, reason):
+    previous_id = link.sort_date_mission_id if link else None
+    link = link or _new_link(operation, mission.mission_type, row)
+    link.sort_date_mission = mission
+    _update_link_snapshot(link, row, applied_at)
+    db.session.flush()
+    return dict(status="applied", reason=reason, mission_id=mission.id, correlation_id=link.id,
+                created=False, sheet=row["source_sheet"], sheet_row=row["sheet_row"],
+                flight_number=mission.flight_number, warnings=[], parking=None,
+                pending_tail_number=link.pending_tail_number,
+                rebound_from_mission_id=previous_id if previous_id != mission.id else None), link, mission
 
 
 def _apply_spare_row(
@@ -594,6 +633,12 @@ def _apply_inbound_state(
         return warnings
 
     current_status = str(mission.arrival_status or "scheduled").strip().lower()
+    if (
+        proposed_status == "arrived" and current_status not in {"arrived", "unloaded"}
+        and operational_utc is None and mission.actual_block_in_datetime_utc is not None
+    ):
+        warnings.append("Arrival completion ignored without a new Block-In; existing evidence preserved.")
+        return warnings
     mission.arrival_status = _arrival_status_after_update(current_status, proposed_status)
 
     if proposed_status == "cancelled":
@@ -845,7 +890,10 @@ def _normalize_live_row(supplied_row, mission_type, batch_index):
     raw_parking = row.get("parking", row.get("current_parking", row.get("S", "")))
     raw_planned = row.get("planned_time", row.get("scheduled_time", row.get("T", "")))
     raw_operational = row.get("operational_time", row.get("U", ""))
-    raw_status = row.get("status", row.get("W", "")) if mission_type == "arrival" else ""
+    raw_status = str(row.get("status", row.get("W", "")) or "").strip().upper() if mission_type == "arrival" else ""
+    inbound_cancel = GOOGLE_ARRIVAL_STATUS_MAP.get(raw_status) == "cancelled"
+    if inbound_cancel and GOOGLE_ARRIVAL_STATUS_MAP.get(raw_tail_text.upper()) == "cancelled":
+        raw_tail_text = ""
     airport_text = str(raw_airport or "").strip().upper()
     destination_mode = "normal"
     if mission_type == "departure":
@@ -859,7 +907,7 @@ def _normalize_live_row(supplied_row, mission_type, batch_index):
             )
 
     airport = _normalize_airport(airport_text)
-    if airport_text and destination_mode == "normal" and not airport:
+    if airport_text and destination_mode == "normal" and not airport and not inbound_cancel:
         raise GoogleMotherBrainMissionError(
             f"{'Origin' if mission_type == 'arrival' else 'Destination'} must be three letters."
         )
@@ -877,7 +925,7 @@ def _normalize_live_row(supplied_row, mission_type, batch_index):
         "parking_value": str(raw_parking or "").strip(),
         "planned_time": raw_planned,
         "operational_time": raw_operational,
-        "status_raw": str(raw_status or "").strip().upper(),
+        "status_raw": raw_status,
         "swap_flight_number": normalize_alp_flight_number(
             row.get("swap_flight_number", row.get("W", ""))
         ) if mission_type == "departure" else None,

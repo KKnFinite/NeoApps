@@ -203,6 +203,7 @@ from app.services.google_motherbrain_live_poll_health import (
 )
 from app.services.google_rain_integration_mode import (
     RainIntegrationTransitionError,
+    RainIntegrationWindowError,
     change_rain_integration_mode,
     rain_integration_status,
 )
@@ -613,13 +614,14 @@ def _handle_integration_settings(gateway, can_edit):
                 )
             else:
                 raise ValueError("Choose a valid System Settings action.")
-        except RainIntegrationTransitionError:
+        except RainIntegrationTransitionError as error:
             db.session.rollback()
             flash(
-                "NeoRain authority change failed; the previous mode remains active.",
+                str(error) if isinstance(error, RainIntegrationWindowError)
+                else "NeoRain authority change failed; the previous mode remains active.",
                 "error",
             )
-            return _render_integration_settings(gateway, can_edit=True), 400
+            return _render_integration_settings(gateway, can_edit=True, suppress_live_poll=True), 400
         except (NeoSektorGoogleError, ValueError) as error:
             db.session.rollback()
             flash(str(error), "error")
@@ -627,8 +629,9 @@ def _handle_integration_settings(gateway, can_edit):
 
         return redirect(url_for("neomotherbrain.integration_settings"))
 
-def _render_integration_settings(gateway, can_edit):
+def _render_integration_settings(gateway, can_edit, *, suppress_live_poll=False):
     neosektor_shared_authority = neosektor_shared_authority_status(gateway)
+    live_poll_context = {"uses_google_live_poll_heartbeat": False} if suppress_live_poll else {}
     return render_template(
         "neomotherbrain/system_settings.html",
         gateway=gateway,
@@ -642,6 +645,7 @@ def _render_integration_settings(gateway, can_edit):
             "night",
         ),
         google_live_poll_health=google_motherbrain_live_poll_health(gateway),
+        **live_poll_context,
     )
 
 

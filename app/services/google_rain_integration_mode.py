@@ -1,11 +1,19 @@
 """Gateway/sort authority for the NeoRain Google migration bundle."""
 
+from datetime import timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from flask import current_app, has_app_context
 
 from app.extensions import db
-from app.models import MotherBrainGoogleIntegrationSetting
+from app.models import Gateway, MotherBrainGoogleIntegrationSetting, SortDateOperation, SortTimelineSortSetting
 from app.services.access_control import get_current_gateway
-from app.services.operation_scope import current_operational_sort_operation
+from app.services.gateway_matrix import (
+    active_sorts_for_gateway_date,
+    configured_sort_window_utc,
+    current_gateway_local_datetime,
+    gateway_timezone,
+)
 
 
 GOOGLE_PRIMARY = "google_primary"
@@ -26,7 +34,11 @@ DEFAULT_RAIN_SORT = "night"
 
 
 class RainIntegrationTransitionError(RuntimeError):
-    """Safe failure from an atomic NeoRain authority handoff."""
+    """Safe failure from an atomic NeoRain authority change."""
+
+
+class RainIntegrationWindowError(RainIntegrationTransitionError):
+    """The schedule cannot establish an idle window for the requested change."""
 
 
 def rain_integration_mode(gateway=None, sort_name=None, *, setting=None):
@@ -98,102 +110,85 @@ def set_rain_integration_mode(gateway, sort_name, mode):
 
 
 def change_rain_integration_mode(gateway, sort_name, requested_mode):
-    """Perform a current-sort authority handoff, then persist its Rain mode."""
+    """Change future authority in a verified Sort gap without importing any data."""
     if gateway is None:
         raise RainIntegrationTransitionError("NeoRain gateway is unavailable.")
-    normalized_sort = _normalize_sort_name(sort_name)
+    sort_name = _normalize_sort_name(sort_name)
     target_mode = _validated_mode(requested_mode)
-    current_mode = rain_integration_mode(gateway, normalized_sort)
-    if current_mode == target_mode:
-        return _transition_status(
-            gateway,
-            normalized_sort,
-            handoff_performed=False,
-            handoff_direction=None,
-        )
-
-    neo_to_neo = (
-        current_mode in {NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY}
-        and target_mode in {NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY}
-    )
-    operation = None if neo_to_neo else current_operational_sort_operation(gateway)
-    if (
-        operation is not None
-        and _normalize_sort_name(operation.sort_name) != normalized_sort
-    ):
-        operation = None
-
-    handoff_direction = None
     try:
-        if operation is not None:
-            if current_mode == GOOGLE_PRIMARY:
-                handoff_direction = "google_to_neo"
-            elif target_mode == GOOGLE_PRIMARY:
-                handoff_direction = "neo_to_google"
-            _apply_current_google_rain_handoff(operation, handoff_direction)
-
-        set_rain_integration_mode(gateway, normalized_sort, target_mode)
-        db.session.commit()
+        with db.session.no_autoflush:
+            # Serialize even the first settings write, when there's no mode row to lock.
+            db.session.query(Gateway.id).filter_by(id=gateway.id).with_for_update().one()
+            setting = MotherBrainGoogleIntegrationSetting.query.filter_by(
+                gateway_id=gateway.id, sort_name=sort_name,
+            ).populate_existing().with_for_update().one_or_none()
+            current_mode = _normalized_mode(getattr(setting, "rain_integration_mode", None))
+            if current_mode != target_mode:
+                _require_sort_gap(gateway, sort_name)
+                setting = setting or ensure_rain_integration_setting(gateway, sort_name)
+                setting.rain_integration_mode = target_mode
+        if current_mode != target_mode:
+            db.session.commit()
+    except RainIntegrationTransitionError:
+        db.session.rollback()
+        raise
     except Exception as error:
         db.session.rollback()
         current_app.logger.warning(
-            "NeoRain authority handoff failed safely: gateway=%s sort=%s direction=%s error=%s",
-            gateway.code,
-            normalized_sort,
-            handoff_direction or "none",
-            type(error).__name__,
+            "NeoRain authority change failed: gateway=%s sort=%s error=%s",
+            gateway.code, sort_name, type(error).__name__,
         )
-        if isinstance(error, RainIntegrationTransitionError):
-            raise
         raise RainIntegrationTransitionError(
             "NeoRain authority could not be changed. The previous mode remains active."
         ) from error
 
-    return _transition_status(
-        gateway,
-        normalized_sort,
-        handoff_performed=operation is not None,
-        handoff_direction=handoff_direction,
-    )
+    return {
+        **rain_integration_status(gateway, sort_name),
+        "handoff_performed": False,
+        "handoff_direction": None,
+    }
+
+
+def _require_sort_gap(gateway, sort_name):
+    invalid = "NeoRain authority cannot change until the MotherBrain Sort Timeline has valid operating hours."
+    settings = SortTimelineSortSetting.query.filter_by(gateway_id=gateway.id).order_by(
+        SortTimelineSortSetting.id
+    ).populate_existing().with_for_update().all()
+    by_name = {row.sort_name: row for row in settings}
+    try:
+        zone = ZoneInfo(gateway_timezone(gateway))
+    except (ZoneInfoNotFoundError, ValueError, TypeError) as error:
+        raise RainIntegrationWindowError(invalid) from error
+    local_now = current_gateway_local_datetime(gateway)
+    recent_dates = (local_now.date() - timedelta(days=1), local_now.date())
+    # Fence the target's physical hours even before a scheduled/manual operation exists.
+    candidates = {(day, sort_name) for day in recent_dates}
+    for day in recent_dates:
+        candidates.update((day, name) for name in active_sorts_for_gateway_date(gateway, day))
+    existing = db.session.query(SortDateOperation.sort_date, SortDateOperation.sort_name).filter(
+        SortDateOperation.gateway_code == gateway.code,
+        SortDateOperation.sort_date.in_(recent_dates),
+        SortDateOperation.archived_at_utc.is_(None),
+    ).all()
+    candidates.update((day, name) for day, name in existing)
+    windows = []
+    for day, name in sorted(candidates):
+        setting = by_name.get(name)
+        if setting is None:
+            raise RainIntegrationWindowError(invalid)
+        start, end = configured_sort_window_utc(gateway, day, name, zone, sort_setting=setting)
+        if start is None:
+            raise RainIntegrationWindowError(invalid)
+        windows.append((start, end))
+    now = current_gateway_local_datetime(gateway).replace(tzinfo=zone).astimezone(timezone.utc)
+    if now.astimezone(zone).date() != local_now.date() or any(start <= now < end for start, end in windows):
+        raise RainIntegrationWindowError(
+            "NeoRain authority cannot change during configured Sort operating hours. Wait until the Sort closes."
+        )
 
 
 def rain_google_read_enabled(gateway=None, sort_name=None):
     return rain_integration_mode(gateway, sort_name) == GOOGLE_PRIMARY
-
-
-def _apply_current_google_rain_handoff(operation, direction):
-    from app.services.google_rain_live_milestones import (
-        GOOGLE_TO_NEO_AUTHORITY_HANDOFF,
-        NEO_TO_GOOGLE_AUTHORITY_HANDOFF,
-        apply_google_rain_departure_milestones,
-    )
-    from app.services.google_rain_sheets import read_google_rain_outbound_milestones
-
-    handoff_mode = {
-        "google_to_neo": GOOGLE_TO_NEO_AUTHORITY_HANDOFF,
-        "neo_to_google": NEO_TO_GOOGLE_AUTHORITY_HANDOFF,
-    }.get(direction)
-    if handoff_mode is None:
-        raise RainIntegrationTransitionError("NeoRain authority handoff is invalid.")
-    rows = read_google_rain_outbound_milestones()
-    return apply_google_rain_departure_milestones(
-        operation,
-        rows=rows,
-        authority_handoff=handoff_mode,
-    )
-
-
-def _transition_status(
-    gateway,
-    sort_name,
-    *,
-    handoff_performed,
-    handoff_direction,
-):
-    status = rain_integration_status(gateway, sort_name)
-    status["handoff_performed"] = bool(handoff_performed)
-    status["handoff_direction"] = handoff_direction
-    return status
 
 
 def _existing_setting(gateway=None, sort_name=None):

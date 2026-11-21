@@ -173,6 +173,11 @@ def _fuel_only_result(row, mission):
 
 def _apply_row(operation, mission, row, *, authority_handoff=None):
     from app.services.neorain_overrides import observe_import
+
+    if _normalized_status(mission.departure_status) == "cancelled":
+        result = _fuel_only_result(row, mission)
+        result["warnings"].append("Cancelled departure milestones preserved.")
+        return result
     changed_fields = []
     warnings = []
     replace_neorain_owned = authority_handoff == NEO_TO_GOOGLE_AUTHORITY_HANDOFF
