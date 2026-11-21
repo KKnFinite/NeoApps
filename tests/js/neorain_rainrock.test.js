@@ -1,14 +1,14 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const code=fs.readFileSync('app/static/js/neorain_rainrock.js','utf8');
 const tick=()=>new Promise(r=>setImmediate(r));
-function page(editable=true){
+function page(editable=true,{sortEndMs=Date.now()+60000}={}){
  const requests=[],handlers={},intervals=[],timeouts=new Map(),notes={},buttons={};let timer=0;
  const inputs=['actual_volume','note_1'].map(name=>({name,value:'',readOnly:!editable,dataset:{savedValue:'',version:'0'}}));
  inputs.forEach(i=>{notes[i.name]={textContent:''};buttons[i.name]={hidden:true};});
  const form={dataset:{canEdit:String(editable)},action:'/rainrock/inputs?operation_id=7',
   querySelectorAll:()=>inputs,addEventListener:(key,fn)=>handlers[key]=fn};
  const status={textContent:'',classList:{toggle(){}}},copyStatus={textContent:''},live={innerHTML:'original'};
- const root={dataset:{operation:'7',stateUrl:'/state?operation_id=7',refreshMs:'60000'},querySelector(s){
+ const root={dataset:{operation:'7',stateUrl:'/state?operation_id=7',autoStateUrl:'/state?operation_id=7&automatic=1',sortEndMs:String(sortEndMs),refreshMs:'60000'},querySelector(s){
   if(s==='[data-rainrock-inputs]')return form;if(s==='[data-rainrock-live]')return live;
   if(s==='[data-rainrock-notes]')return null;
   if(s==='[data-rainrock-save-status]')return status;if(s==='[data-rainrock-copy-status]')return copyStatus;
@@ -18,7 +18,7 @@ function page(editable=true){
  },querySelectorAll:()=>[]};
  const ctx={document:{querySelector:()=>root,hidden:false,fonts:{ready:Promise.resolve()}},window:{addEventListener(){}},
   navigator:{},setTimeout:(fn,ms)=>{const id=++timer;timeouts.set(id,{fn,ms});return id;},clearTimeout:id=>timeouts.delete(id),
-  setInterval:(fn,ms)=>intervals.push({fn,ms}),fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))};
+  setInterval:(fn,ms)=>intervals.push({fn,ms}),clearInterval:()=>{},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))};
  vm.runInNewContext(code,ctx);
  const reply=async(index,extra={})=>{const payload={ok:true,operation_id:7,html:'fresh',fields:Object.fromEntries(inputs.map(i=>[i.name,
   {input_value:'saved',version:1,source:'NeoRain entry'}])),...extra};requests[index].resolve({ok:payload.ok,json:async()=>payload});await tick();};
@@ -64,4 +64,17 @@ test('image export uses promised PNG clipboard, full scroll height and no text s
  assert.match(code,/new ClipboardItem\(\{'image\/png':promised\}\)/);
  assert.match(code,/clone\.scrollHeight/);assert.match(code,/canvas\.height!==Math\.floor\(height\*scale\)/);
  assert.doesNotMatch(code,/writeText/);assert.match(code,/Complete PNG downloaded/);
+});
+test('no automatic request is installed without a valid future Sort deadline',()=>{
+ const p=page(true,{sortEndMs:0});
+ assert.equal(p.intervals.length,0);
+ assert.equal(p.requests.length,0);
+});
+test('a boundary response stops automatic refresh without applying an update',async()=>{
+ const p=page();const timer=p.intervals[0];
+ const poll=timer.fn();await tick();
+ assert.match(p.requests[0].url,/automatic=1/);
+ await p.reply(0,{refresh:{auto_refresh_enabled:false,sort_end_ms:null}});await poll;
+ await timer.fn();
+ assert.equal(p.requests.length,1);
 });

@@ -35,7 +35,7 @@ class NeoRainMissionNotesBrowserTest(unittest.TestCase):
             NeoRainMissionNote.query.delete()
             db.session.commit()
         page = browser.new_page(viewport={"width": width, "height": 880}, accept_downloads=True)
-        self.env().login(page)
+        self.rain().login_for_sort(page)
         with patch("app.services.neorain_reports.read_google_recap", side_effect=AssertionError("Google must stay off")) as reader:
             for board, direction in (("inbound", "arrival"), ("outbound", "departure")):
                 with self.subTest(board=board):

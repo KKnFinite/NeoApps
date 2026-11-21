@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const code = fs.readFileSync('app/static/js/neorain_daily_briefing.js','utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
-function page(canEdit=true,{fallback=false,denyClipboard=false,fallbackSuccess=true}={}) {
+function page(canEdit=true,{fallback=false,denyClipboard=false,fallbackSuccess=true,sortEndMs=Date.now()+60000}={}) {
   const requests=[], handlers={}, timers=[];
   const inputs=['briefing_safety','actual_volume'].map(name => ({name,value:'',disabled:!canEdit,
     tagName:name==='briefing_safety'?'TEXTAREA':'INPUT',style:{},scrollHeight:30,
@@ -18,7 +18,7 @@ function page(canEdit=true,{fallback=false,denyClipboard=false,fallbackSuccess=t
   const form={action:'/inputs?operation_id=7',dataset:{canEdit:String(canEdit)},addEventListener:(name,fn)=>{handlers[name]=fn;},
     querySelectorAll:()=>inputs,querySelector:s=>({'[data-briefing-status]':status,
       '[data-briefing-versions]':hidden}[s])};
-  const root={dataset:{stateUrl:'/state?operation_id=7',refreshMs:'60000'},
+  const root={dataset:{stateUrl:'/state?operation_id=7',autoStateUrl:'/state?operation_id=7&automatic=1',sortEndMs:String(sortEndMs),refreshMs:'60000'},
     querySelector:s=>({'#briefing-text':preview,'#copy-briefing':copy,'#copy-briefing-status':copyStatus,
       '#briefing-delay-details':toggle,'[data-briefing-delay-mode]':mode,'[data-briefing-reports]':reports,
       '[data-briefing-inputs]':form}[s])};
@@ -31,7 +31,7 @@ function page(canEdit=true,{fallback=false,denyClipboard=false,fallbackSuccess=t
       execCommand:()=>{if(fallbackSuccess)copied=area.value;return fallbackSuccess;}},
     navigator:{clipboard:fallback?undefined:{writeText:async text=>{if(denyClipboard)throw Error('Denied');copied=text;}}},
     setTimeout:(fn,ms)=>{const id=++nextTimer;timeouts.set(id,{fn,ms});return id;},clearTimeout:id=>timeouts.delete(id),
-    setInterval:(fn,ms)=>timers.push({fn,ms}),fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))});
+    setInterval:(fn,ms)=>timers.push({fn,ms}),clearInterval:()=>{},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))});
   const reply=async (index,changes={})=>{
     const payload={ok:true,briefing:'Updated\n\nReport',fields:Object.fromEntries(inputs.map(input=>[input.name,
       {editable:true,manual_value:'saved',version:1}])),...changes};
@@ -194,4 +194,17 @@ test('unsupported or denied clipboard fallback copies the exact selected project
   }
   const p=page(true,{fallback:true,fallbackSuccess:false});await p.handlers.copy();
   assert.match(p.copyStatus.textContent,/Copy failed/);assert.equal(p.copied(),null);
+});
+test('no automatic request is installed without a valid future Sort deadline',()=>{
+ const p=page(true,{sortEndMs:0});
+ assert.equal(p.timers.length,0);
+ assert.equal(p.requests.length,0);
+});
+test('a boundary response stops automatic refresh without applying an update',async()=>{
+ const p=page();const timer=p.timers[0];
+ const poll=timer.fn();await tick();
+ assert.match(p.requests[0].url,/automatic=1/);
+ await p.reply(0,{refresh:{auto_refresh_enabled:false,sort_end_ms:null}});await poll;
+ await timer.fn();
+ assert.equal(p.requests.length,1);
 });

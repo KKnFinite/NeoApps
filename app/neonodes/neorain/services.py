@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.orm import aliased, joinedload, selectinload
@@ -50,7 +51,11 @@ from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_collaboration import entity_version
 from app.services.memory_diagnostics import memory_diagnostics
 from app.services.neostaffing import attendance_operation_department_counts
-from app.services.node_refresh import node_auto_refresh_status
+from app.services.gateway_matrix import (
+    current_gateway_local_datetime,
+    gateway_timezone,
+    sort_lookup_window_for_operation,
+)
 from app.services.neorain_performance import completed_variance_minutes, eligible_for_performance, late_inclusion
 from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data, normalize_wave
@@ -445,26 +450,57 @@ def _normalized_source(value):
     return str(value or "").strip().lower()
 
 
-def neorain_outbound_refresh_status(gateway, *, operation=None):
-    """Apply the shared live-screen interval to the shared operational window policy."""
-    status = dict(node_auto_refresh_status(gateway, operation=operation))
-    setting = live_screen_refresh_value(gateway, NEORAIN_OUTBOUND_REFRESH_KEY)
+def neorain_refresh_status(gateway, operation, *, is_current):
+    """Authorize automatic requests only inside an explicitly configured Sort window."""
+    status = {
+        "auto_refresh_enabled": False,
+        "sort_end_ms": None,
+        "reason": "outside_sort_window",
+        "message": "Live updates off - outside Sort window",
+    }
+    if operation is None or not is_current or operation.archived_at_utc is not None:
+        return status
+    start, end = sort_lookup_window_for_operation(operation, gateway, require_configured=True)
+    if start is None or end is None:
+        return status
+    try:
+        zone = ZoneInfo(gateway_timezone(gateway))
+    except ZoneInfoNotFoundError:
+        return status
+
+    start_utc = start.replace(tzinfo=zone).astimezone(timezone.utc)
+    end_utc = end.replace(tzinfo=zone).astimezone(timezone.utc)
+    if (
+        start_utc.astimezone(zone).replace(tzinfo=None) != start
+        or end_utc.astimezone(zone).replace(tzinfo=None) != end
+    ):
+        return status
+    now = current_gateway_local_datetime(gateway).replace(tzinfo=zone).astimezone(timezone.utc)
+    if start_utc <= now < end_utc:
+        status.update(
+            auto_refresh_enabled=True,
+            sort_end_ms=int(end_utc.timestamp() * 1000),
+            reason="active",
+            message="Live updates on",
+        )
+    return status
+
+
+def _board_refresh_status(gateway, operation, key):
+    status = neorain_refresh_status(gateway, operation, is_current=True)
+    setting = live_screen_refresh_value(gateway, key)
     status["live_screen_refresh_interval_ms"] = setting.effective_interval_ms
     if not setting.enabled:
-        status["auto_refresh_enabled"] = False
-        status["reason"] = "disabled"
-        status["message"] = "Live updates off"
-        status["live_status_label"] = "Live updates off"
+        status.update(auto_refresh_enabled=False, reason="disabled", message="Live updates off")
     return status
+
+
+def neorain_outbound_refresh_status(gateway, *, operation=None):
+    return _board_refresh_status(gateway, operation, NEORAIN_OUTBOUND_REFRESH_KEY)
 
 
 def neorain_inbound_refresh_status(gateway, *, operation=None):
-    status = dict(node_auto_refresh_status(gateway, operation=operation))
-    setting = live_screen_refresh_value(gateway, NEORAIN_INBOUND_REFRESH_KEY)
-    status["live_screen_refresh_interval_ms"] = setting.effective_interval_ms
-    if not setting.enabled:
-        status.update({"auto_refresh_enabled": False, "reason": "disabled", "message": "Live updates off", "live_status_label": "Live updates off"})
-    return status
+    return _board_refresh_status(gateway, operation, NEORAIN_INBOUND_REFRESH_KEY)
 
 
 def neorain_outbound_revision(gateway, *, operation=_OPERATION_UNSET):

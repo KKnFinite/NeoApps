@@ -44,6 +44,7 @@ from app.neonodes.neorain.services import (
     neorain_outbound_refresh_status,
     neorain_outbound_revision,
     neorain_load_planner_lineup,
+    neorain_refresh_status,
     set_neorain_late_metrics_included,
 )
 from app.services.google_rain_integration_mode import (
@@ -171,6 +172,27 @@ def _selected_report_operation(gateway):
     return operation, current
 
 
+def _report_refresh_status(gateway, operation, current):
+    return neorain_refresh_status(
+        gateway, operation, is_current=bool(current and operation and current.id == operation.id),
+    )
+
+
+def _automatic_refresh_denied(status, operation):
+    return request.args.get("automatic") == "1" and (
+        not status["auto_refresh_enabled"]
+        or operation.id != request.args.get("operation_id", type=int)
+    )
+
+
+def _refresh_stopped(status):
+    response = jsonify(ok=True, changed=False, refresh={
+        **status, "auto_refresh_enabled": False, "sort_end_ms": None,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def _report_choices(gateway):
     return (SortDateOperation.query.filter_by(gateway_code=gateway.code)
             .order_by(SortDateOperation.sort_date.desc(), SortDateOperation.id.desc())
@@ -193,6 +215,7 @@ def rainrock():
         operations=_report_choices(gateway), can_edit=access["can_edit"],
         report=dashboard_context(operation, current=is_current) if operation else None,
         is_current=is_current,
+        refresh_status=_report_refresh_status(gateway, operation, current),
         report_fields=REPORT_FIELDS, input_groups=INPUT_GROUPS,
     )
 
@@ -209,10 +232,14 @@ def _rainrock_payload(operation, current):
 def rainrock_state():
     if not user_can('neorain.rainrock.view'):
         abort(403)
-    operation, current = _selected_report_operation(get_current_gateway())
+    gateway = get_current_gateway()
+    operation, current = _selected_report_operation(gateway)
     if operation is None:
         abort(404)
-    response = jsonify(ok=True, **_rainrock_payload(operation, current))
+    refresh = _report_refresh_status(gateway, operation, current)
+    if _automatic_refresh_denied(refresh, operation):
+        return _refresh_stopped(refresh)
+    response = jsonify(ok=True, refresh=refresh, **_rainrock_payload(operation, current))
     response.headers['Cache-Control'] = 'no-store'
     return response
 
@@ -277,6 +304,7 @@ def daily_briefing():
         "neonodes/neorain/daily_briefing.html", gateway=gateway, operation=operation,
         operations=_report_choices(gateway), report=report,
         is_current=is_current, input_groups=INPUT_GROUPS,
+        refresh_status=_report_refresh_status(gateway, operation, current),
         input_versions={key: field['version'] for key, field in report['fields'].items()} if report else {},
         can_edit=user_can('neorain.rainrock.edit'),
         briefing=format_briefing(report) if report else "No selected sort.",
@@ -290,10 +318,14 @@ def daily_briefing_state():
     from app.services.neorain_daily_briefing import briefing_context, briefing_payload
     if not user_can('neorain.daily_briefing.view'):
         abort(403)
-    operation, current = _selected_report_operation(get_current_gateway())
+    gateway = get_current_gateway()
+    operation, current = _selected_report_operation(gateway)
     if operation is None:
         abort(404)
-    response = jsonify(ok=True, **briefing_payload(briefing_context(operation,
+    refresh = _report_refresh_status(gateway, operation, current)
+    if _automatic_refresh_denied(refresh, operation):
+        return _refresh_stopped(refresh)
+    response = jsonify(ok=True, refresh=refresh, **briefing_payload(briefing_context(operation,
         current=bool(current and current.id == operation.id))))
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -478,12 +510,15 @@ def inbound_revision():
         return jsonify({"ok": False, "error": "Access denied."}), 403
     gateway = get_current_gateway()
     operation = current_neorain_outbound_operation(gateway)
+    refresh = neorain_inbound_refresh_status(gateway, operation=operation)
+    if _automatic_refresh_denied(refresh, operation):
+        return _refresh_stopped(refresh)
     revision = neorain_inbound_revision(gateway, operation=operation)
     response = jsonify({
         "ok": True,
         "changed": str(request.args.get("revision") or "") != revision,
         "revision": revision,
-        "refresh": neorain_inbound_refresh_status(gateway, operation=operation),
+        "refresh": refresh,
     })
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -601,8 +636,10 @@ def outbound_revision():
 
     gateway = get_current_gateway()
     operation = current_neorain_outbound_operation(gateway)
-    revision = neorain_outbound_revision(gateway, operation=operation)
     refresh = neorain_outbound_refresh_status(gateway, operation=operation)
+    if _automatic_refresh_denied(refresh, operation):
+        return _refresh_stopped(refresh)
+    revision = neorain_outbound_revision(gateway, operation=operation)
     response = jsonify(
         {
             "ok": True,

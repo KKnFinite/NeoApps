@@ -3,7 +3,7 @@
 {% block title %}Inbound | NeoRain{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_csp_inbound.css', v='20261031-csp-v1') }}">
-<section class="neorain-outbound-shell" data-neorain-board-page="inbound" data-neorain-inbound-live data-revision-url="{{ url_for('neorain.inbound_revision') }}" data-late-inclusion-url="{{ url_for('neorain.inbound_late_inclusion') }}" data-block-in-url="{{ url_for('neorain.inbound_block_in') }}" data-inbound-revision="{{ inbound_revision }}">
+<section class="neorain-outbound-shell" data-neorain-board-page="inbound" data-neorain-inbound-live data-revision-url="{{ url_for('neorain.inbound_revision', automatic=1, operation_id=operation.id if operation else none) }}" data-late-inclusion-url="{{ url_for('neorain.inbound_late_inclusion') }}" data-block-in-url="{{ url_for('neorain.inbound_block_in') }}" data-inbound-revision="{{ inbound_revision }}">
     <header class="neorain-outbound-head mobile-shell-duplicate-title">
         <div><p>LIVE OPERATIONS</p><h1>INBOUND</h1></div>
         <strong>{% if operation %}{{ gateway.code }} · {{ operation.sort_name|upper }}{% else %}NO CURRENT SORT{% endif %}</strong>
@@ -204,15 +204,23 @@
             Object.entries(values || {}).forEach(([metric, value]) => root.querySelectorAll(`[data-neorain-late-summary-value="${group}.${metric}"]`).forEach((element) => { element.textContent = String(value ?? 0); }));
         });
     });
+    let refresh = {{ refresh_status|tojson }};
+    const withinSort = () => refresh.auto_refresh_enabled === true && Date.now() < refresh.sort_end_ms;
     const controller = window.NeoLiveUpdates.create({
         intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
         poll: async () => {
+            if (!withinSort()) {
+                controller.setEnabled(false);
+                return;
+            }
             const url = new URL(root.dataset.revisionUrl, window.location.origin);
             url.searchParams.set("revision", revision);
             const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: "no-store", credentials: "same-origin"});
             if (!response.ok) throw new Error("NeoRain Inbound refresh failed.");
             const payload = await response.json();
-            controller.setServerStatus(payload.refresh || {});
+            refresh = payload.refresh || {};
+            controller.setServerStatus({ ...refresh, auto_refresh_enabled: withinSort() });
+            if (!withinSort()) return;
             if (payload.changed && hasPendingEdit()) {
                 root.dataset.neorainRefreshDeferred = "true";
                 return;
@@ -223,7 +231,7 @@
             if (payload.changed) window.location.reload();
         }, continuousWhileVisible: true,
     });
-    controller.setServerStatus({});
+    controller.setServerStatus({ ...refresh, auto_refresh_enabled: withinSort() });
 })();
 </script>
 {% if can_edit %}

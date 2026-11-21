@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set neorain_heartbeat_sort_end_ms = refresh_status.sort_end_ms %}
 
 {% block title %}Outbound | NeoRain{% endblock %}
 
@@ -8,7 +9,7 @@
     data-neorain-board-page="outbound"
     aria-labelledby="neorain-outbound-title"
     data-neorain-outbound-live
-    data-revision-url="{{ url_for('neorain.outbound_revision') }}"
+    data-revision-url="{{ url_for('neorain.outbound_revision', automatic=1, operation_id=operation.id if operation else none) }}"
     data-mutation-url="{{ url_for('neorain.outbound_milestone') }}"
     data-service-url="{{ url_for('neorain.outbound_service_field') }}"
     data-late-inclusion-url="{{ url_for('neorain.outbound_late_inclusion') }}"
@@ -70,15 +71,23 @@
         updateLateSummary(event.detail?.lateSummary);
     });
     if (!window.NeoLiveUpdates) return;
+    let refresh = {{ refresh_status|tojson }};
+    const withinSort = () => refresh.auto_refresh_enabled === true && Date.now() < refresh.sort_end_ms;
     const controller = window.NeoLiveUpdates.create({
         intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
         poll: async () => {
+            if (!withinSort()) {
+                controller.setEnabled(false);
+                return;
+            }
             const url = new URL(root.dataset.revisionUrl, window.location.origin);
             url.searchParams.set("revision", revision);
             const response = await (window.NeoLiveRevision?.fetch || fetch)(url, { cache: "no-store", credentials: "same-origin" });
             if (!response.ok) throw new Error("NeoRain Outbound refresh failed.");
             const payload = await response.json();
-            controller.setServerStatus(payload.refresh || {});
+            refresh = payload.refresh || {};
+            controller.setServerStatus({ ...refresh, auto_refresh_enabled: withinSort() });
+            if (!withinSort()) return;
             if (payload.changed && hasPendingEdit()) {
                 root.dataset.neorainRefreshDeferred = "true";
                 return;
@@ -90,7 +99,7 @@
         },
         continuousWhileVisible: true,
     });
-    controller.setServerStatus({{ refresh_status|tojson }});
+    controller.setServerStatus({ ...refresh, auto_refresh_enabled: withinSort() });
 })();
 </script>
 {% if can_edit_timestamp_milestones %}

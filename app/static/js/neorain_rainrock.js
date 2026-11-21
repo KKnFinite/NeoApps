@@ -92,18 +92,24 @@
     }catch(error){errors.set(input,error.message);}
     finally{button.disabled=false;generation++;showStatus();}
   });
+  let sortEndMs = Number(root.dataset.sortEndMs);
   const refresh=async()=>{
+    if (!(Date.now() < sortEndMs)) { clearInterval(refreshTimer); return; }
     if(document.hidden||activeSave||polling||capturing)return;
     const before=generation;polling=true;
     try{
-      const response=await fetch(root.dataset.stateUrl,{credentials:'same-origin',cache:'no-store'});
+      const response=await fetch(root.dataset.autoStateUrl,{credentials:'same-origin',cache:'no-store'});
       const payload=await response.json();
+      if (payload.refresh) sortEndMs = Number(payload.refresh.sort_end_ms);
+      if (!(Date.now() < sortEndMs)) { clearInterval(refreshTimer); return; }
       if(response.ok&&payload.ok&&before===generation&&!activeSave){apply(payload);showStatus();}
     }catch(_){/* Preserve confirmed output and drafts during an outage. */}
     finally{polling=false;}
   };
   const interval=+root.dataset.refreshMs;
-  if(interval>0)setInterval(refresh,Math.max(1000,interval));
+  const refreshTimer = root.dataset.autoStateUrl && Date.now() < sortEndMs && interval > 0
+    ? setInterval(refresh, Math.max(1000, interval))
+    : null;
   window.addEventListener('beforeunload',event=>{if(inputs.some(dirty)){event.preventDefault();event.returnValue='';}});
 
   async function imageBlob(){

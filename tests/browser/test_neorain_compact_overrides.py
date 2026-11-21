@@ -1,12 +1,14 @@
 """Real Rain pages: compact controls, autosave/reset and existing live refresh."""
 from contextlib import ExitStack
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 import unittest
 from unittest.mock import patch
 
 from playwright.sync_api import expect
 from tests.browser import test_mobile_drawer as fixtures
 from app.extensions import db
+from tests.test_neorain_sort_refresh import configure_sort_window
 from app.models import Gateway, SortDateMission, SortDateOperation
 
 
@@ -37,6 +39,8 @@ class CompactRainBrowserTest(unittest.TestCase):
                 cls.ids[kind] = mission.id
             db.session.commit()
             cls.operation_id = operation.id
+            _, cls.sort_time = configure_sort_window(gateway, operation.sort_date)
+            cls.fixture.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = cls.sort_time
         cls.stack = ExitStack()
         cls.stack.enter_context(patch('app.neonodes.neorain.routes.current_neorain_outbound_operation',
             side_effect=lambda gateway: db.session.get(SortDateOperation, cls.operation_id)))
@@ -120,6 +124,10 @@ class CompactRainBrowserTest(unittest.TestCase):
         self.assertTrue(all(x['width'] <= min(58, x['parent']) + 1 and x['height'] == 26 for x in geometry), geometry)
         self.assertTrue(all(not x['value'] or (len(x['value']) == 5 and x['value'][2] == ':' and x['value'].replace(':','').isdigit()) for x in geometry))
 
+    def login_for_sort(self, page):
+        self.fixture().login(page)
+        page.clock.install(time=self.sort_time.replace(tzinfo=ZoneInfo("America/Chicago")))
+
     def reveal(self, page, field):
         if not page.locator(f'.rain-override[data-rain-override-field="{field}"] [data-rain-override-time]:visible').count():
             page.locator('[data-neorain-mobile-row-open]:visible').first.click()
@@ -132,7 +140,7 @@ class CompactRainBrowserTest(unittest.TestCase):
             context = browser.new_context(viewport={'width':width,'height':900},
                 has_touch=width < 900, is_mobile=width < 900)
             try:
-                page = context.new_page(); self.fixture().login(page)
+                page = context.new_page(); self.login_for_sort(page)
                 errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
                 for board, kind, _ in self.cases:
                     for field in fields[board]:
@@ -191,7 +199,7 @@ class CompactRainBrowserTest(unittest.TestCase):
         browser = self.fixture.pw.chromium.launch(headless=True)
         context = browser.new_context(viewport={'width':390,'height':844})
         try:
-            page=context.new_page();self.fixture().login(page)
+            page=context.new_page();self.login_for_sort(page)
             for board,kind,field in self.cases:
                 self.clear(kind,field);self.fixture().ready(page,'/neorain/'+board)
                 pending=[]
@@ -231,7 +239,7 @@ class CompactRainBrowserTest(unittest.TestCase):
                             page.on('pageerror', lambda error: errors.append(str(error)))
                             page.on('request', lambda request: posts.append(request.post_data_json)
                                 if '/neorain/override' in request.url and request.method == 'POST' else None)
-                            self.fixture().login(page)
+                            self.login_for_sort(page)
                             for board, kind, field in self.cases:
                                 self.clear(kind, field)
                                 self.fixture().ready(page, '/neorain/' + board)
@@ -274,7 +282,7 @@ class CompactRainBrowserTest(unittest.TestCase):
                 context = browser.new_context(viewport={'width': width, 'height': 900})
                 try:
                     page = context.new_page()
-                    self.fixture().login(page)
+                    self.login_for_sort(page)
                     for board, kind, field in self.cases:
                         with self.subTest(width=width, board=board):
                             self.clear(kind, field)
@@ -311,7 +319,7 @@ class CompactRainBrowserTest(unittest.TestCase):
         context = browser.new_context(viewport={'width': 390, 'height': 844})
         try:
             page = context.new_page()
-            self.fixture().login(page)
+            self.login_for_sort(page)
             for board, kind, field in self.cases:
                 self.clear(kind, field)
                 self.fixture().ready(page, '/neorain/' + board)
@@ -340,7 +348,7 @@ class CompactRainBrowserTest(unittest.TestCase):
             browser=getattr(self.fixture.pw,engine).launch(headless=True)
             context=browser.new_context(viewport={'width':width,'height':900},has_touch=width<900,is_mobile=width<900)
             try:
-                page=context.new_page();self.fixture().login(page)
+                page=context.new_page();self.login_for_sort(page)
                 for board,kind,target in self.cases:
                     with self.subTest(engine=engine,board=board):
                         self.fixture().ready(page,'/neorain/'+board)

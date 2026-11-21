@@ -309,10 +309,12 @@ def operation_is_active_at(operation, local_now, gateway=None):
     return bool(start_local and end_local and start_local <= local_now < end_local)
 
 
-def sort_lookup_window_for_operation(operation, gateway=None):
+def sort_lookup_window_for_operation(operation, gateway=None, *, require_configured=False):
     sort_setting = _sort_timeline_sort_setting(gateway or operation.gateway, operation.sort_name)
     start_time = sort_setting.sort_window_start_local if sort_setting else None
     end_time = sort_setting.sort_window_end_local if sort_setting else None
+    if require_configured and (not start_time or not end_time or start_time == end_time):
+        return None, None
     start_time = start_time or time(0, 0)
     end_time = end_time or time(23, 59)
     start_local = datetime.combine(operation.sort_date, start_time)

@@ -147,16 +147,22 @@
     return !inputs.some(input => !input.disabled && dirty(input));
   };
   form.addEventListener('submit', event => { event.preventDefault(); return flushPending(); });
+  let sortEndMs = Number(root.dataset.sortEndMs);
   const refresh = async () => {
+    if (!(Date.now() < sortEndMs)) { clearInterval(refreshTimer); return; }
     if (document.hidden || saving || polling) return;
     const before = generation; polling = true;
     try {
-      const response = await fetch(root.dataset.stateUrl, {credentials:'same-origin', cache:'no-store'});
+      const response = await fetch(root.dataset.autoStateUrl, {credentials:'same-origin', cache:'no-store'});
       const payload = await response.json();
+      if (payload.refresh) sortEndMs = Number(payload.refresh.sort_end_ms);
+      if (!(Date.now() < sortEndMs)) { clearInterval(refreshTimer); return; }
       if (response.ok && payload.ok && before === generation && !saving) apply(payload);
     } catch (_) { /* Retain the last confirmed report and all local drafts. */ }
     finally { polling = false; }
   };
   const interval = +root.dataset.refreshMs;
-  if (root.dataset.stateUrl && interval > 0) setInterval(refresh, Math.max(1000, interval));
+  const refreshTimer = root.dataset.autoStateUrl && Date.now() < sortEndMs && interval > 0
+    ? setInterval(refresh, Math.max(1000, interval))
+    : null;
 })();

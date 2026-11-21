@@ -2,6 +2,7 @@
 import json
 import re
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from threading import Thread
 from unittest import TestCase
@@ -12,6 +13,7 @@ from werkzeug.serving import make_server
 from PIL import Image
 from app.extensions import db
 from app.models import SortDateMission, NeoRainDelayInfo
+from tests.test_neorain_sort_refresh import configure_sort_window
 from tests import test_neorain_rainrock_dashboard as unit
 
 EVIDENCE=Path('instance/browser-evidence/rainrock-flight-tables')
@@ -25,6 +27,8 @@ class RainrockDashboardBrowserTest(TestCase):
         case=unit.RainrockDashboardTest();case.setUp();self.addCleanup(case.doCleanups)
         app=case.app;app.config['RAINROCK_REFRESH_INTERVAL_MS']=1000
         op=case.operation;actor=case.f.actor
+        _, start = configure_sort_window(case.f.gateway, op.sort_date)
+        app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = start + timedelta(hours=2)
         for side in ('arrival','departure'):
             for i in range(1,7):
                 m=SortDateMission(sort_date_operation_id=op.id,sort_date=op.sort_date,gateway_code='RFD',sort_name='night',
@@ -82,7 +86,7 @@ class RainrockDashboardBrowserTest(TestCase):
                 try:
                     args=dict(viewport={'width':1440,'height':900},service_workers='block',accept_downloads=True)
                     if engine=='chromium':args['permissions']=['clipboard-read','clipboard-write']
-                    context=browser.new_context(**args);page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)));login(page);page.goto(url)
+                    context=browser.new_context(**args);page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)));login(page);page.clock.set_fixed_time(app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'].replace(tzinfo=ZoneInfo('America/Chicago')));page.goto(url)
                     values=dict(planned_volume='119805',actual_volume='117540',smalls_percent='89.4',planned_fph='75000',actual_fph='72850',
                         briefing_ramp_staffing_planned='316',briefing_ramp_staffing_actual='320',briefing_hub_staffing_planned='500',
                         briefing_hub_staffing_actual='510',note_1='RFD: All work safely finished.\nComplete notes are visible.')
@@ -91,7 +95,7 @@ class RainrockDashboardBrowserTest(TestCase):
                     expect(page.locator('[data-rainrock-value="actual_fph"]')).to_have_text('72,850')
                     expect(page.locator('[data-rainrock-save-status]')).to_have_text('Auto-saves')
                     # Cross-session canonical values, not a duplicated Rainrock record.
-                    other=browser.new_context(service_workers='block',**({'permissions':['clipboard-read','clipboard-write']} if engine=='chromium' else {}));brief=other.new_page();login(brief)
+                    other=browser.new_context(service_workers='block',**({'permissions':['clipboard-read','clipboard-write']} if engine=='chromium' else {}));brief=other.new_page();login(brief);brief.clock.set_fixed_time(app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'].replace(tzinfo=ZoneInfo('America/Chicago')))
                     brief.goto(origin+'/neorain/daily-briefing?operation_id='+str(operation_id))
                     expect(brief.locator('#briefing-text')).to_contain_text('Ramp Staffing: 320/316')
                     expect(brief.locator('#briefing-text')).to_contain_text('Volume Actual: 117,540')

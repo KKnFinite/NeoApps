@@ -1,5 +1,6 @@
 """Real browser projections, native copy/fallback and sort-scoped live refresh."""
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from threading import Thread
 from unittest import TestCase
@@ -10,6 +11,7 @@ from werkzeug.serving import make_server
 from app.extensions import db
 from app.models import NeoRainDelayInfo, NeoRainReportEntry, SortDateOperation
 from app.services.neorain_daily_briefing import briefing_context, format_briefing
+from tests.test_neorain_sort_refresh import configure_sort_window
 from tests import test_neorain_daily_briefing as unit
 
 
@@ -24,6 +26,8 @@ class BriefingDelayBrowserTest(TestCase):
         case = unit.DailyBriefingTest(); case.setUp(); self.addCleanup(case.doCleanups)
         app, op, actor = case.app, case.operation, case.f.actor
         app.config['NEORAIN_BRIEFING_REFRESH_MS'] = 1000
+        _, start = configure_sort_window(case.f.gateway, op.sort_date)
+        app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = start + timedelta(hours=2)
         note = 'Complete aircraft-specific delay note. ' * 35 + 'END OF NOTES <script>not executable</script>'
         db.session.add_all([
             NeoRainDelayInfo(sort_date_mission_id=case.arrival.id, minutes=10, code='RS', notes='Arrival only'),
@@ -64,6 +68,7 @@ class BriefingDelayBrowserTest(TestCase):
                     page.locator('[name=password]').fill('TestPassword123!')
                     page.locator('button[type=submit]').click()
                     page.wait_for_url(lambda url:'/login' not in url)
+                    page.clock.set_fixed_time(app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'].replace(tzinfo=ZoneInfo('America/Chicago')))
                     page.goto(origin+f'/neorain/daily-briefing?operation_id={opid}')
                     page.on('request', lambda request: requests.append((request.method, request.url)))
                     preview = page.locator('#briefing-text'); toggle = page.locator('#briefing-delay-details')
