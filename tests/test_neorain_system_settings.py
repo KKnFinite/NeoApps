@@ -138,6 +138,33 @@ class NeoRainSystemSettingsTest(unittest.TestCase):
         self.assertNotIn(b"raw provider details", response.data)
         self.assertEqual(rain_integration_mode(self.gateway, "night"), GOOGLE_PRIMARY)
 
+    def test_mirror_switch_is_separate_default_off_scoped_and_audited(self):
+        from app.models.motherbrain_google_integration_setting import NeoRainIntegrationEvent
+        from app.services.google_rain_integration_mode import NEO_PRIMARY_GOOGLE_MIRROR, rain_integration_status
+        url = "/motherbrain/system-settings/integrations"
+        enable = {"action": "set_neorain_google_mirror_writes", "enabled": "1"}
+        self._login("operator")
+        self.assertEqual(self.client.post(url, data=enable).status_code, 403)
+        self.assertEqual(NeoRainIntegrationEvent.query.count(), 0)
+        self._login("grandmaster")
+        for mode in (GOOGLE_PRIMARY, NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY):
+            self.client.post(url, data={"action": "set_neorain_mode", "integration_mode": mode})
+            page = self.client.get(url)
+            self.assertEqual(page.status_code, 200)
+            self.assertIn(b"data-rain-mirror-state>OFF", page.data)
+            self.assertIn(b'value="1" disabled aria-describedby="rain-mirror-reason"', page.data)
+            response = self.client.post(url, data=enable)
+            self.assertEqual(response.status_code, 400)
+            state = rain_integration_status(self.gateway, "night")
+            self.assertEqual(state["mode"], mode)
+            self.assertFalse(state["mirror_requested"])
+            self.assertIn(state["mirror_blocker"].encode(), response.data)
+            event = state["last_activation_refusal"]
+            self.assertEqual(event.actor_user_id, User.query.filter_by(role="grandmaster").one().id)
+            self.assertEqual((event.mode, event.previous_writes, event.writes), (mode, False, False))
+            self.assertIsNone(rain_integration_status(self.gateway, "day")["last_activation_refusal"])
+        self.assertEqual(NeoRainIntegrationEvent.query.filter_by(action="mirror_rejected").count(), 3)
+
     def _login(self, role):
         username = f"rain_settings_{role}"
         user = User.query.filter_by(username=username).first()

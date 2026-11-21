@@ -29,6 +29,9 @@ class MotherBrainGoogleIntegrationSetting(db.Model):
         default="google_primary",
         server_default="google_primary",
     )
+    rain_mirror_writes_enabled = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false(),
+    )
     # Kept deliberately independent from the Rain milestone migration bundle.
     # The operational bundle and final Scorpion fuel data migrate on different
     # schedules.
@@ -47,3 +50,20 @@ class MotherBrainGoogleIntegrationSetting(db.Model):
     )
 
     gateway = db.relationship("Gateway")
+
+
+class NeoRainIntegrationEvent(db.Model):
+    __tablename__ = "neorain_integration_events"
+    __table_args__ = (db.Index("ix_rain_integration_scope_event", "gateway_id", "sort_name", "id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False)
+    sort_name = db.Column(db.String(32), nullable=False)
+    actor_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    action = db.Column(db.String(32), nullable=False)
+    previous_mode = db.Column(db.String(40), nullable=False)
+    mode = db.Column(db.String(40), nullable=False)
+    previous_writes = db.Column(db.Boolean, nullable=False)
+    writes = db.Column(db.Boolean, nullable=False)
+    detail = db.Column(db.String(300), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

@@ -227,6 +227,19 @@ class GoogleRainIntegrationModeTransitionTest(unittest.TestCase):
             self.change(NEO_ONLY)
         self.assertEqual(rain_integration_mode(self.gateway, "night"), GOOGLE_PRIMARY)
 
+    def test_authority_round_trip_disarms_persisted_mirror_without_touching_missions(self):
+        from app.services.google_rain_integration_mode import ensure_rain_integration_setting, NEO_PRIMARY_GOOGLE_MIRROR
+        before = self.facts()
+        self.change(NEO_PRIMARY_GOOGLE_MIRROR)
+        setting = ensure_rain_integration_setting(self.gateway, "night")
+        setting.rain_mirror_writes_enabled = True  # Isolated previously armed configuration.
+        db.session.commit()
+        for mode in (GOOGLE_PRIMARY, NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY):
+            state = self.change(mode)
+            self.assertFalse(state["mirror_enabled"])
+            self.assertFalse(state["mirror_requested"])
+            self.assertEqual(self.facts(), before)
+
     def test_same_mode_in_sort_is_a_read_only_no_op(self):
         self.now(datetime(2026, 8, 29, 21))
         status = self.change(GOOGLE_PRIMARY)

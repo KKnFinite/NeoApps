@@ -1,5 +1,5 @@
 {% if operation and rows and (can_edit_override_field('sta') or can_edit_override_field('block_in') or can_edit_override_field('etd') or can_edit_override_field('elmac')) %}
-{% set target = 'native baseline' if rain_integration_mode == 'neo_only' else 'Google' %}
+{% set target = 'Google' if rain_integration_mode == 'google_primary' else 'native baseline' %}
 <div class="rain-reset-tools" data-rain-reset-tools data-rain-reset-target="{{ target }}">
   <span data-rain-reset-selection aria-live="polite"></span>
   <button type="button" data-rain-reset-selected disabled title="Select a time or checkbox to reset it to {{ target }}">Reset to {{ target }}</button>

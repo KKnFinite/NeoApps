@@ -295,18 +295,18 @@ class RuntimeOwnershipTest(unittest.TestCase):
             writer.http_client.session.close.assert_called_once()
             metadata.http_client.session.close.assert_called_once()
 
-    def test_default_uncertified_adapter_is_owned_but_configured_adapter_is_borrowed(self):
+    def test_uncertified_writer_opens_no_clients_and_cannot_be_armed_by_configuration(self):
         writer,metadata,config=self.factories()
         app=Flask(__name__);app.config.update(config)
-        with app.app_context(), patch.object(runtime,'_create_gspread_writer',return_value=writer), \
-             patch.object(runtime,'_create_gspread',return_value=metadata):
+        with app.app_context(), patch.object(runtime,'_create_gspread_writer',return_value=writer) as open_writer, \
+             patch.object(runtime,'_create_gspread',return_value=metadata) as open_metadata:
             with self.assertRaises(GoogleOverrideBlocked):
                 certified_write(Mock(),'sta',{})
-        writer.http_client.session.close.assert_called_once()
-        metadata.http_client.session.close.assert_called_once()
+            open_writer.assert_not_called()
+            open_metadata.assert_not_called()
         borrowed=Mock(certified_fields={'sta'})
         borrowed.permission_verified.return_value=False
         app.config['NEORAIN_CERTIFIED_GOOGLE_ADAPTER']=borrowed
         with app.app_context(),self.assertRaises(GoogleOverrideBlocked):
             certified_write(Mock(),'sta',{})
-        borrowed.close.assert_not_called()
+        self.assertEqual(borrowed.mock_calls, [])

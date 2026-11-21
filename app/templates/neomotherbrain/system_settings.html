@@ -137,9 +137,11 @@
                     {% if neorain_status.mode == "google_primary" %}
                     <p><strong>GOOGLE PRIMARY:</strong> Google owns Ramp Load Complete, Crew Load Complete, Official Block-Out, and No Return.</p>
                     {% elif neorain_status.mode == "neo_primary_google_mirror" %}
-                    <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> NeoRain owns those fields and mirrors Neo edits to Google.</p>
-                    {% else %}
+                    <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> NeoRain owns these fields. Google imports are disabled. Outbound writes have a separate control below.</p>
+                    {% elif neorain_status.mode == "neo_only" %}
                     <p><strong>NEO ONLY:</strong> NeoRain owns those fields and performs no Rain-specific Google read/write traffic.</p>
+                    {% else %}
+                    <p>Invalid authority setting. Google Rain access is blocked until a valid mode is saved between Sorts.</p>
                     {% endif %}
                 </div>
                     {% if can_edit_system_settings %}
@@ -149,13 +151,33 @@
                     {% endif %}
                 </form>
             </details>
+            <section class="admin-subsection" aria-labelledby="rain-mirror-title" data-neorain-mirror>
+                <div class="mb-section-title admin-heading">
+                    <h3 id="rain-mirror-title">Google mirror writes</h3>
+                    <strong class="system-settings-mode-badge" data-rain-mirror-state>{{ 'ON' if neorain_status.mirror_enabled else 'OFF' }}</strong>
+                </div>
+                <p id="rain-mirror-reason">{{ neorain_status.mirror_blocker }} No writes are queued for retry.</p>
+                {% if neorain_status.last_write_failure %}
+                <p>Last write failure · {{ neorain_status.last_write_failure.created_at }} UTC · {{ neorain_status.last_write_failure.detail }}</p>
+                {% else %}<p class="muted">No recorded write failures.</p>{% endif %}
+                {% if neorain_status.last_activation_refusal %}
+                <p>Last activation refused · {{ neorain_status.last_activation_refusal.created_at }} UTC · {{ neorain_status.last_activation_refusal.detail }}</p>
+                {% endif %}
+                {% if can_edit_rain_mirror %}
+                <form method="post" class="system-settings-form">
+                    <input type="hidden" name="action" value="set_neorain_google_mirror_writes">
+                    <button type="submit" class="action-button" name="enabled" value="0" {% if not neorain_status.mirror_requested %}disabled{% endif %}>Turn off</button>
+                    <button type="submit" class="action-button" name="enabled" value="1" {% if neorain_status.mirror_blocker or neorain_status.mirror_enabled %}disabled{% endif %} aria-describedby="rain-mirror-reason">Turn on</button>
+                </form>
+                {% else %}<p class="view-only-pill">VIEW ONLY</p>{% endif %}
+            </section>
             <section class="admin-subsection" aria-labelledby="neorain-fuel-source-title" data-neorain-fuel-source>
                 <div class="mb-section-title admin-heading">
                     <div>
                         <h2 id="neorain-fuel-source-title">Rain fuel data source</h2>
                         <p>Independent from Rain operational milestone authority.</p>
                     </div>
-                    <strong class="system-settings-mode-badge">{{ neorain_fuel_status.source_label }}</strong>
+                    <strong class="system-settings-mode-badge">{{ neorain_fuel_status.source_label if neorain_status.mode == 'google_primary' else 'NEO' }}</strong>
                 </div>
                 <form method="post" class="system-settings-form">
                     <input type="hidden" name="action" value="set_neorain_fuel_data_source">
@@ -164,7 +186,7 @@
                         <label class="system-settings-mode-option"><input type="radio" name="fuel_data_source" value="{{ source.value }}" {% if source.value == neorain_fuel_status.source %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}><span>{{ source.label }}</span></label>
                         {% endfor %}
                     </div>
-                    <p class="system-settings-mode-help">GOOGLE keeps the legacy Rain fuel display authoritative. NEO shows only final, completed canonical NeoScorpion fuel results.</p>
+                    <p class="system-settings-mode-help">This preference applies in GOOGLE PRIMARY. Both Neo-authoritative modes use completed NeoScorpion fuel results.</p>
                     {% if can_edit_system_settings %}<button class="action-button primary-action" type="submit">SAVE RAIN FUEL SOURCE</button>{% else %}<p class="view-only-pill">VIEW ONLY</p>{% endif %}
                 </form>
             </section>

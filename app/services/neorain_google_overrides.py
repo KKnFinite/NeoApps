@@ -98,12 +98,12 @@ def certified_write(mission, field, values):
     """
     if field not in APPROVED:
         raise GoogleOverrideBlocked('No approved Google destination for this field.')
-    adapter = current_app.config.get('NEORAIN_CERTIFIED_GOOGLE_ADAPTER')
+    adapter = current_app.config.get('NEORAIN_CERTIFIED_GOOGLE_ADAPTER') if current_app.testing else None
     if adapter is None:
         from app.services.neorain_google_runtime import RuntimeGoogleAdapter, RACE_REASON
+        if field not in RuntimeGoogleAdapter.certified_fields:
+            raise GoogleOverrideBlocked(RACE_REASON)
         with RuntimeGoogleAdapter(current_app.config) as adapter:
-            if field not in adapter.certified_fields:
-                raise GoogleOverrideBlocked(RACE_REASON)
             return _certified_write_with_adapter(mission, field, values, adapter)
     return _certified_write_with_adapter(mission, field, values, adapter)
 
@@ -153,23 +153,29 @@ def attempt_once(override_id, generation):
     row = db.session.get(NeoRainMissionOverride, override_id)
     if row is None:
         return
+    from app.models import SortDateOperation
+    from app.services.google_rain_integration_mode import mirror_armed_before_edit, mirror_edit_status, operation_mode
+    operation = db.session.get(SortDateOperation, row.sort_date_operation_id)
+    mode = operation_mode(operation, lock=True)
     mission = SortDateMission.query.filter_by(id=row.sort_date_mission_id).populate_existing().with_for_update().one()
     row = NeoRainMissionOverride.query.filter_by(id=override_id).populate_existing().with_for_update().one()
     if not row.active or row.generation != generation or row.sync_status != 'PENDING':
         db.session.rollback()
         return  # No stale, deleted or already attempted generation may replay.
-    link = SortDateGoogleMissionLink.query.filter_by(sort_date_mission_id=mission.id,
-        sort_date_operation_id=row.sort_date_operation_id, mission_type=mission.mission_type).first()
-    row.sync_attempted_at = datetime.utcnow()
     try:
-        from app.services.google_rain_integration_mode import rain_operation_is_native
-        if rain_operation_is_native(mission.sort_date_operation):
-            row.sync_status, row.sync_detail = 'NEO_ONLY', 'Google integration is disabled for this sort.'
-        elif row.field == 'etd':
-            row.sync_status, row.sync_detail = 'NEO_ONLY', 'ETD has no approved Google write range.'
-        elif link is None:
-            row.sync_status, row.sync_detail = 'NEO_ONLY', 'No verified Google mission link; no Google read or write.'
+        status, detail = mirror_edit_status(operation, mode=mode)
+        if status != 'PENDING':
+            row.sync_status, row.sync_detail = status, detail
+        elif row.field not in APPROVED or APPROVED[row.field][0] != RAIN:
+            row.sync_status, row.sync_detail = 'NOT_WRITTEN', 'No approved Google Rain destination.'
+        elif not mirror_armed_before_edit(operation, row.modified_at):
+            row.sync_status, row.sync_detail = 'NOT_WRITTEN', 'Edit predates mirror activation. No replay.'
         else:
+            links = SortDateGoogleMissionLink.query.filter_by(sort_date_mission_id=mission.id,
+                sort_date_operation_id=operation.id, mission_type=mission.mission_type).limit(2).all()
+            if len(links) != 1:
+                raise GoogleOverrideBlocked('A unique Google mission link is required.')
+            row.sync_attempted_at = datetime.utcnow()
             destination = certified_write(mission, row.field, row.value)
             row.sync_status, row.sync_detail = 'SYNCED', destination
     except GoogleWriteUncertain as exc:
@@ -189,13 +195,16 @@ def refresh_reset(override_id, generation):
     row = db.session.get(NeoRainMissionOverride, override_id)
     if row is None:
         return
+    from app.models import SortDateOperation
+    from app.services.google_rain_integration_mode import GOOGLE_PRIMARY, operation_mode
+    operation = db.session.get(SortDateOperation, row.sort_date_operation_id)
+    if (operation.gateway_code != 'RFD' or operation.sort_name != 'night'
+            or operation_mode(operation, lock=True) != GOOGLE_PRIMARY):
+        db.session.rollback()
+        return
     mission = SortDateMission.query.filter_by(id=row.sort_date_mission_id).populate_existing().with_for_update().one()
     row = NeoRainMissionOverride.query.filter_by(id=override_id).populate_existing().with_for_update().one()
     if row.active or row.generation != generation:
-        db.session.rollback()
-        return
-    from app.services.google_rain_integration_mode import rain_operation_is_native
-    if rain_operation_is_native(mission.sort_date_operation):
         db.session.rollback()
         return
     link = SortDateGoogleMissionLink.query.filter_by(sort_date_mission_id=mission.id,

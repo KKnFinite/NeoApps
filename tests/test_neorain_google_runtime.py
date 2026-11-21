@@ -160,9 +160,10 @@ class DiagnosticRouteTest(unittest.TestCase):
 
     def test_uncertain_result_persists_neo_and_never_retries(self):
         c=self.contract
-        db.session.add(SortDateGoogleMissionLink(sort_date_operation_id=c.operation.id,sort_date_mission_id=c.arrival.id,mission_type='arrival',source_sheet='Inbound',source_row=4));db.session.commit()
+        c.arm_isolated_mirror()
+        db.session.add(SortDateGoogleMissionLink(sort_date_operation_id=c.operation.id,sort_date_mission_id=c.departure.id,mission_type='departure',source_sheet='Outbound',source_row=4));db.session.commit()
         with patch('app.services.neorain_google_overrides.certified_write',side_effect=GoogleWriteUncertain('Timed out after send')) as writer:
-            result=c.edit(c.arrival,'sta','0235')
+            result=c.edit(c.departure,'ramp_load_complete','0235')
             self.assertEqual(result.status_code,200)
             row=NeoRainMissionOverride.query.one()
             self.assertEqual(row.sync_status,'UNCERTAIN');self.assertTrue(row.active)
@@ -171,16 +172,17 @@ class DiagnosticRouteTest(unittest.TestCase):
 
     def test_timeout_after_send_is_uncertain_exactly_one_attempt(self):
         c=self.contract
-        db.session.add(SortDateGoogleMissionLink(sort_date_operation_id=c.operation.id,sort_date_mission_id=c.arrival.id,mission_type='arrival',source_sheet='Inbound',source_row=4));db.session.commit()
-        adapter=Mock(certified_fields={'sta'})
+        c.arm_isolated_mirror()
+        db.session.add(SortDateGoogleMissionLink(sort_date_operation_id=c.operation.id,sort_date_mission_id=c.departure.id,mission_type='departure',source_sheet='Outbound',source_row=4));db.session.commit()
+        adapter=Mock(certified_fields={'ramp_load_complete'})
         adapter.permission_verified.return_value=True
-        adapter.read_identities.return_value=[{'flight':c.arrival.flight_number,'direction':'arrival','gateway':'RFD',
+        adapter.read_identities.return_value=[{'flight':c.departure.flight_number,'direction':'departure','gateway':'RFD',
             'sort_date':c.operation.sort_date.isoformat(),'sort_name':c.operation.sort_name,
-            'tail':c.arrival.assigned_tail_number,'place':c.arrival.origin,'row':4}]
+            'tail':c.departure.assigned_tail_number,'place':c.departure.destination,'row':4}]
         adapter.inspect_input.return_value={'manual_contract_verified':True,'spill_owned':False,'cell':{}}
         adapter.write_input_once.side_effect=TimeoutError('Transport timed out after send')
         c.app.config['NEORAIN_CERTIFIED_GOOGLE_ADAPTER']=adapter
-        response=c.edit(c.arrival,'sta','0235')
+        response=c.edit(c.departure,'ramp_load_complete','0235')
         self.assertEqual(response.status_code,200);self.assertEqual(response.json['sync_status'],'UNCERTAIN')
         row=NeoRainMissionOverride.query.one();attempt_once(row.id,row.generation)
         adapter.write_input_once.assert_called_once();adapter.read_input.assert_not_called()

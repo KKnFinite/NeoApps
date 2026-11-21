@@ -124,6 +124,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "google_mirror_failed_at_utc": "DATETIME",
     },
     "motherbrain_google_integration_settings": {
+        "rain_mirror_writes_enabled": "BOOLEAN NOT NULL DEFAULT 0",
         "rain_integration_mode": (
             "VARCHAR(40) NOT NULL DEFAULT 'google_primary'"
         ),
@@ -436,6 +437,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "google_mirror_failed_at_utc": "TIMESTAMP",
     },
     "motherbrain_google_integration_settings": {
+        "rain_mirror_writes_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
         "rain_integration_mode": (
             "VARCHAR(40) NOT NULL DEFAULT 'google_primary'"
         ),
@@ -1938,6 +1940,8 @@ def _create_missing_application_tables(existing_table_names):
     from app.models import NeoRainMissionOverride, NeoRainOverrideAudit
     NeoRainMissionOverride.__table__.create(bind=db.session.connection(), checkfirst=True)
     NeoRainOverrideAudit.__table__.create(bind=db.session.connection(), checkfirst=True)
+    from app.models.motherbrain_google_integration_setting import NeoRainIntegrationEvent
+    NeoRainIntegrationEvent.__table__.create(bind=db.session.connection(), checkfirst=True)
     from app.models import (NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit, NeoScorpionVendorAccount,
         NeoScorpionVendorNight, NeoScorpionVendorRequest, NeoScorpionVendorAudit, NeoScorpionInventoryReading, NeoScorpionTopOffEvent)
     from app.models.staffing_employee_record import StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent

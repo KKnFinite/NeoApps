@@ -28,6 +28,32 @@ class RainOverrideTest(unittest.TestCase):
         return self.client.post('/neorain/override',json={'mission_id':mission.id,'field':field,'value':value,
             'expected_version':entity_version(mission),**extra})
 
+    def arm_isolated_mirror(self):
+        # Synthetic conditional destination. Production has no certificate.
+        from app.services.google_rain_integration_mode import (
+            NEO_PRIMARY_GOOGLE_MIRROR, set_rain_integration_mode, set_rain_mirror_writes,
+        )
+        set_rain_integration_mode(self.gateway, 'night', NEO_PRIMARY_GOOGLE_MIRROR)
+        self.enterContext(patch('app.services.google_rain_integration_mode.mirror_activation_blocker', return_value=None))
+        admin = self.fixture._user('rain_synthetic_mirror_admin', 'grandmaster', rain_role='grandmaster')
+        set_rain_mirror_writes(self.gateway, 'night', True, admin)
+        return admin
+
+    def test_disarm_rearm_never_replays_an_earlier_pending_edit(self):
+        from app.services.google_rain_integration_mode import set_rain_mirror_writes
+        admin = self.arm_isolated_mirror()
+        with patch('app.services.neorain_google_overrides.attempt_once'):
+            self.assertEqual(self.edit(self.departure, 'ramp_load_complete', '0235').status_code, 200)
+        row = NeoRainMissionOverride.query.filter_by(field='ramp_load_complete').one()
+        self.assertEqual(row.sync_status, 'PENDING')
+        set_rain_mirror_writes(self.gateway, 'night', False, admin)
+        set_rain_mirror_writes(self.gateway, 'night', True, admin)
+        with patch('app.services.neorain_google_overrides.certified_write') as writer:
+            attempt_once(row.id, row.generation)
+            writer.assert_not_called()
+        self.assertEqual(row.sync_status, 'NOT_WRITTEN')
+        self.assertIn('No replay', row.sync_detail)
+
     def test_sta_and_etd_separate_from_eta_std_and_midnight(self):
         self.arrival.eta_datetime_utc = datetime(2026,8,31,9)
         db.session.commit()
@@ -41,7 +67,7 @@ class RainOverrideTest(unittest.TestCase):
         self.assertEqual(response.status_code,200,response.get_data(as_text=True))
         self.assertEqual(response.json['value'],'14:30')
         self.assertEqual(self.departure.planned_datetime_utc,original_std)
-        self.assertEqual(response.json['sync_status'],'NEO_ONLY')
+        self.assertEqual(response.json['sync_status'],'LOCAL_OVERRIDE')
 
     def test_invalid_blank_incomplete_and_stale_do_not_write(self):
         for raw in ('','0','023','2460','2400','2360','ABCD'):
@@ -175,7 +201,7 @@ class RainOverrideTest(unittest.TestCase):
         self.assertEqual(self.edit(self.departure,'included',action='reset').status_code,200)
         attempt_once(row.id,old_generation)
         self.assertFalse(row.active)
-        self.assertEqual(NeoRainOverrideAudit.query.filter_by(action='SYNC').count(),1)
+        self.assertEqual(NeoRainOverrideAudit.query.filter_by(action='SYNC').count(),0)
 
     def test_permissions_historical_scope_and_missing_version(self):
         watcher=self.fixture._user('rain_override_watcher','watcher',rain_role='watcher');db.session.commit();self.fixture._login(watcher)
@@ -202,12 +228,13 @@ class RainOverrideTest(unittest.TestCase):
             db.session.commit();attempt_once(row.id,row.generation);writer.assert_not_called()
 
     def test_google_failure_retains_neo_and_never_retries(self):
+        self.arm_isolated_mirror()
         db.session.add(SortDateGoogleMissionLink(sort_date_operation_id=self.operation.id,
-            sort_date_mission_id=self.arrival.id,mission_type='arrival',source_sheet='Inbound',source_row=4));db.session.commit()
+            sort_date_mission_id=self.departure.id,mission_type='departure',source_sheet='Outbound',source_row=4));db.session.commit()
         with patch('app.services.neorain_google_overrides.certified_write',side_effect=TimeoutError) as writer:
-            response=self.edit(self.arrival,'sta','0235')
+            response=self.edit(self.departure,'ramp_load_complete','0235')
             self.assertEqual(response.status_code,200)
-            row=NeoRainMissionOverride.query.filter_by(field='sta').one()
+            row=NeoRainMissionOverride.query.filter_by(field='ramp_load_complete').one()
             self.assertTrue(row.active);self.assertEqual(row.sync_status,'FAILED')
             attempt_once(row.id,row.generation);self.assertEqual(writer.call_count,1)
 
@@ -230,7 +257,7 @@ class RainOverrideTest(unittest.TestCase):
             self.app.config['NEORAIN_FRESH_UPSTREAM_READER']=lambda mission,field:fresh
             response=self.edit(self.arrival,'sta',action='reset')
             self.assertEqual(response.status_code,200);self.assertEqual(response.json['value'],'04:00')
-            self.assertEqual(writer.call_count,1)
+            writer.assert_not_called()
 
     def test_real_rain_import_shields_only_active_fields(self):
         from app.services.google_rain_live_milestones import apply_google_rain_departure_milestones

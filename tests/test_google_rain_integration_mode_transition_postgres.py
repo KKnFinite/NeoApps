@@ -49,6 +49,46 @@ class RainModeTransitionPostgresTest(fixtures.GoogleRainIntegrationModeTransitio
         with patch.object(fixtures, "create_app", side_effect=pg_app):
             super().setUp()
 
+    def test_additive_schema_upgrades_existing_neo_only_twice(self):
+        from app.services.schema_sync import sync_database_schema
+        from app.models import MotherBrainGoogleIntegrationSetting
+        self.change(NEO_ONLY)
+        before = self.facts()
+        # Recreate the previously deployed shape in this test's disposable schema.
+        db.session.execute(text("ALTER TABLE motherbrain_google_integration_settings DROP COLUMN rain_mirror_writes_enabled"))
+        db.session.execute(text("DROP TABLE neorain_integration_events"))
+        db.session.commit()
+        for _ in range(2):
+            sync_database_schema(self.app)
+            db.session.commit()
+            row = MotherBrainGoogleIntegrationSetting.query.filter_by(gateway_id=self.gateway.id, sort_name="night").one()
+            self.assertEqual(row.rain_integration_mode, NEO_ONLY)
+            self.assertIs(row.rain_mirror_writes_enabled, False)
+            self.assertEqual(self.facts(), before)
+
+    def test_switch_waits_for_import_and_next_worker_sees_native_authority(self):
+        from app.services.google_rain_integration_mode import operation_mode
+        gateway_id, operation_id = self.gateway.id, self.operation.id
+        started = Event()
+
+        def switch():
+            with self.app.app_context():
+                gateway = db.session.get(Gateway, gateway_id)
+                started.set()
+                return change_rain_integration_mode(gateway, "night", NEO_ONLY)["mode"]
+
+        with ThreadPoolExecutor(1) as pool:
+            self.assertEqual(operation_mode(self.operation, lock=True), GOOGLE_PRIMARY)
+            future = pool.submit(switch)
+            try:
+                self.assertTrue(started.wait(5))
+                with self.assertRaises(TimeoutError):
+                    future.result(timeout=0.2)
+            finally:
+                db.session.commit()
+            self.assertEqual(future.result(timeout=10), NEO_ONLY)
+        self.assertEqual(operation_mode(db.session.get(SortDateOperation, operation_id), lock=True), NEO_ONLY)
+
     def test_concurrent_manual_sort_creation_blocks_off_day_cutover(self):
         actor = User(username="concurrent_sort_fixture", password_hash="fixture")
         db.session.add(actor)

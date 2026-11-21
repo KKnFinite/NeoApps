@@ -60,7 +60,7 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
             response = self._post('ramp_load_complete', '0237')
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json['active'])
-        self.assertEqual(response.json['sync_status'], 'NEO_ONLY')
+        self.assertEqual(response.json['sync_status'], 'LOCAL_OVERRIDE')
         writer.assert_not_called()
         self.assertIsNotNone(self.mission.ramp_load_completed_at_utc)
         self.assertEqual(NeoRainMissionOverride.query.one().field, 'ramp_load_complete')
@@ -87,7 +87,7 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         self.assertEqual(NeoRainMissionOverride.query.count(), 0)
 
     def test_mirror_attempt_occurs_once_after_canonical_neo_commit(self):
-        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        self._arm_synthetic_mirror()
         self._link()
         before = entity_version(self.mission)
         def write(mission, field, value):
@@ -108,7 +108,7 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         self.assertEqual(NeoRainOverrideAudit.query.filter_by(action='EDIT').count(), 1)
 
     def test_mirror_failure_preserves_committed_neo_and_never_replays(self):
-        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        self._arm_synthetic_mirror()
         self._link()
         from app.services.neorain_google_overrides import attempt_once
         with self._current_operation(), patch('app.services.neorain_google_overrides.certified_write', side_effect=RuntimeError('isolated provider failure')) as writer:
@@ -140,7 +140,13 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         self.mission.planned_datetime_utc = datetime(2026, 6, 19, 7, 30)
         db.session.commit()
         with self._current_operation():
+            self.assertEqual(self._post('ramp_load_complete', '0220').status_code, 200)
+            self.assertEqual(self._post('crew_load_complete', '0225').status_code, 200)
             response = self._post('official_block_out', '0237')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json['row']['departure_variance'], '-')
+            self.assertEqual(neorain_outbound_late_summary(self.operation)['total']['aircraft_late'], 0)
+            response = self._post('no_return', True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['row']['departure_variance'], '+7')
         summary = neorain_outbound_late_summary(self.operation)
@@ -165,7 +171,8 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json['row']['late_metrics_included'], included)
                 self.assertEqual(response.json['row']['departure_status'], 'departed')
-                self.assertEqual(response.json['sync_status'], 'NEO_ONLY')
+                expected = {GOOGLE_PRIMARY: 'LOCAL_OVERRIDE', NEO_PRIMARY_GOOGLE_MIRROR: 'MIRROR_OFF', NEO_ONLY: 'NEO_ONLY'}
+                self.assertEqual(response.json['sync_status'], expected[mode])
                 writer.assert_not_called()
 
     def test_late_inclusion_stale_and_wrong_sort_missions_are_rejected(self):
@@ -238,6 +245,12 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         db.session.add(SortDateGoogleMissionLink(sort_date_operation_id=self.operation.id,
             sort_date_mission_id=self.mission.id, mission_type='departure', source_sheet='Outbound', source_row=3))
         db.session.commit()
+
+    def _arm_synthetic_mirror(self):
+        from app.services.google_rain_integration_mode import set_rain_mirror_writes
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        self.enterContext(patch('app.services.google_rain_integration_mode.mirror_activation_blocker', return_value=None))
+        set_rain_mirror_writes(self.gateway, 'night', True, self._user('isolated_admin', 'grandmaster'))
 
     def _post(self, field, value, *, mission_id=None, expected_version=None):
         target_id = mission_id or self.mission.id

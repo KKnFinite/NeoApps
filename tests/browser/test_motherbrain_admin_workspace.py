@@ -106,6 +106,10 @@ class AdminWorkspaceTest(unittest.TestCase):
             expect(interval).to_have_value(value)
 
     def check_authority_controls(self, page):
+        mirror = page.locator("[data-neorain-mirror]")
+        expect(mirror.locator("[data-rain-mirror-state]")).to_have_text("OFF")
+        expect(mirror.get_by_role("button", name="Turn on")).to_be_disabled()
+        expect(mirror).to_contain_text("require NEO PRIMARY + GOOGLE MIRROR")
         for form_attribute in ("data-neosektor-mode-form", "data-neorain-mode-form"):
             form = page.locator(f"[{form_attribute}]")
             form.locator("xpath=parent::details").locator("summary").click()

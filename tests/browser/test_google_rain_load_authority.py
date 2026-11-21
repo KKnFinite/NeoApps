@@ -42,6 +42,9 @@ class RainLoadAuthorityBrowserTest(unittest.TestCase):
                     rows=[dict(sheet_row=4, flight_number='UPS0910', ramp_load_complete=value)])
                 db.session.commit()
                 self.assertEqual(result['applied_count'], 1)
+        # Seed the initial fact before login can start its own SQLite write transaction.
+        # The two later imports still run against the signed-in, open board.
+        incoming('2:30')
         browser = getattr(self.fixture.pw, engine).launch(headless=True)
         context = browser.new_context(viewport={'width':1920 if engine == 'chromium' else 390,'height':900})
         try:
@@ -50,7 +53,6 @@ class RainLoadAuthorityBrowserTest(unittest.TestCase):
             self.fixture().login(page)
             with patch('app.neonodes.neorain.routes.current_neorain_outbound_operation',
                        side_effect=lambda gateway:db.session.get(SortDateOperation,oid)):
-                incoming('2:30')
                 self.fixture().ready(page,'/neorain/outbound')
                 clock = page.locator(f'[data-rain-override-mission="{mid}"][data-rain-override-field="ramp_load_complete"] [data-rain-override-time]:visible').first
                 def open_details():

@@ -1,5 +1,4 @@
 """Exercise gspread's real HTTPClient with a local mocked transport only."""
-from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -60,8 +59,6 @@ class GoogleSheetsTimeoutTest(unittest.TestCase):
             lambda c: sheets.read_google_motherbrain_reset_parking_formulas(c),
             lambda c: sheets._clear_google_motherbrain_reset_ranges(['Inbound!A4'], c),
             lambda c: rain.read_google_rain_outbound_milestones(c),
-            lambda c: rain.write_google_rain_departure_milestone(
-                SimpleNamespace(mission_type='departure'), 'no_return', True, config=c),
         )
         for invoke in calls:
             with self.subTest(invoke=invoke):

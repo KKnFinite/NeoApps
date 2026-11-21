@@ -44,7 +44,7 @@ class CompactRainTemplateTest(unittest.TestCase):
             self.assertNotIn('data-rain-override-open', html)
             self.assertNotIn('data-rain-override-reset', html)
             self.assertEqual(html.count('type="button" data-rain-reset-selected'), 1)
-            self.assertIn('20261016-clear-v1', html)
+            self.assertRegex(html, r'<script defer src="[^"]*/js/neorain_overrides\.js\?v=[^"]+"></script>')
         self.assertIn('aria-label="Include for UPS948"', html)
         self.assertNotIn('>Include</label>', html)
         self.assertNotIn('>No Return</label>', html)

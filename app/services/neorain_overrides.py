@@ -113,8 +113,9 @@ def override_is_cleared(row):
 def edit_override(mission, operation, field, raw, actor, *, reset=False, clear=False, confirmed=False):
     from app.neonodes.neorain.services import (_parse_operational_hhmm,
         _mutate_no_return, _advance_departure_status)
-    from app.services.google_rain_integration_mode import rain_operation_is_native
-    native = rain_operation_is_native(operation)
+    from app.services.google_rain_integration_mode import NATIVE_MODES, mirror_edit_status, operation_mode
+    mode = operation_mode(operation)
+    native = mode in NATIVE_MODES
     if field not in FIELDS or mission.mission_type != FIELDS[field][0]:
         raise ValueError('Field does not belong to this mission direction.')
     if mission.sort_date_operation_id != operation.id:
@@ -205,8 +206,8 @@ def edit_override(mission, operation, field, raw, actor, *, reset=False, clear=F
         row.active, row.value = True, snapshot(mission, field)
         row.generation = (row.generation or 0) + 1
         row.modified_by_user_id, row.modified_at = actor.id, datetime.utcnow()
-        row.sync_status = 'NEO_ONLY' if clear else 'PENDING'
-        row.sync_detail = 'Explicitly cleared in Neo; no Google write.' if clear else None
+        row.sync_status, row.sync_detail = (('NEO_ONLY', 'Explicitly cleared in Neo; no Google write.')
+                                           if clear else mirror_edit_status(operation, mode=mode))
         row.sync_attempted_at = None
         mission.updated_at = datetime.utcnow()
         db.session.flush()

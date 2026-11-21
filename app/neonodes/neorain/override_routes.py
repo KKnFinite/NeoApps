@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import SortDateMission
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
+from app.services.google_rain_integration_mode import operation_mode
 from app.services.live_collaboration import entity_version, version_conflict
 from app.services.permission_rules import user_can
 from app.services.neorain_overrides import FIELDS, edit_override, serialized_value, override_display
@@ -45,6 +46,7 @@ def handle_override(default_field=None):
     operation = routes.current_neorain_outbound_operation(gateway)
     if not operation or operation.gateway_id != gateway.id or operation.archived_at_utc or operation.locked_at_utc:
         return jsonify(ok=False, error='No editable current sort.'), 409
+    operation_mode(operation, lock=True)
     mission = SortDateMission.query.filter_by(id=payload.get('mission_id'),
         sort_date_operation_id=operation.id, gateway_code=gateway.code,
         mission_type=FIELDS[field][0]).populate_existing().with_for_update().one_or_none()
@@ -63,11 +65,12 @@ def handle_override(default_field=None):
         row, changed = edit_override(mission, operation, field, payload.get('value', payload.get('included')),
             current_user, reset=action == 'reset', clear=action == 'clear', confirmed=payload.get('confirmed') is True)
         row_id, generation = (row.id, row.generation) if row else (None, None)
+        pending = row is not None and row.sync_status == 'PENDING'
         db.session.commit()
     except ValueError as exc:
         db.session.rollback()
         return jsonify(ok=False, error=str(exc)), 400
-    if changed and action == 'edit':
+    if changed and action == 'edit' and pending:
         from app.services.neorain_google_overrides import attempt_once
         attempt_once(row_id, generation)
     elif changed and action == 'reset':

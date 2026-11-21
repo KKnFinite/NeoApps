@@ -83,6 +83,9 @@ def apply_google_rain_departure_milestones(
     """Apply Rain rows without creating missions, changing tails, or committing."""
     del now
     _validate_operation(operation)
+    from app.services.google_rain_integration_mode import GOOGLE_PRIMARY, operation_mode
+    if operation_mode(operation, lock=True) != GOOGLE_PRIMARY:
+        raise ValueError("Google Rain imports require GOOGLE PRIMARY.")
     if authority_handoff not in {None, *_AUTHORITY_HANDOFFS}:
         raise ValueError("Choose a valid Google Rain authority handoff.")
     missions = SortDateMission.query.filter_by(

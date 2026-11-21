@@ -13,6 +13,7 @@ from tests import test_neorain_overrides as fixtures
 
 
 class FullNativeRainTest(TestCase):
+    mode = NEO_ONLY
     def setUp(self):
         self.rain = fixtures.RainOverrideTest()
         self.rain.setUp()
@@ -22,7 +23,7 @@ class FullNativeRainTest(TestCase):
         self.rain.fixture._login(self.rain.actor)
         self.arrival, self.departure = self.rain.arrival, self.rain.departure
         self.arrival.wave = self.departure.wave = "1"
-        set_rain_integration_mode(self.rain.gateway, self.operation.sort_name, NEO_ONLY)
+        set_rain_integration_mode(self.rain.gateway, self.operation.sort_name, self.mode)
         set_rain_fuel_data_source(self.rain.gateway, self.operation.sort_name, "google")
         db.session.commit()
 

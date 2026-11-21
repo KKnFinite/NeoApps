@@ -8,6 +8,7 @@ from flask import current_app, has_app_context
 from app.extensions import db
 from app.models import Gateway, GatewaySortMatrix, MotherBrainGoogleIntegrationSetting, SortDateOperation, SortTimelineSortSetting
 from app.services.access_control import get_current_gateway
+from app.models.motherbrain_google_integration_setting import NeoRainIntegrationEvent
 from app.services.gateway_matrix import (
     SORT_VALUES,
     configured_sort_window_utc,
@@ -31,6 +32,7 @@ RAIN_INTEGRATION_MODE_LABELS = {
     NEO_ONLY: "NEO ONLY",
 }
 DEFAULT_RAIN_SORT = "night"
+NATIVE_MODES = (NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY)
 
 
 class RainIntegrationTransitionError(RuntimeError):
@@ -41,17 +43,54 @@ class RainIntegrationWindowError(RainIntegrationTransitionError):
     """The schedule cannot establish an idle window for the requested change."""
 
 
-def rain_integration_mode(gateway=None, sort_name=None, *, setting=None):
+def rain_integration_mode(gateway=None, sort_name=None, *, setting=None, lock=False):
     """Read the configured mode without creating or updating persistence."""
+    if lock:
+        # Changes take the exclusive lock, even for an implicit Google Primary default.
+        db.session.query(Gateway.id).filter_by(id=gateway.id).with_for_update(read=True).one()
     if setting is None:
         setting = _existing_setting(gateway, sort_name)
     return _normalized_mode(getattr(setting, "rain_integration_mode", None))
 
 
-def rain_operation_is_native(operation):
-    from app.models import Gateway
+def operation_mode(operation, *, lock=False):
     gateway = operation.gateway or Gateway.query.filter_by(code=operation.gateway_code).one_or_none()
-    return gateway is not None and rain_integration_mode(gateway, operation.sort_name) == NEO_ONLY
+    if gateway is None or gateway.code != operation.gateway_code:
+        raise RainIntegrationTransitionError("NeoRain operation has no verified gateway.")
+    mode = rain_integration_mode(gateway, operation.sort_name, lock=lock)
+    if mode not in RAIN_INTEGRATION_MODES:
+        raise RainIntegrationTransitionError("Invalid NeoRain authority. Correct the integration mode between Sorts.")
+    return mode
+
+
+def rain_operation_is_native(operation):
+    return operation_mode(operation) in NATIVE_MODES
+
+
+def mirror_activation_blocker(mode):
+    if mode != NEO_PRIMARY_GOOGLE_MIRROR:
+        return "Google mirror writes require NEO PRIMARY + GOOGLE MIRROR."
+    from app.services.neorain_google_runtime import RACE_REASON
+    return RACE_REASON
+
+
+def mirror_edit_status(operation, *, mode=None):
+    mode = mode or operation_mode(operation)
+    if mode == GOOGLE_PRIMARY:
+        return "LOCAL_OVERRIDE", "Neo override saved. Google remains authoritative upstream."
+    if mode == NEO_ONLY:
+        return "NEO_ONLY", "Saved in Neo. Google integration is disabled."
+    setting = _existing_setting(operation.gateway, operation.sort_name)
+    if setting and setting.rain_mirror_writes_enabled and not mirror_activation_blocker(mode):
+        return "PENDING", "Native edit saved. Mirror confirmation pending."
+    return "MIRROR_OFF", "Saved in Neo. Google mirror writes are off."
+
+
+def mirror_armed_before_edit(operation, edited_at):
+    last_activation = NeoRainIntegrationEvent.query.filter_by(
+        gateway_id=operation.gateway_id, sort_name=operation.sort_name, action="mirror_on",
+    ).order_by(NeoRainIntegrationEvent.id.desc()).first()
+    return bool(last_activation and last_activation.created_at < edited_at)
 
 
 def rain_integration_status(gateway=None, sort_name=None):
@@ -61,7 +100,7 @@ def rain_integration_status(gateway=None, sort_name=None):
     mode = _normalized_mode(getattr(setting, "rain_integration_mode", None))
     return {
         "mode": mode,
-        "mode_label": RAIN_INTEGRATION_MODE_LABELS[mode],
+        "mode_label": RAIN_INTEGRATION_MODE_LABELS.get(mode, "INVALID MODE"),
         "modes": tuple(
             {"value": value, "label": RAIN_INTEGRATION_MODE_LABELS[value]}
             for value in RAIN_INTEGRATION_MODES
@@ -69,7 +108,64 @@ def rain_integration_status(gateway=None, sort_name=None):
         "gateway_code": gateway.code if gateway else None,
         "sort_name": normalized_sort,
         "persisted": setting is not None,
+        "mirror_requested": bool(setting and setting.rain_mirror_writes_enabled),
+        "mirror_enabled": bool(setting and setting.rain_mirror_writes_enabled and not mirror_activation_blocker(mode)),
+        "mirror_blocker": mirror_activation_blocker(mode),
+        "last_activation_refusal": (NeoRainIntegrationEvent.query.filter_by(
+            gateway_id=gateway.id, sort_name=normalized_sort, action="mirror_rejected",
+        ).order_by(NeoRainIntegrationEvent.id.desc()).first() if gateway else None),
+        "last_write_failure": _last_write_failure(gateway, normalized_sort) if gateway else None,
     }
+
+
+def _last_write_failure(gateway, sort_name):
+    from app.models import NeoRainMissionOverride, NeoRainOverrideAudit
+    return (NeoRainOverrideAudit.query.join(
+        NeoRainMissionOverride, NeoRainMissionOverride.id == NeoRainOverrideAudit.override_id,
+    ).join(SortDateOperation, SortDateOperation.id == NeoRainMissionOverride.sort_date_operation_id)
+        .filter(SortDateOperation.gateway_id == gateway.id, SortDateOperation.sort_name == sort_name,
+                NeoRainOverrideAudit.action == "SYNC", db.or_(
+                    NeoRainOverrideAudit.detail.like("FAILED:%"),
+                    NeoRainOverrideAudit.detail.like("UNCERTAIN:%"),
+                    NeoRainOverrideAudit.detail.like("NOT_WRITTEN:%")))
+        .order_by(NeoRainOverrideAudit.id.desc()).first())
+
+
+def _event(gateway, sort_name, actor, action, old_mode, mode, previous_writes, writes, detail):
+    db.session.add(NeoRainIntegrationEvent(
+        gateway_id=gateway.id, sort_name=sort_name, actor_user_id=getattr(actor, "id", None),
+        action=action, previous_mode=old_mode, mode=mode, previous_writes=previous_writes,
+        writes=writes, detail=detail,
+    ))
+
+
+def set_rain_mirror_writes(gateway, sort_name, enabled, actor):
+    from app.models import User
+    from app.services.account_security import platform_grandmaster
+    if not platform_grandmaster(actor):
+        raise PermissionError("NeoApps Grandmaster required.")
+    if type(enabled) is not bool:
+        raise ValueError("Choose ON or OFF for Google mirror writes.")
+    sort_name = _normalize_sort_name(sort_name)
+    session_version = actor.auth_session_version
+    db.session.query(Gateway.id).filter_by(id=gateway.id).with_for_update().one()
+    actor = User.query.filter_by(id=actor.id).populate_existing().with_for_update(read=True).one_or_none()
+    if not platform_grandmaster(actor) or actor.auth_session_version != session_version:
+        raise PermissionError("NeoApps Grandmaster access changed.")
+    setting = _existing_setting(gateway, sort_name)
+    previous = bool(setting and setting.rain_mirror_writes_enabled)
+    mode = rain_integration_mode(gateway, sort_name, setting=setting)
+    reason = mirror_activation_blocker(mode) if enabled else None
+    if reason:
+        _event(gateway, sort_name, actor, "mirror_rejected", mode, mode, previous, previous, reason)
+        db.session.commit()
+        raise ValueError(reason)
+    if previous != enabled:
+        setting = setting or ensure_rain_integration_setting(gateway, sort_name)
+        setting.rain_mirror_writes_enabled = enabled
+        _event(gateway, sort_name, actor, "mirror_on" if enabled else "mirror_off",
+               mode, mode, previous, enabled, "Mirror writes enabled." if enabled else "Mirror writes disabled.")
+    db.session.commit()
 
 
 def ensure_rain_integration_setting(gateway, sort_name=DEFAULT_RAIN_SORT):
@@ -91,9 +187,6 @@ def ensure_rain_integration_setting(gateway, sort_name=DEFAULT_RAIN_SORT):
         db.session.add(setting)
     else:
         setting.gateway_code = gateway.code
-        setting.rain_integration_mode = _normalized_mode(
-            setting.rain_integration_mode
-        )
         if str(getattr(setting, "rain_fuel_data_source", "") or "").strip().lower() not in {"google", "neo"}:
             setting.rain_fuel_data_source = "google"
     db.session.flush()
@@ -104,12 +197,14 @@ def set_rain_integration_mode(gateway, sort_name, mode):
     """Persist one validated Rain authority change without committing it."""
     normalized_mode = _validated_mode(mode)
     setting = ensure_rain_integration_setting(gateway, sort_name)
+    if setting.rain_integration_mode != normalized_mode or normalized_mode != NEO_PRIMARY_GOOGLE_MIRROR:
+        setting.rain_mirror_writes_enabled = False
     setting.rain_integration_mode = normalized_mode
     db.session.flush()
     return setting
 
 
-def change_rain_integration_mode(gateway, sort_name, requested_mode):
+def change_rain_integration_mode(gateway, sort_name, requested_mode, *, actor=None):
     """Change future authority in a verified Sort gap without importing any data."""
     if gateway is None:
         raise RainIntegrationTransitionError("NeoRain gateway is unavailable.")
@@ -126,6 +221,9 @@ def change_rain_integration_mode(gateway, sort_name, requested_mode):
             if current_mode != target_mode:
                 _require_sort_gap(gateway, sort_name)
                 setting = setting or ensure_rain_integration_setting(gateway, sort_name)
+                _event(gateway, sort_name, actor, "mode", current_mode, target_mode,
+                       bool(setting.rain_mirror_writes_enabled), False, "Authority changed between Sorts.")
+                setting.rain_mirror_writes_enabled = False
                 setting.rain_integration_mode = target_mode
         if current_mode != target_mode:
             db.session.commit()
@@ -208,8 +306,10 @@ def _require_sort_gap(gateway, sort_name):
         )
 
 
-def rain_google_read_enabled(gateway=None, sort_name=None):
-    return rain_integration_mode(gateway, sort_name) == GOOGLE_PRIMARY
+def rain_google_read_enabled(gateway=None, sort_name=None, *, lock=False):
+    gateway = _resolve_gateway(gateway)
+    return (gateway is not None and gateway.code == "RFD" and _normalize_sort_name(sort_name) == DEFAULT_RAIN_SORT
+            and rain_integration_mode(gateway, sort_name, lock=lock) == GOOGLE_PRIMARY)
 
 
 def _existing_setting(gateway=None, sort_name=None):
@@ -221,7 +321,7 @@ def _existing_setting(gateway=None, sort_name=None):
     return MotherBrainGoogleIntegrationSetting.query.filter_by(
         gateway_id=gateway.id,
         sort_name=_normalize_sort_name(sort_name),
-    ).first()
+    ).populate_existing().first()
 
 
 def _resolve_gateway(gateway=None):
@@ -238,12 +338,8 @@ def _normalize_sort_name(sort_name):
 
 
 def _normalized_mode(mode):
-    normalized = str(mode or "").strip().lower()
-    return (
-        normalized
-        if normalized in RAIN_INTEGRATION_MODES
-        else DEFAULT_RAIN_INTEGRATION_MODE
-    )
+    # Only a missing setting gets the historic Google Primary default.
+    return DEFAULT_RAIN_INTEGRATION_MODE if mode is None else str(mode).strip().lower()
 
 
 def _validated_mode(mode):

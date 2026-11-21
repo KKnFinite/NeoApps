@@ -20,7 +20,7 @@ from app.models import (
 )
 from app.services.google_rain_integration_mode import (
     DEFAULT_RAIN_SORT,
-    NEO_ONLY,
+    NATIVE_MODES,
     ensure_rain_integration_setting,
 )
 
@@ -36,7 +36,7 @@ def rain_fuel_data_source(gateway, sort_name=DEFAULT_RAIN_SORT, *, configured=Fa
     row = MotherBrainGoogleIntegrationSetting.query.filter_by(
         gateway_id=gateway.id, sort_name=_sort_name(sort_name)
     ).first()
-    if not configured and row and row.rain_integration_mode == NEO_ONLY:
+    if not configured and row and row.rain_integration_mode in NATIVE_MODES:
         return RAIN_FUEL_SOURCE_NEO
     return _source(getattr(row, "rain_fuel_data_source", None))
 

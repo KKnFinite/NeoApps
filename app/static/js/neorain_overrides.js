@@ -52,7 +52,7 @@
           if (input) input.value = String(displayValue || '');
           delete root.dataset.rainOverrideDirty;
           root._rainPendingClear = null;
-          note(root, action === 'reset' ? 'Reset saved.' : (action === 'clear' ? 'Cleared.' : 'Saved.'));
+          note(root, payload.sync_detail || (action === 'reset' ? 'Reset saved.' : (action === 'clear' ? 'Cleared.' : 'Saved.')));
         }
       } catch (error) {
         if (sequence !== root._rainSequence) return;

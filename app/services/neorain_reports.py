@@ -24,7 +24,7 @@ from app.services.google_motherbrain_sheets import (
     _configured_reader_inputs, _create_gspread_client, _google_call,
 )
 from app.services.time_display import format_local_hhmm
-from app.services.google_rain_integration_mode import rain_operation_is_native
+from app.services.google_rain_integration_mode import NATIVE_MODES, operation_mode, rain_operation_is_native
 from app.services.neorain_performance import completed_actual, completed_variance_minutes, eligible_for_performance, mission_cancelled
 
 
@@ -124,7 +124,7 @@ def read_google_recap():
 
 def snapshot_current_google(operation):
     """Refresh only the selected current sort; historical snapshots never drift."""
-    if rain_operation_is_native(operation):
+    if operation_mode(operation, lock=True) in NATIVE_MODES:
         return "Native NeoRain"
     if str(operation.gateway_code or "").upper() != "RFD" or operation.sort_name.casefold() != "night":
         return "RFD Recap applies only to RFD Night Sorts"

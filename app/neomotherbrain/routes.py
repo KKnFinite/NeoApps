@@ -205,6 +205,7 @@ from app.services.google_rain_integration_mode import (
     RainIntegrationTransitionError,
     RainIntegrationWindowError,
     change_rain_integration_mode,
+    set_rain_mirror_writes,
     rain_integration_status,
 )
 from app.services.neorain_fuel_authority import (
@@ -576,11 +577,25 @@ def _handle_integration_settings(gateway, can_edit):
                     gateway,
                     "night",
                     request.form.get("integration_mode"),
+                    actor=current_user,
                 )
                 flash(
                     f"NeoRain integration mode is now {status['mode_label']}.",
                     "success",
                 )
+            elif action == "set_neorain_google_mirror_writes":
+                from app.services.account_security import platform_grandmaster
+                if not platform_grandmaster(current_user):
+                    abort(403)
+                value = request.form.get("enabled")
+                if value not in {"0", "1"}:
+                    raise ValueError("Choose ON or OFF for Google mirror writes.")
+                try:
+                    set_rain_mirror_writes(gateway, "night", value == "1", current_user)
+                except PermissionError:
+                    db.session.rollback()
+                    abort(403)
+                flash(f"NeoRain Google mirror writes are {'ON' if value == '1' else 'OFF'}.", "success")
             elif action == "set_neorain_fuel_data_source":
                 setting = set_rain_fuel_data_source(
                     gateway, "night", request.form.get("fuel_data_source")
@@ -630,12 +645,14 @@ def _handle_integration_settings(gateway, can_edit):
         return redirect(url_for("neomotherbrain.integration_settings"))
 
 def _render_integration_settings(gateway, can_edit, *, suppress_live_poll=False):
+    from app.services.account_security import platform_grandmaster
     neosektor_shared_authority = neosektor_shared_authority_status(gateway)
     live_poll_context = {"uses_google_live_poll_heartbeat": False} if suppress_live_poll else {}
     return render_template(
         "neomotherbrain/system_settings.html",
         gateway=gateway,
         can_edit_system_settings=can_edit,
+        can_edit_rain_mirror=can_edit and platform_grandmaster(current_user),
         neosektor_status=neosektor_integration_status(gateway),
         neosektor_shared_authority=neosektor_shared_authority,
         neorain_status=rain_integration_status(gateway, "night"),

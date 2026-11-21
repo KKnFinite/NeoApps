@@ -39,8 +39,7 @@ from app.services.google_rain_rollover_gate import gate_google_rain_rollover_row
 from app.services.google_rain_sheets import read_google_rain_outbound_milestones
 from app.services.google_rain_integration_mode import (
     GOOGLE_PRIMARY,
-    NEO_ONLY,
-    rain_integration_mode,
+    operation_mode,
 )
 from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.memory_diagnostics import memory_diagnostics
@@ -262,11 +261,9 @@ def _run_google_rain_best_effort(
 ):
     """Run Rain after the primary poll is durable; never undo that success."""
     try:
-        mode = rain_integration_mode(
-            gateway or operation.gateway,
-            operation.sort_name,
-        )
-        if mode == NEO_ONLY:
+        mode = operation_mode(operation, lock=True)
+        if mode != GOOGLE_PRIMARY:
+            db.session.rollback()  # Release the shared authority lock.
             return {
                 "status": "skipped_neo_authoritative",
                 "mode": mode,
@@ -274,8 +271,14 @@ def _run_google_rain_best_effort(
                 "skipped_count": 0,
             }
         if current_app.config.get("TESTING") and reader is None and applier is None:
+            db.session.rollback()
             return {"status": "not_run", "mode": mode}
 
+        # The MotherBrain read or the authority lock may have outlasted the Sort.
+        preflight = google_motherbrain_live_poll_preflight(gateway or operation.gateway, now=now)
+        if preflight["status"] != "eligible" or preflight["sort_date"] != operation.sort_date:
+            db.session.rollback()
+            return {"status": "outside_window", "mode": mode}
         reader = reader or read_google_rain_outbound_milestones
         applier = applier or apply_google_rain_departure_milestones
         rows = reader()
@@ -284,7 +287,7 @@ def _run_google_rain_best_effort(
             operation,
             rows=rollover["rows"],
             now=now,
-            apply_milestones=(mode != NEO_ONLY),
+            apply_milestones=True,
         )
         db.session.commit()
         return {
