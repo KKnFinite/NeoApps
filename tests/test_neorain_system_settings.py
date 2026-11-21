@@ -16,6 +16,7 @@ from app.services.google_rain_integration_mode import (
     RainIntegrationTransitionError,
     rain_integration_mode,
 )
+from app.services.gateway_matrix import save_gateway_matrix
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
 from tests.test_neorain_sort_refresh import configure_sort_window
@@ -41,7 +42,8 @@ class NeoRainSystemSettingsTest(unittest.TestCase):
         ensure_default_permission_rules()
         db.session.commit()
         configure_sort_window(self.gateway, date(2026, 11, 19))
-        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 11, 19, 20, 59)
+        save_gateway_matrix(self.gateway, {("thursday", "night")})
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 11, 20, 21, 30)
         self.client = self.app.test_client()
 
     def tearDown(self):

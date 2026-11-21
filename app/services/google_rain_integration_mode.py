@@ -6,10 +6,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from flask import current_app, has_app_context
 
 from app.extensions import db
-from app.models import Gateway, MotherBrainGoogleIntegrationSetting, SortDateOperation, SortTimelineSortSetting
+from app.models import Gateway, GatewaySortMatrix, MotherBrainGoogleIntegrationSetting, SortDateOperation, SortTimelineSortSetting
 from app.services.access_control import get_current_gateway
 from app.services.gateway_matrix import (
-    active_sorts_for_gateway_date,
+    SORT_VALUES,
     configured_sort_window_utc,
     current_gateway_local_datetime,
     gateway_timezone,
@@ -155,31 +155,52 @@ def _require_sort_gap(gateway, sort_name):
         SortTimelineSortSetting.id
     ).populate_existing().with_for_update().all()
     by_name = {row.sort_name: row for row in settings}
+    if len(by_name) != len(settings) or any(row.gateway_code != gateway.code for row in settings):
+        raise RainIntegrationWindowError(invalid)
     try:
         zone = ZoneInfo(gateway_timezone(gateway))
     except (ZoneInfoNotFoundError, ValueError, TypeError) as error:
         raise RainIntegrationWindowError(invalid) from error
     local_now = current_gateway_local_datetime(gateway)
     recent_dates = (local_now.date() - timedelta(days=1), local_now.date())
-    # Fence the target's physical hours even before a scheduled/manual operation exists.
-    candidates = {(day, sort_name) for day in recent_dates}
-    for day in recent_dates:
-        candidates.update((day, name) for name in active_sorts_for_gateway_date(gateway, day))
-    existing = db.session.query(SortDateOperation.sort_date, SortDateOperation.sort_name).filter(
-        SortDateOperation.gateway_code == gateway.code,
+    dates_by_weekday = {day.strftime("%A").lower(): day for day in recent_dates}
+    matrix = GatewaySortMatrix.query.filter(
+        GatewaySortMatrix.gateway_id == gateway.id,
+        GatewaySortMatrix.day_of_week.in_(dates_by_weekday),
+    ).order_by(GatewaySortMatrix.id).populate_existing().with_for_update().all()
+    expected_cells = {(weekday, name) for weekday in dates_by_weekday for name in SORT_VALUES}
+    if (
+        len(matrix) != len(expected_cells)
+        or {(row.day_of_week, row.sort_name) for row in matrix} != expected_cells
+        or any(row.gateway_code != gateway.code for row in matrix)
+    ):
+        raise RainIntegrationWindowError(
+            "NeoRain authority cannot change until the MotherBrain Gateway Sort Matrix is complete and consistent."
+        )
+
+    candidates = {(dates_by_weekday[row.day_of_week], row.sort_name) for row in matrix if row.is_active}
+    existing = db.session.query(
+        SortDateOperation.sort_date, SortDateOperation.sort_name,
+        SortDateOperation.gateway_id, SortDateOperation.gateway_code,
+    ).filter(
+        db.or_(SortDateOperation.gateway_id == gateway.id, SortDateOperation.gateway_code == gateway.code),
         SortDateOperation.sort_date.in_(recent_dates),
         SortDateOperation.archived_at_utc.is_(None),
     ).all()
-    candidates.update((day, name) for day, name in existing)
+    if any(code != gateway.code or id_ not in (None, gateway.id) for _, _, id_, code in existing):
+        raise RainIntegrationWindowError("NeoRain authority cannot change while an operation has inconsistent gateway scope.")
+    candidates.update((day, name) for day, name, _, _ in existing)
     windows = []
-    for day, name in sorted(candidates):
+    # Validate the target timeline on off-days without treating those days as scheduled.
+    for day, name in sorted(candidates | {(day, sort_name) for day in recent_dates}):
         setting = by_name.get(name)
         if setting is None:
             raise RainIntegrationWindowError(invalid)
         start, end = configured_sort_window_utc(gateway, day, name, zone, sort_setting=setting)
         if start is None:
             raise RainIntegrationWindowError(invalid)
-        windows.append((start, end))
+        if (day, name) in candidates:
+            windows.append((start, end))
     now = current_gateway_local_datetime(gateway).replace(tzinfo=zone).astimezone(timezone.utc)
     if now.astimezone(zone).date() != local_now.date() or any(start <= now < end for start, end in windows):
         raise RainIntegrationWindowError(

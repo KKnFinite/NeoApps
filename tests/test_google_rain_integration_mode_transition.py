@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import Gateway, GatewaySortMatrix, SortDateMission, SortDateOperation
+from app.models import Gateway, GatewaySortMatrix, SortDateMission, SortDateOperation, User
+from app.services.gateway_matrix import save_gateway_matrix
 from app.services.google_rain_integration_mode import (
     GOOGLE_PRIMARY, NEO_ONLY, NEO_PRIMARY_GOOGLE_MIRROR,
     RainIntegrationTransitionError, RainIntegrationWindowError,
@@ -41,6 +42,7 @@ class GoogleRainIntegrationModeTransitionTest(unittest.TestCase):
             actual_block_out_datetime_utc=datetime(2026, 8, 30, 8, 5), actual_block_out_source="neorain",
         ))
         self.night, _ = configure_sort_window(self.gateway, self.operation.sort_date)
+        save_gateway_matrix(self.gateway, {("thursday", "night")})
         self.now(datetime(2026, 8, 29, 20, 59))
         for target, attr in (
             ("app.services.google_rain_sheets.read_google_rain_outbound_milestones", "reader"),
@@ -122,12 +124,61 @@ class GoogleRainIntegrationModeTransitionTest(unittest.TestCase):
         self.now(datetime(2026, 8, 30, 13))
         day = next(setting for setting in self.night.timeline_settings.sort_settings if setting.sort_name == "day")
         day.sort_window_start_local, day.sort_window_end_local = time(10), time(15)
-        db.session.add(GatewaySortMatrix(gateway_id=self.gateway.id, gateway_code="RFD", day_of_week="sunday",
-                                        sort_name="day", is_active=True))
-        db.session.commit()
+        save_gateway_matrix(self.gateway, {("thursday", "night"), ("sunday", "day")})
         with self.assertRaisesRegex(RainIntegrationWindowError, "Sort operating hours"):
             self.change(NEO_ONLY)
         self.assertEqual(SortDateOperation.query.count(), 1)
+
+    def test_friday_night_without_a_scheduled_or_existing_sort_is_an_idle_gap(self):
+        before = self.facts()
+        for now, target in (
+            (datetime(2026, 11, 20, 21, 30), NEO_ONLY),
+            (datetime(2026, 11, 21, 1, 40), GOOGLE_PRIMARY),
+        ):
+            self.now(now)
+            self.assertEqual(self.change(target)["mode"], target)
+            self.assertEqual(self.facts(), before)
+
+    def test_scheduled_night_requires_no_operation_row_and_protects_its_overnight_spillover(self):
+        for now in (datetime(2026, 11, 19, 21), datetime(2026, 11, 20, 4, 59)):
+            self.now(now)
+            with self.assertRaisesRegex(RainIntegrationWindowError, "Sort operating hours"):
+                self.change(NEO_ONLY)
+        self.now(datetime(2026, 11, 20, 5))
+        self.assertEqual(self.change(NEO_ONLY)["mode"], NEO_ONLY)
+
+    def test_unscheduled_manual_friday_operation_still_blocks_until_its_window_ends(self):
+        actor = User(username="manual_sort_fixture", password_hash="fixture")
+        db.session.add(actor)
+        db.session.flush()
+        db.session.add(SortDateOperation(
+            gateway_id=self.gateway.id, gateway_code=self.gateway.code, sort_name="night",
+            sort_date=date(2026, 11, 20), generated_by_user_id=actor.id,
+        ))
+        db.session.commit()
+        for now in (datetime(2026, 11, 20, 21, 30), datetime(2026, 11, 21, 1, 40)):
+            self.now(now)
+            with self.assertRaisesRegex(RainIntegrationWindowError, "Sort operating hours"):
+                self.change(NEO_ONLY)
+        self.now(datetime(2026, 11, 21, 5))
+        self.assertEqual(self.change(NEO_ONLY)["mode"], NEO_ONLY)
+
+    def test_missing_matrix_cell_and_conflicting_gateway_identity_fail_closed(self):
+        self.now(datetime(2026, 11, 21, 1, 40))
+        cell = GatewaySortMatrix.query.filter_by(gateway_id=self.gateway.id,
+                                                 day_of_week="friday", sort_name="night").one()
+        db.session.delete(cell)
+        db.session.commit()
+        with self.assertRaises(RainIntegrationWindowError):
+            self.change(NEO_ONLY)
+        save_gateway_matrix(self.gateway, {("thursday", "night")})
+        cell = GatewaySortMatrix.query.filter_by(gateway_id=self.gateway.id,
+                                                 day_of_week="friday", sort_name="night").one()
+        cell.gateway_code = "OTHER"
+        db.session.commit()
+        with self.assertRaises(RainIntegrationWindowError):
+            self.change(NEO_ONLY)
+        self.assertEqual(rain_integration_mode(self.gateway, "night"), GOOGLE_PRIMARY)
 
     def test_same_mode_in_sort_is_a_read_only_no_op(self):
         self.now(datetime(2026, 8, 29, 21))
