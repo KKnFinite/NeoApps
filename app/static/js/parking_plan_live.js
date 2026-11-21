@@ -334,6 +334,13 @@
 
     const updatePickerOptions = (tails) => {
         pickerOptions.hydrate(page, pickerOptions.fromLiveTails(tails), {canEdit});
+        page.querySelectorAll(".parking-mobile-assignment select[name='tail_number']").forEach((select) => {
+            const previous = select.value;
+            select.replaceChildren(new Option("SELECT TAIL", ""), ...tails.map((row) =>
+                new Option(`${row.tail_number} ${row.source.position_code || "UNASSIGNED"}`, row.tail_number)
+            ));
+            select.value = previous;
+        });
     };
     const updateMobileSlotTrigger = (lane) => {
         const trigger = lane?.querySelector("[data-mobile-slot-editor-trigger]");
@@ -1065,6 +1072,23 @@
             errorTarget: typedAssignError,
         });
         if (succeeded) typedAssignForm.removeAttribute("data-parking-dirty");
+    });
+
+    const removeForm = page.querySelector(".parking-mobile-remove-controls");
+    removeForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await unassignTail(removeForm.elements.tail_number.value);
+    });
+
+    const hotForm = page.querySelector(".parking-mobile-hot-note-controls");
+    hotForm?.elements.tail_number.addEventListener("change", () => {
+        hotForm.elements.note.value = tailCard(hotForm.elements.tail_number.value)?.dataset.parkingNote || "";
+        hotForm.elements.note.defaultValue = hotForm.elements.note.value;
+    });
+    hotForm?.addEventListener("formdata", (event) => {
+        if (hotForm.elements.note.value === hotForm.elements.note.defaultValue) {
+            event.formData.delete("note");
+        }
     });
 
     const unassignDropTarget = page.querySelector("[data-parking-unassign-drop]");

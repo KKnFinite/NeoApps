@@ -12,6 +12,7 @@
     draggable="{{ 'true' if can_edit_parking_plan else 'false' }}"
     id="PARKING-TAIL-{{ row.tail }}"
     data-parking-tail
+    {% if can_edit_parking_plan %}data-parking-note="{{ row.note or '' }}"{% endif %}
     data-tail-number="{{ row.tail }}"
     data-parking-tail-version="{{ live_tail.get('version', '') }}"
     data-parking-source-location="{{ live_source.get('location', 'unassigned') }}"

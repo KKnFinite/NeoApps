@@ -4,8 +4,10 @@
 {% block title %}Parking Plan | NeoApps{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_parking.css', v=config.STATIC_ASSET_VERSION) }}">
 <section
-    class="parking-plan-page"
+    class="parking-plan-page mb-parking mb-planning panel"
     data-parking-plan
     data-operation-id="{{ operation.id if operation else '' }}"
     data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) if operation else '' }}"
@@ -18,25 +20,29 @@
     data-live-reason="{{ live_update_status.reason if operation else 'outside_ops_window' }}"
     data-live-label="{{ live_update_status.live_status_label if operation else 'Live updates off - outside Ops window' }}"
 >
-    <div class="section-heading">
-        <h1 class="neo-page-title motherbrain-page-title mobile-shell-duplicate-title motherbrain-body-duplicate-title">Parking Plan</h1>
+    <header class="mb-heading">
+        <div>
+            {% if operation %}<p>{{ operation.gateway_code }} · {{ operation.sort_name|title }} Sort · {{ operation.sort_date }}</p>{% endif %}
+            <h1>Parking Plan</h1>
+            {% if operation %}
+            <span class="live-update-status parking-live-update-status" data-live-update-status data-live-update-state="{{ live_update_status.reason }}">{{ live_update_status.live_status_label }}</span>
+            {% elif selection_mode %}
+            <p>{{ gateway.code }} LOCAL DATE {{ local_date }}. SELECT A PLANNED OR CURRENT SORT OPERATION.</p>
+            {% else %}
+            <p>No planned sort operation.</p>
+            {% endif %}
+        </div>
         {% if operation %}
-        <p class="muted">{{ operation.gateway_code }} {{ operation.sort_name|upper }} SORT DATE {{ operation.sort_date }}</p>
-        <span
-            class="live-update-status parking-live-update-status"
-            data-live-update-status
-            data-live-update-state="{{ live_update_status.reason }}"
-        >{{ live_update_status.live_status_label }}</span>
-        <p class="parking-live-message" data-parking-live-message role="status" hidden></p>
-        {% if user_can("motherbrain.parking_rules.view") %}
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.parking_rules', operation_id=operation.id) }}">PARKING RULES</a>
+        <nav class="mb-jumps" aria-label="Parking workspace">
+            <a href="#parking-unparked">Unparked tails</a>
+            <a href="#parking-optimizer">Optimizer</a>
+            {% if user_can("motherbrain.parking_rules.view") %}
+            <a href="{{ url_for('neomotherbrain.parking_rules', operation_id=operation.id) }}">Parking Rules</a>
+            {% endif %}
+        </nav>
         {% endif %}
-        {% elif selection_mode %}
-        <p class="muted">{{ gateway.code }} LOCAL DATE {{ local_date }}. SELECT A PLANNED OR CURRENT SORT OPERATION.</p>
-        {% else %}
-        <p class="muted">No planned sort operation.</p>
-        {% endif %}
-    </div>
+    </header>
+    {% if operation %}<p class="parking-live-message" data-parking-live-message role="status" hidden></p>{% endif %}
 
     {% if selection_mode %}
         {% if operation_options %}
@@ -101,8 +107,7 @@
     <section class="parking-status-panel has-warnings" aria-label="Parking conflict details">
         <div class="parking-status-heading">
             <div>
-                <span>PARKING CONFLICTS</span>
-                <h2>REVIEW PARKING DETAILS</h2>
+                <h2>Parking conflicts and warnings</h2>
             </div>
         </div>
 
@@ -183,159 +188,6 @@
     </section>
     {% endif %}
 
-    <section
-        class="parking-optimizer-panel"
-        aria-label="Parking optimizer preview"
-        data-parking-optimizer-panel
-        {% if optimizer_preview %}data-optimizer-preview-revision="{{ parking_live_state.revision }}"{% endif %}
-    >
-        <div class="parking-optimizer-heading">
-            <div>
-                <span>PREVIEW ONLY</span>
-                <h2>OPTIMIZE / SUGGEST PLAN</h2>
-            </div>
-            <p>Hard rules stay mandatory. Preferences and deice spacing shape the preview, but suggestions do not change the saved Parking Plan.</p>
-        </div>
-        {% if can_run_parking_optimizer %}
-        <form class="parking-optimizer-form" method="post" action="{{ url_for('neomotherbrain.optimize_parking_plan', operation_id=operation.id) }}">
-            <label class="parking-checkbox">
-                <input type="checkbox" name="include_remote" value="1" {% if optimizer_defaults.include_remote %}checked{% endif %}>
-                <span>Include Remote</span>
-            </label>
-            <label class="parking-checkbox">
-                <input type="checkbox" name="include_throat" value="1" {% if optimizer_defaults.include_throat %}checked{% endif %}>
-                <span>Include 9/10</span>
-            </label>
-            <button class="action-button" type="submit">SUGGEST PLAN</button>
-        </form>
-        {% else %}
-        <p class="muted">Your current permissions allow viewing Parking Plan, but not running optimizer previews.</p>
-        {% endif %}
-
-        {% if optimizer_preview %}
-        <div class="parking-optimizer-results" aria-label="Parking optimizer preview results">
-            <p class="parking-optimizer-stale-message" data-parking-optimizer-stale hidden>Parking changed after this preview. Generate a fresh preview before applying.</p>
-            <div class="parking-optimizer-result-head">
-                <span>Solver {{ optimizer_preview.solver_status }}</span>
-                <span>Candidates {{ optimizer_preview.candidate_tail_count }}</span>
-                <span>Remote {{ "ON" if optimizer_preview.runtime_toggles.include_remote else "OFF" }}</span>
-                <span>9/10 {{ "ON" if optimizer_preview.runtime_toggles.include_throat else "OFF" }}</span>
-                <span>Deice {{ optimizer_preview.runtime_toggles.deice_spacing_threshold_minutes }} min / {{ optimizer_preview.runtime_toggles.deice_scoring_status|upper }}</span>
-                <span>Inbound spacing {{ optimizer_preview.runtime_toggles.inbound_same_ramp_spacing_minutes }} min / {{ optimizer_preview.runtime_toggles.inbound_spacing_status|upper }}</span>
-                {% if optimizer_preview.wall_time_seconds is not none %}
-                <span>{{ "%.3f"|format(optimizer_preview.wall_time_seconds) }} sec</span>
-                {% endif %}
-            </div>
-            <p class="parking-optimizer-note">{{ optimizer_preview.summary }}</p>
-            {% if optimizer_preview.runtime_toggles.deice_scoring_detail %}
-            <p class="parking-optimizer-note">Deice: {{ optimizer_preview.runtime_toggles.deice_scoring_detail }}</p>
-            {% endif %}
-            {% if optimizer_preview.runtime_toggles.inbound_spacing_detail %}
-            <p class="parking-optimizer-note">Inbound spacing: {{ optimizer_preview.runtime_toggles.inbound_spacing_detail }}</p>
-            {% endif %}
-            {% if optimizer_preview.solver_diagnostic %}
-            <p class="parking-optimizer-note parking-optimizer-diagnostic">{{ optimizer_preview.solver_diagnostic }}</p>
-            {% endif %}
-            {% if optimizer_preview.model_diagnostics %}
-            <div class="parking-optimizer-section parking-optimizer-diagnostics">
-                <h3>MODEL DIAGNOSTICS</h3>
-                <ul>
-                    {% for diagnostic in optimizer_preview.model_diagnostics %}
-                    <li>
-                        <strong>{{ diagnostic.stage|upper }}</strong>
-                        {{ diagnostic.status }} / placements {{ diagnostic.placement_count }} / ETA checks {{ diagnostic.eta_relation_count }}
-                        / deice candidates {{ diagnostic.deice_candidate_count }} / deice scans {{ diagnostic.deice_pair_scan_count }}
-                        / workers {{ diagnostic.search_workers }} / memory {{ diagnostic.memory_limit_mb }} MB
-                        <span>{{ diagnostic.summary }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if optimizer_preview.locked_assignments %}
-            <div class="parking-optimizer-section">
-                <h3>LOCKED / PRESERVED</h3>
-                <ul>
-                    {% for assignment in optimizer_preview.locked_assignments %}
-                    <li><strong>{{ assignment.tail }}</strong> {{ assignment.label }} / {{ assignment.aircraft_type }} / {{ assignment.parking_window }} <span>{{ assignment.reason }}</span></li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if optimizer_preview.suggested_assignments %}
-            <div class="parking-optimizer-section">
-                <h3>SUGGESTED ASSIGNMENTS</h3>
-                <ul>
-                    {% for assignment in optimizer_preview.suggested_assignments %}
-                    <li>
-                        <strong>{{ assignment.tail }}</strong> {{ assignment.label }} / {{ assignment.origin }} / {{ assignment.aircraft_type }} / {{ assignment.parking_window }}
-                        <span>{{ assignment.reason }}</span>
-                        {% if assignment.building_lineup_belt_pair %}
-                        <small>Building Lineup {{ assignment.building_lineup_belt_pair }} / preferred ramps {{ assignment.building_lineup_preferred_ramps|join(", ") or "NONE" }} / score {{ "YES" if assignment.building_lineup_belt_preference_applied else "NO" }}</small>
-                        {% endif %}
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% if can_apply_parking_optimizer and optimizer_preview.can_apply_preview %}
-            <form class="parking-optimizer-apply-form" method="post" action="{{ url_for('neomotherbrain.apply_parking_plan_optimizer', operation_id=operation.id) }}">
-                <input type="hidden" name="include_remote" value="{{ 1 if optimizer_preview.runtime_toggles.include_remote else 0 }}">
-                <input type="hidden" name="include_throat" value="{{ 1 if optimizer_preview.runtime_toggles.include_throat else 0 }}">
-                <input type="hidden" name="expected_plan_revision" value="{{ parking_live_state.revision }}">
-                <label class="parking-checkbox">
-                    <input type="checkbox" name="confirm_apply" value="1" required>
-                    <span>I understand this writes the suggested assignments to the current Parking Plan.</span>
-                </label>
-                <button class="action-button" type="submit">APPLY SUGGESTED PLAN</button>
-            </form>
-            {% elif can_apply_parking_optimizer %}
-            <p class="parking-optimizer-note">Apply is unavailable until Suggest Plan completes with a feasible solver result.</p>
-            {% else %}
-            <p class="parking-optimizer-note">Your current permissions allow previewing suggestions, but not applying them.</p>
-            {% endif %}
-            {% endif %}
-
-            {% if optimizer_preview.unassigned_tails %}
-            <div class="parking-optimizer-section">
-                <h3>UNASSIGNED / UNRESOLVED</h3>
-                <ul>
-                    {% for row in optimizer_preview.unassigned_tails %}
-                    <li>
-                        <strong>{{ row.tail }}</strong> {{ row.origin }} / {{ row.aircraft_type }} / {{ row.parking_window }}
-                        <span>{{ row.reason }}</span>
-                        <small>
-                            Candidates {{ row.candidate_positions_before_filters }} -> {{ row.candidate_positions_after_hard_filters }}
-                            {% if row.candidate_positions_after_sample %}
-                                / available {{ row.candidate_positions_after_sample }}
-                            {% elif row.top_rejection_reason %}
-                                / {{ row.top_rejection_reason }}
-                            {% endif %}
-                            {% if row.building_lineup_belt_pair %}
-                                / Building Lineup {{ row.building_lineup_belt_pair }} prefers {{ row.building_lineup_preferred_ramps|join(", ") or "NONE" }}
-                            {% endif %}
-                        </small>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if optimizer_preview.conflicts %}
-            <div class="parking-optimizer-section">
-                <h3>LOCKED CONFLICTS</h3>
-                <ul>
-                    {% for conflict in optimizer_preview.conflicts %}
-                    <li><strong>{{ conflict.position }}</strong>{% if conflict.tail %} / {{ conflict.tail }}{% endif %} <span>{{ conflict.message }}</span></li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
-    </section>
-
     {% if can_edit_parking_plan %}
     <script nonce="{{ csp_nonce() }}" type="application/json" data-parking-picker-bootstrap>{{ {
         "all_tails": tail_rows | map(attribute="tail") | list,
@@ -401,24 +253,13 @@
     <section class="parking-layout parking-layout-with-sidebar">
         <aside class="parking-left-rail" aria-label="Manage sort navigation and unparked tails">
             {% include "neomotherbrain/_manage_sort_sidebar.html" %}
-            <section class="parking-tail-panel" aria-label="Unparked tails and parking assignment controls" data-parking-unassign-drop>
+            <section id="parking-unparked" class="parking-tail-panel" aria-label="Unparked tails and parking assignment controls" data-parking-unassign-drop>
             <div class="parking-panel-heading">
                 <h2>UNPARKED TAILS</h2>
-                <div class="parking-panel-actions">
-                    <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
-                    {% if summary.assigned_tails and can_edit_parking_plan %}
-                    <form
-                        method="post"
-                        action="{{ url_for('neomotherbrain.clear_parking_plan_assignments', operation_id=operation.id) }}"
-                        data-confirm-message="Clear all parked tails for this sort operation?"
-                    >
-                        <input type="hidden" name="operation_id" value="{{ operation.id }}">
-                        <button class="parking-clear-button" type="submit">CLEAR PARKING</button>
-                    </form>
-                    {% endif %}
-                </div>
             </div>
             {% if can_edit_parking_plan %}
+            <details class="mb-parking-mobile-tools">
+            <summary>Assignment and HOT / notes</summary>
             <div class="parking-mobile-assignment" aria-label="Mobile parking assignment controls">
                 <form class="parking-mobile-action-section parking-mobile-assign-controls" method="post" action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}">
                     <input type="hidden" name="operation_id" value="{{ operation.id }}">
@@ -517,6 +358,7 @@
                     <button class="parking-remove-button" type="submit">REMOVE / UNASSIGN</button>
                 </form>
             </div>
+            </details>
             {% endif %}
 
             {% if can_edit_parking_plan %}
@@ -579,7 +421,7 @@
             </section>
         </aside>
 
-        <section class="parking-ramp-layout" aria-label="Visual ramp parking layout" data-mobile-parking-ramp-cards>
+        <section id="parking-ramps" class="parking-ramp-layout" aria-label="Visual ramp parking layout" data-mobile-parking-ramp-cards>
             {% for ramp in ramp_groups %}
             <article
                 class="parking-ramp-group parking-ramp-{{ ramp.code|lower }}"
@@ -588,6 +430,7 @@
                 data-ramp-column="{{ loop.cycle('1', '2') }}"
                 data-ramp-layout="{{ 'remote' if ramp.code == 'R' else 'standard' }}"
             >
+                <h2 class="mb-ramp-title">{{ ramp.name|title }}</h2>
                 <div class="parking-position-grid parking-position-grid-{{ ramp.code|lower }}">
                     <div class="parking-ramp-center" aria-hidden="true">{{ ramp.name|upper }}</div>
                     {% for position in ramp.positions %}
@@ -649,6 +492,177 @@
             {% endfor %}
         </section>
     </section>
+
+    <section
+        id="parking-optimizer" class="parking-optimizer-panel"
+        aria-label="Parking optimizer preview"
+        data-parking-optimizer-panel
+        {% if optimizer_preview %}data-optimizer-preview-revision="{{ parking_live_state.revision }}"{% endif %}
+    >
+        <div class="parking-optimizer-heading">
+            <div>
+                <span>PREVIEW ONLY</span>
+                <h2>OPTIMIZE / SUGGEST PLAN</h2>
+            </div>
+            <p>Review suggestions before applying them to this Sort.</p>
+        </div>
+        {% if can_run_parking_optimizer %}
+        <form class="parking-optimizer-form" method="post" action="{{ url_for('neomotherbrain.optimize_parking_plan', operation_id=operation.id) }}#parking-optimizer">
+            <label class="parking-checkbox">
+                <input type="checkbox" name="include_remote" value="1" {% if optimizer_defaults.include_remote %}checked{% endif %}>
+                <span>Include Remote</span>
+            </label>
+            <label class="parking-checkbox">
+                <input type="checkbox" name="include_throat" value="1" {% if optimizer_defaults.include_throat %}checked{% endif %}>
+                <span>Include 9/10</span>
+            </label>
+            <button class="action-button" type="submit">SUGGEST PLAN</button>
+        </form>
+        {% else %}
+        <p class="muted">Your current permissions allow viewing Parking Plan, but not running optimizer previews.</p>
+        {% endif %}
+
+        {% if optimizer_preview %}
+        <div class="parking-optimizer-results" aria-label="Parking optimizer preview results">
+            <p class="parking-optimizer-stale-message" data-parking-optimizer-stale hidden>Parking changed after this preview. Generate a fresh preview before applying.</p>
+            <div class="parking-optimizer-result-head">
+                <span>Solver {{ optimizer_preview.solver_status }}</span>
+                <span>Candidates {{ optimizer_preview.candidate_tail_count }}</span>
+                <span>Remote {{ "ON" if optimizer_preview.runtime_toggles.include_remote else "OFF" }}</span>
+                <span>9/10 {{ "ON" if optimizer_preview.runtime_toggles.include_throat else "OFF" }}</span>
+                <span>Deice {{ optimizer_preview.runtime_toggles.deice_spacing_threshold_minutes }} min / {{ optimizer_preview.runtime_toggles.deice_scoring_status|upper }}</span>
+                <span>Inbound spacing {{ optimizer_preview.runtime_toggles.inbound_same_ramp_spacing_minutes }} min / {{ optimizer_preview.runtime_toggles.inbound_spacing_status|upper }}</span>
+                {% if optimizer_preview.wall_time_seconds is not none %}
+                <span>{{ "%.3f"|format(optimizer_preview.wall_time_seconds) }} sec</span>
+                {% endif %}
+            </div>
+            <p class="parking-optimizer-note">{{ optimizer_preview.summary }}</p>
+            {% if optimizer_preview.locked_assignments %}
+            <div class="parking-optimizer-section">
+                <h3>LOCKED / PRESERVED</h3>
+                <ul>
+                    {% for assignment in optimizer_preview.locked_assignments %}
+                    <li><strong>{{ assignment.tail }}</strong> {{ assignment.label }} / {{ assignment.aircraft_type }} / {{ assignment.parking_window }} <span>{{ assignment.reason }}</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if optimizer_preview.suggested_assignments %}
+            <div class="parking-optimizer-section">
+                <h3>SUGGESTED ASSIGNMENTS</h3>
+                <ul>
+                    {% for assignment in optimizer_preview.suggested_assignments %}
+                    <li>
+                        <strong>{{ assignment.tail }}</strong> {{ assignment.label }} / {{ assignment.origin }} / {{ assignment.aircraft_type }} / {{ assignment.parking_window }}
+                        <span>{{ assignment.reason }}</span>
+                        {% if assignment.building_lineup_belt_pair %}
+                        <small>Building Lineup {{ assignment.building_lineup_belt_pair }} / preferred ramps {{ assignment.building_lineup_preferred_ramps|join(", ") or "NONE" }} / score {{ "YES" if assignment.building_lineup_belt_preference_applied else "NO" }}</small>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            {% endif %}
+
+            {% if optimizer_preview.unassigned_tails %}
+            <div class="parking-optimizer-section">
+                <h3>UNASSIGNED / UNRESOLVED</h3>
+                <ul>
+                    {% for row in optimizer_preview.unassigned_tails %}
+                    <li>
+                        <strong>{{ row.tail }}</strong> {{ row.origin }} / {{ row.aircraft_type }} / {{ row.parking_window }}
+                        <span>{{ row.reason }}</span>
+                        <small>
+                            Candidates {{ row.candidate_positions_before_filters }} -> {{ row.candidate_positions_after_hard_filters }}
+                            {% if row.candidate_positions_after_sample %}
+                                / available {{ row.candidate_positions_after_sample }}
+                            {% elif row.top_rejection_reason %}
+                                / {{ row.top_rejection_reason }}
+                            {% endif %}
+                            {% if row.building_lineup_belt_pair %}
+                                / Building Lineup {{ row.building_lineup_belt_pair }} prefers {{ row.building_lineup_preferred_ramps|join(", ") or "NONE" }}
+                            {% endif %}
+                        </small>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if optimizer_preview.conflicts %}
+            <div class="parking-optimizer-section">
+                <h3>LOCKED CONFLICTS</h3>
+                <ul>
+                    {% for conflict in optimizer_preview.conflicts %}
+                    <li><strong>{{ conflict.position }}</strong>{% if conflict.tail %} / {{ conflict.tail }}{% endif %} <span>{{ conflict.message }}</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if optimizer_preview.suggested_assignments %}
+            {% if can_apply_parking_optimizer and optimizer_preview.can_apply_preview %}
+            <form class="parking-optimizer-apply-form" method="post" action="{{ url_for('neomotherbrain.apply_parking_plan_optimizer', operation_id=operation.id) }}">
+                <input type="hidden" name="include_remote" value="{{ 1 if optimizer_preview.runtime_toggles.include_remote else 0 }}">
+                <input type="hidden" name="include_throat" value="{{ 1 if optimizer_preview.runtime_toggles.include_throat else 0 }}">
+                <input type="hidden" name="expected_plan_revision" value="{{ parking_live_state.revision }}">
+                <label class="parking-checkbox">
+                    <input type="checkbox" name="confirm_apply" value="1" required>
+                    <span>I understand this writes the suggested assignments to the current Parking Plan.</span>
+                </label>
+                <button class="action-button" type="submit">APPLY SUGGESTED PLAN</button>
+            </form>
+            {% elif can_apply_parking_optimizer %}
+            <p class="parking-optimizer-note">Apply is unavailable until Suggest Plan completes with a feasible solver result.</p>
+            {% else %}
+            <p class="parking-optimizer-note">Your current permissions allow previewing suggestions, but not applying them.</p>
+            {% endif %}
+            {% endif %}
+            {% if optimizer_preview.runtime_toggles.deice_scoring_detail or optimizer_preview.runtime_toggles.inbound_spacing_detail or optimizer_preview.solver_diagnostic or optimizer_preview.model_diagnostics %}
+            <details class="mb-parking-diagnostics">
+                <summary>Solver diagnostics</summary>
+                {% if optimizer_preview.runtime_toggles.deice_scoring_detail %}
+                <p class="parking-optimizer-note">Deice: {{ optimizer_preview.runtime_toggles.deice_scoring_detail }}</p>
+                {% endif %}
+                {% if optimizer_preview.runtime_toggles.inbound_spacing_detail %}
+                <p class="parking-optimizer-note">Inbound spacing: {{ optimizer_preview.runtime_toggles.inbound_spacing_detail }}</p>
+                {% endif %}
+                {% if optimizer_preview.solver_diagnostic %}
+                <p class="parking-optimizer-note parking-optimizer-diagnostic">{{ optimizer_preview.solver_diagnostic }}</p>
+                {% endif %}
+                {% if optimizer_preview.model_diagnostics %}
+                <div class="parking-optimizer-section parking-optimizer-diagnostics">
+                    <h3>MODEL DIAGNOSTICS</h3>
+                    <ul>
+                        {% for diagnostic in optimizer_preview.model_diagnostics %}
+                        <li>
+                            <strong>{{ diagnostic.stage|upper }}</strong>
+                            {{ diagnostic.status }} / placements {{ diagnostic.placement_count }} / ETA checks {{ diagnostic.eta_relation_count }}
+                            / deice candidates {{ diagnostic.deice_candidate_count }} / deice scans {{ diagnostic.deice_pair_scan_count }}
+                            / workers {{ diagnostic.search_workers }} / memory {{ diagnostic.memory_limit_mb }} MB
+                            <span>{{ diagnostic.summary }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </details>
+            {% endif %}
+        </div>
+        {% endif %}
+    </section>
+
+    {% if summary.assigned_tails and can_edit_parking_plan %}
+    <form class="mb-parking-clear"
+        method="post"
+        action="{{ url_for('neomotherbrain.clear_parking_plan_assignments', operation_id=operation.id) }}"
+        data-confirm-message="Clear all parked tails for this sort operation?"
+    >
+        <input type="hidden" name="operation_id" value="{{ operation.id }}">
+        <button class="parking-clear-button" type="submit">CLEAR PARKING</button>
+    </form>
+    {% endif %}
     {% endif %}
 </section>
 

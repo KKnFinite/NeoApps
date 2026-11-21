@@ -64,6 +64,7 @@
 <section id="parking-rule-section-{{ category }}" class="parking-rules-card" aria-label="{{ title }}">
     <div class="section-heading parking-rules-card-heading">
         <h2>{{ title|upper }}</h2>
+        <strong class="mb-rule-strength">{{ "HARD" if category in (categories.arrival_required, categories.departure_required, categories.aircraft_restrictions) else "SOFT" }}</strong>
         <p class="muted">{{ helper_text }}</p>
     </div>
     <div class="parking-rules-row-list" data-parking-rule-section="{{ category }}">
@@ -139,6 +140,7 @@
 <section id="parking-rule-section-{{ category }}" class="parking-rules-card" aria-label="{{ title }}">
     <div class="section-heading parking-rules-card-heading">
         <h2>{{ title|upper }}</h2>
+        <strong class="mb-rule-strength">{{ "HARD" if category in (categories.arrival_required, categories.departure_required, categories.aircraft_restrictions) else "SOFT" }}</strong>
         {% if helper_text %}<p class="muted">{{ helper_text }}</p>{% endif %}
     </div>
     <div class="table-wrap">
@@ -214,6 +216,7 @@
 <section id="parking-rule-section-{{ category }}" class="parking-rules-card" aria-label="Blocked Parking Positions">
     <div class="section-heading parking-rules-card-heading">
         <h2>BLOCKED PARKING POSITIONS</h2>
+        <strong class="mb-rule-strength">HARD</strong>
         <p class="muted">Blocked positions are hard rules. The optimizer will never suggest these positions, and saved manual assignments there will show conflict alerts.</p>
     </div>
     <div class="table-wrap">
@@ -309,16 +312,21 @@
 {% endmacro %}
 
 {% block content %}
-<section class="parking-rules-page">
-    <div class="section-heading">
-        <h1 class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Parking Rules</h1>
-        <p class="muted">FOUNDATION SETTINGS FOR FUTURE PARKING PLAN OPTIMIZATION. MANUAL PARKING ASSIGNMENTS ARE UNCHANGED.</p>
-        {% if operation %}
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=operation.id) }}">BACK TO PARKING PLAN</a>
-        {% else %}
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.parking_plan') }}">BACK TO PARKING PLAN</a>
-        {% endif %}
-    </div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_parking.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="parking-rules-page mb-parking mb-planning panel">
+    <header class="mb-heading">
+        <div>
+            {% if operation %}<p>{{ operation.gateway_code }} · {{ operation.sort_name|title }} Sort · {{ operation.sort_date }}</p>{% endif %}
+            <h1>Parking Rules</h1>
+        </div>
+        <nav class="mb-jumps" aria-label="Parking rules sections">
+            <a href="#flight-rules">Flight rules</a>
+            <a href="#physical-restrictions">Physical restrictions</a>
+            <a href="#optimizer-configuration">Optimizer</a>
+            <a href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=operation.id) if operation else url_for('neomotherbrain.parking_plan') }}">Back to Parking Plan</a>
+        </nav>
+    </header>
 
     {% if not can_edit_parking_rules %}
     <section class="panel parking-rules-readonly-note">
@@ -328,19 +336,31 @@
     {% endif %}
 
     <div class="parking-rules-grid">
-        {{ plan_rule_table("Arrival Preferred Parking", rules_by_category[categories.arrival_preferred], categories.arrival_preferred, arrival_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this arrival flight/origin on the selected ramp or position when valid alternatives exist.") }}
-        {{ plan_rule_table("Arrival Required Parking", rules_by_category[categories.arrival_required], categories.arrival_required, arrival_rule_options, "Required parking is a HARD rule. This arrival flight/origin must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
-        {{ plan_rule_table("Departure Preferred Parking", rules_by_category[categories.departure_preferred], categories.departure_preferred, departure_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this departure flight/destination on the selected ramp or position when valid alternatives exist.") }}
-        {{ plan_rule_table("Departure Required Parking", rules_by_category[categories.departure_required], categories.departure_required, departure_rule_options, "Required parking is a HARD rule. This departure flight/destination must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
+        <h2 class="mb-rule-group" id="flight-rules">Flight parking rules</h2>
+        {{ plan_rule_table("Arrival Preferred Parking", rules_by_category[categories.arrival_preferred], categories.arrival_preferred, arrival_rule_options, "Preferred parking is a SOFT rule. Use this location when available.") }}
+        {{ plan_rule_table("Arrival Required Parking", rules_by_category[categories.arrival_required], categories.arrival_required, arrival_rule_options, "Required parking is a HARD rule. An unavailable location leaves the flight unresolved.") }}
+        {{ plan_rule_table("Departure Preferred Parking", rules_by_category[categories.departure_preferred], categories.departure_preferred, departure_rule_options, "Preferred parking is a SOFT rule. Use this location when available.") }}
+        {{ plan_rule_table("Departure Required Parking", rules_by_category[categories.departure_required], categories.departure_required, departure_rule_options, "Required parking is a HARD rule. An unavailable location leaves the flight unresolved.") }}
 
         <form id="parking-rules-other-rules" class="operation-form parking-rules-form" method="post" data-parking-rules-form>
             {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
             <input type="hidden" name="return_to" value="">
             <input type="hidden" name="parking_rule_settings_present" value="1">
+            <h2 class="mb-rule-group" id="physical-restrictions">Physical restrictions</h2>
             {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Aircraft Type Restrictions are HARD / NOT ALLOWED rules. The optimizer will never park the selected aircraft type on that ramp. A restriction row means not allowed on this ramp.", "aircraft_type") }}
             {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Aircraft Type Preferences are SOFT optimizer guidance. The optimizer will try to place these aircraft types on these ramps when possible, but hard rules still win and preferences are not required.", "aircraft_type") }}
             {{ blocked_position_table(rules_by_category[categories.blocked_positions], categories.blocked_positions) }}
 
+            <details class="parking-rules-card mb-parking-diagnostics">
+                <summary>PHYSICAL PARKING RULES</summary>
+                <ul class="parking-physical-rules">
+                    {% for rule_text in physical_rules %}
+                    <li>{{ rule_text }}</li>
+                    {% endfor %}
+                </ul>
+            </details>
+
+            <h2 class="mb-rule-group" id="optimizer-configuration">Optimizer configuration</h2>
             <section class="parking-rules-card" aria-label="Optimizer Defaults">
                 <div class="section-heading parking-rules-card-heading">
                     <h2>OPTIMIZER DEFAULTS</h2>
@@ -388,23 +408,14 @@
 
             {{ building_lineup_belt_preferences_table(building_lineup_belt_preferences) }}
 
-            <section class="parking-rules-card" aria-label="Physical Parking Rules">
-                <div class="section-heading parking-rules-card-heading">
-                    <h2>PHYSICAL PARKING RULES</h2>
-                    <p class="muted">READ-ONLY FOUNDATION FOR FUTURE OPTIMIZER GEOMETRY.</p>
-                </div>
-                <ul class="parking-physical-rules">
-                    {% for rule_text in physical_rules %}
-                    <li>{{ rule_text }}</li>
-                    {% endfor %}
-                </ul>
-            </section>
+            {% if can_edit_parking_rules %}
+            <div class="action-row">
+                <button class="action-button" type="submit">SAVE DEFAULTS / OTHER RULES</button>
+            </div>
+            {% endif %}
 
-            <section class="parking-rules-card" aria-label="Optimizer Rule Report">
-                <div class="section-heading parking-rules-card-heading">
-                    <h2>OPTIMIZER RULE REPORT</h2>
-                    <p class="muted">READ-ONLY SUMMARY OF THE RULES AND SETTINGS THE OPTIMIZER USES.</p>
-                </div>
+            <details class="parking-rules-card mb-parking-diagnostics" aria-label="Optimizer Rule Report">
+                <summary>OPTIMIZER RULE REPORT</summary>
                 <div class="parking-rules-report-grid">
                     <div class="parking-rules-report-block">
                         <h3>HARD RULES</h3>
@@ -492,13 +503,7 @@
                         </dl>
                     </div>
                 </div>
-            </section>
-
-            {% if can_edit_parking_rules %}
-            <div class="action-row">
-                <button class="action-button" type="submit">SAVE DEFAULTS / OTHER RULES</button>
-            </div>
-            {% endif %}
+            </details>
         </form>
     </div>
 </section>
