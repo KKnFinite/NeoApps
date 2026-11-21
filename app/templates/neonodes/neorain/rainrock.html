@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Rainrock | NeoRain{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static',filename='css/neorain_rainrock.css',v='sort-hours-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neorain_rainrock.css',v='native-closeout-v1') }}">
 <main class="rainrock" data-rainrock data-operation="{{ operation.id if operation else '' }}" data-state-url="{{ url_for('neorain.rainrock_state',operation_id=operation.id) if operation else '' }}" {% if refresh_status.auto_refresh_enabled %}data-auto-state-url="{{ url_for('neorain.rainrock_state', operation_id=operation.id, automatic=1) }}" data-sort-end-ms="{{ refresh_status.sort_end_ms }}" data-refresh-ms="{{ config.get('RAINROCK_REFRESH_INTERVAL_MS',60000) }}"{% endif %}>
   <header class="rainrock-head"><h1>◈ RAINROCK</h1>{% include 'neonodes/neorain/_report_sort_picker.html' %}<span class="rainrock-save-state" data-rainrock-save-status role="status">{{ 'Auto-saves' if can_edit else 'Read-only' }}</span></header>
   {% if report %}
@@ -18,5 +18,5 @@
   {% else %}<p>No sort selected. Choose an available sort above.</p>{% endif %}
 </main>
 <script src="{{ url_for('static',filename='vendor/html2canvas-1.4.1.min.js') }}" defer></script>
-<script src="{{ url_for('static',filename='js/neorain_rainrock.js',v='native-closeout-v1') }}" defer></script>
+<script src="{{ url_for('static',filename='js/neorain_rainrock.js',v='sort-hours-v1') }}" defer></script>
 {% endblock %}

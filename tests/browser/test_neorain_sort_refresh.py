@@ -72,6 +72,9 @@ class NeoRainSortRefreshBrowserTest(TestCase):
                     app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = case.start - timedelta(minutes=1)
                     page.clock.set_system_time((case.start - timedelta(minutes=1)).replace(tzinfo=zone))
                     self.assertEqual(page.goto(url).status, 200)
+                    if report:
+                        asset = f"neorain_{screen.replace('-', '_')}.js?v=sort-hours-v1"
+                        self.assertEqual(page.locator(f'script[src$="{asset}"]').count(), 1)
                     requests.clear()
                     page.clock.run_for(70000)
                     self.assertEqual(requests, [])
