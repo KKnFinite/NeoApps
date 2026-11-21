@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from math import ceil
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 from flask import has_request_context, request
 from sqlalchemy import cast, literal, null, select, text, union_all
 
@@ -19,7 +21,9 @@ from app.models import (
     SortDateMission,
 )
 from app.services.operation_scope import current_operational_sort_operation
-from app.services.gateway_matrix import current_gateway_local_datetime, current_operations_for_gateway
+from app.services.gateway_matrix import (
+    current_gateway_local_datetime, current_operations_for_gateway, gateway_timezone, physical_poll_windows,
+)
 from app.services.node_refresh import node_auto_refresh_status
 from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.request_cache import MISSING, request_cached, set_request_cached
@@ -921,16 +925,38 @@ def _neosektor_screen_refresh_status(
     now=None,
     schedule_next_window=False,
 ):
-    """Combine canonical Ops-window eligibility with one screen's DB override."""
+    """Limit the screen's existing Ops schedule to the physical Sort hours."""
     status = node_auto_refresh_status(
         gateway,
         now=now,
-        schedule_next_window=schedule_next_window,
     )
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    selected_day = date.fromisoformat(status["sort_date"]) if status.get("sort_date") else None
+    selected = physical_poll_windows(gateway, selected_day, (status.get("sort_name") or "").lower(),
+                                     within_ops=True, now=local_now)
     setting = live_screen_refresh_value(gateway, screen_key)
+    upcoming = []
+    if schedule_next_window and setting.enabled:
+        upcoming = physical_poll_windows(gateway, None, None, follow_matrix=True,
+                                         within_ops=True, now=local_now)
+    zone = ZoneInfo(gateway_timezone(gateway)) if selected or upcoming else None
+    current_ms = int(local_now.replace(tzinfo=zone).timestamp() * 1000) if zone else 0
+    if status["auto_refresh_enabled"] and not any(start <= current_ms < end for start, end in selected):
+        status.update(auto_refresh_enabled=False, reason="outside_sort_window", message="Outside Sort hours",
+                      live_status_label="Outside Sort hours", is_operation_active=False)
+    # Future matrix windows can wake Driver Routing but never activate a different selected Sort.
+    windows = sorted(selected + [p for p in upcoming if p[0] > current_ms and p not in selected])
+    if schedule_next_window and setting.enabled and not status["auto_refresh_enabled"]:
+        next_start = next((start for start, _ in windows if start > current_ms), None)
+        next_local = (datetime.fromtimestamp(next_start / 1000, zone)
+                      .replace(tzinfo=None) if next_start else None)
+        status.update(next_check_seconds=ceil((next_start - current_ms) / 1000) if next_start else None,
+                      next_window_start_local=next_local.isoformat() if next_local else None)
     status = {
         **status,
         "screen_key": screen_key,
+        "poll_windows": windows if setting.enabled else [],
+        "poll_clock_ms": current_ms if windows else None,
         "live_screen_refresh_interval_ms": setting.effective_interval_ms,
         "refresh_configured_label": setting.configured_label,
         "refresh_effective_label": setting.effective_label,

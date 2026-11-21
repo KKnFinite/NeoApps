@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const signal = (version = 'v1', sort_date = '2026-09-09') => ({version, sort_date, sort_name: 'night'});
 
-function harness() {
+function harness(insideSort = () => true) {
     const timers = new Map(), events = {}, hints = [], full = [];
     let timerId = 0, api;
     const listen = (name, fn) => { (events[name] ||= []).push(fn); };
@@ -17,7 +17,7 @@ function harness() {
         clearTimeout(id) { timers.delete(id); },
     }, fetch(url, options) { return new Promise(resolve => hints.push({url, options, resolve})); }};
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../app/static/js/neosektor_routing_watch.js'), 'utf8'), context);
-    api = context.window.NeoSektorRoutingWatch.create({versionUrl: '/version', initial: signal(),
+    api = context.window.NeoSektorRoutingWatch.create({versionUrl: '/version', initial: signal(), insideSort,
         fetchState: () => new Promise((resolve, reject) => full.push({resolve, reject})).then(next => {
             if (next) api.observe(next);
         }),
@@ -34,6 +34,16 @@ function harness() {
         },
     };
 }
+
+test('Sort close stops pending hints and visibility wake requests', async () => {
+    let open = true;
+    const h = harness(() => open);
+    open = false;
+    await h.next();
+    await h.event('visibilitychange');
+    assert.equal(h.hints.length, 0);
+    assert.equal(h.timers.size, 0);
+});
 
 test('unchanged 1.5-second hints never load full state; changed signal fetches once', async () => {
     const h = harness();

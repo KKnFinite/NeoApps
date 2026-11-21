@@ -84,8 +84,9 @@ function harness(name) {
     };
     vm.createContext(context);
     vm.runInContext(helper, context);
+    context.window.NeoSektorLive.renderStatus({dataset:{}}, {poll_windows:[[0, 4102444800000]]});
     const pollName = name === 'driver_routing' ? 'fetchRoutingState' : 'refreshState';
-    const poll = source(name).match(new RegExp(`    const ${pollName} = async \\(\\) => \\{[\\s\\S]*?\\n    \\};`))[0];
+    const poll = source(name).match(new RegExp(`    const ${pollName} = async [^\\n]+ => \\{[\\s\\S]*?\\n    \\};`))[0];
     vm.runInContext(`${poll}\nthis.poll = ${pollName};`, context);
     return {context, calls, events, poll: context.poll,
         finish(payload, ok = true, jsonError = false) {
@@ -99,6 +100,20 @@ function harness(name) {
 }
 
 for (const name of names) {
+    test(`${name}: idle and missing Sort hours issue no automatic state requests`, async () => {
+        const h = harness(name);
+        for (const windows of [[], [[0, Date.now() - 1]], [[Date.now() + 60000, Date.now() + 120000]]]) {
+            h.context.window.NeoSektorLive.renderStatus({dataset:{}}, {poll_windows:windows});
+            await h.poll();
+        }
+        assert.equal(h.calls.length, 0);
+        if (['tunnel_conductor','ballmat'].includes(name)) {
+            const manual = h.poll({manual:true});
+            assert.equal(h.calls.length, 1);
+            h.finish({ok:true, changed:false, refresh:{}});
+            await manual;
+        }
+    });
     test(`${name}: revision transport, status order and screen renderer`, async () => {
         const h = harness(name), pending = h.poll();
         assert.equal(h.calls.length, 1);

@@ -15,7 +15,7 @@ test("refresh serializes requests, skips hidden tabs, and honors Retry-After", a
             replaceChildren() {this.innerHTML="";}
         };
     }
-    const root={ dataset:{revision:"initial",state:"/neoraiden/state"}, querySelector:s=>element(s.slice(6,-1)) };
+    const root={ dataset:{revision:"initial",state:"/neoraiden/state",windows:"[[0,100000]]"}, querySelector:s=>element(s.slice(6,-1)) };
     const document={hidden:false,querySelector:()=>root,addEventListener(event,listener){this[event]=listener;}};
     const storage={getItem() {return null;}};
     const fetch = (_url, args) => {
@@ -31,7 +31,7 @@ test("refresh serializes requests, skips hidden tabs, and honors Retry-After", a
     await element("refresh").click();
     tick();
     assert.equal(calls,1);
-    pending({status:429,ok:false,headers:{get:()=>"90"}});
+    pending({status:429,ok:false,headers:{get:key=>key==="Retry-After"?"90":null}});
     await request;
     assert.equal(element("refresh").disabled,true);
     now=89999;
@@ -44,7 +44,12 @@ test("refresh serializes requests, skips hidden tabs, and honors Retry-After", a
     document.hidden=false;
     document.visibilitychange();
     assert.equal(calls,2);
-    pending({status:304,headers:{get:()=>'"initial"'}});
+    pending({status:304,headers:{get:key=>key==="ETag"?'"initial"':null}});
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(element("stale").hidden,true);
+    now = 150000;
+    tick();
+    document.visibilitychange();
+    assert.equal(calls, 2);
+    assert.equal(element("countdown").textContent, "Outside Sort hours");
 });

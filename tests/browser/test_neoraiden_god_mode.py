@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.sync_api import expect
 
 from app.extensions import db
-from app.models import Gateway, SortDateMission
+from app.models import Gateway, NeoSektorOpenBayState, SortDateMission
 from tests.browser import test_mobile_drawer as shell_tests
 from tests.neoraiden_fixtures import busy_sort
 
@@ -75,12 +75,16 @@ class GodModeBrowser(unittest.TestCase):
                         flight = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="FX101").one()
                         fuel = 27777 if engine == "chromium" else 27778
                         flight.planned_fuel_load = fuel
+                        bays = NeoSektorOpenBayState.query.filter_by(side="EAST").one()
+                        bays.open_count = 4 if engine == "chromium" else 3
+                        east = bays.open_count
                         db.session.commit()
                     with page.expect_response(lambda response: "/neoraiden/state" in response.url and response.status == 200):
                         page.locator("[data-refresh]").click()
                     expect(page.get_by_role("searchbox")).to_have_value("FX101")
                     expect(item.locator(".rd-detail")).to_be_visible()
                     expect(item.locator(".rd-detail")).to_contain_text(str(fuel))
+                    expect(page.locator(".rd-uld-foot")).to_contain_text(f"E {east} · W 3")
                     page.get_by_role("searchbox").fill("")
                     page.reload()
                     expect(page.locator("[data-raiden]")).to_have_attribute("data-list","departures")
@@ -151,10 +155,12 @@ class GodModeBrowser(unittest.TestCase):
                     with ShellFixture.app.app_context():
                         m=SortDateMission.query.filter_by(sort_date_operation_id=op_id,flight_number="FX101").one()
                         m.planned_fuel_load = 30001 if engine=="chromium" else 30002
+                        NeoSektorOpenBayState.query.filter_by(side="EAST").one().open_count = 0
                         db.session.commit()
                     with page.expect_response(lambda r:'/neoraiden/state' in r.url and r.status==200):
                         page.locator("[data-refresh]").click()
                     expect(page.locator("[data-page]")).to_have_text(current)
+                    expect(page.locator(".rd-uld-foot")).to_contain_text("E 0 · W 3")
                     expect(page.locator("[data-pause]")).to_have_text("Resume")
                     page.locator("[data-prev]").click()
                     page.get_by_role("button",name="Exit TV Mode").click()

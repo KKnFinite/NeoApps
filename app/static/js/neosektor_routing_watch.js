@@ -1,11 +1,11 @@
 /* Driver-only invalidation hints; all routing remains in the canonical fetch. */
 window.NeoSektorRoutingWatch = {
-    create({versionUrl, initial, fetchState, requestRefresh}) {
+    create({versionUrl, initial, fetchState, requestRefresh, insideSort = () => true}) {
         let snapshot = initial;
         let generation = 0;
         let enabled = false, stopped = false, checking = false;
         let timer = null, fullRequest = null;
-        const active = () => enabled && !stopped && !document.hidden;
+        const active = () => enabled && !stopped && !document.hidden && insideSort();
         const clear = () => { window.clearTimeout(timer); timer = null; };
         const schedule = (delay = 1500) => {
             if (active() && timer === null && !checking) timer = window.setTimeout(check, delay);

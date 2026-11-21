@@ -1,11 +1,18 @@
 /* Shared transport/status only. Pages own scheduling, mutations and rendering. */
 (() => {
     "use strict";
+    let periods = [];
+    let clockOffset = 0;
+    const insideSort = () => {
+        const now = Date.now() + clockOffset;
+        return periods.some(([start, end]) => start <= now && now < end);
+    };
 
     const poll = async ({
-        stateUrl, revision, errorMessage, requestOptions,
+        stateUrl, revision, errorMessage, requestOptions, manual = false,
         accept = () => true, onRevision, onStatus, onState,
     }) => {
+        if (!manual && !insideSort()) return;
         const pollUrl = new URL(stateUrl, window.location.href);
         pollUrl.searchParams.set("revision", revision);
         const response = await (window.NeoLiveRevision?.fetch || fetch)(pollUrl, requestOptions);
@@ -33,6 +40,8 @@
     };
 
     const renderStatus = (root, status, paused, separator = " · ") => {
+        periods = status.poll_windows || [];
+        clockOffset = Number.isFinite(status.poll_clock_ms) ? status.poll_clock_ms - Date.now() : 0;
         const isActive = status.auto_refresh_enabled !== false;
         root.dataset.refreshActive = isActive ? "true" : "false";
         if (paused) {
@@ -48,5 +57,5 @@
         }
     };
 
-    window.NeoSektorLive = { poll, renderStatus };
+    window.NeoSektorLive = { poll, renderStatus, insideSort };
 })();

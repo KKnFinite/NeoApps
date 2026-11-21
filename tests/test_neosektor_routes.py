@@ -4935,6 +4935,27 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "2026-06-29T22:00:00",
         )
 
+    def test_passive_routing_wakes_only_within_explicit_sort_and_ops_hours(self):
+        from app.services.neosektor_live_counts import driver_routing_refresh_status
+        from tests.test_neorain_sort_refresh import configure_sort_window
+        day = date(2026, 6, 29)
+        self._add_sort_operation(day, "night")
+        night, _ = configure_sort_window(self.gateway, day)
+        save_gateway_matrix(self.gateway, {("monday", "night")})
+        for local, active, wake in (
+            (datetime(2026, 6, 29, 18), False, 3 * 3600),
+            (datetime(2026, 6, 29, 21), True, None),
+            (datetime(2026, 6, 30, 4, 59), True, None),
+            (datetime(2026, 6, 30, 5), False, 6 * 86400 + 16 * 3600),
+        ):
+            status = driver_routing_refresh_status(self.gateway, now=local)
+            self.assertEqual((status["auto_refresh_enabled"], status["next_check_seconds"]), (active, wake))
+        night.sort_window_end_local = None
+        db.session.commit()
+        closed = driver_routing_refresh_status(self.gateway, now=datetime(2026, 6, 29, 22))
+        self.assertFalse(closed["auto_refresh_enabled"])
+        self.assertEqual(closed["poll_windows"], [])
+
     def test_live_counts_and_discharge_use_the_tunnel_refresh_banner_standard(self):
         self._login_approved_user(role="simulator")
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 29, 10, 0)

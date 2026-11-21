@@ -1272,6 +1272,13 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(worksheet.updates, [("D3", 15), ("E3", 20)])
 
     def test_spare_capacity_ltu_mirrors_canonical_route_response(self):
+        from app.models import SortDateOperation
+        from tests.test_neorain_sort_refresh import configure_sort_window
+        now = datetime(2026, 11, 19, 22)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = now
+        db.session.add(SortDateOperation(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+                                         sort_date=now.date(), sort_name="night"))
+        configure_sort_window(self.gateway, now.date())
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
         apply_standalone_compat_values(self.gateway, _complete_sheet_values(
             D2=22, B2=2, C2=0, D3=22, B3=2, C3=0, B4=4, C4=4))
@@ -1300,13 +1307,11 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                  for key, item in value.items()}
             )):
                 old_revision = self.client.get('/neosektor/live-counts/state').json['revision']
-            with patch('app.services.neosektor_live_counts.node_auto_refresh_status',
-                       return_value={**refreshed.json['refresh'], 'auto_refresh_enabled': True}):
-                corrected = self.client.get('/neosektor/live-counts/state', query_string={'revision': old_revision}).json
-                self.assertTrue(corrected['changed'])
-                self.assertEqual([w['left'] for w in corrected['state']['waves']], [62, 22])
-                unchanged = self.client.get('/neosektor/live-counts/state', query_string={'revision': corrected['revision']}).json
-                self.assertFalse(unchanged['changed'])
+            corrected = self.client.get('/neosektor/live-counts/state', query_string={'revision': old_revision}).json
+            self.assertTrue(corrected['changed'])
+            self.assertEqual([w['left'] for w in corrected['state']['waves']], [62, 22])
+            unchanged = self.client.get('/neosektor/live-counts/state', query_string={'revision': corrected['revision']}).json
+            self.assertFalse(unchanged['changed'])
 
     def test_failed_initial_mirror_enablement_remains_off(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)

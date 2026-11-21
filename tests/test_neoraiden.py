@@ -37,6 +37,21 @@ class RaidenTest(unittest.TestCase):
     setUp = fixtures.GatewayShellTest.setUp
     tearDown = fixtures.GatewayShellTest.tearDown
 
+    def test_automatic_state_is_bounded_by_physical_sort_hours(self):
+        from datetime import timedelta
+        from tests.test_neorain_sort_refresh import configure_sort_window
+        op = seed_sort(self.gateway)
+        _, start = configure_sort_window(self.gateway, op.sort_date)
+        path = f"/neoraiden/state?operation_id={op.id}"
+        for minutes, status in ((-1,204),(0,200),(479,200),(480,204),(1440,204)):
+            self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start + timedelta(minutes=minutes)
+            self.assertEqual(self.client.get(path, headers={"X-Raiden-Automatic":"1"}).status_code, status)
+        self.assertEqual(self.client.get(path).status_code, 200)
+        op.archived_at_utc = start
+        db.session.commit()
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
+        self.assertEqual(self.client.get(path, headers={"X-Raiden-Automatic":"1"}).status_code, 204)
+
     def test_recorded_uld_projection_and_wave_lifecycle(self):
         from datetime import timedelta
         from app.models import NeoSektorOperationalSetting, NeoSektorBallmatWaveCount, NeoSektorWaveState

@@ -23,7 +23,10 @@
         get("stale").textContent = message;
         get("stale").hidden = !message;
     }
-    async function refresh() {
+    let windows = JSON.parse(root.dataset.windows || "[]");
+    const insideSort = () => windows.some(([start, end]) => start <= Date.now() && Date.now() < end);
+    async function refresh(automatic = false) {
+        if (automatic && !insideSort()) return;
         if (pending || stopped || document.hidden || Date.now() < retriesAfter) return;
         pending = true;
         get("refresh").disabled = true;
@@ -33,8 +36,12 @@
         try {
             const response = await fetch(root.dataset.state, {
                 credentials: "same-origin", cache: "no-store", signal: controller.signal,
-                headers: revision ? { "If-None-Match": '"' + revision + '"' } : {}
+                headers: { ...(revision && { "If-None-Match": '"' + revision + '"' }),
+                           ...(automatic && { "X-Raiden-Automatic": "1" }) }
             });
+            const periods = response.headers.get("X-Raiden-Windows");
+            if (periods) windows = JSON.parse(periods);
+            if (response.status === 204) return;
             if (response.redirected || [401,403,404].includes(response.status)) {
                 get("board").replaceChildren();
                 root.dispatchEvent(new Event("raiden:updated"));
@@ -71,8 +78,9 @@
         if (pending || document.hidden) return;
         get("refresh").disabled = stopped || Date.now() < retriesAfter;
         const seconds = Math.max(0, Math.ceil((due - Date.now()) / 1000));
-        get("countdown").textContent = stopped ? "Refresh stopped" : "Next refresh in " + seconds + "s";
-        if (!stopped && !seconds) refresh();
+        get("countdown").textContent = stopped ? "Refresh stopped" : insideSort()
+            ? "Next refresh in " + seconds + "s" : "Outside Sort hours";
+        if (!stopped && !seconds && insideSort()) refresh(true);
     }
     chooser.addEventListener("change", () => {
         try { localStorage.setItem(storageKey, chooser.value); } catch (_) {}
@@ -80,9 +88,9 @@
         tick();
     });
     get("sort-choice").addEventListener("change", event => location.assign(event.target.value));
-    get("refresh").addEventListener("click", refresh);
+    get("refresh").addEventListener("click", () => refresh());
     document.addEventListener("visibilitychange", tick);
-    window.addEventListener("pageshow", event => { if (event.persisted) refresh(); });
+    window.addEventListener("pageshow", event => { if (event.persisted) refresh(true); });
     stamp();
     tick();
     setInterval(tick, 1000);

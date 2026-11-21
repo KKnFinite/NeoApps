@@ -345,6 +345,44 @@ def configured_sort_window_utc(gateway, sort_date, sort_name, zone, *, sort_sett
     return start_utc, end_utc
 
 
+def physical_poll_windows(gateway, sort_date, sort_name, *, follow_matrix=False, within_ops=False, now=None):
+    """UTC millisecond intervals for the selected operation and scheduled screen wakes."""
+    try:
+        zone = ZoneInfo(gateway_timezone(gateway))
+    except (TypeError, ValueError, ZoneInfoNotFoundError):
+        return []
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    today = local_now.date()
+    candidates = set()
+    if sort_date and sort_name and today - timedelta(days=1) <= sort_date <= today + timedelta(days=1):
+        candidates.add((sort_date, sort_name))
+    if follow_matrix:
+        entries = matrix_entries_for_gateway(gateway)
+        for offset in range(-1, 8):
+            day = today + timedelta(days=offset)
+            weekday = DAY_OPTIONS[day.weekday()][0]
+            for name, _ in SORT_OPTIONS:
+                cell = entries.get((weekday, name))
+                if cell and cell.is_active and cell.gateway_code == gateway.code:
+                    candidates.add((day, name))
+    now_utc = local_now.replace(tzinfo=zone).astimezone(timezone.utc)
+    periods = []
+    for day, name in sorted(candidates):
+        setting = _sort_timeline_sort_setting(gateway, name)
+        if not setting:
+            continue
+        start, end = configured_sort_window_utc(gateway, day, name, zone, sort_setting=setting)
+        if not start:
+            continue
+        if within_ops and setting.ops_window_start_local and setting.ops_window_end_local:
+            ops_start, ops_end = _sort_window_for_date(day, setting.ops_window_start_local, setting.ops_window_end_local)
+            start = max(start, ops_start.replace(tzinfo=zone).astimezone(timezone.utc))
+            end = min(end, ops_end.replace(tzinfo=zone).astimezone(timezone.utc))
+        if end > max(now_utc, start):
+            periods.append([int(start.timestamp() * 1000), int(end.timestamp() * 1000)])
+    return sorted(periods)
+
+
 def ops_window_for_operation(operation, gateway=None):
     """Return the node-online window, falling back only for legacy config.
 

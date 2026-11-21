@@ -322,7 +322,7 @@
     </main>
 </section>
 
-<script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20261101-poll-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20261121-hours') }}"></script>
 <script src="{{ url_for('static', filename='js/neosektor_spotter_modes.js', mode='20260909-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neosektor_discharge_controls.js', controls='20261119-stop-sign') }}"></script>
 <script nonce="{{ csp_nonce() }}">
@@ -422,7 +422,7 @@
     const restoreAfterFailure = (tokens, message) => {
         clearPendingTokens(tokens);
         showEditError(message);
-        refreshState();
+        refreshState({manual: true});
     };
 
     const setEditableValue = (input, value) => {
@@ -578,12 +578,12 @@
         };
     };
 
-    const refreshState = async () => {
+    const refreshState = async ({manual = false} = {}) => {
         // Keep mutation/revision snapshots local to this page's write lifecycle.
         const revisionAtRequest = currentRevision;
         const mutationEpochAtRequest = mutationEpoch;
         return window.NeoSektorLive.poll({
-            stateUrl, revision: revisionAtRequest,
+            stateUrl, revision: revisionAtRequest, manual,
             errorMessage: "Tunnel Conductor refresh failed.",
             requestOptions: { cache: "no-store", credentials: "same-origin" },
             accept: () => !(

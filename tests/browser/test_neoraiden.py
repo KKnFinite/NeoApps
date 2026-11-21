@@ -1,4 +1,6 @@
 import unittest
+from datetime import timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 from playwright.sync_api import expect
@@ -6,6 +8,7 @@ from app.extensions import db
 from app.models import Gateway, SortDateMission
 from tests.browser import test_mobile_drawer as fixtures
 from tests.test_neoraiden import seed_sort
+from tests.test_neorain_sort_refresh import configure_sort_window
 
 
 class CommandCenterBrowser(unittest.TestCase):
@@ -14,7 +17,11 @@ class CommandCenterBrowser(unittest.TestCase):
         fixture.setUpClass()
         self.addCleanup(fixture.tearDownClass)
         with fixture.app.app_context():
-            op_id = seed_sort(Gateway.query.one()).id
+            gateway = Gateway.query.one()
+            op = seed_sort(gateway)
+            op_id = op.id
+            _, start = configure_sort_window(gateway, op.sort_date)
+            fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
         evidence = Path("instance/browser-evidence/gateway-shell")
         evidence.mkdir(parents=True,exist_ok=True)
         for engine in ("chromium","webkit"):
@@ -22,6 +29,7 @@ class CommandCenterBrowser(unittest.TestCase):
                 browser = getattr(fixture.pw,engine).launch()
                 try:
                     page = browser.new_page(viewport=dict(width=1366,height=768), service_workers="block")
+                    page.clock.install(time=start.replace(tzinfo=ZoneInfo("America/Chicago")))
                     fixture().login(page,username="drawer-watcher")
                     fixture().ready(page,"/rfd")
                     for width, height in ((390,844),(1366,768)):
@@ -60,6 +68,14 @@ class CommandCenterBrowser(unittest.TestCase):
                             page.locator(".operational-board-exit").click()
                         page.screenshot(path=evidence / f"raiden-{engine}-{w}.png")
                     page.route("**/neoraiden/state*",lambda route:route.fulfill(status=503,body=""))
+                    automatic_requests = []
+                    page.on("request", lambda req: automatic_requests.append(req.url)
+                            if "/neoraiden/state" in req.url else None)
+                    page.clock.set_system_time((start + timedelta(hours=8)).replace(tzinfo=ZoneInfo("America/Chicago")))
+                    page.clock.fast_forward(61000)
+                    page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true}))")
+                    expect(page.locator("[data-countdown]")).to_have_text("Outside Sort hours")
+                    self.assertEqual(automatic_requests, [])
                     with page.expect_response(lambda r:"/neoraiden/state" in r.url and r.status == 503):
                         page.locator("[data-refresh]").click()
                     expect(page.locator("[data-stale]")).to_contain_text("last successful update")

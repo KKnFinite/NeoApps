@@ -8,7 +8,8 @@ const repo = path.join(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(repo, file), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const snapshot = (first = 'auto', second = 'auto') => ({
-    waves: [], sides: {}, operational_settings: {}, refresh: {auto_refresh_enabled: true},
+    waves: [], sides: {}, operational_settings: {},
+    refresh: {auto_refresh_enabled: true, poll_windows: [[Date.now() - 60000, Date.now() + 60000]]},
     routing: {west_offset: 0, routes: {first: {override: first}, second: {override: second}}},
 });
 
