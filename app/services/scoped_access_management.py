@@ -182,18 +182,13 @@ def set_policy(scope,token,updates):
         reviewed=serializer.loads(token,max_age=1200)
         if reviewed!=serializer.loads(policy_review(scope)):raise AccountConflict('Policy or authority changed. Reload before editing.')
     except BadSignature:raise AccountConflict('Policy review expired.') from None
-    from app.services.permission_rules import permission_is_configurable
-    from app.services.account_scope_runtime import policy_floor
+    from app.services.permission_thresholds import validate_threshold
     for rule_id,selected in updates:
         rule=PermissionRule.query.filter_by(id=rule_id).populate_existing().with_for_update().one_or_none()
-        if not rule or not permission_is_configurable(rule.permission_key) or not can_configure(actor,scope,rule.permission_key):
+        if not rule or not can_configure(actor,scope,rule.permission_key):
             raise ValueError('This rule is outside your permitted policy scope.')
-        floor=policy_floor(rule.permission_key)
-        if selected not in ROLE_LEVELS or ROLE_LEVELS[selected]<ROLE_LEVELS.get(floor,50):raise ValueError('The operational safety floor cannot be lowered.')
-        if scope.kind=='node' and selected=='grandmaster':raise ValueError('Node policies cannot require a retired node role.')
-        from app.services.account_security import protected_policy_threshold
-        if protected_policy_threshold(rule.permission_key) and selected!='grandmaster':raise ValueError('Platform security requires protected Grandmaster authority.')
         before=effective_minimum(scope,rule)
+        selected=validate_threshold(rule.permission_key,before,selected,scoped=True)
         if before!=selected:
             from app.models import AccountSecurityEvent
             receipt=AccountSecurityEvent(actor_user_id=actor.id,subject_user_id=actor.id,action='scoped_permission_changed',

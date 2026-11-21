@@ -1,0 +1,23 @@
+{% if field.editable %}<input type="hidden" name="rule_ids" value="{{ rule.id }}">{% endif %}
+{% if legacy_threshold %}<span class="role-select-wrap">{% endif %}
+<select name="minimum_role_{{ rule.id }}" aria-label="{{ threshold_label }} minimum role"
+        {% if field.reason or field.floor or field.minimum not in threshold_roles %}aria-describedby="threshold-note-{{ rule.id }}"{% endif %}
+        data-permission-role-select {% if not field.editable %}disabled{% endif %}>
+    {% if field.minimum not in threshold_roles %}
+    <option value="" selected disabled hidden>{{ field.minimum|role_label }} (current)</option>
+    {% endif %}
+    {% for role in threshold_roles %}
+    <option value="{{ role }}" {% if role == field.minimum %}selected{% endif %}
+            {% if not field.editable or role not in field.choices %}disabled{% endif %}>{{ role|role_label }}</option>
+    {% endfor %}
+</select>
+{% if legacy_threshold %}</span>{% endif %}
+{% if field.reason or field.floor or field.minimum not in threshold_roles %}
+<small id="threshold-note-{{ rule.id }}">
+    {% if field.reason %}{{ field.reason }}
+    {% elif field.floor %}Reviewed minimum allowed is {{ field.floor|role_label }}.
+    {% endif %}
+    {% if field.minimum not in threshold_roles %}Current minimum is {{ field.minimum|role_label }}.{% endif %}
+    {% if not field.editable %}Watcher, Operator, Simulator and Master are unavailable.{% endif %}
+</small>
+{% endif %}

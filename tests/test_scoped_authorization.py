@@ -182,6 +182,64 @@ class ScopedAuthorizationTest(TestCase):
         other=Scope('node','neogateway',999,self.node.id)
         self.assertEqual(scoped_minimum(other,rule.permission_key,base),base)
 
+    def test_policy_role_choices_and_access_enforcement(self):
+        from tests.html_contracts import document
+
+        self.cutover()
+        rule = PermissionRule.query.filter_by(permission_key='neoscorpion.fueler.edit').one()
+        self.as_user(self.master)
+        management.set_policy(self.scope, management.policy_review(self.scope), [(rule.id, 'master')])
+        db.session.commit()
+        grant = management.existing_role(self.target, self.scope)
+        for threshold in ('operator', 'simulator', 'master'):
+            self.as_user(self.master)
+            management.set_policy(self.scope, management.policy_review(self.scope), [(rule.id, threshold)])
+            db.session.commit()
+            for level, role in enumerate(('watcher', 'operator', 'simulator', 'master')):
+                with self.subTest(threshold=threshold, role=role):
+                    grant.role = role
+                    db.session.commit()
+                    self.as_user(self.target)
+                    self.assertEqual(user_can(rule.permission_key), level >= ('watcher', 'operator', 'simulator', 'master').index(threshold))
+        self.as_user(self.master)
+        management.set_policy(self.scope, management.policy_review(self.scope), [(rule.id, 'operator')])
+        db.session.commit()
+        client = self.app.test_client()
+        self._sign_in_client(client, self.master)
+        before = digest(inventory())
+        page = document(client.get('/neoscorpion/permissions'))
+        select = page.one('select', name=f'minimum_role_{rule.id}')
+        options = select.findall('option')
+        self.assertEqual([o.attrs['value'] for o in options], ['watcher', 'operator', 'simulator', 'master'])
+        self.assertEqual([o.attrs['value'] for o in options if 'disabled' in o.attrs], ['watcher'])
+        self.assertIn('selected', select.one('option', value='operator').attrs)
+        self.assertEqual(digest(inventory()), before)
+
+    def test_watcher_threshold_is_selectable_on_rules_with_a_watcher_floor(self):
+        self.cutover()
+        rule = PermissionRule.query.filter_by(permission_key='neoapps.portal.request_access.edit').one()
+        scope = Scope('neoapps')
+        for level in ('operator', 'watcher'):
+            management.set_policy(scope, management.policy_review(scope), [(rule.id, level)])
+            db.session.commit()
+            clear_request_cache()
+            self.assertEqual(management.effective_minimum(scope, rule), level)
+            self.assertEqual(user_can(rule.permission_key, user=self.target), level == 'watcher')
+
+    def test_even_platform_admin_cannot_change_hard_authority_or_select_grandmaster(self):
+        self.cutover()
+        cases = [
+            ('neoapps.user_management.edit', Scope('neoapps'), 'master'),
+            ('neomotherbrain.manage_api.run', Scope('gateway', 'neogateway', self.gateway.id), 'master'),
+            ('neoscorpion.fueler.edit', self.scope, 'grandmaster'),
+        ]
+        for key, scope, value in cases:
+            with self.subTest(permission=key):
+                rule = PermissionRule.query.filter_by(permission_key=key).one()
+                with self.assertRaises(ValueError):
+                    management.set_policy(scope, management.policy_review(scope), [(rule.id, value)])
+                self.assertFalse(AccountScopedPolicy.query.count())
+
     def test_application_admin_requires_platform_master_and_exact_app_grandmaster(self):
         self.cutover();scope=Scope('application','neostaffing')
         app=PortalAppAccess(user_id=self.master.id,app_code='neostaffing',status='approved',is_active=True,role='grandmaster')

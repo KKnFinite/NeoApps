@@ -28,21 +28,16 @@
                         <div class="permission-rule-actions">
                             {% for action in item.actions %}
                             {% set rule = action.rule %}
-                            {% set protected = protected_policy_threshold(rule.permission_key) %}
+                            {% set field = threshold(rule) %}
                             <label class="permission-rule-action" data-permission-action="{{ action.type }}" data-permission-key="{{ rule.permission_key }}">
-                                {% if not protected %}
-                                <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+                                {% if field.editable %}
                                 <input type="hidden" name="description_{{ rule.id }}" value="{{ rule.description or '' }}">
                                 {% endif %}
                                 <span>{{ action.label }}</span>
                                 <small class="permission-rule-key">{{ rule.permission_key }}</small>
-                                <span class="role-select-wrap">
-                                    <select name="minimum_role_{{ rule.id }}" aria-label="{{ item.label }} {{ action.label }} minimum role" data-permission-role-select {% if protected %}disabled{% endif %}>
-                                        {% for role in role_choices %}
-                                        <option value="{{ role }}" {% if ('grandmaster' if protected else rule.minimum_role) == role %}selected{% endif %}>{{ role|role_label }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </span>
+                                {% with threshold_label=item.label ~ ' ' ~ action.label, legacy_threshold=true %}
+                                {% include "auth/_permission_threshold.html" %}
+                                {% endwith %}
                             </label>
                             {% endfor %}
                         </div>

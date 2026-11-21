@@ -12,7 +12,7 @@ from app.services.access_control import get_current_gateway
 from app.services import scoped_access_management as management
 from app.services.accounts_workspace import review_token
 from app.services.account_foundation import AccountConflict,FoundationNotActivated
-from app.services.permission_rules import permission_is_configurable
+from app.services.permission_thresholds import THRESHOLD_ROLES, threshold_field
 from app.services.account_security import platform_grandmaster
 from app.services.auth_rate_limits import client_ip_for_request,login_is_limited,record_login_failure
 from app.services.grandmaster_commissioning import ReauthenticationFailed,may_initiate_commissioning
@@ -101,17 +101,18 @@ def scoped_permissions(owner):
     scope=scope_for(owner);_guard(scope)
     if request.method=='POST':
         try:
-            updates=[(int(id_),request.form.get('minimum_role_'+id_,'')) for id_ in request.form.getlist('rule_ids')]
+            updates=[(int(id_),request.form.get('minimum_role_'+id_)) for id_ in request.form.getlist('rule_ids')]
             management.set_policy(scope,request.form.get('policy_token',''),updates);db.session.commit()
         except (ValueError,SQLAlchemyError) as error:return _error(error)
         flash('Scoped permission rules saved.','info');return redirect(url_for('auth.scoped_permissions',owner=owner))
-    from app.services.account_scope_runtime import policy_floor
-    choices=('watcher','operator','simulator','master') if scope.kind=='node' else tuple(management.ROLE_LEVELS)
+    active = scoped_active()
     return render_template('auth/accounts/scoped_permissions.html',scoped_workspace=True,owner=owner,scope=scope,scope_links=scope_links(),
-        active=scoped_active(),rules=management.rules_for(scope),policy_token=management.policy_review(scope),
-        may_configure=lambda key:scoped_active() and permission_is_configurable(key) and can_configure(current_user,scope,key),
-        effective_minimum=lambda rule:management.effective_minimum(scope,rule),
-        role_choices=lambda rule:[role for role in choices if management.ROLE_LEVELS[role]>=management.ROLE_LEVELS.get(policy_floor(rule.permission_key),50)],
+        active=active,rules=management.rules_for(scope),policy_token=management.policy_review(scope),
+        threshold_roles=THRESHOLD_ROLES,
+        threshold=lambda rule: threshold_field(
+            rule.permission_key, management.effective_minimum(scope,rule), scoped=True,
+            may_edit=active and can_configure(current_user,scope,rule.permission_key),
+        ),
         browser_tab_title=f'{owner} Permissions | NeoApps')
 
 

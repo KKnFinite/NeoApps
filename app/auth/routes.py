@@ -46,7 +46,7 @@ from app.services.auth_session_security import (
 )
 from app.services.account_security import (
     guard_app_role_change, guard_node_change, lock_administration, may_manage_permission,
-    node_authority, platform_grandmaster, protected_policy_threshold,
+    node_authority, platform_grandmaster,
     record_security_change,
 )
 from app.services.auth_rate_limits import (
@@ -684,6 +684,7 @@ def pending_users():
 @login_required
 def permission_rules():
     from app.services.account_scope_runtime import scoped_active
+    from app.services.permission_thresholds import THRESHOLD_ROLES, threshold_field
     if scoped_active():
         from app.auth.scoped_access import scoped_permissions
         return scoped_permissions('motherbrain' if request.path.startswith('/motherbrain/') else 'neoapps')
@@ -716,8 +717,8 @@ def permission_rules():
     return render_template(
         "auth/permission_rules.html",
         grouped_rules=grouped_permission_rules(rules),
-        protected_policy_threshold=protected_policy_threshold,
-        role_choices=ROLE_CHOICES,
+        threshold_roles=THRESHOLD_ROLES,
+        threshold=lambda rule: threshold_field(rule.permission_key, rule.minimum_role, scoped=False),
         rules=rules,
         workspace_tabs=_tabs("security")["workspace_tabs"] if workspace else [],
         active_tab="security", account_workspace=workspace,
@@ -2018,6 +2019,8 @@ def _approval_node_role_values_from_form():
 
 
 def _apply_permission_rule_form():
+    from app.services.permission_thresholds import validate_threshold
+
     rule_ids = request.form.getlist("rule_ids")
     parsed_ids = []
     for value in rule_ids:
@@ -2041,12 +2044,14 @@ def _apply_permission_rule_form():
         if not may_manage_permission(current_user, rule.permission_key):
             raise ValueError("You cannot modify permissions outside your administrative scope.")
 
-        minimum_role = request.form.get(f"minimum_role_{rule.id}", "").strip().lower()
+        selected = request.form.get(f"minimum_role_{rule.id}")
+        minimum_role = validate_threshold(
+            rule.permission_key, rule.minimum_role,
+            selected.strip().lower() if selected is not None else None, scoped=False,
+        )
+        if selected is None:
+            continue
         description = request.form.get(f"description_{rule.id}", "").strip()
-        if minimum_role not in ROLE_CHOICES:
-            raise ValueError("Unsupported minimum role selected.")
-        if protected_policy_threshold(rule.permission_key) and minimum_role != "grandmaster":
-            raise ValueError("Security administration requires Grandmaster authority.")
 
         if rule.minimum_role != minimum_role or rule.description != description:
             record_security_change("permission_rule_changed", current_user,

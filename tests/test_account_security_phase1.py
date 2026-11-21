@@ -121,7 +121,10 @@ class AccountSecurityPhase1Test(TestCase):
         root = document(self.client.get("/admin/permissions"))
         select = root.one("select", name=f"minimum_role_{security.id}")
         self.assertIn("disabled", select.attrs)
-        self.assertIn("selected", select.one("option", value="grandmaster").attrs)
+        self.assertEqual([option.attrs["value"] for option in select.findall("option") if option.attrs["value"]],
+                         ["watcher", "operator", "simulator", "master"])
+        self.assertTrue(all("disabled" in option.attrs for option in select.findall("option")))
+        self.assertIn(b"Platform security requires protected Grandmaster authority.", self.client.get("/admin/permissions").data)
         self.assertFalse(root.findall("input", name="rule_ids", value=str(security.id)))
         operation = PermissionRule.query.filter_by(permission_key="neoermac.building_lineup.edit").one()
         self.policy_post((operation, "master"))

@@ -1,4 +1,5 @@
 from tests.css_contracts import stylesheet_source
+from tests.html_contracts import document
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -368,7 +369,10 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertNotIn(b"<th>DESCRIPTION</th>", response.data)
         self.assertNotIn(b"<th>MINIMUM ROLE</th>", response.data)
         self.assertIn(b"neoermac.building_lineup.edit", response.data)
-        self.assertIn(b'<option value="master" selected>Master</option>', response.data)
+        select = document(response).one("select", name=f"minimum_role_{rule.id}")
+        self.assertEqual([option.attrs["value"] for option in select.findall("option")],
+                         ["watcher", "operator", "simulator", "master"])
+        self.assertIn("selected", select.one("option", value="master").attrs)
         self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
         self.assertIn(b'href="/motherbrain"', response.data)
         self.assertNotIn(b"motherbrain-main-menu-return", response.data)

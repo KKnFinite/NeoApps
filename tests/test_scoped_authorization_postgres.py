@@ -127,6 +127,24 @@ class ScopedAuthorizationPostgresTest(unittest.TestCase):
             self.assertEqual(db.session.get(PermissionRule,rule_id).minimum_role,'operator')
             self.assertEqual(AccountSecurityEvent.query.filter_by(action='scoped_permission_changed').count(),1)
 
+    def test_operator_threshold_saves_and_forged_protected_or_out_of_scope_edit_rolls_back(self):
+        self.cutover()
+        with self.app.app_context():
+            editable = PermissionRule.query.filter_by(permission_key='neoscorpion.fueler.edit').one().id
+            protected = PermissionRule.query.filter_by(permission_key='neoscorpion.refresh_settings.edit').one().id
+        def save(updates):
+            management.set_policy(self.scope, management.policy_review(self.scope), updates)
+            return 'saved'
+        self.assertEqual(self.run_as(self.master_id, lambda: save([(editable, 'master')])), 'saved')
+        self.assertEqual(self.run_as(self.master_id, lambda: save([(editable, 'operator')])), 'saved')
+        self.assertEqual(self.run_as(self.master_id, lambda: save([(editable, 'master'), (protected, 'watcher')])), 'ValueError')
+        self.assertEqual(self.run_as(self.master_id, lambda: save([(editable, 'watcher')])), 'ValueError')
+        with self.app.app_context():
+            override = AccountScopedPolicy.query.one()
+            self.assertEqual((override.scope_key, override.minimum_role), (self.scope.key, 'operator'))
+            self.assertEqual(db.session.get(PermissionRule, editable).minimum_role, 'operator')
+            self.assertEqual(AccountSecurityEvent.query.filter_by(action='scoped_permission_changed').count(), 2)
+
     def test_rollback_race_cannot_overwrite_a_committed_role(self):
         self.cutover();rollback_token=self.run_as(self.root_id,lambda:rollback_review()['token'])
         role_token=self.run_as(self.root_id,lambda:review_token(db.session.get(User,self.target_id)));start=Barrier(2)
