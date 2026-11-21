@@ -468,6 +468,12 @@ def _apply_existing_arrival_cancellation(operation, mission, link, row, applied_
         raise GoogleMotherBrainMissionError("Arrival identity changed during Google cancellation; retry with fresh rows.")
     if mission.master_retirement:
         raise GoogleMotherBrainMissionError("Mission retired by Master Schedule.")
+    if (
+        row["source_sheet"] == "Inbound source" and link is not None
+        and link.sort_date_mission_id == mission.id
+        and link.last_status_raw == row["status_raw"] and mission.arrival_status != "cancelled"
+    ):
+        return _record_status_only_row(operation, mission, link, row, applied_at, "Reopened arrival preserved.")
     mission.arrival_status = _arrival_status_after_update(mission.arrival_status, "cancelled")
     reason = "Unloaded arrival preserved." if mission.arrival_status == "unloaded" else "Explicit arrival cancellation applied."
     return _record_status_only_row(operation, mission, link, row, applied_at, reason)

@@ -545,6 +545,33 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(state.lease_token, "")
         self.assertIsNone(state.last_error)
 
+    def test_poll_imports_only_source_cancellations_in_the_matching_physical_sort(self):
+        self._enable()
+        operation = self._ensure_operation()
+        for flight in ("UPS0555", "UPS0753"):
+            db.session.add(SortDateMission(
+                sort_date_operation_id=operation.id, sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code, sort_name=operation.sort_name,
+                mission_type="arrival", mission_source="master", flight_number=flight,
+                origin="MSP", destination="RFD", arrival_status="scheduled",
+            ))
+        db.session.commit()
+        rows = [
+            {"source_sheet": "Inbound source", "sheet_row": 22, "P": "UPS0555", "W": "CNL",
+             "source_scheduled_utc": datetime(2026, 6, 19, 3, 55)},
+            {"source_sheet": "Inbound source", "sheet_row": 23, "P": "UPS0753", "W": "CNL",
+             "source_scheduled_utc": datetime(2026, 6, 18, 3, 55)},
+        ]
+        result = execute_google_motherbrain_live_poll(
+            self.gateway, now=self.NOW,
+            reader=lambda: {"inbound_source_sort_date": operation.sort_date, "inbound_source_cancellations": rows},
+            rain_reader=lambda: [],
+        )
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["applied_count"], 1)
+        missions = {row.flight_number: row.arrival_status for row in SortDateMission.query.all()}
+        self.assertEqual(missions, {"UPS0555": "cancelled", "UPS0753": "scheduled"})
+
     def test_successful_poll_applies_rain_in_separate_followup_transaction(self):
         self._enable()
         operation = self._ensure_operation()

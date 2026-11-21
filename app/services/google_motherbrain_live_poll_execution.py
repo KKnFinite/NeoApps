@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import current_app
 
@@ -10,7 +11,9 @@ from app.extensions import db
 from app.models import SortDateOperation, SortTimelineSortSetting
 from app.services.gateway_matrix import (
     active_sorts_for_gateway_date,
+    configured_sort_window_utc,
     current_gateway_local_datetime,
+    gateway_timezone,
 )
 from app.services.google_motherbrain_import import (
     GOOGLE_MOTHERBRAIN_GATEWAY_CODE,
@@ -103,6 +106,12 @@ def execute_google_motherbrain_live_poll(
     applier = applier or apply_google_motherbrain_live_rows
     try:
         live_rows = reader()
+        inbound_rows = live_rows.get("inbound_rows", ())
+        if live_rows.get("inbound_source_cancellations"):
+            source_cancellations = _same_sort_source_cancellations(
+                live_rows, operation, gateway, preflight["sort_settings"].get(operation.sort_name),
+            )
+            inbound_rows = [*inbound_rows, *source_cancellations]
         # SQLite legacy transaction mode doesn't BEGIN on SELECT. Ensure the
         # applier's row savepoints belong to a real outer transaction there too.
         connection = db.session.connection()
@@ -113,7 +122,7 @@ def execute_google_motherbrain_live_poll(
             connection.exec_driver_sql("BEGIN")
         application = applier(
             operation,
-            inbound_rows=live_rows.get("inbound_rows", ()),
+            inbound_rows=inbound_rows,
             outbound_rows=live_rows.get("outbound_rows", ()),
             now=now,
         )
@@ -162,6 +171,22 @@ def execute_google_motherbrain_live_poll(
         "rain_applied_count": rain_result.get("applied_count", 0),
         "rain_skipped_count": rain_result.get("skipped_count", 0),
     }
+
+
+def _same_sort_source_cancellations(live_rows, operation, gateway, setting):
+    candidates = live_rows.get("inbound_source_cancellations", ())
+    if not candidates or not setting or live_rows.get("inbound_source_sort_date") != operation.sort_date:
+        return []
+    try:
+        zone = ZoneInfo(gateway_timezone(gateway))
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        return []
+    start, end = configured_sort_window_utc(
+        gateway, operation.sort_date, operation.sort_name, zone, sort_setting=setting,
+    )
+    if start is None:
+        return []
+    return [row for row in candidates if start <= row["source_scheduled_utc"].replace(tzinfo=timezone.utc) < end]
 
 
 def google_motherbrain_live_poll_preflight(gateway, now=None):

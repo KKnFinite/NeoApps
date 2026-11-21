@@ -15,7 +15,8 @@ try:
 except ImportError:  # Production installs the declared dependency.
     gspread = None
 
-from app.services.alp_import import is_alp_header_row
+from app.services.alp_import import _alp_utc_datetime, is_alp_header_row
+from app.services.mission_identity import flight_identity
 from app.services.google_motherbrain_import import (
     GOOGLE_MOTHERBRAIN_GATEWAY_CODE,
     GOOGLE_MOTHERBRAIN_SCHEMA_VERSION,
@@ -58,6 +59,9 @@ GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS = (
         4,
     ),
 )
+GOOGLE_MOTHERBRAIN_LIVE_CANCELLATION_RANGES = ("Inbound!H2", "Inbound!A4:B100", "Inbound!F4:G100")
+
+
 GOOGLE_MOTHERBRAIN_REQUIRED_TABS = frozenset(
     {"Inbound", "Outbound", "Parking Plan"}
 )
@@ -243,6 +247,7 @@ def read_google_motherbrain_live_rows(config=None, client_factory=None):
         lambda: client.open_by_key(spreadsheet_id),
     )
     ranges = [spec[1] for spec in GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS]
+    ranges.extend(GOOGLE_MOTHERBRAIN_LIVE_CANCELLATION_RANGES)
     response = _google_call(
         "read_live_ranges",
         lambda: spreadsheet.values_batch_get(
@@ -254,7 +259,7 @@ def read_google_motherbrain_live_rows(config=None, client_factory=None):
             },
         ),
     )
-    range_values = _range_values(response, GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS)
+    range_values = _range_values(response, ranges)
     live_rows = {}
     for index, (key, _a1, row_count, columns, start_row) in enumerate(
         GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS
@@ -267,7 +272,53 @@ def read_google_motherbrain_live_rows(config=None, client_factory=None):
             columns=columns,
             start_row=start_row,
         )
+    date_cells, identities, statuses = range_values[-3:]
+    sort_date = _live_source_date(_padded_rows(date_cells, 1, 1)[0][0])
+    live_rows["inbound_source_sort_date"] = sort_date
+    live_rows["inbound_source_cancellations"] = _live_inbound_source_cancellations(
+        sort_date, identities, statuses, live_rows["inbound_rows"],
+    )
     return live_rows
+
+
+def _live_source_date(value):
+    text = str(value or "").strip()
+    for pattern in ("%Y-%m-%d", "%m-%d-%Y", "%m/%d/%Y", "%d-%b-%Y", "%d-%b-%y"):
+        try:
+            return datetime.strptime(text, pattern).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _live_inbound_source_cancellations(sort_date, identities, statuses, official_rows):
+    if sort_date is None:
+        return []
+    # P:W omits some CNL flights. Supplement only identities absent from
+    # that official projection, which remains authoritative on reopening.
+    official = {flight_identity(row["P"]) for row in official_rows}
+    candidates = {}
+    for row_no, ((raw_date, flight), (status, raw_time)) in enumerate(zip(
+        _padded_rows(identities, 97, 2), _padded_rows(statuses, 97, 2),
+    ), start=4):
+        flight = str(flight or "").strip().upper()
+        if not re.fullmatch(r"(?:UPS|5X)?[0-9]+", flight):
+            continue
+        try:
+            scheduled_utc = _alp_utc_datetime(raw_date, raw_time)
+        except ValueError:
+            continue
+        if scheduled_utc.date() not in (sort_date, sort_date + timedelta(days=1)):
+            continue
+        key = flight_identity(flight)
+        if key not in official:
+            candidates.setdefault(key, []).append((row_no, flight, str(status or "").strip().upper(), scheduled_utc))
+    return [
+        {"source_sheet": "Inbound source", "sheet_row": row_no, "P": flight, "W": status,
+         "source_scheduled_utc": scheduled_utc}
+        for rows in candidates.values() if len(rows) == 1
+        for row_no, flight, status, scheduled_utc in rows if status in {"CNL", "CANCELLED", "CANCELED", "CANX"}
+    ]
 
 
 def read_google_motherbrain_reset_parking_formulas(config=None, client_factory=None):

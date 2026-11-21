@@ -15,6 +15,7 @@ from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.google_motherbrain_sheets import (
     GOOGLE_MOTHERBRAIN_LOCKED_SPREADSHEET_ID,
     GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS,
+    GOOGLE_MOTHERBRAIN_LIVE_CANCELLATION_RANGES,
     GOOGLE_MOTHERBRAIN_RANGE_SPECS,
     GOOGLE_MOTHERBRAIN_READONLY_SCOPES,
     GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE,
@@ -430,7 +431,7 @@ class GoogleMotherBrainSheetsReaderTest(unittest.TestCase):
 
 
 class GoogleMotherBrainLiveRangeReaderTest(unittest.TestCase):
-    def test_live_reader_fetches_only_the_two_live_ranges_and_preserves_rows(self):
+    def test_live_reader_batches_official_rows_and_source_cancellation_fields(self):
         spreadsheet = _LiveRangeSpreadsheet(
             {
                 "Inbound!P4:W100": [
@@ -451,13 +452,11 @@ class GoogleMotherBrainLiveRangeReaderTest(unittest.TestCase):
         )
 
         expected_ranges = [spec[1] for spec in GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS]
+        expected_ranges.extend(GOOGLE_MOTHERBRAIN_LIVE_CANCELLATION_RANGES)
         self.assertEqual(client.opened_ids, [GOOGLE_MOTHERBRAIN_LOCKED_SPREADSHEET_ID])
         self.assertEqual(len(spreadsheet.batch_calls), 1)
         self.assertEqual(spreadsheet.batch_calls[0][0], expected_ranges)
         self.assertNotIn("Inbound!A4:G100", spreadsheet.batch_calls[0][0])
-        self.assertFalse(
-            any(":A" in value or "!A" in value for value in spreadsheet.batch_calls[0][0])
-        )
         self.assertEqual(
             live_rows["inbound_rows"],
             [
@@ -493,6 +492,31 @@ class GoogleMotherBrainLiveRangeReaderTest(unittest.TestCase):
         self.assertEqual(outbound["X"], "ONT")
         self.assertEqual(outbound["Y"], "N101UP")
         self.assertEqual(outbound["Z"], "ACK")
+
+
+    def test_source_only_cancellation_preserves_row_and_prefers_official_and_unambiguous_records(self):
+        spreadsheet = _LiveRangeSpreadsheet({
+            "Inbound!H2": [["11-19-2026"]],
+            "Inbound!P4:W100": [["UPS0753", "N401UP", "DFW", "", "22:44", "23:27", "", "ARR"]],
+            "Inbound!A4:B100": [
+                ["20-Nov-2026", "UPS0555"], ["20-Nov-2026", "UPS0753"],
+                ["19-Nov-2026", "UPS0853"], ["20-Nov-2026", "UPS0853"],
+                ["18-Nov-2026", "UPS0987"], ["20-Nov-2026", "UPS1218"],
+            ],
+            "Inbound!F4:G100": [
+                ["CNL", "04:55 (E)"], ["CNL", "04:44 (E)"],
+                ["CNL", "23:10 (E)"], ["ARR", "06:38 (E)"],
+                ["CNL", "06:51 (E)"], ["CNL", ""],
+            ],
+        })
+        result = read_google_motherbrain_live_rows(
+            reader_config(), client_factory=lambda _credentials: FakeClient(spreadsheet),
+        )
+        self.assertEqual(result["inbound_source_sort_date"], date(2026, 11, 19))
+        self.assertEqual(result["inbound_source_cancellations"], [{
+            "source_sheet": "Inbound source", "sheet_row": 4, "P": "UPS0555", "W": "CNL",
+            "source_scheduled_utc": datetime(2026, 11, 20, 4, 55),
+        }])
 
 
 class GoogleMotherBrainResetFormulaReaderTest(unittest.TestCase):
