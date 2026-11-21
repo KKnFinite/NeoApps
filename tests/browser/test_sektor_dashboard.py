@@ -18,10 +18,10 @@ class SektorDashboardBrowserTest(unittest.TestCase):
                     try:
                         page = browser.new_page(viewport={'width':width,'height':height})
                         fixture.login(page)
-                        fixture.ready(page, '/neosektor')
+                        fixture.ready(page, '/neosektor?dashboard=1' if width > 900 else '/neosektor')
                         page.evaluate("async()=>{await document.fonts.load('300 16px NeoFontLite');await document.fonts.ready;}")
                         self.assertEqual(page.locator('[data-node-dashboard-tile]').evaluate_all("es=>es.map(e=>e.dataset.nodeDashboardTile)"),
-                                         ['ebm','wbm','tunnel','driver-routing','discharge','settings','live-counts'])
+                                         ['ebm','wbm','tunnel','driver-routing','discharge','stats','live-counts','employees','settings'])
                         self.assertEqual(page.locator('[data-operational-sidebar]').count(),0)
                         if width>900:
                             self.assertTrue(page.locator('.operational-node-topbar').evaluate('e=>{const b=e.getBoundingClientRect();return b.left===0 && b.top===0 && b.width===innerWidth && [...e.children].every(c=>{const r=c.getBoundingClientRect();return r.top>=b.top && r.bottom<=b.bottom+1;});}'))
@@ -29,8 +29,9 @@ class SektorDashboardBrowserTest(unittest.TestCase):
                         self.assertTrue(page.locator('.sektor-command-copy strong').evaluate_all('es=>es.every(e=>{const r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=e.closest("a").getBoundingClientRect();return t.left>=b.left && t.right<=b.right && t.top>=b.top && t.bottom<=b.bottom;})'))
                         self.assertIn('NeoFontLite',page.locator('.sektor-command-copy strong').first.evaluate('e=>getComputedStyle(e).fontFamily'))
                         art = page.locator('.sektor-command-art img').evaluate('e=>e.currentSrc')
-                        self.assertIn('dashboard_mobile.png' if width<901 else 'dashboard_desktop.png',art)
-                        self.assertTrue(page.locator('.sektor-command-tile--live-counts').evaluate("e=>Math.abs(e.getBoundingClientRect().width-e.parentElement.getBoundingClientRect().width)<2"))
+                        self.assertIn('dashboard_mobile.webp' if width<901 else 'dashboard_desktop.webp',art)
+                        self.assertTrue(page.locator('.sektor-command-grid').evaluate(
+                            "e => getComputedStyle(e).gridTemplateColumns.split(' ').length === 2"))
                         page.screenshot(path=str(evidence/f'{engine}-{width}-{height}.png'),full_page=True)
                         if width<901:
                             page.locator('.sektor-command-tile--live-counts').scroll_into_view_if_needed()

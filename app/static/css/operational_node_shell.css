@@ -39,6 +39,16 @@
         scrollbar-width: thin;
     }
     .operational-sidebar-primary > * { flex: 0 0 auto; }
+    .node-secondary-tools summary {
+        cursor: pointer;
+        padding: 8px 10px;
+        border-radius: 7px;
+        color: #c8d6da;
+        font: 600 .85rem/1.3 system-ui, sans-serif;
+    }
+    .node-secondary-tools summary:hover { background: #1c333d; }
+    .node-secondary-tools summary:focus-visible { outline: 2px solid #83dfd4; outline-offset: -2px; }
+    .node-secondary-tools[open] > a { margin-top: 3px; }
     body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-menu {
         grid-template-columns: minmax(0,1fr);
         overflow: visible;

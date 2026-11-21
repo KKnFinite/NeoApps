@@ -3,6 +3,7 @@ from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
+from app.neonodes.landing import node_landing
 from app.extensions import db
 from app.models import (
     NeoSubZeroDepartureDeiceEvent,
@@ -187,7 +188,7 @@ def navigation():
 def index():
     endpoint = session.get(LAST_PAGE_KEY)
     if endpoint == "neosubzero.coordinator" and can_view_outbound():
-        return redirect(url_for("neosubzero.operations", mode="outbound"))
+        return node_landing("neosubzero.operations", mobile_url=url_for("neosubzero.operations", mode="outbound"))
     permitted_endpoints = [
         page[1] for page in NEOSUBZERO_PAGES if _navigation_page_allowed(page[1], page[2])
     ]
@@ -196,7 +197,8 @@ def index():
     if endpoint is None:
         flash("Access denied.", "error")
         return redirect(url_for("neomotherbrain.rfd_hub"))
-    return redirect(url_for(endpoint))
+    desktop = "neosubzero.operations" if "neosubzero.operations" in permitted_endpoints else None
+    return node_landing(desktop, mobile_url=url_for(endpoint))
 
 
 @bp.route("/pretreat")

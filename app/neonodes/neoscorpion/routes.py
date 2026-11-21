@@ -10,6 +10,7 @@ import io
 from datetime import datetime
 
 from app.auth.decorators import gateway_node_required
+from app.neonodes.landing import node_landing
 from app.extensions import db
 from app.models import NeoScorpionSettings, SortDateMission
 from app.neonodes.neoscorpion import bp
@@ -164,22 +165,27 @@ def inject_neoscorpion_navigation():
 @gateway_node_required("scorpion")
 def index():
     gateway = get_current_gateway()
+    menu = _visible_neoscorpion_internal_menu()
+    endpoints = {item.endpoint for item in menu}
+    desktop = next((endpoint for endpoint in ("neoscorpion.fuel_dispatch", "neoscorpion.fueler",
+                    "neoscorpion.truck_driver", "neoscorpion.fueling_board") if endpoint in endpoints), None)
     access = permission_access(NEOSCORPION_DASHBOARD_VIEW_PERMISSION)
     if not access["can_view"]:
-        flash("Access denied.", "error")
-        return redirect(url_for("neomotherbrain.rfd_hub"))
+        if not desktop:
+            flash("Access denied.", "error")
+        return node_landing(desktop, mobile_url=url_for("neomotherbrain.rfd_hub"))
 
-    return render_template(
-        "neonodes/neoscorpion/index.html",
+    return node_landing(
+        desktop, splash="neonodes/neoscorpion/index.html",
         gateway=gateway,
-        menu_items=_visible_neoscorpion_internal_menu(),
+        menu_items=menu,
     )
 
 
 @bp.route("/")
 @gateway_node_required("scorpion")
 def index_slash():
-    return redirect(url_for("neoscorpion.index"))
+    return redirect(url_for("neoscorpion.index", operation_id=request.args.get("operation_id", type=int)))
 
 
 @bp.get("/quick-fuel")

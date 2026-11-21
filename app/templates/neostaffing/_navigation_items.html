@@ -21,7 +21,7 @@
 {% endfor %}
 {% if workspace_secondary %}
 <details class="staffing-legacy-more-tools" {% if workspace_secondary|selectattr('active')|list %}open{% endif %}>
-    <summary class="{{ staffing_nav_class|default('') }}">More Tools</summary>
+    <summary class="{{ staffing_nav_class|default('') }}">{{ 'UNDER CONSTRUCTION' if staffing_desktop else 'More Tools' }}</summary>
     {% for item in workspace_secondary %}
     <a class="{{ staffing_nav_class|default('') }}{% if item.active %} is-active{% endif %}" data-staffing-nav href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>
         <span class="operational-side-link-icon" aria-hidden="true">{{ item.label[0] }}</span><span class="operational-side-link-label">{{ item.label }}</span>

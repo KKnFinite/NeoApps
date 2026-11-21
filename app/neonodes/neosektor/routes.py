@@ -7,6 +7,7 @@ from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
+from app.neonodes.landing import node_landing
 from app.extensions import db
 from app.services.operator_errors import safe_mutation_error
 from app.models import SortDateOperation
@@ -211,13 +212,17 @@ def inject_neosektor_navigation():
 @bp.route("")
 @gateway_node_required("sektor")
 def index():
+    # A provider error on Tunnel Conductor returns here to display its message.
+    desktop = ("neosektor.tunnel_conductor" if not request.args.get("dashboard")
+               and user_can(TUNNEL_CONDUCTOR_VIEW_PERMISSION) else None)
     if not user_can(NEOSEKTOR_DASHBOARD_VIEW_PERMISSION):
-        flash("Access denied.", "error")
-        return redirect(url_for("neomotherbrain.rfd_hub"))
+        if not desktop:
+            flash("Access denied.", "error")
+        return node_landing(desktop, mobile_url=url_for("neomotherbrain.rfd_hub"))
 
     gateway = get_current_gateway()
-    return render_template(
-        "neonodes/neosektor/index.html",
+    return node_landing(
+        desktop, splash="neonodes/neosektor/index.html",
         gateway=gateway,
         can_view=True,
         mobile_dashboard_items=_visible_neosektor_mobile_dashboard_items(),
@@ -227,7 +232,7 @@ def index():
 @bp.route("/")
 @gateway_node_required("sektor")
 def index_slash():
-    return redirect(url_for("neosektor.index"))
+    return redirect(url_for("neosektor.index", operation_id=request.args.get("operation_id", type=int)))
 
 
 @bp.route("/stats")
@@ -273,7 +278,7 @@ def tunnel_conductor():
         context = tunnel_conductor_context(gateway, bundle=bundle)
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("neosektor.index"))
+        return redirect(url_for("neosektor.index", dashboard=1))
     context["live_revision"] = neosektor_state_revision(
         gateway,
         ROUTING_STATE_SCOPE,

@@ -20,8 +20,12 @@ class QuickFuelBrowserTest(unittest.TestCase):
                     context = browser.new_context(viewport={"width": width, "height": height})
                     page = context.new_page()
                     _Fixture.login(_Fixture, page, "drawer-watcher")
-                    page.goto(_Fixture.origin + "/neoscorpion")
-                    expect(page.locator('[data-node-dashboard-tile="quick-fuel"]')).to_have_count(1)
+                    page.goto(_Fixture.origin + "/neoscorpion", wait_until="commit")
+                    if width > 900:
+                        expect(page).to_have_url(_Fixture.origin + "/neoscorpion/fuel-dispatch")
+                        expect(page.locator(".node-secondary-tools a[href='/neoscorpion/quick-fuel']")).to_have_count(1)
+                    else:
+                        expect(page.locator('[data-node-dashboard-tile="quick-fuel"]')).to_be_visible()
                     response = page.goto(_Fixture.origin + "/neoscorpion/quick-fuel")
                     self.assertEqual(response.status, 200)
                     expect(page.locator('label:has([name="required_fuel"])')).to_contain_text("Fuel Load")

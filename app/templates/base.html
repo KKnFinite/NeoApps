@@ -19,6 +19,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+    {% if desktop_landing_url %}{% include "neonodes/_responsive_entry.html" %}{% endif %}
     <meta name="theme-color" content="#d95a1f">
     <meta name="application-name" content="NeoApps">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -71,7 +72,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
     {% endif %}
     {% if uses_operational_shell %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/operational_node_shell.css', v=config.STATIC_ASSET_VERSION, rev='152107da4330') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/operational_node_shell.css', v=config.STATIC_ASSET_VERSION, rev='de93a7dc16ca') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260913-employees-v7') }}">

@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from flask_login import current_user
 
 from app.auth.decorators import gateway_node_required
+from app.neonodes.landing import node_landing
 from app.extensions import db
 from app.models import MasterFlightSchedule, NeoRainCrewAdminAssignment, NeoRainDelayInfo, NeoRainLoadPlannerContact, NeoRainOutboundServiceState, SortDateMission, SortDateOperation, StaffingPerson
 from app.neonodes.neorain import bp
@@ -141,7 +142,8 @@ def index():
     if not endpoint:
         flash("Access denied.", "error")
         return redirect(url_for("neomotherbrain.rfd_hub"))
-    return redirect(url_for(endpoint))
+    desktop = "neorain.inbound" if user_can("neorain.inbound.view") else None
+    return node_landing(desktop, mobile_url=url_for(endpoint))
 
 
 @bp.route("/")

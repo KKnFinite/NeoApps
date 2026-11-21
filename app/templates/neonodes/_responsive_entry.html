@@ -1,0 +1,7 @@
+<script nonce="{{ csp_nonce() }}">
+    if (window.matchMedia("(min-width: 901px)").matches) {
+        window.location.replace({{ desktop_landing_url|tojson }});
+    }{% if mobile_landing_url %} else {
+        window.location.replace({{ mobile_landing_url|tojson }});
+    }{% endif %}
+</script>

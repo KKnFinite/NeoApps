@@ -1,3 +1,6 @@
+{% macro desktop_link(label, endpoint, active) %}
+<a class="motherbrain-desktop-side-link{% if active %} is-active{% endif %}" href="{{ url_for(endpoint) }}"{% if active %} aria-current="page"{% endif %}><span class="operational-side-link-icon" aria-hidden="true">{{ label[0] }}</span><span class="operational-side-link-label">{{ label }}</span></a>
+{% endmacro %}
 <aside class="motherbrain-desktop-side-nav node-desktop-side-nav operational-desktop-sidebar node-{{ node_header_key }}" aria-label="{{ node_header_name }} navigation" data-node-desktop-side-nav data-operational-sidebar data-node-desktop-shell="{{ node_header_key }}">
     <div class="operational-sidebar-primary">
     <div class="operational-sidebar-topline">
@@ -12,20 +15,39 @@
     <nav class="motherbrain-desktop-side-menu node-desktop-side-menu" aria-label="{{ node_header_name }} menu">
         {% if is_neostaffing_page %}
         {% set staffing_nav_class = 'motherbrain-desktop-side-link' %}
+        {% set staffing_desktop = true %}
         {% include "neostaffing/_navigation_items.html" %}
         {% elif is_neoermac_page %}
-        <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neoermac.index' %} is-active{% endif %}" href="{{ url_for('neoermac.index') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Dashboard</span></a>
-        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/door-view') %} is-active{% endif %}" href="{{ url_for('neoermac.door_view') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Door View</span></a>
-        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/building-lineup') %} is-active{% endif %}" href="{{ url_for('neoermac.building_lineup') }}"><span class="operational-side-link-icon">B</span><span class="operational-side-link-label">Building Lineup</span></a>
-        <a class="motherbrain-desktop-side-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}"><span class="operational-side-link-icon">O</span><span class="operational-side-link-label">View Outbound</span></a>
-        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/upcoming-pulls') %} is-active{% endif %}" href="{{ url_for('neoermac.upcoming_pulls') }}"><span class="operational-side-link-icon">P</span><span class="operational-side-link-label">Upcoming Pulls</span></a>
-        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}"><span class="operational-side-link-icon">T</span><span class="operational-side-link-label">Tug Assignments</span></a>
-        {% if user_can('neoermac.settings.view') %}<a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/settings') %} is-active{% endif %}" href="{{ url_for('neoermac.settings') }}"><span class="operational-side-link-icon">S</span><span class="operational-side-link-label">Settings</span></a>{% endif %}
+        {% for label, screen in [('View Outbound','view_outbound'), ('Upcoming Pulls','upcoming_pulls'), ('Door View','door_view'), ('Building Lineup','building_lineup'), ('Settings','settings')] %}
+            {% set endpoint = 'neoermac.' ~ screen %}
+            {% if user_can(endpoint ~ '.view') or (screen in ('door_view', 'building_lineup') and user_can(endpoint ~ '.edit')) %}
+                {{ desktop_link(label, endpoint, request.endpoint == endpoint) }}
+            {% endif %}
+        {% endfor %}
+        {% if user_can('neoermac.tug_assignments.view') %}
+        <details class="node-secondary-tools"{% if request.endpoint == 'neoermac.tug_assignments' %} open{% endif %}>
+            <summary>UNDER CONSTRUCTION</summary>
+            {{ desktop_link('Tug Assignments', 'neoermac.tug_assignments', request.endpoint == 'neoermac.tug_assignments') }}
+        </details>
+        {% endif %}
         {% elif is_neosektor_page %}
-        <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neosektor.index' %} is-active{% endif %}" href="{{ url_for('neosektor.index') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Dashboard</span></a>
-        {% for item in neosektor_internal_menu_items() %}<a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}"><span class="operational-side-link-icon">{{ item.label[0] }}</span><span class="operational-side-link-label">{{ item.label }}</span></a>{% endfor %}
+        {% set visible = neosektor_internal_menu_items() %}
+        {% for screen in ('tunnel_conductor','driver_routing','ebm','wbm','live_counts','discharge','manage_employees','staffing_stats','settings') %}
+            {% for item in visible if item.endpoint == 'neosektor.' ~ screen %}{{ desktop_link(item.label, item.endpoint, item.active) }}{% endfor %}
+        {% endfor %}
         {% elif is_neoscorpion_page %}
-        {% for item in neoscorpion_internal_menu_items() %}<a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}"><span class="operational-side-link-icon">{{ item.label[0] }}</span><span class="operational-side-link-label">{{ item.label }}</span></a>{% endfor %}
+        {% set primary = ('dispatch','fueling-board','fueler','truck-driver','settings') %}
+        {% set visible = neoscorpion_internal_menu_items() %}
+        {% for key in primary %}
+            {% for item in visible if item.key == key %}{{ desktop_link(item.label, item.endpoint, item.active) }}{% endfor %}
+        {% endfor %}
+        {% set secondary = visible|rejectattr('key','in',primary + ('dashboard',))|list %}
+        {% if secondary %}
+        <details class="node-secondary-tools"{% if secondary|selectattr('active')|list %} open{% endif %}>
+            <summary>More Tools</summary>
+            {% for item in secondary %}{{ desktop_link(item.label, item.endpoint, item.active) }}{% endfor %}
+        </details>
+        {% endif %}
         {% elif is_neorain_page %}
         {% for item in neorain_menu_items() %}<a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}"><span class="operational-side-link-icon">{{ item.label[0] }}</span><span class="operational-side-link-label">{{ item.label }}</span></a>{% endfor %}
         {% elif is_neosubzero_page %}

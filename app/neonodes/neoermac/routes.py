@@ -13,6 +13,7 @@ from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
+from app.neonodes.landing import node_landing
 from app.extensions import db
 from app.services.operator_errors import safe_mutation_error
 from app.neonodes.neoermac import bp
@@ -107,16 +108,18 @@ NEOERMAC_PAGES = (
 @bp.route("")
 @gateway_node_required("ermac")
 def index():
+    desktop = "neoermac.view_outbound" if user_can(VIEW_OUTBOUND_VIEW_PERMISSION) else None
     access = permission_access(NEOERMAC_DASHBOARD_VIEW_PERMISSION)
     if not access["can_view"]:
-        flash("Access denied.", "error")
-        return redirect(url_for("neomotherbrain.rfd_hub"))
+        if not desktop:
+            flash("Access denied.", "error")
+        return node_landing(desktop, mobile_url=url_for("neomotherbrain.rfd_hub"))
 
     gateway = get_current_gateway()
     if access_initialization_changed_this_request():
         db.session.commit()
-    return render_template(
-        "neonodes/neoermac/index.html",
+    return node_landing(
+        desktop, splash="neonodes/neoermac/index.html",
         gateway=gateway,
         menu_items=NEOERMAC_PAGES,
     )
@@ -125,7 +128,7 @@ def index():
 @bp.route("/")
 @gateway_node_required("ermac")
 def index_slash():
-    return redirect(url_for("neoermac.index"))
+    return redirect(url_for("neoermac.index", operation_id=request.args.get("operation_id", type=int)))
 
 
 @bp.route("/settings")

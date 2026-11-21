@@ -283,6 +283,27 @@ class OperationalShellTest(unittest.TestCase):
                 if path.startswith('/motherbrain'):
                     self.assertIn('/motherbrain/manage-sort', hrefs)
 
+    def test_scorpion_root_returns_an_authorized_fallback_for_each_limited_menu(self):
+        from unittest.mock import patch
+        for permission, path in (("neoscorpion.fuel_assignments.view", "/neoscorpion/fueler"),
+                                 ("neoscorpion.truck_driver.view", "/neoscorpion/truck-driver")):
+            with self.subTest(permission=permission), patch("app.neonodes.neoscorpion.routes.user_can",
+                                                            side_effect=lambda key: key == permission):
+                response = self.client.get("/neoscorpion", headers={"Accept": "text/html"})
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(f'window.location.replace("{path}")'.encode(), response.data)
+                self.assertNotIn(b'window.location.replace("/neoscorpion/fuel-dispatch")', response.data)
+
+    def test_sektor_failed_conductor_entry_displays_the_error_without_reentry(self):
+        from unittest.mock import patch
+        from app.neonodes.neosektor.routes import NeoSektorGoogleError
+        with patch("app.neonodes.neosektor.routes.tunnel_conductor_context",
+                   side_effect=NeoSektorGoogleError("Synthetic provider unavailable")):
+            response = self.client.get("/neosektor/tunnel-conductor", follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Synthetic provider unavailable", response.data)
+        self.assertNotIn(b'window.location.replace("/neosektor/tunnel-conductor")', response.data)
+
     def test_sidebar_reuses_permission_filtered_node_menu(self):
         watcher = User(username="operational-watcher", role="watcher")
         set_user_password(watcher, "TestPassword123!")
