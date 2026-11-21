@@ -90,6 +90,18 @@
                     </form>{% endif %}
                 {% endif %}
             </details>
+            {% if can_archive_test_sort and operation.generated_by_user_id and not operation.archived_at_utc and not operation.locked_at_utc %}
+            <details class="mb-disclosure">
+                <summary>Archive a manual test Sort</summary>
+                <form method="post" action="{{ url_for('neomotherbrain.archive_manual_test_sort', operation_id=operation.id) }}">
+                    {{ csrf_field() }}
+                    <label>Reason for marking operation {{ operation.id }} as a test
+                        <input name="reason" required maxlength="240">
+                    </label>
+                    <button class="action-button" type="submit">Archive test Sort</button>
+                </form>
+            </details>
+            {% endif %}
         </div>
     </div>
 </section>

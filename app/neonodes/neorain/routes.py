@@ -48,7 +48,6 @@ from app.neonodes.neorain.services import (
     set_neorain_late_metrics_included,
 )
 from app.services.google_rain_integration_mode import (
-    GOOGLE_PRIMARY,
     NEO_ONLY,
     NEO_PRIMARY_GOOGLE_MIRROR,
     rain_integration_mode,
@@ -392,7 +391,7 @@ def inbound():
         eligible_crew_admins=eligible_neorain_crew_admins(),
         inbound_revision=neorain_inbound_revision(gateway, operation=operation),
         refresh_status=neorain_inbound_refresh_status(gateway, operation=operation),
-        rain_integration_mode=rain_integration_mode(gateway, operation.sort_name) if operation else GOOGLE_PRIMARY,
+        rain_integration_mode=rain_integration_mode(gateway, getattr(operation, "sort_name", None)),
         **context,
     )
 
@@ -599,11 +598,7 @@ def outbound():
     gateway = get_current_gateway()
     operation = current_neorain_outbound_operation(gateway)
     context = neorain_outbound_context(gateway, operation=operation)
-    integration_mode = (
-        rain_integration_mode(gateway, operation.sort_name)
-        if operation is not None
-        else GOOGLE_PRIMARY
-    )
+    integration_mode = rain_integration_mode(gateway, getattr(operation, "sort_name", None))
     return render_template(
         "neonodes/neorain/outbound.html",
         can_edit=access["can_edit"],

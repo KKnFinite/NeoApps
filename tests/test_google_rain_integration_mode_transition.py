@@ -12,6 +12,8 @@ from app.services.google_rain_integration_mode import (
     change_rain_integration_mode, rain_integration_mode, set_rain_integration_mode,
 )
 from tests.test_neorain_sort_refresh import configure_sort_window
+from app.models.sort_date_operation import ManualTestSortArchive
+from app.services.manual_test_sort_archive import archive_manual_test_operation
 
 
 class GoogleRainIntegrationModeTransitionTest(unittest.TestCase):
@@ -70,6 +72,51 @@ class GoogleRainIntegrationModeTransitionTest(unittest.TestCase):
     def facts(self):
         table = SortDateMission.__table__
         return db.session.execute(table.select().order_by(table.c.id)).all()
+
+    def test_explicit_test_archive_is_atomic_and_preserves_missions(self):
+        actor = User(username="test_owner", password_hash="fixture", role="grandmaster")
+        db.session.add(actor)
+        db.session.flush()
+        self.operation.generated_by_user_id = actor.id
+        self.now(datetime(2026, 8, 29, 22))
+        mission = SortDateMission.query.one()
+        mission.departure_status = "scheduled"
+        mission.actual_block_out_datetime_utc = mission.ramp_load_completed_at_utc = None
+        db.session.commit()
+        before = self.facts()
+        with self.assertRaises(RainIntegrationWindowError):
+            self.change(NEO_ONLY)
+        archive_manual_test_operation(self.gateway, self.operation.id, actor, "Owner test")
+        db.session.flush()
+        db.session.rollback()
+        self.assertIsNone(self.operation.archived_at_utc)
+        self.assertIsNone(db.session.get(ManualTestSortArchive, self.operation.id))
+        archive_manual_test_operation(self.gateway, self.operation.id, actor, "Owner test")
+        db.session.commit()
+        receipt = db.session.get(ManualTestSortArchive, self.operation.id)
+        self.assertEqual((receipt.reason, receipt.actor_user_id, receipt.archived_at_utc),
+                         ("Owner test", actor.id, self.operation.archived_at_utc))
+        self.assertEqual(self.change(NEO_ONLY)["mode"], NEO_ONLY)
+        self.assertEqual(before, self.facts())
+        save_gateway_matrix(self.gateway, {("saturday", "night")})
+        with self.assertRaises(RainIntegrationWindowError):
+            self.change(GOOGLE_PRIMARY)
+
+    def test_test_archive_refuses_unauthorized_scheduled_and_operational_sorts(self):
+        actor = User(username="sort_owner", password_hash="fixture", role="operator")
+        db.session.add(actor)
+        db.session.flush()
+        self.operation.generated_by_user_id = actor.id
+        with self.assertRaises(PermissionError):
+            archive_manual_test_operation(self.gateway, self.operation.id, actor, "Test")
+        actor.role = "grandmaster"
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "Operational activity"):
+            archive_manual_test_operation(self.gateway, self.operation.id, actor, "Test")
+        save_gateway_matrix(self.gateway, {("saturday", "night")})
+        with self.assertRaisesRegex(ValueError, "explicitly mark"):
+            archive_manual_test_operation(self.gateway, self.operation.id, actor, "Test")
+        self.assertIsNone(self.operation.archived_at_utc)
 
     def test_opening_midnight_and_last_minute_block_every_authority_change(self):
         before = self.facts()

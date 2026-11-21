@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import User
+from app.models import SortDateOperation, User
 from app.services.access_control import (
     ensure_default_gateway_and_nodes,
     backfill_default_gateway_node_roles,
@@ -63,6 +63,30 @@ class NeoRainSystemSettingsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoRain integration mode is now NEO ONLY", response.data)
         self.assertEqual(rain_integration_mode(self.gateway, "night"), NEO_ONLY)
+
+    def test_authenticated_manual_test_sort_archive_and_cutover(self):
+        self._login("grandmaster")
+        operation = SortDateOperation(gateway_id=self.gateway.id, gateway_code="RFD",
+                                      sort_date=date(2026, 11, 20), sort_name="night",
+                                      generated_by_user_id=User.query.filter_by(role="grandmaster").one().id)
+        db.session.add(operation)
+        db.session.commit()
+        path = f"/motherbrain/operations/{operation.id}"
+        control = path + "/archive-manual-test"
+        self._login("operator")
+        self.client.post(control, data={"reason": "Fixture"})
+        self.assertIsNone(operation.archived_at_utc)
+        self._login("grandmaster")
+        self.assertIn(control.encode(), self.client.get(path).data)
+        response = self.client.post(control, data={"reason": "Fixture"}, follow_redirects=True)
+        self.assertIn(b"Test Sort archived.", response.data)
+        self.assertIsNotNone(operation.archived_at_utc)
+        self.assertNotIn(control.encode(), response.data)
+        result = self.client.post("/motherbrain/system-settings/integrations", data={
+            "action": "set_neorain_mode", "integration_mode": NEO_ONLY,
+        }, follow_redirects=True)
+        self.assertIn(b"NeoRain integration mode is now NEO ONLY", result.data)
+        self.assertIn(b'data-neorain-integration-mode="neo_only"', self.client.get("/neorain/outbound").data)
 
     def test_viewer_sees_disabled_selector_and_cannot_change_mode(self):
         self._login("operator")

@@ -2455,6 +2455,7 @@ def new_operation():
 @bp.route("/motherbrain/operations/<int:operation_id>")
 @gateway_node_required("motherbrain")
 def operation_detail(operation_id):
+    from app.services.account_security import platform_grandmaster
     gateway = get_current_gateway()
     denied = _permission_guard(MANAGE_SORT_VIEW_PERMISSION)
     if denied:
@@ -2468,9 +2469,32 @@ def operation_detail(operation_id):
         arrival_count=arrival_count,
         departure_count=departure_count,
         mission_count=arrival_count + departure_count,
+        can_archive_test_sort=platform_grandmaster(current_user) and user_can(MANAGE_SORT_EDIT_PERMISSION),
         google_reader_status=google_motherbrain_reader_status(),
         **_flight_api_auto_poll_timer_context(gateway, operation=operation),
     )
+
+
+@bp.post("/motherbrain/operations/<int:operation_id>/archive-manual-test")
+@gateway_node_required("motherbrain")
+def archive_manual_test_sort(operation_id):
+    from app.services.manual_test_sort_archive import archive_manual_test_operation
+
+    denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION)
+    if denied:
+        return denied
+    try:
+        archive_manual_test_operation(get_current_gateway(), operation_id, current_user, request.form.get("reason"))
+        db.session.commit()
+    except PermissionError:
+        db.session.rollback()
+        abort(403)
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+        return redirect(url_for("neomotherbrain.operation_detail", operation_id=operation_id))
+    flash("Test Sort archived. Its missions and recorded history are preserved.", "success")
+    return redirect(url_for("neomotherbrain.operation_detail", operation_id=operation_id))
 
 
 @bp.post(

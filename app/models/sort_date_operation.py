@@ -5,6 +5,16 @@ from sqlalchemy.orm import validates
 from app.extensions import db
 
 
+class ManualTestSortArchive(db.Model):
+    """Receipt for explicitly retiring an unscheduled operator-created test Sort."""
+    __tablename__ = "manual_test_sort_archives"
+
+    operation_id = db.Column(db.Integer, db.ForeignKey("sort_date_operations.id"), primary_key=True)
+    actor_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    reason = db.Column(db.String(240), nullable=False)
+    archived_at_utc = db.Column(db.DateTime, nullable=False)
+
+
 class SortDateOperation(db.Model):
     __tablename__ = "sort_date_operations"
     __table_args__ = (
