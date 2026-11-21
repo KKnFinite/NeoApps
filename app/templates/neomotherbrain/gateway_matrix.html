@@ -3,7 +3,10 @@
 {% block title %}Gateway Matrix | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page manage-sort-sidebar-page">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_schedule.css', v=config.STATIC_ASSET_VERSION) }}">
+{% set can_edit = user_can("neomotherbrain.gateway_matrix.edit") %}
+<section class="panel mb-planning mb-schedule manage-sort-sidebar-page">
     {% if selected_operation %}
     {% set manage_sort_sidebar_operation = selected_operation %}
     {% set manage_sort_sidebar_active = "gateway-matrix" %}
@@ -11,37 +14,40 @@
         {% include "neomotherbrain/_manage_sort_sidebar.html" %}
         <div class="manage-sort-main">
     {% endif %}
-            <div class="section-heading gateway-matrix-heading-block">
-                <h1 class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Gateway Matrix</h1>
-                <p class="muted">SET ACTIVE SORTS FOR {{ gateway.code }}</p>
-            </div>
-
-            <form method="post" class="gateway-matrix-form">
-                <div class="gateway-matrix-grid" role="table" aria-label="{{ gateway.code }} Gateway Matrix">
-                    <div class="gateway-matrix-heading" role="row">
-                        <span>DAY</span>
-                        {% for sort_name, sort_label in sort_options %}
-                        <span>{{ sort_label }} Sort</span>
-                        {% endfor %}
-                    </div>
-
-                    {% for day, day_label in day_options %}
-                    <div class="gateway-matrix-row" role="row">
-                        <strong>{{ day_label }}</strong>
-                        {% for sort_name, sort_label in sort_options %}
-                        <label class="matrix-toggle">
-                            <input type="checkbox" name="{{ day }}_{{ sort_name }}" value="1" {% if matrix[day][sort_name] %}checked{% endif %}>
-                            <span>{{ sort_label }} Sort</span>
-                        </label>
-                        {% endfor %}
-                    </div>
+    <header class="mb-heading">
+        <div><p>{{ gateway.code }} · Weekly operations</p><h1>Gateway Matrix</h1></div>
+        {% if not can_edit %}<span>View only</span>{% endif %}
+    </header>
+    <form method="post" class="mb-week-form">
+        <table class="mb-week" aria-label="SET ACTIVE SORTS FOR {{ gateway.code }}">
+            <thead>
+                <tr>
+                    <th scope="col">Weekday</th>
+                    {% for sort_name, sort_label in sort_options %}
+                    <th scope="col">{{ sort_label }}<span class="mb-sort-suffix"> Sort</span></th>
                     {% endfor %}
-                </div>
-
-                <div class="action-row">
-                    <button class="action-button" type="submit">SAVE GATEWAY MATRIX</button>
-                </div>
-            </form>
+                </tr>
+            </thead>
+            <tbody>
+                {% for day, day_label in day_options %}
+                <tr>
+                    <th scope="row"><span class="mb-day-full">{{ day_label }}</span><abbr class="mb-day-short" title="{{ day_label }}">{{ day_label[:3] }}</abbr></th>
+                    {% for sort_name, sort_label in sort_options %}
+                    <td><label class="mb-week-cell">
+                        <input type="checkbox" name="{{ day }}_{{ sort_name }}" value="1"
+                               aria-label="{{ day_label }}, {{ sort_label }} Sort"
+                               {% if matrix[day][sort_name] %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+                        <span class="mb-on" aria-hidden="true">On</span><span class="mb-off" aria-hidden="true">Off</span>
+                    </label></td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if can_edit %}
+        <div class="mb-actions"><button class="action-button mb-save" type="submit">SAVE GATEWAY MATRIX</button></div>
+        {% endif %}
+    </form>
     {% if selected_operation %}
         </div>
     </div>

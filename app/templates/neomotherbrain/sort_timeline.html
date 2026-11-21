@@ -2,10 +2,11 @@
 
 {% block title %}Sort Timeline | NeoApps{% endblock %}
 
-{% macro time_input(name, value) -%}
+{% macro time_input(name, value, label) -%}
 <input
     type="text"
     name="{{ name }}"
+    aria-label="{{ label }}"
     value="{{ format_timeline_time(value) if value else '' }}"
     inputmode="numeric"
     pattern="(?:[0-9][0-5][0-9]|(?:[01][0-9]|2[0-3]):?[0-5][0-9])"
@@ -24,17 +25,20 @@
 {%- endmacro %}
 
 {% macro budget_preview(title, preview) -%}
-<section class="sort-timeline-section" aria-labelledby="{{ title|lower|replace(' ', '-') }}" data-sort-timeline-preview="{{ preview.month_key }}">
+<section class="mb-month" aria-labelledby="{{ title|lower|replace(' ', '-') }}" data-sort-timeline-preview="{{ preview.month_key }}">
     <div class="sort-timeline-preview-heading">
         <h2 id="{{ title|lower|replace(' ', '-') }}">{{ title }}</h2>
         <span>{{ preview.month_label }}</span>
     </div>
-    {% if preview.provider_disabled %}
-    <p class="sort-timeline-warning">API PROVIDER IS OFF. NO POLLING, IMPORTS, OR SCHEDULED API USAGE WILL RUN.</p>
-    {% elif preview.budget_exhausted %}
-    <p class="sort-timeline-warning">API BUDGET EXHAUSTED. SCHEDULED POLLS ARE BLOCKED FOR THIS MONTH.</p>
-    {% endif %}
+    <p class="sort-timeline-warning" data-provider-disabled {% if not preview.provider_disabled %}hidden{% endif %}>Provider is off. API polling and imports are disabled.</p>
+    <p class="sort-timeline-warning" data-budget-exhausted {% if not preview.budget_exhausted %}hidden{% endif %}>Monthly API budget exhausted. Scheduled polls are blocked.</p>
     <div class="metric-grid sort-timeline-preview-grid">
+        {{ metric_tile("Polls Remaining", "polls_remaining", preview.polls_remaining) }}
+        {{ metric_tile("Adjusted Daily Poll Cap", "adjusted_daily_poll_cap", preview.adjusted_daily_poll_cap) }}
+        {{ metric_tile("Total Scheduled Polls", "total_scheduled_polls", preview.total_scheduled_polls) }}
+    </div>
+    <details class="mb-calc"><summary>Calculations and forecast</summary>
+    <div class="mb-metric-list">
         {{ metric_tile("Monthly API Units", "monthly_api_units", preview.monthly_api_units) }}
         {{ metric_tile("Units Per Poll", "units_per_poll", preview.units_per_poll) }}
         {{ metric_tile("Taxi-To-Ramp Minutes", "taxi_to_ramp_minutes", preview.taxi_to_ramp_minutes) }}
@@ -42,25 +46,26 @@
         {{ metric_tile("Units Used", "units_used", preview.units_used) }}
         {{ metric_tile("Units Remaining", "units_remaining", preview.units_remaining) }}
         {{ metric_tile("Polls Used", "polls_used", preview.polls_used) }}
-        {{ metric_tile("Polls Remaining", "polls_remaining", preview.polls_remaining) }}
         {{ metric_tile("Operating Days", "operating_days", preview.operating_days) }}
         {{ metric_tile("Full-Month API Polling Days", "full_month_api_polling_days", preview.full_month_api_polling_days) }}
         {{ metric_tile("Remaining API Polling Days", "remaining_api_polling_days", preview.remaining_api_polling_days) }}
         {{ metric_tile("Original Daily Poll Cap", "original_daily_poll_cap", preview.original_daily_poll_cap) }}
-        {{ metric_tile("Adjusted Daily Poll Cap", "adjusted_daily_poll_cap", preview.adjusted_daily_poll_cap) }}
         {{ metric_tile("Minimum Auto Poll Interval", "minimum_auto_poll_interval_minutes", preview.minimum_auto_poll_interval_minutes) }}
         {{ metric_tile("Actual Auto Poll Interval", "actual_auto_poll_interval_minutes", preview.actual_auto_poll_interval_minutes if preview.actual_auto_poll_interval_minutes is not none else "NONE") }}
         {{ metric_tile("Projected Polls Per Polling Day", "projected_polls_per_polling_day", preview.projected_polls_per_polling_day) }}
         {{ metric_tile("Special Poll Count", "special_poll_count", preview.special_poll_count) }}
         {{ metric_tile("Auto Interval Poll Count", "auto_interval_poll_count", preview.auto_interval_poll_count) }}
-        {{ metric_tile("Total Scheduled Polls", "total_scheduled_polls", preview.total_scheduled_polls) }}
     </div>
     <p class="muted">Operating Days are Gateway Matrix sort/day occurrences adjusted by month offset. Full-Month API Polling Days count API-enabled sort/day occurrences for the full month. Remaining API Polling Days use the current RFD local month and time.</p>
+    </details>
 </section>
 {%- endmacro %}
 
 {% block content %}
-<section class="panel centered-command-page manage-sort-sidebar-page sort-timeline-page" aria-labelledby="sort-timeline-title">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_schedule.css', v=config.STATIC_ASSET_VERSION) }}">
+{% set can_edit = user_can("neomotherbrain.sort_timeline.edit") %}
+<section class="panel mb-planning mb-schedule manage-sort-sidebar-page sort-timeline-page" aria-labelledby="sort-timeline-title">
     {% if selected_operation %}
     {% set manage_sort_sidebar_operation = selected_operation %}
     {% set manage_sort_sidebar_active = "sort-timeline" %}
@@ -68,21 +73,65 @@
         {% include "neomotherbrain/_manage_sort_sidebar.html" %}
         <div class="manage-sort-main">
     {% endif %}
-            <div class="section-heading">
-                <h1 id="sort-timeline-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Sort Timeline</h1>
-                <p class="muted">{{ gateway.code }} API PLANNING SETTINGS. NO EXTERNAL API CALLS ARE MADE FROM THIS SCREEN.</p>
-            </div>
-
-    <form class="operation-form sort-timeline-form" method="post" data-sort-timeline-autosave>
+    <header class="mb-heading">
+        <div><p>{{ gateway.code }} · API PLANNING SETTINGS</p><h1 id="sort-timeline-title">Sort Timeline</h1></div>
+        <nav class="mb-jumps" aria-label="Timeline sections">
+            <a href="#timeline-global-settings">API configuration</a>
+            <a href="#timeline-api-schedule">Weekly &amp; monthly</a>
+            <a href="#timeline-budget">Budgets</a>
+        </nav>
+    </header>
+    <form class="operation-form sort-timeline-form" method="post" {% if can_edit %}data-sort-timeline-autosave{% endif %}>
+        {% if can_edit %}
+        <p class="sort-timeline-autosave-status" data-sort-timeline-save-status role="status">AUTO-SAVE READY</p>
+        {% else %}<p class="sort-timeline-autosave-status">View only</p>{% endif %}
         <input type="hidden" name="month_key" value="{{ current_month_key }}">
+        <fieldset class="mb-fields" {% if not can_edit %}disabled{% endif %} aria-label="Sort Timeline settings">
+        <section class="mb-section" aria-labelledby="timeline-operations">
+            <h2 id="timeline-operations">Operational schedule</h2>
+            {% for sort_preview in current_preview.sort_previews %}
+            <div class="mb-sort-windows">
+                <h3>{{ sort_preview.sort_label }} Sort</h3>
+                <div class="mb-time-groups">
+                    {% for title, fields in (
+                        ('Flight lookup', [('Sort Start','sort_start','sort_window_start_local'), ('Sort End','sort_end','sort_window_end_local')]),
+                        ('Planning', [('Planning Start','planning_start','planning_start_local')]),
+                        ('Operating hours', [('Ops Start','ops_start','ops_window_start_local'), ('Ops End','ops_end','ops_window_end_local')]),
+                        ('Flight API', [('API Poll Start','polling_start','polling_start_local'), ('API Poll End','polling_end','polling_end_local')]),
+                        ('Google polling', [('Google Polling Start','google_polling_start','google_polling_start_local'), ('Google Polling End','google_polling_end','google_polling_end_local')])
+                    ) %}
+                    <fieldset class="mb-time-pair">
+                        <legend>{{ title }}</legend>
+                        {% for label, suffix, attribute in fields %}
+                        <label><span>{{ label.split()[-1] }}</span>{{ time_input(sort_preview.sort_name ~ "_" ~ suffix, sort_preview.sort_setting[attribute], sort_preview.sort_label ~ " " ~ label) }}</label>
+                        {% endfor %}
+                    </fieldset>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}<p>No Gateway Matrix sort/day combinations are configured yet.</p>{% endfor %}
+            <details class="mb-calc"><summary>Window definitions</summary>
+                <p>Sort start and end define the flight lookup range. Planning start marks the preparation window. Ops hours govern live screen refresh. Flight API and Google polling each have their own configured window.</p>
+            </details>
+        </section>
 
-        <section class="sort-timeline-section" aria-labelledby="timeline-global-settings">
-            <h2 id="timeline-global-settings">API LIMITS AND PROVIDER</h2>
+        <section class="mb-section" aria-labelledby="timeline-global-settings">
+            <h2 id="timeline-global-settings">API configuration</h2>
             <div class="sort-timeline-grid">
                 <label class="sort-timeline-provider-toggle">
                     <span>Provider Enabled</span>
                     <input type="checkbox" name="provider_enabled" value="1" {% if settings.provider_enabled %}checked{% endif %}>
                 </label>
+                <label>
+                    <span>Provider Name</span>
+                    <input type="text" name="provider_name" value="{{ settings.provider_name }}" placeholder="AeroDataBox">
+                </label>
+                <label>
+                    <span>API Key Env Var Name</span>
+                    <input type="text" name="api_key_env_var_name" value="{{ settings.api_key_env_var_name }}" placeholder="AERODATABOX_API_KEY" autocomplete="off">
+                </label>
+            </div>
+            <div class="sort-timeline-grid">
                 <label>
                     <span>Monthly API Units</span>
                     <input type="number" name="monthly_api_units" min="0" step="1" value="{{ settings.monthly_api_units }}">
@@ -99,51 +148,17 @@
                 <label>
                     <span>Minimum Auto Poll Interval Minutes</span>
                     <input type="number" name="minimum_auto_poll_interval_minutes" min="1" step="1" value="{{ settings.minimum_auto_poll_interval_minutes }}">
-                    <small class="muted">Auto polling will never run more often than this interval, even if monthly budget math allows faster polling. This helps avoid burning unnecessary API polls.</small>
-                </label>
-                <label>
-                    <span>Provider Name</span>
-                    <input type="text" name="provider_name" value="{{ settings.provider_name }}" placeholder="AeroDataBox">
-                </label>
-                <label>
-                    <span>API Key Env Var Name</span>
-                    <input type="text" name="api_key_env_var_name" value="{{ settings.api_key_env_var_name }}" placeholder="AERODATABOX_API_KEY" autocomplete="off">
                 </label>
             </div>
-            <p class="muted">Future arrival flow: Scheduled / Expected -> In Air -> On Ground (API runway time) -> Assumed Arrived (runway time + taxi-to-ramp minutes) -> Arrived (manual operational status) -> Unloaded (manual operational status).</p>
+            <details class="mb-calc"><summary>Polling interval and arrival status</summary>
+                <p>Auto polling will never run more often than this interval. The budget can lengthen it.</p>
+                <p>Scheduled / Expected -> In Air -> On Ground (API runway time) -> Assumed Arrived (runway time plus taxi time) -> Arrived (manual) -> Unloaded (manual).</p>
+            </details>
         </section>
 
-        <section class="sort-timeline-section" aria-labelledby="timeline-window-meanings">
-            <h2 id="timeline-window-meanings">WINDOW DEFINITIONS</h2>
-            <p class="muted"><strong>Sort Flight Lookup Window:</strong> Flight API requests pull arrivals/departures for the full sort start-to-end time. This is the flight data range.</p>
-            <p class="muted"><strong>API Polling Window:</strong> Automatic API polling may run only during this window. It controls when polls happen, not which flights are requested.</p>
-            <p class="muted"><strong>Ops / Node Online Window:</strong> Nodes and live screens auto-refresh only during this window. Outside it, refresh stops to help preserve Render instance time.</p>
-        </section>
-
-        <section class="sort-timeline-section" aria-labelledby="timeline-operating-offset">
-            <h2 id="timeline-operating-offset">OPERATING DAY OFFSET</h2>
-            <div class="sort-timeline-variance-grid" aria-label="Operating day offset by month">
-                {% for month_number, month_label in month_options %}
-                <div class="sort-timeline-variance-control">
-                    <span>{{ month_label }}</span>
-                    <div>
-                        <button class="action-button action-button-secondary sort-timeline-step" type="button" data-variance-step="-1" aria-label="Decrease {{ month_label }} offset">-</button>
-                        <input type="number" name="month_variance_{{ month_number }}" step="1" value="{{ month_variances[month_number] }}" aria-label="{{ month_label }} operating day offset">
-                        <button class="action-button action-button-secondary sort-timeline-step" type="button" data-variance-step="1" aria-label="Increase {{ month_label }} offset">+</button>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-
-        {{ budget_preview("Current Month Preview", current_preview) }}
-        {{ budget_preview("Next Month Preview", next_preview) }}
-
-        <section class="sort-timeline-section" aria-labelledby="timeline-api-schedule">
-            <h2 id="timeline-api-schedule">GATEWAY MATRIX API SCHEDULE</h2>
-            {% if not api_schedule.has_configured_cells %}
-            <p class="muted">No Gateway Matrix sort/day combinations are configured yet.</p>
-            {% endif %}
+        <section class="mb-section" aria-labelledby="timeline-api-schedule">
+            <h2 id="timeline-api-schedule">Weekly and monthly scheduling</h2>
+            <h3>Gateway Matrix API-enabled days</h3>
             <div class="sort-timeline-sort-grid">
                 {% for sort_preview in current_preview.sort_previews %}
                 {% set sort_name = sort_preview.sort_name %}
@@ -155,75 +170,11 @@
                     </div>
                     <div class="sort-timeline-api-days">
                         {% for day_info in sort_preview.configured_days %}
-                        <label class="matrix-toggle sort-timeline-api-day-toggle">
-                            <input type="checkbox" name="{{ day_info.field_name }}" value="1" {% if day_info.is_enabled %}checked{% endif %}>
+                        <label class="mb-api-day">
+                            <input type="checkbox" aria-label="{{ sort_preview.sort_label }} Sort, {{ day_info.day_label }} API enabled" name="{{ day_info.field_name }}" value="1" {% if day_info.is_enabled %}checked{% endif %}>
                             <span>{{ day_info.day_label }}</span>
                         </label>
                         {% endfor %}
-                    </div>
-                    <div class="sort-timeline-window-grid">
-                        <label>
-                            <span>Sort Start</span>
-                            {{ time_input(sort_name ~ "_sort_start", sort_setting.sort_window_start_local) }}
-                        </label>
-                        <label>
-                            <span>Sort End</span>
-                            {{ time_input(sort_name ~ "_sort_end", sort_setting.sort_window_end_local) }}
-                        </label>
-                        <label>
-                            <span>Planning Start</span>
-                            {{ time_input(sort_name ~ "_planning_start", sort_setting.planning_start_local) }}
-                        </label>
-                        <label>
-                            <span>Ops Start</span>
-                            {{ time_input(sort_name ~ "_ops_start", sort_setting.ops_window_start_local) }}
-                        </label>
-                        <label>
-                            <span>Ops End</span>
-                            {{ time_input(sort_name ~ "_ops_end", sort_setting.ops_window_end_local) }}
-                        </label>
-                        <label>
-                            <span>API Poll Start</span>
-                            {{ time_input(sort_name ~ "_polling_start", sort_setting.polling_start_local) }}
-                        </label>
-                        <label>
-                            <span>API Poll End</span>
-                            {{ time_input(sort_name ~ "_polling_end", sort_setting.polling_end_local) }}
-                        </label>
-                        <label>
-                            <span>Google Polling Start</span>
-                            {{ time_input(sort_name ~ "_google_polling_start", sort_setting.google_polling_start_local) }}
-                        </label>
-                        <label>
-                            <span>Google Polling End</span>
-                            {{ time_input(sort_name ~ "_google_polling_end", sort_setting.google_polling_end_local) }}
-                        </label>
-                    </div>
-                    <div class="metric-grid sort-timeline-sort-preview">
-                        <article class="metric-tile">
-                            <span>API Days</span>
-                            <strong data-sort-preview-metric="api_day_count">{{ sort_preview.api_day_count }}</strong>
-                        </article>
-                        <article class="metric-tile">
-                            <span>Special Polls</span>
-                            <strong data-sort-preview-metric="special_poll_count">{{ sort_preview.special_poll_count }}</strong>
-                        </article>
-                        <article class="metric-tile">
-                            <span>Budget Interval</span>
-                            <strong data-sort-preview-metric="budget_poll_interval_minutes">{{ sort_preview.budget_poll_interval_minutes if sort_preview.budget_poll_interval_minutes is not none else "NONE" }}</strong>
-                        </article>
-                        <article class="metric-tile">
-                            <span>Actual Interval</span>
-                            <strong data-sort-preview-metric="actual_auto_poll_interval_minutes">{{ sort_preview.actual_auto_poll_interval_minutes if sort_preview.actual_auto_poll_interval_minutes is not none else "NONE" }}</strong>
-                        </article>
-                        <article class="metric-tile">
-                            <span>Projected Polls</span>
-                            <strong data-sort-preview-metric="projected_polls_per_polling_day">{{ sort_preview.projected_polls_per_polling_day }}</strong>
-                        </article>
-                        <article class="metric-tile">
-                            <span>Next</span>
-                            <strong data-sort-preview-metric="next_poll_time">{{ format_timeline_time(sort_preview.next_poll_time) }}</strong>
-                        </article>
                     </div>
                     <div class="sort-timeline-special-polls" data-special-poll-list="{{ sort_name }}">
                         <span class="sort-timeline-field-label">Special Poll Times</span>
@@ -233,6 +184,7 @@
                                 type="text"
                                 name="{{ sort_name }}_special_poll_time"
                                 value="{{ format_timeline_time(special_time.poll_time_local) }}"
+                                aria-label="{{ sort_preview.sort_label }} special poll time"
                                 inputmode="numeric"
                                 pattern="(?:[0-9][0-5][0-9]|(?:[01][0-9]|2[0-3]):?[0-5][0-9])"
                                 maxlength="5"
@@ -267,12 +219,61 @@
                         </div>
                     </div>
                     <button class="action-button action-button-secondary sort-timeline-add-special" type="button" data-add-special-poll="{{ sort_name }}">ADD SPECIAL POLL TIME ROW</button>
+                    <details class="mb-calc"><summary>Sort forecast</summary>
+                        <div class="metric-grid sort-timeline-sort-preview">
+                            <article class="metric-tile">
+                                <span>API Days</span>
+                                <strong data-sort-preview-metric="api_day_count">{{ sort_preview.api_day_count }}</strong>
+                            </article>
+                            <article class="metric-tile">
+                                <span>Special Polls</span>
+                                <strong data-sort-preview-metric="special_poll_count">{{ sort_preview.special_poll_count }}</strong>
+                            </article>
+                            <article class="metric-tile">
+                                <span>Budget Interval</span>
+                                <strong data-sort-preview-metric="budget_poll_interval_minutes">{{ sort_preview.budget_poll_interval_minutes if sort_preview.budget_poll_interval_minutes is not none else "NONE" }}</strong>
+                            </article>
+                            <article class="metric-tile">
+                                <span>Actual Interval</span>
+                                <strong data-sort-preview-metric="actual_auto_poll_interval_minutes">{{ sort_preview.actual_auto_poll_interval_minutes if sort_preview.actual_auto_poll_interval_minutes is not none else "NONE" }}</strong>
+                            </article>
+                            <article class="metric-tile">
+                                <span>Projected Polls</span>
+                                <strong data-sort-preview-metric="projected_polls_per_polling_day">{{ sort_preview.projected_polls_per_polling_day }}</strong>
+                            </article>
+                            <article class="metric-tile">
+                                <span>Next</span>
+                                <strong data-sort-preview-metric="next_poll_time">{{ format_timeline_time(sort_preview.next_poll_time) }}</strong>
+                            </article>
+                        </div>
+                    </details>
                 </article>
                 {% endfor %}
             </div>
+            <div class="mb-offsets">
+                <h3>Monthly operating-day offsets</h3>
+                <div class="sort-timeline-variance-grid" aria-label="Operating day offset by month">
+                    {% for month_number, month_label in month_options %}
+                    <div class="sort-timeline-variance-control">
+                        <span>{{ month_label }}</span>
+                        <div>
+                            <button class="action-button action-button-secondary sort-timeline-step" type="button" data-variance-step="-1" aria-label="Decrease {{ month_label }} offset">-</button>
+                            <input type="number" name="month_variance_{{ month_number }}" step="1" value="{{ month_variances[month_number] }}" aria-label="{{ month_label }} operating day offset">
+                            <button class="action-button action-button-secondary sort-timeline-step" type="button" data-variance-step="1" aria-label="Increase {{ month_label }} offset">+</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </section>
-
-        <p class="sort-timeline-autosave-status" data-sort-timeline-save-status aria-live="polite">AUTO-SAVE READY</p>
+        </fieldset>
+        <section class="mb-section" aria-labelledby="timeline-budget">
+            <h2 id="timeline-budget">Budget intelligence</h2>
+            <div class="mb-budgets">
+                {{ budget_preview("Current Month Preview", current_preview) }}
+                {{ budget_preview("Next Month Preview", next_preview) }}
+            </div>
+        </section>
     </form>
     {% if selected_operation %}
         </div>
@@ -354,6 +355,8 @@
             if (!preview) {
                 return;
             }
+            preview.querySelector("[data-provider-disabled]").hidden = !metrics.provider_disabled;
+            preview.querySelector("[data-budget-exhausted]").hidden = !metrics.budget_exhausted;
             Object.entries(metrics || {}).forEach(([key, value]) => {
                 const node = preview.querySelector(`[data-preview-metric="${key}"]`);
                 if (node) {

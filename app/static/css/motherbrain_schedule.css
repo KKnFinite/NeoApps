@@ -1,0 +1,101 @@
+/* Gateway Matrix and Sort Timeline use the Planning page body. */
+.mb-schedule .mb-heading { margin-bottom: 12px; }
+.mb-schedule .manage-sort-main, .mb-schedule .sort-timeline-form { min-width: 0; }
+.mb-schedule .mb-week-form { width: min(100%, 60rem); }
+.mb-schedule .mb-week { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.mb-week th, .mb-week td {
+    text-align: center; padding: 4px; border-bottom: 1px solid var(--mb-line);
+}
+.mb-week thead th { color: var(--mb-muted); font-size: .83rem; }
+.mb-week th:first-child { text-align: left; }
+.mb-week tbody th { font-size: .88rem; }
+.mb-week .mb-day-short { display: none; }
+.mb-week .mb-week-cell {
+    display: flex; justify-content: center; align-items: center; gap: 7px;
+    min-height: 40px; margin: 0; border-radius: 5px;
+    background: #1b2830; border: 1px solid #40505a; color: #c3cdd2;
+    cursor: pointer; font: 600 .83rem/1.2 system-ui, sans-serif;
+}
+.mb-week-cell:has(input:checked) { background: #244c46; border-color: #63988a; color: #eefaf5; }
+.mb-week-cell:has(input:focus-visible) { outline: 2px solid #ade1ff; outline-offset: 1px; }
+.mb-week-cell:has(input:disabled) { cursor: default; }
+.mb-week-cell input, .mb-schedule .mb-api-day input { width: 17px; height: 17px; margin: 0; accent-color: #66cbb3; }
+.mb-week-cell input:not(:checked) ~ .mb-on, .mb-week-cell input:checked ~ .mb-off { display: none; }
+.mb-week-form .mb-actions { margin-top: 12px; }
+.mb-week-form .mb-save { background: #31574e; border-color: #679486; }
+.mb-schedule .sort-timeline-form { display: block; margin: 0; }
+.mb-schedule .sort-timeline-autosave-status {
+    position: sticky; top: var(--operational-header-height, 72px); z-index: 2;
+    width: fit-content; max-width: 100%; margin: 0 0 6px auto; padding: 3px 8px;
+    color: #d7e2e7; background: #1c2a32; border: 1px solid var(--mb-line); border-radius: 4px;
+    font: 650 .75rem/1.35 system-ui, sans-serif;
+}
+.mb-schedule .sort-timeline-autosave-status[data-state="error"], .mb-schedule .sort-timeline-warning { color: #ffb9ac; }
+.mb-schedule .sort-timeline-autosave-status[data-state="saved"] { color: #99e7cc; text-shadow: none; }
+.mb-schedule [id^="timeline-"] { scroll-margin-top: 105px; }
+.mb-schedule h3, .mb-schedule .sort-timeline-card-heading h3 {
+    margin: 0; color: #e6eff2; font: 650 .94rem/1.4 system-ui, sans-serif;
+}
+.mb-schedule .mb-sort-windows { padding: 10px 0; border-bottom: 1px solid var(--mb-line); }
+.mb-time-groups {
+    display: grid; grid-template-columns: 2fr 1fr 2fr 2fr 2fr; gap: 12px; margin-top: 5px;
+}
+.mb-time-pair {
+    display: flex; align-items: end; gap: 5px; padding: 0; margin: 0; min-width: 0; border: 0;
+}
+.mb-time-pair legend { padding: 0; color: #d6e6ec; font: 620 .8rem/1.45 system-ui, sans-serif; }
+.mb-schedule .operation-form label { min-width: 0; text-align: left; }
+.mb-schedule .mb-time-pair label, .mb-schedule .sort-timeline-grid label { display: grid; gap: 3px; }
+.mb-schedule .operation-form label > span, .mb-schedule .sort-timeline-field-label {
+    color: var(--mb-muted); text-transform: none; letter-spacing: normal; font: 600 .79rem/1.3 system-ui, sans-serif;
+}
+.mb-schedule .operation-form :is(input[type=text], input[type=number]) {
+    width: 100%; min-width: 0; min-height: 35px; padding: 5px 7px;
+    border: 1px solid #526672; border-radius: 4px; background: #213039; color: #f1f6f8;
+    font: 550 .88rem/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums;
+}
+.mb-schedule .operation-form input[aria-invalid=true] { border-color: #ffac97; }
+.mb-schedule .mb-calc { margin: 6px 0 0; }
+.mb-schedule summary { width: fit-content; padding: 6px 0; cursor: pointer; font: 600 .84rem/1.4 system-ui, sans-serif; }
+.mb-schedule .mb-calc p { color: var(--mb-muted); margin: 4px 0; font-size: .84rem; }
+.mb-schedule .sort-timeline-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); align-items: start; gap: 10px; margin-top: 10px;
+}
+.mb-schedule .sort-timeline-grid .sort-timeline-provider-toggle { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+.mb-schedule .sort-timeline-provider-toggle input { width: 20px; height: 20px; }
+.mb-schedule #timeline-api-schedule + h3, .mb-schedule .mb-offsets { margin-top: 12px; }
+.mb-schedule .sort-timeline-sort-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 10px; margin-block: 6px 12px; }
+.mb-schedule .sort-timeline-sort-card, .mb-schedule .mb-month { min-width: 0; padding: 10px; border: 1px solid var(--mb-line); border-radius: 6px; background: #1b272e; }
+.mb-schedule .sort-timeline-sort-card { align-content: start; gap: 6px; }
+.mb-schedule .sort-timeline-api-days { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.mb-schedule .operation-form .mb-api-day { display: flex; align-items: center; gap: 4px; width: auto; min-height: 32px; }
+.mb-schedule .sort-timeline-add-special { justify-self: start; }
+.mb-schedule .sort-timeline-variance-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); gap: 6px; margin-top: 6px; }
+.mb-schedule .sort-timeline-variance-control { padding: 6px; min-height: 0; gap: 2px; background: transparent; border-color: var(--mb-line); }
+.mb-schedule .sort-timeline-variance-control > div { grid-template-columns: 32px minmax(0, 1fr) 32px; gap: 3px; }
+.mb-schedule .sort-timeline-step { min-width: 0; min-height: 35px; padding: 4px; }
+.mb-schedule .mb-budgets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px; margin-top: 8px; }
+.mb-schedule .mb-month .sort-timeline-preview-heading h2 { font-size: .95rem; }
+.mb-schedule .sort-timeline-warning { font-size: .85rem; }
+.mb-schedule .sort-timeline-warning[hidden] { display: none; }
+.mb-schedule .metric-tile { min-width: 0; min-height: 0; padding: 6px; }
+.mb-metric-list .metric-tile { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; border: 0; border-bottom: 1px solid var(--mb-line); border-radius: 0; background: none; }
+.mb-schedule .mb-metric-list strong { font-size: .9rem; }
+@media (max-width: 1050px) {
+    .mb-time-groups { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    .mb-schedule .mb-heading .mb-jumps { gap: 4px; }
+    .mb-schedule .mb-jumps a { padding: 5px 8px; }
+    .mb-week .mb-day-full, .mb-week .mb-sort-suffix, .mb-week-cell :is(.mb-on, .mb-off) { display: none; }
+    .mb-week .mb-day-short { display: inline; text-decoration: none; }
+    .mb-week th, .mb-week td { padding: 3px 2px; }
+    .mb-week th:first-child { width: 18%; }
+    .mb-week .mb-week-cell { min-height: 44px; }
+    .mb-time-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .mb-schedule .sort-timeline-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mb-schedule .mb-budgets { grid-template-columns: minmax(0, 1fr); }
+    .mb-schedule .sort-timeline-autosave-status { top: 56px; }
+    .mb-schedule .operation-form :is(input[type=text], input[type=number]) { min-height: 40px; font-size: 1rem; }
+    .mb-schedule .mb-api-day { min-height: 40px; }
+}

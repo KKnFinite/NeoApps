@@ -1596,9 +1596,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("centered-command-page", html)
+        self.assertIn('<table class="mb-week"', html)
         self.assertIn("motherbrain-gateway-matrix-page", html)
-        self.assertIn("gateway-matrix-heading-block", html)
+        self.assertEqual(html.count('<th scope="row">'), 7)
         self.assertIn("SET ACTIVE SORTS FOR RFD", html)
         for sort_header in ("Sunrise Sort", "Day Sort", "Twilight Sort", "Night Sort"):
             self.assertIn(sort_header, html)
@@ -1614,15 +1614,36 @@ class MotherBrainRoutesTest(unittest.TestCase):
             html.index('name="monday_twilight"'),
             html.index('name="monday_night"'),
         )
-        css = stylesheet_source()
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-gateway-matrix-page .centered-command-page.manage-sort-sidebar-page {\n"
-            "        padding: 0;\n"
-            "        border: 0;\n"
-            "        background: transparent;",
-            css,
-        )
-        self.assertIn("body.mobile-app-chrome.motherbrain-gateway-matrix-page .manage-sort-main", css)
+        for day in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"):
+            for sort in ("Sunrise", "Day", "Twilight", "Night"):
+                self.assertIn(f'aria-label="{day}, {sort} Sort"', html)
+
+    def test_schedule_workspaces_respect_independent_view_and_edit_permissions(self):
+        self._add_matrix_cell("monday", "night")
+        PermissionRule.query.filter_by(permission_key="neomotherbrain.sort_timeline.view").one().minimum_role = "operator"
+        db.session.commit()
+        self._login_motherbrain_role("ScheduleViewer", "operator")
+
+        matrix = self.client.get("/motherbrain/gateway-matrix")
+        self.assertEqual(matrix.status_code, 200)
+        self.assertIn(b"View only", matrix.data)
+        self.assertNotIn(b"SAVE GATEWAY MATRIX", matrix.data)
+        timeline = self.client.get("/motherbrain/sort-timeline")
+        self.assertEqual(timeline.status_code, 200)
+        self.assertIn(b'<fieldset class="mb-fields" disabled', timeline.data)
+        self.assertNotIn(b"data-sort-timeline-save-status role=", timeline.data)
+
+        settings = SortTimelineSettings.query.filter_by(gateway_id=self.rfd_gateway.id).one()
+        initial_units = settings.monthly_api_units
+        for path, changes in (("gateway-matrix", {"friday_day": "1"}),
+                              ("sort-timeline", {"monthly_api_units": "3"})):
+            denied = self.client.post(f"/motherbrain/{path}", data=changes)
+            self.assertEqual(denied.status_code, 302)
+            self.assertEqual(denied.location, "/rfd")
+        db.session.refresh(settings)
+        self.assertEqual(settings.monthly_api_units, initial_units)
+        rows = GatewaySortMatrix.query.filter_by(gateway_id=self.rfd_gateway.id, is_active=True).all()
+        self.assertEqual({(row.day_of_week, row.sort_name) for row in rows}, {("monday", "night")})
 
     def test_gateway_matrix_saves_current_gateway_sort_toggles(self):
         response = self.client.post(

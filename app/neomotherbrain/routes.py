@@ -1932,6 +1932,8 @@ def _sort_timeline_autosave_payload(context):
 
 def _sort_timeline_preview_payload(preview):
     return {
+        "provider_disabled": preview["provider_disabled"],
+        "budget_exhausted": preview["budget_exhausted"],
         "monthly_api_units": preview["monthly_api_units"],
         "units_per_poll": preview["units_per_poll"],
         "taxi_to_ramp_minutes": preview["taxi_to_ramp_minutes"],
