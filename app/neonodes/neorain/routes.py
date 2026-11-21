@@ -138,12 +138,18 @@ def inject_neorain_navigation():
 @bp.route("")
 @gateway_node_required("rain")
 def index():
-    endpoint = _last_valid_neorain_endpoint()
-    if not endpoint:
+    menu = _visible_neorain_menu_items()
+    if not menu:
         flash("Access denied.", "error")
         return redirect(url_for("neomotherbrain.rfd_hub"))
-    desktop = "neorain.inbound" if user_can("neorain.inbound.view") else None
-    return node_landing(desktop, mobile_url=url_for(endpoint))
+    endpoints = {item["endpoint"] for item in menu}
+    remembered = session.get(NEORAIN_LAST_PAGE_SESSION_KEY)
+    fallback = remembered if remembered in endpoints else menu[0]["endpoint"]
+    desktop = "neorain.inbound" if "neorain.inbound" in endpoints else fallback
+    return node_landing(
+        desktop, splash="neonodes/mobile_splash.html",
+        splash_items=[(item["label"], item["endpoint"], None) for item in menu],
+    )
 
 
 @bp.route("/")
@@ -1142,15 +1148,6 @@ def _positive_integer(value):
 
 def _json_error(code, message, status_code):
     return jsonify({"ok": False, "code": code, "error": message}), status_code
-
-
-def _last_valid_neorain_endpoint():
-    visible_pages = _visible_neorain_menu_items()
-    visible_endpoints = {item["endpoint"] for item in visible_pages}
-    remembered = session.get(NEORAIN_LAST_PAGE_SESSION_KEY)
-    if remembered in visible_endpoints:
-        return remembered
-    return visible_pages[0]["endpoint"] if visible_pages else None
 
 
 def _visible_neorain_menu_items():

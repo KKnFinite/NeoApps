@@ -56,7 +56,7 @@ class NeoRainRoutesTest(unittest.TestCase):
         self.assertTrue(metadata["is_neorain_page"])
         self.assertFalse(metadata["uses_google_live_poll_heartbeat"])
 
-    def test_first_visit_defaults_to_inbound_and_remembers_last_valid_page(self):
+    def test_root_uses_mobile_menu_and_keeps_inbound_as_desktop_default(self):
         user = self._rain_user("rain_navigation_user", "watcher")
         self._login(user)
 
@@ -65,12 +65,16 @@ class NeoRainRoutesTest(unittest.TestCase):
         outbound = self.client.get("/neorain/outbound")
         remembered = self.client.get("/neorain/", follow_redirects=False)
 
-        self.assertEqual(first.location, "/neorain/inbound")
+        for page in (first, remembered):
+            self.assertEqual(page.status_code, 200)
+            self.assertIn(b"data-node-splash-menu", page.data)
+            self.assertIn(b'window.location.replace("/neorain/inbound")', page.data)
         self.assertEqual(inbound.status_code, 200)
         self.assertIn(b"INBOUND", inbound.data)
         self.assertEqual(outbound.status_code, 200)
         self.assertIn(b"OUTBOUND", outbound.data)
-        self.assertEqual(remembered.location, "/neorain/outbound")
+        with self.client.session_transaction() as session:
+            self.assertEqual(session["neorain.last_page"], "neorain.outbound")
 
     def test_all_four_pages_require_rain_node_access(self):
         user = self._rain_user("rain_watcher", "watcher")

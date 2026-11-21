@@ -1,0 +1,77 @@
+.node-splash {
+    --splash-accent: #7bd7ff;
+    --splash-glow: #269cc133;
+    width: min(100%, 42rem);
+    margin-inline: auto;
+    padding: 1.25rem .25rem 1.5rem;
+}
+
+.node-splash--rain {
+    --splash-accent: #d4b4ff;
+    --splash-glow: #8752d138;
+}
+
+.node-splash-brand {
+    display: grid;
+    justify-items: center;
+    gap: .65rem;
+    padding: .9rem 0 1.2rem;
+    background: radial-gradient(ellipse 60% 90% at 50% 40%, var(--splash-glow), transparent 76%);
+}
+
+.node-splash-brand img {
+    display: block;
+    width: clamp(6.5rem, 24vw, 9rem);
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: contain;
+}
+
+.node-splash-brand h1 {
+    margin: 0;
+    color: var(--splash-accent);
+    font: 400 clamp(1.1rem, 4.5vw, 1.45rem)/1.35 NeoFont, system-ui, sans-serif;
+}
+
+.node-splash-menu {
+    display: grid;
+    gap: .55rem;
+}
+
+.node-splash-menu a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .65rem;
+    min-width: 0;
+    min-height: 3.25rem;
+    padding: .65rem .9rem;
+    border: 1px solid #3c495b;
+    border-inline-start: 2px solid var(--splash-accent);
+    border-radius: .35rem .8rem .35rem .8rem;
+    background: linear-gradient(114deg, var(--splash-glow), transparent 72%), #111923;
+    color: #f1f5fa;
+    text-decoration: none;
+    font: 400 .875rem/1.45 NeoFontLite, system-ui, sans-serif;
+}
+
+.node-splash-menu a:hover,
+.node-splash-menu a:focus-visible {
+    border-color: var(--splash-accent);
+    background-color: #222c39;
+}
+
+.node-splash-menu a:focus-visible {
+    outline: 2px solid var(--splash-accent);
+    outline-offset: 2px;
+}
+
+.node-splash-arrow {
+    flex: none;
+    color: var(--splash-accent);
+    font: 1.2rem/1 system-ui, sans-serif;
+}
+
+@media (min-width: 600px) {
+    .node-splash-menu { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

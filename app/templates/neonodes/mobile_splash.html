@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ node_header_name }} | NeoGateway{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/node_mobile_splash.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="node-splash node-splash--{{ node_header_key }}">
+    <header class="node-splash-brand">
+        <img src="{{ url_for('static', filename=node_desktop_sidebar_logo) }}" alt="" width="144" height="144">
+        <h1>{{ node_header_name }}</h1>
+    </header>
+    <nav class="node-splash-menu" aria-label="{{ node_header_name }} operations" data-node-splash-menu>
+        {% for label, endpoint, external in splash_items %}
+        <a href="{{ external or url_for(endpoint, operation_id=splash_operation_id) }}"{% if external %} target="_blank" rel="noopener noreferrer"{% endif %}>
+            <span>{{ label }}</span><span class="node-splash-arrow" aria-hidden="true">{{ '↗' if external else '›' }}</span>
+        </a>
+        {% endfor %}
+    </nav>
+</section>
+{% endblock %}

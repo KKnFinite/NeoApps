@@ -305,6 +305,8 @@ def resolve_shell_metadata(
         if is_neoermac_page
         else neoscorpion_current_label
         if is_neoscorpion_page
+        else "DASHBOARD"
+        if is_neosubzero_page and normalized_path == "/neosubzero"
         else neorain_current_label
         if is_neorain_page
         else "DEICE DISPATCH"
@@ -612,6 +614,8 @@ def _neorain_labels(path):
         return "LOAD PLANNER LINEUP", "LINEUP"
     if path.startswith("/neorain/settings"):
         return "SETTINGS", "SETTINGS"
+    if path.rstrip("/") == "/neorain":
+        return "DASHBOARD", "DASHBOARD"
     return "INBOUND", "INBOUND"
 
 

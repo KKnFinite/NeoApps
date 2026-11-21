@@ -57,7 +57,12 @@ class OperationsTest(unittest.TestCase):
 
         with self.client.session_transaction() as session:
             session['neosubzero.last_page'] = 'neosubzero.coordinator'
-        self.assertEqual(self.client.get('/neosubzero/').location, '/neosubzero/operations?mode=outbound')
+        splash = self.client.get('/neosubzero/')
+        self.assertEqual(splash.status_code, 200)
+        self.assertIn(b'data-node-splash-menu', splash.data)
+        self.assertIn(b'window.location.replace("/neosubzero/operations")', splash.data)
+        with self.client.session_transaction() as session:
+            self.assertEqual(session['neosubzero.last_page'], 'neosubzero.coordinator')
         retired = self.client.get('/neosubzero/coordinator/revision?revision=old')
         self.assertEqual(retired.status_code, 410)
         self.assertTrue(retired.json['changed'])

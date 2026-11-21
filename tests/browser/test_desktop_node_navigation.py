@@ -51,7 +51,7 @@ class DesktopNodeNavigationTest(unittest.TestCase):
                                 env().ready(page, f"/{node}/{remembered}")
                             else:
                                 remembered = ""
-                            target = HOME.get(node, "") if desktop else remembered
+                            target = HOME.get(node, "") if desktop else ""
                             path = "/" + node + ("/" + target if target else "")
                             expected = re.compile(re.escape(env.origin + path) + r"/?(?:\?.*)?$")
                             page.goto(env.origin + "/" + node, wait_until="commit")
