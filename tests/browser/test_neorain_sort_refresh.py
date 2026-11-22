@@ -2,7 +2,6 @@
 from datetime import timedelta
 from threading import Thread
 from unittest import TestCase
-from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from playwright.sync_api import sync_playwright
@@ -10,6 +9,8 @@ from werkzeug.serving import make_server
 
 from app.extensions import db
 from app.models import SortDateOperation
+from app.services.gateway_matrix import save_gateway_matrix
+from app.services.google_motherbrain_live_polling import set_google_motherbrain_live_polling_enabled
 from tests import test_neorain_sort_refresh as fixtures
 
 
@@ -30,6 +31,9 @@ class NeoRainSortRefreshBrowserTest(TestCase):
         old = SortDateOperation(gateway_id=case.case.gateway.id, gateway_code="RFD",
                                 sort_date=case.operation.sort_date - timedelta(days=1), sort_name="night")
         db.session.add(old)
+        gateway = case.case.gateway
+        save_gateway_matrix(gateway, [(case.operation.sort_date.strftime("%A"), "night")])
+        set_google_motherbrain_live_polling_enabled(gateway, "night", True)
         db.session.commit()
         operation_id, old_id = case.operation.id, old.id
         server = make_server("127.0.0.1", 0, app, threaded=True)
@@ -38,10 +42,6 @@ class NeoRainSortRefreshBrowserTest(TestCase):
         self.addCleanup(worker.join, 5)
         self.addCleanup(server.shutdown)
         origin = f"http://127.0.0.1:{server.server_port}"
-        preflight = patch("app.services.google_motherbrain_live_poll_execution.google_motherbrain_live_poll_preflight",
-                          return_value={"status": "eligible"})
-        preflight.start()
-        self.addCleanup(preflight.stop)
         zone = ZoneInfo("America/Chicago")
         endpoints = {"inbound": "revision", "outbound": "revision", "rainrock": "state",
                      "daily-briefing": "state"}
@@ -64,6 +64,17 @@ class NeoRainSortRefreshBrowserTest(TestCase):
             requests = []
             page.on("request", lambda request: requests.append(request.url) if
                     "automatic=1" in request.url or "/google-live-poll/execute" in request.url else None)
+            # A non-Rain shell also has to stop locally when left open across close.
+            close = case.start + timedelta(hours=8)
+            before_close = close - timedelta(seconds=10)
+            app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = before_close
+            page.clock.set_system_time(before_close.replace(tzinfo=zone))
+            with page.expect_response(lambda response: "/google-live-poll/execute" in response.url):
+                self.assertEqual(page.goto(origin + "/rfd").status, 200)
+            requests.clear()
+            app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = close
+            page.clock.run_for(70000)
+            self.assertEqual(requests, [])
             for screen, endpoint in endpoints.items():
                 with self.subTest(screen=screen):
                     base = f"{origin}/neorain/{screen}"

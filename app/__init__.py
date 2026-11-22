@@ -385,6 +385,7 @@ def register_template_helpers(app):
             default_gateway_code=app.config["DEFAULT_GATEWAY_CODE"],
         )
         google_live_poll_heartbeat_client_version = None
+        google_live_poll_sort_end_ms = None
         if shell_metadata["uses_google_live_poll_heartbeat"]:
             from app.services.access_control import get_current_gateway
             from app.services.google_motherbrain_live_poll_execution import (
@@ -398,6 +399,7 @@ def register_template_helpers(app):
             shell_metadata["uses_google_live_poll_heartbeat"] = (
                 preflight["status"] == "eligible"
             )
+            google_live_poll_sort_end_ms = preflight.get("sort_end_ms")
             google_live_poll_heartbeat_client_version = (
                 GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION
             )
@@ -416,6 +418,7 @@ def register_template_helpers(app):
             "google_live_poll_heartbeat_client_version": (
                 google_live_poll_heartbeat_client_version
             ),
+            "google_live_poll_sort_end_ms": google_live_poll_sort_end_ms,
             **shell_metadata,
         }
 

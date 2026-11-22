@@ -408,6 +408,19 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         reader.assert_not_called()
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
 
+    def test_ambiguous_hours_or_unknown_zone_never_contact_google(self):
+        self._enable()
+        reader = Mock()
+        for end_time, zone in ((time(14), "America/Chicago"), (time(5), "Unknown/Zone")):
+            with self.subTest(end_time=end_time, zone=zone):
+                self.sort_setting.sort_window_end_local = end_time
+                db.session.commit()
+                with patch.dict(self.app.config, DEFAULT_GATEWAY_TIMEZONE=zone):
+                    result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW, reader=reader)
+                self.assertEqual(result["status"], "outside_window")
+        reader.assert_not_called()
+        self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
+
     def test_missing_sort_window_bound_is_outside_window(self):
         self._enable()
         reader = Mock()
@@ -1121,6 +1134,8 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
                     b'data-client-version="2"',
                     response.data,
                 )
+                close = datetime(2026, 6, 19, 5, tzinfo=ZoneInfo("America/Chicago"))
+                self.assertIn(f'data-sort-end-ms="{int(close.timestamp() * 1000)}"', response.text)
 
         portal = client.get("/portal")
         self.assertEqual(portal.status_code, 200)

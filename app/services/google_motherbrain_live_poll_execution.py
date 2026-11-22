@@ -216,10 +216,17 @@ def google_motherbrain_live_poll_preflight(gateway, now=None):
     if not sort_setting:
         return {"status": "outside_window", "sort_date": None}
 
+    try:
+        zone = ZoneInfo(gateway_timezone(gateway))
+    except (ZoneInfoNotFoundError, TypeError, ValueError):
+        return {"status": "outside_window", "sort_date": None}
     local_now = current_gateway_local_datetime(gateway, now=now)
+    now_utc = local_now.replace(tzinfo=zone).astimezone(timezone.utc)
     for sort_date in (local_now.date() - timedelta(days=1), local_now.date()):
-        start_local, end_local = _physical_sort_window(sort_date, sort_setting)
-        if start_local and end_local and start_local <= local_now < end_local:
+        start, end = configured_sort_window_utc(
+            gateway, sort_date, GOOGLE_MOTHERBRAIN_SORT_NAME, zone, sort_setting=sort_setting,
+        )
+        if start and start <= now_utc < end:
             active_sorts = active_sorts_for_gateway_date(
                 gateway,
                 sort_date,
@@ -230,6 +237,7 @@ def google_motherbrain_live_poll_preflight(gateway, now=None):
                 "status": "eligible",
                 "sort_date": sort_date,
                 "local_now": local_now,
+                "sort_end_ms": int(end.timestamp() * 1000),
                 "sort_settings": sort_settings,
                 "active_sorts_by_date": {sort_date: active_sorts},
             }

@@ -915,10 +915,11 @@
     {% if uses_operational_shell %}
     <script defer src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION, rev='37d7717e8c0d') }}"></script>
     {% endif %}
-    {% if uses_google_live_poll_heartbeat and (neorain_heartbeat_sort_end_ms is not defined or neorain_heartbeat_sort_end_ms) %}
+    {% set page_sort_end_ms = neorain_heartbeat_sort_end_ms|default(google_live_poll_sort_end_ms) %}
+    {% if uses_google_live_poll_heartbeat and google_live_poll_sort_end_ms and page_sort_end_ms %}
     <script nonce="{{ csp_nonce() }}"
         data-google-live-poll-heartbeat
-        {% if neorain_heartbeat_sort_end_ms is defined %}data-sort-end-ms="{{ neorain_heartbeat_sort_end_ms }}"{% endif %}
+        data-sort-end-ms="{{ [google_live_poll_sort_end_ms, page_sort_end_ms]|min }}"
         data-endpoint="{{ url_for('neomotherbrain.execute_google_live_poll') }}"
         data-client-version="{{ google_live_poll_heartbeat_client_version }}"
     >
@@ -947,7 +948,7 @@
         };
         const runHeartbeat = async () => {
             const sortEndMs = heartbeatElement.dataset.sortEndMs;
-            if (sortEndMs && !(Date.now() < Number(sortEndMs))) {
+            if (!(Date.now() < Number(sortEndMs))) {
                 window.__neoGoogleLivePollHeartbeatActive = false;
                 return;
             }
