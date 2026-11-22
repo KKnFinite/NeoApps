@@ -40,6 +40,17 @@ class VendorWorkflowTest(TestCase):
         vendors.decide_claim(self.gateway,self.operation,self.dispatcher,claim.id,True,0);db.session.commit()
         return user,account
 
+    def test_automatic_revision_returns_no_content_outside_physical_sort(self):
+        self.prepare()
+        user, _account = self.connect()
+        self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
+        with patch('app.neonodes.neoscorpion.vendor_routes.vendor_revision_in_sort', return_value=False), \
+             patch('app.neonodes.neoscorpion.vendor_routes.vendor_fingerprint',
+                   side_effect=AssertionError('Off-hours revision must not read live state')):
+            response = self.client.get(f'{DRIVER}/revision?operation_id={self.operation.id}')
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.get_data(), b'')
+
     def sort_mission_groups(self):
         response = self.client.get(f'{DRIVER}/my-truck')
         self.assertEqual(response.status_code, 200)
