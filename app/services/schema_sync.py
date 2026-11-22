@@ -815,8 +815,11 @@ def sync_database_schema(app):
         table_names,
     )
 
+    # Reflect the same visible PostgreSQL tables in one batch. An Engine-bound
+    # Inspector otherwise checks out a connection for every table at deployment.
+    reflected = inspector.get_multi_columns(filter_names=sorted(table_names))
     table_columns = {
-        table_name: {column["name"] for column in inspector.get_columns(table_name)}
+        table_name: {column["name"] for column in reflected[(None, table_name)]}
         for table_name in table_names
     }
 
