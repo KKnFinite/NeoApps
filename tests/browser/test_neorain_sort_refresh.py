@@ -84,10 +84,10 @@ class NeoRainSortRefreshBrowserTest(TestCase):
                     page.clock.set_system_time((case.start - timedelta(minutes=1)).replace(tzinfo=zone))
                     self.assertEqual(page.goto(url).status, 200)
                     if report:
-                        asset = f"neorain_{screen.replace('-', '_')}.js?v=sort-hours-v1"
+                        asset = f"neorain_{screen.replace('-', '_')}.js?v=physical-hours-v2"
                         self.assertEqual(page.locator(f'script[src$="{asset}"]').count(), 1)
                     requests.clear()
-                    page.clock.run_for(70000)
+                    page.clock.run_for(59000)
                     self.assertEqual(requests, [])
 
                     at = case.start + timedelta(hours=7, minutes=58)

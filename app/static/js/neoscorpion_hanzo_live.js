@@ -16,7 +16,7 @@
     let panelDigest = '';
 
     const reload = () => {
-        if (reloading) {
+        if (reloading || !window.NeoLiveUpdates.insidePhysicalSort()) {
             return;
         }
         reloading = true;
@@ -34,6 +34,7 @@
         if (!response.ok) {
             throw new Error(payload.error || "Hanzo live status is unavailable.");
         }
+        if (!window.NeoLiveUpdates.insidePhysicalSort()) return;
         const nextOperationId = payload.operation_id === null
             ? "none"
             : String(payload.operation_id);

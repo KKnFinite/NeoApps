@@ -282,6 +282,7 @@
         if (!response.ok || payload.ok !== true) {
             throw new Error("Fuel Assignments live status is unavailable.");
         }
+        if (!window.NeoLiveUpdates.insidePhysicalSort()) return;
 
         const nextOperationId = payload.operation_id === null
             ? "none"

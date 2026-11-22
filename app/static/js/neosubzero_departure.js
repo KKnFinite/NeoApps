@@ -198,7 +198,7 @@
                 && root.dataset.dirty !== "true"
                 && !root.querySelector('input:focus,textarea:focus,select:focus,[contenteditable="true"]:focus')
             ) {
-                window.location.reload();
+                if (window.NeoLiveUpdates.insidePhysicalSort()) window.location.reload();
             }
         },
     });

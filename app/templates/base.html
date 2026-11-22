@@ -26,7 +26,7 @@
     <meta name="apple-mobile-web-app-title" content="NeoApps">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{{ browser_tab_title }}</title>
-    {% if request.blueprint == 'neoscorpion' or request.endpoint == 'scorpion_vendor.manage' %}<script src="{{ url_for('static',filename='js/neoscorpion_vendor.js',v=config.STATIC_ASSET_VERSION) }}" defer></script>{% endif %}
+    {% if request.blueprint == 'neoscorpion' or request.endpoint == 'scorpion_vendor.manage' %}<script src="{{ url_for('static',filename='js/neoscorpion_vendor.js', hours='20261121',v=config.STATIC_ASSET_VERSION) }}" defer></script>{% endif %}
     {% if request.blueprint == 'neoscorpion' or request.endpoint == 'scorpion_vendor.manage' %}<link rel="stylesheet" href="{{ url_for('static',filename='css/neoscorpion_vendor.css',v='20261015') }}">{% endif %}
     <link rel="manifest" href="{{ url_for('pwa_manifest_by_key', manifest_key=current_pwa_manifest_key(), v=config.STATIC_ASSET_VERSION) }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('apple_touch_icon') }}">
@@ -145,9 +145,10 @@
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if uses_live_update_controller %}
+    <meta name="physical-sort-windows" content="{{ screen_poll_windows(gateway|default(none))|tojson }}">
     <meta name="live-poll-scope" content="{{ live_poll_scope(gateway|default(none)) }}">
-    <script src="{{ url_for('static', filename='js/live_revision.js', v='20261120-fueler-total') }}"></script>
-    <script src="{{ url_for('static', filename='js/live_updates.js', v='20261111-poll-v2') }}"></script>
+    <script src="{{ url_for('static', filename='js/live_revision.js', hours='20261121', v='20261120-fueler-total') }}"></script>
+    <script src="{{ url_for('static', filename='js/live_updates.js', v='20261121-physical-sort') }}"></script>
     {% endif %}
     {% if is_neostaffing_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20261106-sidebar-scroll-v1', attendance='20261110-autosave-v1' if request.endpoint == 'neostaffing.attendance' else none) }}">
@@ -162,7 +163,7 @@
           data-renew-url="{{ url_for('auth.renew_csrf') }}"
           data-authenticated="{{ 'true' if current_user.is_authenticated else 'false' }}"
           data-ttl="{{ config.CSRF_TOKEN_TTL_SECONDS }}">
-    <script src="{{ url_for('static', filename='js/csrf.js', v='20261031-renewal-v1') }}"></script>
+    <script src="{{ url_for('static', filename='js/csrf.js', v='20261121-physical-sort') }}"></script>
     <script src="{{ url_for('static', filename='js/form_actions.js', v='20261031-csp-v1') }}"></script>
 </head>
 <body class="{% if is_accounts_workspace %}accounts-workspace-page {% endif %}{% if is_neostaffing_page and request.endpoint == "neostaffing.index" %}staffing-dashboard {% endif %}blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page gateway-shell-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}{% if is_rfd_hub_page %} data-gateway-shell{% endif %}>

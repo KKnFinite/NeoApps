@@ -36,7 +36,7 @@
 {% endif %}
 </div>
 {% if waiting_status or fingerprint is defined %}
-<div data-vendor-refresh
+<div data-vendor-refresh data-sort-windows='{{ refresh_windows|tojson }}'
      data-login-url="{{ url_for('auth.login') }}"
      data-workspace-url="{{ view_as_screen_url if view_as else url_for('scorpion_vendor.my_truck') }}"
      {% if view_as %}data-preview-exit="{{ url_for('auth.view_as_index') }}"{% endif %}
@@ -49,4 +49,4 @@
      {% endif %}></div>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/neoscorpion_vendor.js', v=config.STATIC_ASSET_VERSION, view_as='20261119-preview-v1') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/neoscorpion_vendor.js', hours='20261121', v=config.STATIC_ASSET_VERSION, view_as='20261119-preview-v1') }}" defer></script>{% endblock %}

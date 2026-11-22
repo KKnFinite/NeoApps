@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from unittest import TestCase
 
 from playwright.sync_api import expect
@@ -29,6 +30,8 @@ class AccountsViewAsBrowserTest(TestCase):
                                       enabled=True, invited_by_user_id=actor.id))
                     fueler_id = fixture_user('browser-fueler', nodes={'scorpion': 'operator'}).id
                     local_now = datetime(2026, 8, 18, 22)
+                    from tests.test_neorain_sort_refresh import configure_sort_window
+                    configure_sort_window(gateway, local_now.date())
                     fixture.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = local_now
                     operation = SortDateOperation(sort_date=local_now.date(), gateway_id=gateway.id,
                         gateway_code=gateway.code, sort_name='night', window_minutes=60, generated_by_user_id=actor.id)
@@ -52,6 +55,7 @@ class AccountsViewAsBrowserTest(TestCase):
                         browser = getattr(fixture.pw, engine).launch()
                         try:
                             page = browser.new_page(viewport={'width': width, 'height': height})
+                            page.clock.install(time=local_now.replace(tzinfo=ZoneInfo('America/Chicago')))
                             self.exercise(fixture, page, driver_id, supervisor_id, fueler_id, operation_id)
                         finally:
                             browser.close()

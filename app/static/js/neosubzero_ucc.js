@@ -799,7 +799,7 @@
                 if (pollingTv === tvMode) applyInterval();
             }
             // A deferred fragment remains pending for the management view.
-            if (payload.revision !== displayedRevision) await refreshBoard();
+            if (payload.revision !== displayedRevision && window.NeoLiveUpdates.insidePhysicalSort()) await refreshBoard();
             if (pollingTv === tvMode) controller.setServerStatus(currentStatus());
         },
     });

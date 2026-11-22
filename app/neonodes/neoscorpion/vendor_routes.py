@@ -1,6 +1,6 @@
 """Separate vendor surface; normal Dispatch remains employee-only."""
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, render_template, request, redirect, url_for, abort, jsonify, flash
 from flask_login import login_required, current_user
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +14,29 @@ from app.services.neoscorpion_assets import lock_nightly_asset_scope_for_mutatio
 from app.services.neoscorpion_driver_missions import group_missions, sort_missions_revision
 
 bp = Blueprint('scorpion_vendor', __name__)
+
+
+def vendor_refresh_windows(gateway):
+    """Publish upcoming *physical* Sort windows, not planning/Ops windows.
+
+    Old tabs fail closed after the bounded horizon; an explicit page reload can
+    obtain the latest schedule. A timer that runs outside these windows does no I/O.
+    """
+    from app.services.gateway_matrix import screen_poll_windows
+    return [[datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat() for ms in period]
+            for period in screen_poll_windows(gateway)]
+
+
+def vendor_revision_in_sort(gateway):
+    """Reject expensive revision projection outside real configured Sort hours."""
+    from app.services.gateway_matrix import current_gateway_local_datetime, gateway_timezone, screen_poll_windows
+    from zoneinfo import ZoneInfo
+    periods = screen_poll_windows(gateway)
+    if not periods:
+        return False
+    local_now = current_gateway_local_datetime(gateway)
+    instant = local_now.replace(tzinfo=ZoneInfo(gateway_timezone(gateway))).timestamp() * 1000
+    return any(start <= instant < end for start, end in periods)
 
 
 @bp.context_processor
@@ -206,7 +229,9 @@ def my_truck(account):
         except (ValueError,TypeError,IntegrityError) as exc:
             db.session.rollback(); flash(str(exc) if isinstance(exc,ValueError) else 'Request changed. Refresh.','error')
         return redirect(url_for('scorpion_vendor.my_truck'))
-    return render_template('neonodes/neoscorpion/vendor_truck.html', **driver_screen_context(account, current_user))
+    return render_template('neonodes/neoscorpion/vendor_truck.html',
+        refresh_windows=vendor_refresh_windows(account.gateway),
+        **driver_screen_context(account, current_user))
 
 
 def connected_truck(account, operation):
@@ -253,12 +278,15 @@ def live(account):
     from app.neonodes.neoscorpion.routes import _dispatch_presentation_context
     context = _dispatch_presentation_context(account.gateway)
     require_same_operation(context['operation'], operation)
-    return render_template('neonodes/neoscorpion/vendor_live.html', account=account, fingerprint=fingerprint, **context)
+    return render_template('neonodes/neoscorpion/vendor_live.html', account=account,
+        fingerprint=fingerprint, refresh_windows=vendor_refresh_windows(account.gateway), **context)
 
 
 @bp.get('/revision')
 @vendor_only
 def revision(account):
+    if not vendor_revision_in_sort(account.gateway):
+        return '', 204
     if request.args.get('waiting') == '1':
         operation, status = driver_access(account)
         from app.services.fuel_driver_accounts import supervisor_membership
@@ -276,12 +304,15 @@ def revision(account):
 @vendor_only
 def supervisor(account):
     from app.services.fuel_driver_accounts import supervisor_context
-    return render_template('neonodes/neoscorpion/vendor_supervisor.html', **supervisor_context(account))
+    return render_template('neonodes/neoscorpion/vendor_supervisor.html',
+        refresh_windows=vendor_refresh_windows(account.gateway), **supervisor_context(account))
 
 
 @bp.get('/supervisor/revision')
 @vendor_only
 def supervisor_revision(account):
+    if not vendor_revision_in_sort(account.gateway):
+        return '', 204
     from app.services.fuel_driver_accounts import supervisor_context
     return jsonify(supervisor_context(account)['fingerprint'])
 

@@ -19,8 +19,8 @@
   </label>
 {% endmacro %}
 <main class="rain-report rain-daily-briefing" data-daily-briefing
-  {% if refresh_status.auto_refresh_enabled %}data-auto-state-url="{{ url_for('neorain.daily_briefing_state', operation_id=operation.id, automatic=1) }}"
-  data-sort-end-ms="{{ refresh_status.sort_end_ms }}"
+  {% if refresh_status.sort_end_ms %}data-auto-state-url="{{ url_for('neorain.daily_briefing_state', operation_id=operation.id, automatic=1) }}"
+  data-sort-start-ms="{{ refresh_status.sort_start_ms }}" data-sort-end-ms="{{ refresh_status.sort_end_ms }}"
   data-refresh-ms="{{ config.get('NEORAIN_BRIEFING_REFRESH_MS',60000) }}"{% endif %}>
   <header class="neorain-outbound-head"><div><p>NIGHTLY OPERATIONS</p><h1>DAILY BRIEFING</h1></div></header>
   {% include "neonodes/neorain/_report_sort_picker.html" %}
@@ -59,5 +59,5 @@
     <script nonce="{{ csp_nonce() }}" type="application/json" data-briefing-reports>{{ {'briefing':briefing,'briefing_detailed':briefing_detailed}|tojson }}</script>
   </section>
 </main>
-<script defer src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='sort-hours-v1') }}"></script>
+<script defer src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='physical-hours-v2') }}"></script>
 {% endblock %}

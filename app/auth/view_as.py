@@ -201,12 +201,14 @@ def _selection(key):
 @preview_only
 def view_as_screen(gateway, key):
     from app.services.page_assets import page_stylesheets
+    from app.neonodes.neoscorpion.vendor_routes import vendor_refresh_windows
     interface, subject = _selection(key)
     context = interface.context(gateway, subject, 'screen')
     g.view_as_screen = True
     subject_id = subject.id if subject else None
     return render_template(
         interface.template, **context, gateway=gateway, can_edit=False, view_as=True,
+        refresh_windows=vendor_refresh_windows(gateway) if not interface.panel else [],
         view_as_label=interface.label, view_as_subject=subject.display_name if subject else 'Role preview',
         view_as_revision_url=url_for('auth.view_as_live', key=key, part='revision', user=subject_id),
         view_as_panel_url=url_for('auth.view_as_live', key=key, part='panel', user=subject_id) if interface.panel else None,

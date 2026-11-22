@@ -89,7 +89,10 @@
             const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: 'no-store', credentials: 'same-origin',
                 headers: {'X-Requested-With': 'XMLHttpRequest'}});
             if (ticket !== issued) return;
-            if (response.status === 428) { global.location.reload(); return; }
+            if (response.status === 428) {
+                if (global.NeoLiveUpdates.insidePhysicalSort()) global.location.reload();
+                return;
+            }
             if (!response.ok) throw new Error('Outbound refresh failed.');
             const payload = await response.json();
             if (ticket !== issued) return;

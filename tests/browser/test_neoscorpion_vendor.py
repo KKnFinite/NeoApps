@@ -14,8 +14,19 @@ from tests.browser import test_mobile_drawer as fixtures
 from tests.neoscorpion_handoff_fixture import submit_and_verify
 
 
+def active_browser_refresh_windows(_gateway):
+    # Tests for vendor workflow pin physical Sort eligibility independently of
+    # the machine's wall clock. Boundary behavior has a dedicated JS test.
+    now = datetime.utcnow()
+    return [[(now-timedelta(minutes=1)).isoformat()+'Z',
+             (now+timedelta(minutes=45)).isoformat()+'Z']]
+
+
 class VendorBrowserTest(unittest.TestCase):
-    def test_all_sort_missions_refresh_on_vendor_truck(self):
+    @patch('app.neonodes.neoscorpion.vendor_routes.vendor_refresh_windows',
+           side_effect=active_browser_refresh_windows)
+    @patch('app.neonodes.neoscorpion.vendor_routes.vendor_revision_in_sort', return_value=True)
+    def test_all_sort_missions_refresh_on_vendor_truck(self, *_mocks):
         F = fixtures.MobileDrawerBrowserTest
         F.setUpClass()
         browser = None
@@ -155,7 +166,10 @@ class VendorBrowserTest(unittest.TestCase):
                 browser.close()
             F.tearDownClass()
 
-    def test_vendor_approval_claim_inventory_and_responsive_board(self):
+    @patch('app.neonodes.neoscorpion.vendor_routes.vendor_refresh_windows',
+           side_effect=active_browser_refresh_windows)
+    @patch('app.neonodes.neoscorpion.vendor_routes.vendor_revision_in_sort', return_value=True)
+    def test_vendor_approval_claim_inventory_and_responsive_board(self, *_mocks):
         F=fixtures.MobileDrawerBrowserTest
         F.setUpClass();browser=None
         def submit(page,button):
@@ -189,16 +203,11 @@ class VendorBrowserTest(unittest.TestCase):
                 F().login(driver,'browser-vendor',path='/login')
                 expect(driver).to_have_url(F.origin+'/neoscorpion/driver/my-truck')
                 self.assertEqual(driver.request.get(F.origin+'/neoscorpion/driver/live').status,403)
-                submit(admin,admin.get_by_role('button',name='APPROVE TONIGHT',exact=True))
-                expect(admin.locator('article').first).to_contain_text('ENABLED · APPROVED')
-                response=driver.goto(F.origin+'/neoscorpion/driver/my-truck')
-                self.assertEqual(response.status,200,driver.locator('body').inner_text())
-                driver.get_by_text('REQUEST / CHANGE TRUCK',exact=True).click()
                 driver.locator('select[name=truck_id]').select_option(str(truck_id))
-                submit(driver,driver.get_by_role('button',name='REQUEST DISPATCH APPROVAL'))
-                expect(driver.locator('[data-vendor-live]')).to_contain_text('NO APPROVED TRUCK')
-                expect(driver.locator('[data-vendor-live]')).to_contain_text('PENDING APPROVAL')
-                admin.reload();submit(admin,admin.get_by_role('button',name='APPROVE CLAIM',exact=True))
+                submit(driver,driver.get_by_role('button',name='REQUEST TRUCK',exact=True))
+                expect(driver.get_by_role('status').filter(has_text='CLAIM')).to_contain_text('PENDING')
+                self.assertEqual(driver.request.get(F.origin+'/neoscorpion/driver/live').status,403)
+                admin.reload();submit(admin,admin.locator('button[value=claim_approve]'))
                 driver.reload();expect(driver.locator('[data-vendor-live]')).to_contain_text('TRUCK 422808')
                 with F.app.app_context():
                     service.confirm_fueler_truck_on(db.session.get(Gateway,gateway_id),db.session.get(User,actor_id),assignment_id,

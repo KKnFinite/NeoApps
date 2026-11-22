@@ -28,7 +28,7 @@ function fixture() {
         matchMedia(){return {matches:false};},localStorage:{getItem(){return null;}},
         setTimeout,clearTimeout,scrollY:100,scrollTo(){},location:{origin:'http://fixture.test',href:'http://fixture.test/neosubzero/ucc'},
         history:{replaceState(_state,_title,url){window.location.href=String(url);}},
-        NeoLiveUpdates:{create(options){poll=options.poll;return {setIntervalMs(){},setServerStatus(){}};}},
+        NeoLiveUpdates:{insidePhysicalSort:()=>true,create(options){poll=options.poll;return {setIntervalMs(){},setServerStatus(){}};}},
     };
     const calls=[];
     const context = {

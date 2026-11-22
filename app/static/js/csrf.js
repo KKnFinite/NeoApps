@@ -44,6 +44,11 @@
     const schedule = () => {
         clearTimeout(timer);
         if (!token() || meta.dataset.authenticated !== 'true' || document.hidden || blocked) return;
+        if (!window.NeoLiveUpdates?.insidePhysicalSort()) {
+            const opening = window.NeoLiveUpdates?.nextPhysicalOpening();
+            if (opening) timer = setTimeout(renewIfDue, Math.max(1000, opening - Date.now()));
+            return;
+        }
         timer = setTimeout(() => { void renewIfDue(); }, Math.max(1000, Math.max(refreshAt, retryAt) - Date.now()));
     };
     const ensureFresh = async () => {
@@ -88,6 +93,7 @@
     };
     async function renewIfDue() {
         if (document.hidden || !token() || meta.dataset.authenticated !== 'true') return;
+        if (!window.NeoLiveUpdates?.insidePhysicalSort()) { schedule(); return; }
         try { await ensureFresh(); }
         catch (error) { feedback(error); }
         schedule();

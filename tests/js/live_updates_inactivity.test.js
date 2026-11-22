@@ -13,7 +13,7 @@ const source = fs.readFileSync(
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-const createHarness = () => {
+const createHarness = (periods = [[0, Number.MAX_SAFE_INTEGER]], clock = Date) => {
     const listeners = new Map();
     const timers = new Map();
     let nextTimerId = 1;
@@ -106,7 +106,10 @@ const createHarness = () => {
         querySelectorAll() {
             return [];
         },
-        querySelector() {
+        querySelector(selector) {
+            if (selector === 'meta[name="physical-sort-windows"]') {
+                return {content: JSON.stringify(periods)};
+            }
             return null;
         },
         createElement(tagName) {
@@ -128,6 +131,7 @@ const createHarness = () => {
         },
     };
     const sandbox = {
+        Date: clock,
         CSS: {escape: String},
         DOMParser: class DOMParser {},
         Element: FakeElement,
@@ -189,6 +193,35 @@ test("monitor control is tab-local and exposes a clear pressed state", () => {
     assert.equal(monitorButton.attributes.get("aria-pressed"), "true");
     assert.equal(monitorButton.children[1].textContent, "ON");
     assert.equal(harness.hasTimer(600000), false);
+});
+
+test("physical hours bound timer and visibility wakes even in continuous display mode", async () => {
+    let now = 99999, calls = 0;
+    const h = createHarness([[100000, 120000]], {now: () => now});
+    const controller = h.liveUpdates.create({intervalMs: 5000, continuousWhileVisible: true, poll: () => { calls++; }});
+    controller.setEnabled(true);
+    await controller.refreshNow({force: true});
+    assert.equal(calls, 0);
+    assert.ok(h.hasTimer(1));
+    for (const [at, expected] of [[100000, 1], [119999, 2], [120000, 2], [200000, 2]]) {
+        now = at;
+        await controller.refreshNow({force: true});
+        assert.equal(calls, expected);
+    }
+    h.document.dispatch("visibilitychange");
+    await settle();
+    assert.equal(calls, 2);
+    controller.destroy();
+});
+
+test("absent or malformed Sort hours fail closed", async () => {
+    for (const windows of [[], {}, [[10, 10]], [["0", "9999999999999"]]]) {
+        const h = createHarness(windows);
+        const controller = h.liveUpdates.create({intervalMs: 5000, poll: () => assert.fail("unexpected request")});
+        controller.setEnabled(true);
+        assert.equal(await controller.refreshNow({force: true}), false);
+        controller.destroy();
+    }
 });
 
 test("foreground inactivity stops polling until one immediate reconciliation", async () => {

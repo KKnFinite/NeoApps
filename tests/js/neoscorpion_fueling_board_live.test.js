@@ -31,7 +31,7 @@ function harness(segmentKeys = false) {
         querySelector(selector) { return selector === '[data-fueling-board-panel]' ? currentPanel : null; }};
     const context = {document: {querySelector: () => root, createElement() { return {set innerHTML(value) {this.html = value;},
         get content() { return {querySelector: () => nextPanel}; }}; }},
-        NeoLiveUpdates: {create(options) { controller = options; return {setServerStatus() {}}; }},
+        NeoLiveUpdates: {insidePhysicalSort: () => true, create(options) { controller = options; return {setServerStatus() {}}; }},
         fetch(url) { return new Promise(resolve => requests.push({url, reply(payload) {resolve({ok: true, json: async () => payload});}})); },
         requestAnimationFrame(callback) {callback();}, scrollX: 0, scrollY: 80,
         scrollTo(x, y) {this.scrollX = x; this.scrollY = y;}};

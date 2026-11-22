@@ -861,16 +861,17 @@
                 !!card.querySelector(dirtyForm) || card.closest('[data-ops-row]').dataset.missionId === selected;
         });
         applyLayout();
-        if (!isPretreat && selected && !busy) fetchPage().catch(error => notify(error.message,true));
+        if (!isPretreat && selected && !busy && window.NeoLiveUpdates?.insidePhysicalSort()) {
+            fetchPage().catch(error => notify(error.message,true));
+        }
     });
     if (!isPretreat && requestedDrafts().length) {
         fetchPage().catch(error => notify(error.message,true));
     }
-    window.addEventListener('beforeunload',()=>{ saveDraft(); stopLive(); });
-    window.addEventListener('pagehide',stopLive);
-    // A back/forward-cache restore needs a fresh controller and canonical scope;
-    // reload restores any saved draft with its original concurrency token.
-    window.addEventListener('pageshow',event=>{ if (event.persisted) location.reload(); });
+    window.addEventListener('beforeunload',saveDraft);
+    window.addEventListener('pagehide',event=>{ if (!event.persisted) stopLive(); });
+    // The cached document retains its drafts, revision and live controller.
+    window.addEventListener('pageshow',event=>{ if (event.persisted) controller?.refreshNow(); });
     const initialRefresh = JSON.parse(root.dataset.refreshStatus || '{}');
     const interval = Number(initialRefresh.live_screen_refresh_interval_ms || root.dataset.refreshIntervalMs);
     if (!window.NeoLiveUpdates || interval < 1000) return;
@@ -884,7 +885,7 @@
         const payload = await response.json();
         if (payload.refresh?.live_screen_refresh_interval_ms) controller.setIntervalMs(payload.refresh.live_screen_refresh_interval_ms);
         controller.setServerStatus(payload.refresh || {});
-        if (payload.changed && !busy && !preferenceBusy) await fetchPage();
+        if (payload.changed && !busy && !preferenceBusy && window.NeoLiveUpdates.insidePhysicalSort()) await fetchPage();
     }});
     controller.setServerStatus(initialRefresh);
 })();

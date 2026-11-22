@@ -63,7 +63,7 @@ const createHarness = (initialStatus, responsePayload = null) => {
         },
     };
     const window = {
-        NeoLiveUpdates: {inactivityTimeoutMs: 10 * 60 * 1000},
+        NeoLiveUpdates: {inactivityTimeoutMs: 10 * 60 * 1000, insidePhysicalSort: () => true},
         clearTimeout(timerId) {
             timers.delete(timerId);
         },

@@ -52,7 +52,7 @@ from app.services.live_collaboration import entity_version
 from app.services.memory_diagnostics import memory_diagnostics
 from app.services.neostaffing import attendance_operation_department_counts
 from app.services.gateway_matrix import (
-    configured_sort_window_utc,
+    physical_poll_windows,
     current_gateway_local_datetime,
     gateway_timezone,
 )
@@ -464,14 +464,15 @@ def neorain_refresh_status(gateway, operation, *, is_current):
         zone = ZoneInfo(gateway_timezone(gateway))
     except (ZoneInfoNotFoundError, ValueError, TypeError):
         return status
-    start_utc, end_utc = configured_sort_window_utc(gateway, operation.sort_date, operation.sort_name, zone)
-    if start_utc is None:
+    windows = physical_poll_windows(gateway, operation.sort_date, operation.sort_name)
+    if not windows:
         return status
-    now = current_gateway_local_datetime(gateway).replace(tzinfo=zone).astimezone(timezone.utc)
-    if start_utc <= now < end_utc:
+    start_ms, end_ms = windows[0]
+    now = current_gateway_local_datetime(gateway).replace(tzinfo=zone).timestamp() * 1000
+    status.update(sort_start_ms=start_ms, sort_end_ms=end_ms)
+    if start_ms <= now < end_ms:
         status.update(
             auto_refresh_enabled=True,
-            sort_end_ms=int(end_utc.timestamp() * 1000),
             reason="active",
             message="Live updates on",
         )
@@ -483,7 +484,7 @@ def _board_refresh_status(gateway, operation, key):
     setting = live_screen_refresh_value(gateway, key)
     status["live_screen_refresh_interval_ms"] = setting.effective_interval_ms
     if not setting.enabled:
-        status.update(auto_refresh_enabled=False, reason="disabled", message="Live updates off")
+        status.update(auto_refresh_enabled=False, sort_end_ms=None, reason="disabled", message="Live updates off")
     return status
 
 
