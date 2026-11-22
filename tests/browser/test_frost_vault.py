@@ -6,6 +6,7 @@ from unittest.mock import patch
 from playwright.sync_api import expect
 from tests.browser import test_mobile_drawer as fixtures
 from tests import test_frost_vault as contracts
+from tests.frost_schedule_fixture import configure
 from app.extensions import db
 from app.models import Gateway,FrostDocument,User,NeoSubZeroSprayRecord
 from app.services.frost_documents import drain
@@ -14,19 +15,19 @@ from tests.test_frost_history import weather_csv
 
 
 class FrostVaultBrowserTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.f=fixtures.MobileDrawerBrowserTest;cls.f.setUpClass()
-        cls.store=contracts.MemoryR2()
-        cls.patches=[patch('app.services.neoscorpion_learning_vault._require_r2_config',return_value={'bucket':'isolated'}),
-            patch('app.services.neoscorpion_learning_vault._r2_client',return_value=cls.store),
-            patch('app.neonodes.neosubzero.frost_routes.learning_vault_status',return_value=SimpleNamespace(configured=True))]
-        for item in cls.patches:item.start()
-
-    @classmethod
-    def tearDownClass(cls):
-        for item in reversed(cls.patches):item.stop()
-        cls.f.tearDownClass()
+    def setUp(self):
+        # A simulated future capture must not leave a worker lease in the next scenario.
+        self.f = fixtures.MobileDrawerBrowserTest
+        self.f.setUpClass()
+        self.addCleanup(self.f.tearDownClass)
+        self.store = contracts.MemoryR2()
+        self.enterContext(patch('app.services.neoscorpion_learning_vault._require_r2_config',
+                                return_value={'bucket': 'isolated'}))
+        self.enterContext(patch('app.services.neoscorpion_learning_vault._r2_client', return_value=self.store))
+        self.enterContext(patch('app.neonodes.neosubzero.frost_routes.learning_vault_status',
+                                return_value=SimpleNamespace(configured=True)))
+        with self.f.app.app_context():
+            configure(Gateway.query.filter_by(code="RFD").one())
 
     def test_historical_health_live_updates_and_mobile_import_stays_accessible(self):
         with self.f.app.app_context():
