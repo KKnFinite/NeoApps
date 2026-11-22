@@ -21,7 +21,7 @@ from tests import test_neoermac_routes as ef
 URI=os.environ.get('NEOSTAFFING_TEST_POSTGRES_URL')
 
 
-def postgres(test, fixture, setup):
+def postgres(test, fixture, setup, *, fixture_lock_ms=3000):
     url=make_url(URI)
     if url.host not in {'127.0.0.1','localhost'} or not url.database.startswith('neostaffing_test_'):
         raise RuntimeError('Refusing non-disposable PostgreSQL')
@@ -34,7 +34,7 @@ def postgres(test, fixture, setup):
     def local(config):
         return create_app(type('OperationalPerformancePG',(config,),dict(SQLALCHEMY_DATABASE_URI=URI,
             SQLALCHEMY_ENGINE_OPTIONS={'connect_args':{'connect_timeout':5,
-                'options':f'-csearch_path={schema} -clock_timeout=3000 -cstatement_timeout=15000'}})))
+                'options':f'-csearch_path={schema} -clock_timeout={fixture_lock_ms} -cstatement_timeout={max(15000, fixture_lock_ms + 5000)}'}})))
     with patch.object(fixture,'create_app',local):setup()
 
 

@@ -10,8 +10,10 @@ from app.services.neorain_ground_time_settings import set_neorain_ground_time_th
 from app.services.neosubzero_trucks import manage_truck
 from app.services.sort_timeline import record_sort_timeline_api_attempt
 from tests import test_accounts_workspace as accounts
+from tests.test_fuel_driver_accounts import FuelDriverAccountsTest
 from tests import test_gateway_shell as gateways
 from tests import test_neostaffing_shift_flow as flow
+from tests import test_neorain_load_planner_routes as planners
 from tests.test_sektor_ermac_performance_postgres import postgres
 
 
@@ -96,3 +98,36 @@ class AccountUpdates(accounts.AccountsWorkspaceTest):
         self.assertEqual(save(preferred_app='neobid').status_code, 400)
         db.session.expire_all()
         self.assertEqual(row.version, version + 1)
+
+
+class RetiredCompanies(FuelDriverAccountsTest):
+    def setUp(self):
+        postgres(self, accounts, super().setUp)
+        self.historical = super().legacy_supervisor()
+
+    def legacy_supervisor(self):
+        return self.historical
+
+
+class CrewUpdates(planners.NeoRainLoadPlannerRoutesTest):
+    def setUp(self):
+        postgres(self, planners, super().setUp)
+
+    def test_crew_crud(self):
+        from app.models import StaffingUnit
+        from app.services import neorain_crew_admin as crew
+        area = StaffingUnit(unit_type='work_area', name='Crew Admin', parent=self.load_planners.parent, active=True)
+        db.session.add(area)
+        db.session.flush()
+        first = self._person('CREW-1', area)
+        second = self._person('CREW-2', area)
+        db.session.commit()
+        record = crew.add_neorain_crew_admin_assignment(self.operation, first, ['Alpha'], 'p1', 'v1')
+        db.session.commit()
+        crew.update_neorain_crew_admin_assignment(record, second, ['Bravo'], 'p2', 'v2')
+        db.session.commit()
+        db.session.expire_all()
+        self.assertEqual((record.person_id, record.printer_number, record.van_number), (second.id, 'p2', 'v2'))
+        crew.remove_neorain_crew_admin_assignment(record)
+        db.session.commit()
+        self.assertFalse(crew.neorain_crew_admin_assignments(self.operation))

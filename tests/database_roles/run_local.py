@@ -122,16 +122,17 @@ def main():
                     env['ROLE_TEST_PRIOR_URL'] = url(LEGACY, database)
                 else:
                     env.pop('ROLE_TEST_PRIOR_URL', None)
-                status |= subprocess.run([sys.executable, "tests/database_roles/acceptance.py", *cases],
-                                         env=env, cwd=ROOT, check=False).returncode
+                actors = [MIGRATOR] if cases == ['boundary'] else [MIGRATOR, RUNTIME, FALLBACK]
+                for actor in actors:
+                    if cases == ['catalog_paths'] and actor != RUNTIME:
+                        continue
+                    status |= subprocess.run([sys.executable, "tests/database_roles/acceptance.py", *cases],
+                                             env=dict(env, ROLE_TEST_ACTOR=actor), cwd=ROOT, check=False).returncode
             return status
         finally:
-            try:
-                pg("pg_ctl", "-D", data, "-m", "fast", "-t", "100", "-w", "stop")
-            except subprocess.CalledProcessError:
-                # A large synthetic run can exceed the checkpoint timeout on
-                # Windows. Only our new disposable data directory is affected.
-                pg("pg_ctl", "-D", data, "-m", "immediate", "-w", "stop")
+            # The uniquely named scratch cluster is discarded immediately
+            # after all test clients exit. A final disk checkpoint is unused.
+            pg("pg_ctl", "-D", data, "-m", "immediate", "-w", "stop")
 
 
 if __name__ == "__main__":

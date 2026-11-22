@@ -23,12 +23,12 @@ from tests.test_neorain_overrides_postgres import RainOverridePostgresTest
 from tests import test_google_rain_integration_mode_transition as manual
 from tests.test_sektor_ermac_performance_postgres import postgres
 from run_local import DBNAME, FALLBACK, MIGRATOR, RUNTIME
-from operations import AccountUpdates, GatewayUpdates, StaffingUpdates
+from operations import AccountUpdates, CrewUpdates, GatewayUpdates, StaffingUpdates, RetiredCompanies
 
 
 class Gateway(gateway.GatewayShellTest):
     def setUp(self):
-        postgres(self, gateway, super().setUp)
+        postgres(self, gateway, super().setUp, fixture_lock_ms=30000)
 
 
 class SortHours(windows.NeoRainSortRefreshTest):
@@ -39,17 +39,18 @@ class SortHours(windows.NeoRainSortRefreshTest):
 
 class ReviewAlerts(review_alerts.UnmatchedReviewAlertsTest):
     def setUp(self):
-        postgres(self, review_alerts, super().setUp)
+        postgres(self, review_alerts, super().setUp, fixture_lock_ms=30000)
 
 
 class ManualSort(manual.GoogleRainIntegrationModeTransitionTest):
     def setUp(self):
-        postgres(self, manual, super().setUp)
+        postgres(self, manual, super().setUp, fixture_lock_ms=30000)
 
 
 CASES = {
+    "crew_edits": "__main__.CrewUpdates.test_crew_crud",
     "review_alert": "__main__.ReviewAlerts.test_alert_action_marks_only_current_user_read_and_deep_links_queue",
-    "vendor_membership": "test_fuel_driver_accounts_postgres.FuelDriverAccountsPostgresTest.test_company_capability_changes_serialize_and_preserve_history",
+    "vendor_membership": "__main__.RetiredCompanies.test_retired_company_endpoints_reject_changes_without_mutating_history",
     "transfer": "test_neostaffing_transfers_postgres.EmployeeTransferPostgresTest.test_competing_transfers_accept_one_revision_and_keep_one_active_placement",
     "timecard": "test_neostaffing_timecards_postgres.TimecardsPostgresTest.test_concurrent_distinct_employees_both_persist",
     "employee_record": "test_neostaffing_employee_records_postgres.EmployeeRecordPostgresTest.test_two_finalizations_only_one_wins",
@@ -112,8 +113,11 @@ def assert_disposable():
 def restricted_method(case, method, role=RUNTIME):
     # setUp and tearDown own the fixture. All application transactions inside
     # the assertion (including separate request threads) use this fresh pool.
-    app = current_app._get_current_object() if has_app_context() else case.app
-    with nullcontext() if has_app_context() else app.app_context():
+    app = getattr(case, 'app', None) or getattr(getattr(case, 'fixture', None), 'app', None)
+    if app is None:
+        app = current_app._get_current_object()
+    active = has_app_context() and current_app._get_current_object() is app
+    with nullcontext() if active else app.app_context():
         owner_engine = db.engine
         db.session.commit()
         with owner_engine.begin() as conn:
@@ -211,7 +215,12 @@ def main():
     runner = unittest.TextTestRunner(verbosity=2)
     boundary = runner.run(suite) if suite.countTestCases() else None
     results = [boundary] if boundary else []
-    for role in (MIGRATOR, RUNTIME, FALLBACK):
+    if 'boundary' in names:
+        return int(not boundary.wasSuccessful())
+    role = os.environ['ROLE_TEST_ACTOR']
+    if role not in (MIGRATOR, RUNTIME, FALLBACK):
+        raise ValueError('Unknown disposable test principal')
+    if names:
         operational = unittest.TestSuite()
         if 'catalog_paths' in names and role == RUNTIME:
             operational.addTests(portable_suite())
