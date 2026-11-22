@@ -6,6 +6,7 @@ from app.services.gateway_matrix import (
     current_gateway_local_datetime,
     current_operations_for_gateway,
     ops_window_for_operation,
+    physical_poll_windows,
     sort_lookup_window_for_operation,
 )
 
@@ -20,7 +21,7 @@ def node_auto_refresh_status(
     schedule_next_window=False,
 ):
     """Resolve live-screen eligibility independently from Flight API polling."""
-    return _auto_refresh_status(
+    status = _auto_refresh_status(
         gateway,
         operation=operation,
         now=now,
@@ -32,6 +33,12 @@ def node_auto_refresh_status(
         outside_message=outside_message,
         schedule_next_window=schedule_next_window,
     )
+    if status["reason"] == "before_ops_window" and status["sort_date"]:
+        day = datetime.fromisoformat(status["sort_date"]).date()
+        windows = physical_poll_windows(gateway, day, status["sort_name"].lower(), within_ops=True, now=now)
+        if windows:
+            status["resume_at_ms"] = windows[0][0]
+    return status
 
 
 def sort_window_auto_refresh_status(

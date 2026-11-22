@@ -87,14 +87,16 @@ class CsrfRenewalBrowserTest(unittest.TestCase):
                     old=page.locator('meta[name=csrf-token]').get_attribute('content')
                     page.locator('#ajax [name=notes]').fill('Shift draft remains')
                     self.age(page,14)
+                    page.evaluate("window.dispatchEvent(new Event('focus'))")
+                    expect(page.locator('meta[name=csrf-token]')).to_have_attribute('content',old)
                     with page.expect_response(lambda response:'/csrf-token' in response.url) as renewed:
-                        page.evaluate("window.dispatchEvent(new Event('focus'))")
+                        page.locator('#ajax button').click()
                     self.assertEqual(renewed.value.status,200)
                     # A response event signals headers, before fetch().json()
                     # necessarily updates the shared meta/hidden token fields.
                     expect(page.locator('meta[name=csrf-token]')).not_to_have_attribute('content',old)
                     self.assertTrue(page.evaluate('window.originalDocument'))
-                    page.locator('#ajax button').click();expect(page.locator('#result')).to_have_text('200')
+                    expect(page.locator('#result')).to_have_text('200')
                     expect(page.locator('#ajax [name=notes]')).to_have_value('Shift draft remains')
                     page.evaluate('''()=>{const form=document.createElement('form');form.id='dynamic';form.method='post';form.action='/_csrf-lab/save';
                         form.innerHTML='<input name="notes" value="Dynamic draft"><button name="intent" value="dynamic">Save</button>';document.body.append(form);}''')
@@ -125,7 +127,7 @@ class CsrfRenewalBrowserTest(unittest.TestCase):
             second.evaluate('''offset=>{const now=Date.now;Date.now=()=>now()+offset;}''',self.offset*1000)
             for page in (first,second):
                 with page.expect_response(lambda response:'/csrf-token' in response.url):
-                    page.evaluate("window.dispatchEvent(new Event('focus'))")
+                    page.evaluate("window.NeoAppsCsrf.ensureFresh()")
             for page in (first,second):
                 page.locator('#ajax button').click();expect(page.locator('#result')).to_have_text('200')
             self.assertEqual(len(self.saved),2)

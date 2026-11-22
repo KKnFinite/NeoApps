@@ -1564,7 +1564,7 @@
         if (pendingFuelDataRefresh && !hasUnsavedControls()) reloadPage();
     });
 
-    const handleChangedFingerprint = async (nextOperationId, nextRevision, nextTailRevision) => {
+    const handleChangedFingerprint = async (nextOperationId, nextRevision, nextTailRevision, automatic = false) => {
         // A clean screen needs one authoritative panel, not both critical and
         // full copies of the same aircraft. Dirty/dialog states retain the
         // independent handoff path, including when typing began in transit.
@@ -1572,6 +1572,7 @@
                 && !dispatcherCheckSaving && !preferenceSaving) {
             if (await reloadPage()) return true;
         }
+        if (automatic && !window.NeoLiveUpdates.insidePhysicalSort()) return false;
         const critical = await refreshCriticalCompletion(nextOperationId, nextRevision, nextTailRevision);
         // A dispatcher may have unsaved edits or an OPEN Fueler Data dialog.
         // Those states must not hide a newly valid COMPLETE action for minutes.
@@ -1579,8 +1580,9 @@
         return critical;
     };
 
-    const poll = async () => {
+    const poll = async (manual = false) => {
         const response = await (window.NeoLiveRevision?.revision || fetch)(revisionUrl, {
+            manual,
             cache: "no-store",
             credentials: "same-origin",
             headers: {"Accept": "application/json"},
@@ -1603,6 +1605,7 @@
             criticalRefreshKey = ''; pendingFuelDataRefresh = true; stateGeneration += 1;
         }
         if (!observeLiveState(nextOperationId, nextRevision, nextTailRevision)) return;
+        if (!manual && !window.NeoLiveUpdates.insidePhysicalSort()) return;
         if (permissionChanged || nextOperationId !== operationId || nextRevision !== revision
                 || nextTailRevision !== tailRevision
                 || (pendingFuelDataRefresh && criticalRefreshKey !== [nextOperationId,nextRevision,nextTailRevision].join(':'))) {
@@ -1610,7 +1613,7 @@
             // is busy/discarded. A dirty form must not suppress the next read
             // merely because that revision is already known locally.
             window.NeoScorpionFuelData?.revisionChanged(nextRevision, nextOperationId);
-            await handleChangedFingerprint(nextOperationId, nextRevision, nextTailRevision);
+            await handleChangedFingerprint(nextOperationId, nextRevision, nextTailRevision, !manual);
         } else if (Number(payload.tail_notes_revision || 0) !== tailNotesRevision) {
             pendingFuelDataRefresh = true;
             if (!hasUnsavedControls()) await reloadPage();
@@ -2002,7 +2005,7 @@
             stateGeneration += 1;
             // The acknowledgement need not include the operation/tail
             // fingerprint. Obtain it with a read, never a mutation retry.
-            void poll().catch(() => {
+            void poll(true).catch(() => {
                 if(form.isConnected) setStatus(status, (form.dataset.truckCardSettled === 'saved' ? 'Saved' : 'Check truck status')
                     + ' — live status unavailable; refresh before another action.', 'error');
             });

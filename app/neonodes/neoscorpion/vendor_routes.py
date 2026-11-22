@@ -1,6 +1,6 @@
 """Separate vendor surface; normal Dispatch remains employee-only."""
 from functools import wraps
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from flask import Blueprint, render_template, request, redirect, url_for, abort, jsonify, flash
 from flask_login import login_required, current_user
 from sqlalchemy.exc import IntegrityError
@@ -22,23 +22,21 @@ def vendor_refresh_windows(gateway):
     Old tabs fail closed after the bounded horizon; an explicit page reload can
     obtain the latest schedule. A timer that runs outside these windows does no I/O.
     """
-    from app.services.frost_schedule import Schedule
-    schedule = Schedule.load(gateway)
-    if not schedule.zone or not schedule.rows:
-        return []
-    at = datetime.now(timezone.utc)
-    day = at.astimezone(schedule.zone).date()
-    windows = {(start.isoformat(), end.isoformat())
-        for offset in range(-1, 15)
-        for start, end in schedule.windows(day + timedelta(days=offset))
-        if end > at}
-    return [list(window) for window in sorted(windows)]
+    from app.services.gateway_matrix import screen_poll_windows
+    return [[datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat() for ms in period]
+            for period in screen_poll_windows(gateway)]
 
 
 def vendor_revision_in_sort(gateway):
     """Reject expensive revision projection outside real configured Sort hours."""
-    from app.services.frost_schedule import Schedule
-    return Schedule.load(gateway).eligible(datetime.now(timezone.utc))
+    from app.services.gateway_matrix import current_gateway_local_datetime, gateway_timezone, screen_poll_windows
+    from zoneinfo import ZoneInfo
+    periods = screen_poll_windows(gateway)
+    if not periods:
+        return False
+    local_now = current_gateway_local_datetime(gateway)
+    instant = local_now.replace(tzinfo=ZoneInfo(gateway_timezone(gateway))).timestamp() * 1000
+    return any(start <= instant < end for start, end in periods)
 
 
 @bp.context_processor

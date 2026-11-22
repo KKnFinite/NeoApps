@@ -73,12 +73,19 @@
         return response;
     };
     const fetchRevision = async (url, options = {}, intervalMs = 5000, operationId = "none") => {
+        const {manual = false, ...requestOptions} = options;
+        const assertOpen = () => {
+            if (!manual && window.NeoLiveUpdates && !window.NeoLiveUpdates.insidePhysicalSort()) {
+                throw new DOMException("Outside physical Sort hours", "AbortError");
+            }
+        };
+        assertOpen();
         const target = new URL(url, window.location.href);
         if (!channel || target.origin !== window.location.origin) {
             const abort = new AbortController();
             const timer = window.setTimeout(() => abort.abort(), 10000);
             try {
-                const response = await fetchLive(url, {...options, signal: abort.signal});
+                const response = await fetchLive(url, {...requestOptions, signal: abort.signal});
                 if (target.origin === window.location.origin) verifyScope(response);
                 await response.clone().json().catch(() => null);
                 return response;
@@ -90,6 +97,7 @@
         freshResume = false;
         send({type: 'request', key});
         const read = async () => {
+            assertOpen();  // A cross-tab lock can be acquired after the closing boundary.
             const started = Date.now();
             const until = Math.max(entry.until, entryFor(cooldownKey(target)).until);
             if (until > Date.now()) throw throttled(until);
@@ -99,7 +107,7 @@
             const abort = new AbortController();
             const timer = window.setTimeout(() => abort.abort(), 10000);
             try {
-                const response = await fetchLive(url, {...options, signal: abort.signal});
+                const response = await fetchLive(url, {...requestOptions, signal: abort.signal});
                 const currentScope = verifyScope(response);
                 // A login redirect/403/error is never a shared successful fingerprint.
                 if (response.ok && !response.redirected && currentScope === scope) {

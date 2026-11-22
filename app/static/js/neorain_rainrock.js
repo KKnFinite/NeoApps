@@ -95,6 +95,7 @@
   let sortEndMs = Number(root.dataset.sortEndMs);
   const refresh=async()=>{
     if (!(Date.now() < sortEndMs)) { clearInterval(refreshTimer); return; }
+    if (Date.now() < Number(root.dataset.sortStartMs) || !window.NeoLiveUpdates?.insidePhysicalSort()) return;
     if(document.hidden||activeSave||polling||capturing)return;
     const before=generation;polling=true;
     try{

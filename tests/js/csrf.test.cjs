@@ -3,7 +3,7 @@ const test=require('node:test'), assert=require('node:assert/strict');
 const vm=require('node:vm'), fs=require('node:fs');
 const source=fs.readFileSync('app/static/js/csrf.js','utf8');
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
-function harness() {
+function harness(insideSort = false) {
     let now=1800000000000, renewHandler=null, mutationHandler=null;
     const events={},winEvents={},calls=[],timers=new Map();let nextTimer=0,notice=null;
     class Element {
@@ -23,7 +23,8 @@ function harness() {
         querySelector(selector){return selector.startsWith('meta')?meta:notice;},
         createElement(){return new Element();},addEventListener(type,fn){events[type]=fn;}};
     const response=(status,data,headers={})=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json',...headers}});
-    const window={addEventListener(type,fn){winEvents[type]=fn;},fetch:async(input,init={})=>{
+    const window={NeoLiveUpdates:{insidePhysicalSort:()=>insideSort,nextPhysicalOpening:()=>undefined},
+        addEventListener(type,fn){winEvents[type]=fn;},fetch:async(input,init={})=>{
         const url=input instanceof Request?input.url:String(input);calls.push({url,init,input});
         if(url.includes('/csrf-token'))return renewHandler?renewHandler():response(200,{csrf_token:`${now/1000}.nonce.renewed`,expires_in:7200});
         return mutationHandler?mutationHandler():response(200,{ok:true});
@@ -53,7 +54,7 @@ test('fresh fetch uses current meta token and preserves request options',async()
     assert.equal(h.calls[0].init.headers.get('If-Match'),'revision-7');assert.equal(h.calls[0].init.body,body);
 });
 test('proactive renewal before expiry is sparse, no-store and session bound',async()=>{
-    const h=harness();const initialTimer=[...h.timers.values()][0];assert.equal(initialTimer.ms,6900000);
+    const h=harness(true);const initialTimer=[...h.timers.values()][0];assert.equal(initialTimer.ms,6900000);
     h.advance(6900000);h.winEvents.focus();await settle();
     assert.equal(h.calls.length,1);const sent=h.calls[0].init;
     assert.equal(sent.cache,'no-store');assert.equal(sent.credentials,'same-origin');assert.equal(sent.redirect,'error');
@@ -84,8 +85,10 @@ test('new dynamic form receives a current hidden token',()=>{
     const h=harness();const {form,button}=h.form();form.fields=[];h.dispatch(form,button);
     assert.equal(form.fields[0].name,'csrf_token');assert.equal(form.fields[0].value,h.meta.content);assert.equal(form.submissions,1);
 });
-test('overnight focus renews without a page reload',async()=>{
+test('off-hours focus and pageshow leave renewal until a protected action',async()=>{
     const h=harness();h.advance(14*3600000);h.winEvents.pageshow();await settle();
+    h.winEvents.focus();await settle();assert.equal(h.calls.length,0);
+    await h.window.NeoAppsCsrf.ensureFresh();
     assert.equal(h.calls.length,1);assert.match(h.meta.content,/renewed/);
 });
 test('renewal network failure keeps drafts, sends no mutation and backs off',async()=>{

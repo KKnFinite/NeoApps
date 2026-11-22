@@ -20,7 +20,12 @@ DRIVER = '/neoscorpion/driver'
 
 
 class VendorWorkflowTest(TestCase):
-    setUp=timeline.OperationalTimelineTest.setUp
+    def setUp(self):
+        timeline.OperationalTimelineTest.setUp(self)
+        from tests.test_neorain_sort_refresh import configure_sort_window
+        _, start = configure_sort_window(self.gateway, self.operation.sort_date)
+        self.fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
+
     prepare=timeline.OperationalTimelineTest.prepare
     login=timeline.OperationalTimelineTest.login
     save=timeline.OperationalTimelineTest.save
@@ -44,8 +49,8 @@ class VendorWorkflowTest(TestCase):
         self.prepare()
         user, _account = self.connect()
         self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
-        with patch('app.neonodes.neoscorpion.vendor_routes.vendor_revision_in_sort', return_value=False), \
-             patch('app.neonodes.neoscorpion.vendor_routes.vendor_fingerprint',
+        self.fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] += timedelta(hours=8)
+        with patch('app.neonodes.neoscorpion.vendor_routes.vendor_fingerprint',
                    side_effect=AssertionError('Off-hours revision must not read live state')):
             response = self.client.get(f'{DRIVER}/revision?operation_id={self.operation.id}')
         self.assertEqual(response.status_code, 204)

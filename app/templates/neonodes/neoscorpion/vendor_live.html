@@ -8,4 +8,4 @@
 <div data-vendor-refresh data-sort-windows='{{ refresh_windows|tojson }}' data-login-url="{{ url_for('auth.login') }}" data-revision='{{ fingerprint|tojson }}'
      data-revision-url="{{ url_for('scorpion_vendor.revision', operation_id=operation.id, view='live') }}"></div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/neoscorpion_vendor.js', v=config.STATIC_ASSET_VERSION) }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/neoscorpion_vendor.js', hours='20261121', v=config.STATIC_ASSET_VERSION) }}" defer></script>{% endblock %}

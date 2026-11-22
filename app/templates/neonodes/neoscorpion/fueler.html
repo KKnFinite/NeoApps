@@ -6,7 +6,10 @@
     {% for stylesheet in view_as_stylesheets if stylesheet not in ('css/14-neoscorpion.css', 'css/26-neoscorpion.css') %}
     <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION) }}">
     {% endfor %}
-    <script src="{{ url_for('static', filename='js/live_updates.js', v='20261111-poll-v2') }}"></script>
+    {% if view_as %}
+    <meta name="physical-sort-windows" content="{{ screen_poll_windows(gateway)|tojson }}">
+    <script src="{{ url_for('static', filename='js/live_updates.js', v='20261121-physical-sort') }}"></script>
+    {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -40,5 +43,5 @@
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_header.js', scorpion='20261102-fuel-header-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_planning.js', v=config.STATIC_ASSET_VERSION, scorpion='20261021-shared-fuel-screen-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_data.js', v=config.STATIC_ASSET_VERSION, scorpion='20261021-direct-entry-v1') }}"></script>
-<script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_live.js', v='20261120-fueler-total', scorpion='20261016-multi-truck-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_live.js', hours='20261121', v='20261120-fueler-total', scorpion='20261016-multi-truck-v1') }}"></script>
 {% endblock %}

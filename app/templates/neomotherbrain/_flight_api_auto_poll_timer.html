@@ -184,6 +184,11 @@
         if (stopped || inactivityPaused || document.hidden) {
             return;
         }
+        if (!window.NeoLiveUpdates?.insidePhysicalSort()) {
+            const opening = window.NeoLiveUpdates?.nextPhysicalOpening();
+            if (opening) scheduleCheck(opening - Date.now());
+            return;
+        }
 
         markCheckStarted();
         setStatus("READY", "Checking server eligibility.", parseInitialStatus());

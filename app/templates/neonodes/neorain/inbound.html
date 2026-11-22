@@ -205,7 +205,7 @@
         });
     });
     let refresh = {{ refresh_status|tojson }};
-    const withinSort = () => refresh.auto_refresh_enabled === true && Date.now() < refresh.sort_end_ms;
+    const withinSort = () => refresh.sort_start_ms <= Date.now() && Date.now() < refresh.sort_end_ms;
     const controller = window.NeoLiveUpdates.create({
         intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
         poll: async () => {
@@ -231,7 +231,7 @@
             if (payload.changed) window.location.reload();
         }, continuousWhileVisible: true,
     });
-    controller.setServerStatus({ ...refresh, auto_refresh_enabled: withinSort() });
+    controller.setServerStatus({ ...refresh, auto_refresh_enabled: Date.now() < refresh.sort_end_ms });
 })();
 </script>
 {% if can_edit %}

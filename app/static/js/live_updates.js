@@ -8,6 +8,18 @@
     const DEFAULT_FAILURE_THRESHOLD = 3;
     const MINIMUM_REFRESH_INTERVAL_MS = 5000;
     const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+    function readPhysicalWindows() {
+        try {
+            const periods = JSON.parse(document.querySelector('meta[name="physical-sort-windows"]')?.content || "[]");
+            return periods.filter(pair => Array.isArray(pair) && pair.length === 2 &&
+                pair.every(Number.isSafeInteger) && pair[1] > pair[0]);
+        } catch (_) {
+            return [];
+        }
+    }
+    const physicalWindows = readPhysicalWindows();
+    const insidePhysicalSort = (at = Date.now()) => physicalWindows.some(([start, end]) => start <= at && at < end);
+    const nextPhysicalOpening = (at = Date.now()) => physicalWindows.find(([start]) => start > at)?.[0];
     const USER_ACTIVITY_EVENTS = Object.freeze([
         ["pointerdown", true],
         ["mousedown", true],
@@ -63,6 +75,13 @@
         setServerStatus(status) {
             this.serverStatus = status || {};
             this.setEnabled(this.serverStatus.auto_refresh_enabled !== false);
+            const opening = this.serverStatus.resume_at_ms;
+            if (!this.enabled && this.serverStatus.reason === "before_ops_window" &&
+                    Number.isFinite(opening) && opening > Date.now()) {
+                this.timer = window.setTimeout(() => {
+                    if (!this.destroyed && insidePhysicalSort()) this.setEnabled(true);
+                }, opening - Date.now());
+            }
         }
 
         setIntervalMs(value) {
@@ -118,6 +137,10 @@
                 return Promise.resolve(false);
             }
             if (this.retryAt > Date.now()) { this.schedule(); return Promise.resolve(false); }
+            if (!insidePhysicalSort()) {
+                this.schedule();
+                return Promise.resolve(false);
+            }
             const elapsed = Date.now() - this.lastRefreshStartedAt;
             if (!options.force && this.lastRefreshStartedAt && elapsed < MINIMUM_REFRESH_INTERVAL_MS) {
                 this.clearTimer();
@@ -132,7 +155,7 @@
             this.lastRefreshStartedAt = Date.now();
             if (options.force) window.NeoLiveRevision?.resume();
             return Promise.resolve()
-                .then(() => this.poll())
+                .then(() => insidePhysicalSort() && this.poll())
                 .then(() => {
                     this.failures = 0;
                     if (this.enabled && !this.inactivityPaused) {
@@ -176,6 +199,12 @@
                 return;
             }
             const cooldown = Math.max(0, this.retryAt - Date.now());
+            if (!insidePhysicalSort()) {
+                this.renderStatus("outside_sort_window", "Live updates off - outside Sort hours");
+                const opening = nextPhysicalOpening();
+                if (opening) this.timer = window.setTimeout(() => this.refreshNow(), Math.max(0, opening - Date.now()));
+                return;
+            }
             const delay = this.staggerOnThrottle ? this.intervalMs + cooldown : Math.max(this.intervalMs, cooldown);
             this.timer = window.setTimeout(() => this.refreshNow(), Math.min(2147483647, delay));
         }
@@ -709,6 +738,8 @@
     };
 
     window.NeoLiveUpdates = Object.freeze({
+        insidePhysicalSort,
+        nextPhysicalOpening,
         create: (options) => new LiveUpdateController(options),
         inactivityTimeoutMs: INACTIVITY_TIMEOUT_MS,
         reconcileRows,

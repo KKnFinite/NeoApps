@@ -12,6 +12,8 @@ from tests import test_neorain_overrides as fixtures
 
 
 def configure_sort_window(gateway, sort_date):
+    from app.services.gateway_matrix import save_gateway_matrix
+    save_gateway_matrix(gateway, [(sort_date.strftime("%A"), "night")])
     timeline = ensure_sort_timeline_settings(gateway)
     night = next(setting for setting in timeline.sort_settings if setting.sort_name == "night")
     night.sort_window_start_local, night.sort_window_end_local = time(21), time(5)
@@ -71,3 +73,16 @@ class NeoRainSortRefreshTest(TestCase):
             response = self.client.get(f"/neorain/outbound/revision?automatic=1&operation_id={old.id}")
             self.assertFalse(response.json["refresh"]["auto_refresh_enabled"])
             revision.assert_not_called()
+
+    def test_an_operation_record_does_not_enable_an_unscheduled_or_inactive_sort(self):
+        from app.services.gateway_matrix import physical_poll_windows, save_gateway_matrix
+        gateway = self.case.gateway
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.start
+        save_gateway_matrix(gateway, [])
+        db.session.commit()
+        self.assertEqual(physical_poll_windows(gateway, self.operation.sort_date, "night"), [])
+        self.assertFalse(neorain_refresh_status(gateway, self.operation, is_current=True)["auto_refresh_enabled"])
+        save_gateway_matrix(gateway, [(self.operation.sort_date.strftime("%A"), "night")])
+        gateway.is_active = False
+        db.session.commit()
+        self.assertEqual(physical_poll_windows(gateway, None, None, follow_matrix=True), [])

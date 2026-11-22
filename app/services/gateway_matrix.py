@@ -5,7 +5,7 @@ from flask import current_app, has_request_context, request
 from sqlalchemy import and_
 
 from app.extensions import db
-from app.models import GatewaySortMatrix, SortDateOperation, SortTimelineSortSetting
+from app.models import Gateway, GatewaySortMatrix, SortDateOperation, SortTimelineSortSetting
 from app.services.operational_request_policy import (
     current_request_is_lightweight_live_state,
     operation_read_options,
@@ -347,6 +347,8 @@ def configured_sort_window_utc(gateway, sort_date, sort_name, zone, *, sort_sett
 
 def physical_poll_windows(gateway, sort_date, sort_name, *, follow_matrix=False, within_ops=False, now=None):
     """UTC millisecond intervals for the selected operation and scheduled screen wakes."""
+    if gateway is None or not gateway.is_active:
+        return []
     try:
         zone = ZoneInfo(gateway_timezone(gateway))
     except (TypeError, ValueError, ZoneInfoNotFoundError):
@@ -354,10 +356,12 @@ def physical_poll_windows(gateway, sort_date, sort_name, *, follow_matrix=False,
     local_now = current_gateway_local_datetime(gateway, now=now)
     today = local_now.date()
     candidates = set()
+    entries = request_cached("physical_poll_matrix", gateway.id, lambda: matrix_entries_for_gateway(gateway))
     if sort_date and sort_name and today - timedelta(days=1) <= sort_date <= today + timedelta(days=1):
-        candidates.add((sort_date, sort_name))
+        cell = entries.get((DAY_OPTIONS[sort_date.weekday()][0], sort_name))
+        if cell and cell.is_active and cell.gateway_code == gateway.code:
+            candidates.add((sort_date, sort_name))
     if follow_matrix:
-        entries = matrix_entries_for_gateway(gateway)
         for offset in range(-1, 8):
             day = today + timedelta(days=offset)
             weekday = DAY_OPTIONS[day.weekday()][0]
@@ -369,7 +373,7 @@ def physical_poll_windows(gateway, sort_date, sort_name, *, follow_matrix=False,
     periods = []
     for day, name in sorted(candidates):
         setting = _sort_timeline_sort_setting(gateway, name)
-        if not setting:
+        if not setting or setting.gateway_code != gateway.code:
             continue
         start, end = configured_sort_window_utc(gateway, day, name, zone, sort_setting=setting)
         if not start:
@@ -381,6 +385,14 @@ def physical_poll_windows(gateway, sort_date, sort_name, *, follow_matrix=False,
         if end > max(now_utc, start):
             periods.append([int(start.timestamp() * 1000), int(end.timestamp() * 1000)])
     return sorted(periods)
+
+
+def screen_poll_windows(gateway=None):
+    """Physical network windows for gateway-wide live screens. Never initialize a gateway."""
+    if gateway is None:
+        code = current_app.config.get("DEFAULT_GATEWAY_CODE", "RFD").upper()
+        gateway = request_cached("screen_poll_gateway", code, lambda: Gateway.query.filter_by(code=code).first())
+    return physical_poll_windows(gateway, None, None, follow_matrix=True)
 
 
 def ops_window_for_operation(operation, gateway=None):
