@@ -9,13 +9,15 @@
     };
 
     const poll = async ({
-        stateUrl, revision, errorMessage, requestOptions, manual = false,
+        stateUrl, revision, errorMessage, requestOptions, manual = false, pace = false,
         accept = () => true, onRevision, onStatus, onState,
     }) => {
         if (!manual && !insideSort()) return;
         const pollUrl = new URL(stateUrl, window.location.href);
         pollUrl.searchParams.set("revision", revision);
-        const response = await (window.NeoLiveRevision?.fetch || fetch)(pollUrl, requestOptions);
+        const response = pace && !manual && window.NeoLiveRevision?.pacedState
+            ? await window.NeoLiveRevision.pacedState(pollUrl, requestOptions, insideSort)
+            : await (window.NeoLiveRevision?.fetch || fetch)(pollUrl, requestOptions);
         if (!response.ok) {
             throw new Error(errorMessage);
         }

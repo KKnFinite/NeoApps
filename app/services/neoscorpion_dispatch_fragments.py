@@ -3,7 +3,7 @@ import hashlib
 import json
 import re
 
-from flask import current_app
+from flask import current_app, request
 from jinja2 import pass_context
 from markupsafe import Markup
 
@@ -126,6 +126,14 @@ def panel_content(html):
     return dict(html='' if unchanged else html, panel_digest=digest, unchanged=unchanged)
 
 
+def _response_fingerprints(key, previous, current):
+    # Old clients still receive the complete map. Equality includes the key set,
+    # so a removed or added mission always returns a replacement.
+    if request.headers.get('X-Neo-Compact-Fingerprints') == '1' and current == previous:
+        return {key + '_unchanged': True}
+    return {key: current}
+
+
 def spear_fragments(context, gateway, access, supplied, *, settings_view=False):
     """SPEAR recalculation never downloads operational forms or fuel history."""
     try:
@@ -156,7 +164,7 @@ def spear_fragments(context, gateway, access, supplied, *, settings_view=False):
             fragment('tail-' + str(row['mission'].id), '_dispatch_spear_tail.html', row=row)
         for truck in context['truck_visuals']:
             fragment('truck-' + str(truck['truck_id']), '_dispatch_truck_spear.html', truck=truck)
-    return dict(spear_fragments=pieces, spear_fingerprints=hashes,
+    return dict(spear_fragments=pieces, **_response_fingerprints('spear_fingerprints', previous, hashes),
         # Existing signed references still bind actions to the exact rendered
         # evidence. Update hidden references as well as the visible explanation.
         spear_references={str(r['mission'].id):r.get('spear_decision_reference', '') for r in context['rows']})
@@ -199,7 +207,7 @@ def critical_fragments(context, gateway, access, supplied, *, settings_view=Fals
     assets_hash = _digest(assets, scope, 'assets')
     hashes['assets'] = assets_hash
     operation = context['operation']
-    return dict(fingerprints=hashes, compact=True, can_edit=bool(access['can_edit']),
+    return dict(**_response_fingerprints('fingerprints', previous, hashes), compact=True, can_edit=bool(access['can_edit']),
         mission_manifest={str(row['mission'].id):{'arrival':row['dispatch_arrival_rank'], 'etd':row['dispatch_etd_rank']}
                           for row in context['rows']}, html=render(
         'neonodes/neoscorpion/_dispatch_critical.html',

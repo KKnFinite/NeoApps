@@ -72,7 +72,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
     {% endif %}
     {% if uses_operational_shell %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/operational_node_shell.css', v=config.STATIC_ASSET_VERSION, rev='de93a7dc16ca') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/operational_node_shell.css', v=config.STATIC_ASSET_VERSION, rev='46e214c0fcd5') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260913-employees-v7') }}">
@@ -147,7 +147,7 @@
     {% if uses_live_update_controller %}
     <meta name="physical-sort-windows" content="{{ screen_poll_windows(gateway|default(none))|tojson }}">
     <meta name="live-poll-scope" content="{{ live_poll_scope(gateway|default(none)) }}">
-    <script src="{{ url_for('static', filename='js/live_revision.js', hours='20261121', v='20261120-fueler-total') }}"></script>
+    <script src="{{ url_for('static', filename='js/live_revision.js', hours='20261121', v='20261122-state-slots') }}"></script>
     <script src="{{ url_for('static', filename='js/live_updates.js', v='20261121-physical-sort') }}"></script>
     {% endif %}
     {% if is_neostaffing_page %}

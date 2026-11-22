@@ -92,7 +92,7 @@
     </main>
 </section>
 
-<script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20261121-hours') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20261122-state-slots') }}"></script>
 <script src="{{ url_for('static', filename='js/neosektor_routing_watch.js', watch='20261121-hours') }}"></script>
 <script nonce="{{ csp_nonce() }}">
 (() => {
@@ -211,7 +211,7 @@
 
     const fetchRoutingState = async () => {
         return window.NeoSektorLive.poll({
-            stateUrl, revision: currentRevision,
+            stateUrl, revision: currentRevision, pace: true,
             errorMessage: "Driver Routing refresh failed.",
             requestOptions: { cache: "no-store", credentials: "same-origin" },
             onRevision: revision => { currentRevision = revision || currentRevision; },

@@ -1338,7 +1338,7 @@
             const response = await (window.NeoLiveRevision?.fetch || fetch)(criticalUrl, {
                 cache: "no-store", credentials: "same-origin",
                 headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest",
-                    "X-Neo-Dispatch-Fingerprints": JSON.stringify(criticalFingerprints)},
+                    "X-Neo-Compact-Fingerprints": "1", "X-Neo-Dispatch-Fingerprints": JSON.stringify(criticalFingerprints)},
             });
             const payload = await response.json().catch(() => ({}));
             if (response.status === 403) lockAuthority();
@@ -1354,7 +1354,7 @@
             applyCriticalCompletion(nextPanel, payload.mission_manifest);
             stateGeneration += 1;
             criticalRefreshKey = key;
-            criticalFingerprints = payload.fingerprints || {};
+            if (!payload.fingerprints_unchanged) criticalFingerprints = payload.fingerprints || {};
             return true;
         } catch (error) {
             const status = root.querySelector("[data-spear-fleet-status]");
@@ -1376,7 +1376,7 @@
             url.searchParams.set('operation_id', operationId);
             const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {
                 cache: 'no-store', credentials: 'same-origin', headers: {
-                    Accept: 'application/json', 'X-Neo-Spear-Fingerprints': JSON.stringify(spearFingerprints)},
+                    Accept: 'application/json', 'X-Neo-Compact-Fingerprints': '1', 'X-Neo-Spear-Fingerprints': JSON.stringify(spearFingerprints)},
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true || !payload.spear_fragments) {
@@ -1416,7 +1416,7 @@
                         'input[name="spear_decision_reference"]').forEach(input => { input.value = reference; });
                 });
             }
-            spearFingerprints = payload.spear_fingerprints || {};
+            if (!payload.spear_fingerprints_unchanged) spearFingerprints = payload.spear_fingerprints || {};
             root.dataset.spearPlanToken = payload.spear_plan_token || '';
             root.dataset.spearAutomaticReference = payload.spear_automatic_reference || '';
             root.dataset.spearAutomationEnabled = payload.spear_automation_enabled ? 'true' : 'false';

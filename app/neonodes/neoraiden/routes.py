@@ -5,12 +5,13 @@ from zoneinfo import ZoneInfo
 from flask import abort, current_app, jsonify, make_response, render_template, request
 from flask_login import current_user, login_required
 from sqlalchemy.orm import load_only
+from app.extensions import db
 
 from app.models import Gateway, SortDateOperation
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
 from app.services.gateway_matrix import current_gateway_local_datetime, gateway_timezone, physical_poll_windows
 from . import bp
-from .services import authorized_gateways, gateway_operations, snapshot
+from .services import authorized_gateways, board_sources, gateway_operations, postgres_board_versions, snapshot
 
 
 def _selection():
@@ -41,6 +42,23 @@ def _revision(board):
     return sha256(json.dumps(board, separators=(",", ":")).encode()).hexdigest()
 
 
+def _board(gateway, operation, *, conditional=False):
+    if operation is not None and db.engine.dialect.name == "postgresql":
+        # Reauthorize every source and recalculate time-dependent wave states on every read.
+        sources = board_sources(current_user, gateway, operation)
+        access, uld = sources
+        revision = _revision(("board-v1", current_app.config.get("STATIC_ASSET_VERSION"),
+            current_user.id, gateway.id, gateway.code, operation.id, str(operation.sort_date), operation.sort_name,
+            operation.window_minutes, operation.first_wave_window_minutes, operation.second_wave_window_minutes,
+            sorted(access), uld, postgres_board_versions(gateway, operation, access)))
+        if conditional and request.if_none_match.contains(revision):
+            return None, revision
+        return snapshot(current_user, gateway, operation, sources=sources), revision
+    board = snapshot(current_user, gateway, operation)
+    revision = _revision(board)
+    return (None if conditional and request.if_none_match.contains(revision) else board), revision
+
+
 def _poll_windows(gateway, operation):
     live = operation and not operation.archived_at_utc
     return physical_poll_windows(gateway, operation.sort_date if live else None,
@@ -54,9 +72,9 @@ def index():
     gateways, gateway, operation = _selection()
     sorts = gateway_operations(gateway).options(load_only(SortDateOperation.id, SortDateOperation.sort_date,
         SortDateOperation.sort_name)).order_by(SortDateOperation.sort_date.desc(),SortDateOperation.id.desc()).all()
-    board = snapshot(current_user, gateway, operation)
+    board, revision = _board(gateway, operation)
     return render_template("neonodes/neoraiden/index.html", gateways=gateways, gateway=gateway, sorts=sorts,
-        selected_id=request.args.get("operation_id",type=int), board=board, revision=_revision(board),
+        selected_id=request.args.get("operation_id",type=int), board=board, revision=revision,
         poll_windows=_poll_windows(gateway, operation))
 
 
@@ -75,9 +93,8 @@ def state():
             response.headers["X-Raiden-Windows"] = json.dumps(windows)
             response.cache_control.no_store = True
             return response
-    board = snapshot(current_user,gateway,operation)
-    revision = _revision(board)
-    if request.if_none_match.contains(revision):
+    board, revision = _board(gateway, operation, conditional=True)
+    if board is None:
         response = make_response("",304)
     else:
         # A refresh fragment has no shell, account menu or alert-tray dependencies.

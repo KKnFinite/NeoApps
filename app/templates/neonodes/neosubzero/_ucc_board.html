@@ -59,6 +59,7 @@
 {% macro crew_position(position) -%}
     <span class="ucc-crew-position" aria-hidden="true" title="Crew position {{ position }}">{{ position }}</span>
 {%- endmacro %}
+{% set shared_pool = live_fragment and can_edit and request.args.get('crew_options') == 'shared' %}
 {% macro staffing_slots(ramp) -%}
         <div class="ucc-staffing-grid">
         {% set scope = 'early' if ramp.name == 'Early Out' else 'regular' %}
@@ -110,7 +111,7 @@
                 <label class="ucc-pill"><span class="ucc-crew-field-label">{{ role|capitalize }}</span><select id="{{ editor_id }}-{{ role }}" name="person_id" aria-label="{{ label }}">
                     <option value="">{{ role|capitalize }}</option>
                     {% if person_slot.person and not person_slot.available %}<option value="{{ person_slot.person.id }}" selected disabled data-ucc-attendance="{{ person_slot.attendance_display }}">{{ crew_name(person_slot.person) }}</option>{% endif %}
-                    {% for person_row in staffing_pool %}<option value="{{ person_row.person.id }}"{% if person_slot.person and person_slot.person.id == person_row.person.id %} selected data-ucc-attendance="{{ person_slot.attendance_display }}"{% elif person_row.person.id|string in assignment_index[scope] %} data-ucc-assigned-elsewhere hidden{% endif %}>{{ crew_name(person_row.person) }}</option>{% endfor %}
+                    {% if not shared_pool %}{% for person_row in staffing_pool %}<option value="{{ person_row.person.id }}"{% if person_slot.person and person_slot.person.id == person_row.person.id %} selected data-ucc-attendance="{{ person_slot.attendance_display }}"{% elif person_row.person.id|string in assignment_index[scope] %} data-ucc-assigned-elsewhere hidden{% endif %}>{{ crew_name(person_row.person) }}</option>{% endfor %}{% endif %}
                 </select><span data-ucc-selected-text{% if person_slot.person %} data-ucc-attendance="{{ person_slot.attendance_display }}"{% endif %}>{{ crew_name(person_slot.person) if person_slot.person else role|capitalize }}</span></label>
                 <button type="submit" class="ucc-legacy-save">SAVE</button>
             </form>{% endfor %}
@@ -126,6 +127,7 @@
         </div>
 {%- endmacro %}
 <div data-ucc-live-board>
+{% if shared_pool %}<template data-ucc-staffing-options><select>{% for row in staffing_pool %}<option value="{{ row.person.id }}">{{ crew_name(row.person) }}</option>{% endfor %}</select></template>{% endif %}
 {# Fragment replacement also upgrades already-open tabs without stale geometry. #}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_ducc_desktop.css', v='ducc-working-crew-v1') }}">
 {% if not operation %}<p class="neosubzero-empty">No current sort. Staffing management is unavailable.</p>{% endif %}

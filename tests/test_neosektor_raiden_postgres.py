@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from app.extensions import db
 from app.models import (
@@ -12,7 +12,8 @@ from app.models import (
 from app.services import neosektor_sheets_compat as sheets
 from app.services.neosektor_live_counts import native_uld_summary
 from tests import test_gateway_shell as fixtures
-from tests.neoraiden_fixtures import record_counts
+from tests.neoraiden_fixtures import busy_sort, record_attendance, record_counts
+from tests import test_neoraiden as raiden
 from tests.test_neoraiden import seed_sort
 from tests.test_sektor_ermac_performance_postgres import URI, postgres
 
@@ -23,6 +24,49 @@ class SektorRaidenMigrationTest(unittest.TestCase):
         postgres(self, fixtures, lambda: fixtures.GatewayShellTest.setUp(self))
 
     tearDown = fixtures.GatewayShellTest.tearDown
+    test_gateway_and_sort_isolation = raiden.RaidenTest.test_gateway_and_sort_isolation_and_read_only_current
+    test_source_revocation_invalidates_etag = raiden.RaidenTest.test_native_projection_identity_and_revalidation
+
+    def test_conditional_read_skips_mission_projection_and_tracks_committed_sources(self):
+        from app.models import SortDateMission, SortDateParkingAssignment
+        op = busy_sort(self.gateway)
+        path = f"/neoraiden/state?gateway=RFD&operation_id={op.id}"
+        first = self.client.get(path)
+        self.assertEqual(first.status_code, 200)
+        def unchanged(tag):
+            return self.client.get(path, headers={'If-None-Match': tag})
+
+        statements = []
+        def record(conn, cursor, statement, *unused):
+            statements.append(statement)
+        event.listen(db.engine, 'before_cursor_execute', record)
+        try:
+            self.assertEqual(unchanged(first.headers['ETag']).status_code, 304)
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', record)
+        self.assertFalse(any('sort_date_missions.flight_number' in sql for sql in statements))
+        self.assertFalse(any(sql.lstrip().split()[0].upper() in ('INSERT','UPDATE','DELETE') for sql in statements))
+
+        mission = SortDateMission.query.filter_by(sort_date_operation_id=op.id, flight_number='FX202').one()
+        mission.assigned_tail_number = 'N900TEST'
+        db.session.commit()
+        changed = unchanged(first.headers['ETag'])
+        self.assertEqual(changed.status_code, 200)
+        self.assertIn('N900TEST', changed.json['html'])
+        assignment = SortDateParkingAssignment.query.filter_by(sort_date_operation_id=op.id).first()
+        db.session.delete(assignment)
+        db.session.commit()
+        removed = unchanged(changed.headers['ETag'])
+        self.assertEqual(removed.status_code, 200)
+        record_attendance(op)
+        attendance = unchanged(removed.headers['ETag'])
+        self.assertEqual(attendance.status_code, 200)
+        bay = NeoSektorOpenBayState.query.filter_by(side='EAST').one()
+        bay.open_count += 1
+        db.session.commit()
+        updated = unchanged(attendance.headers['ETag'])
+        self.assertEqual(updated.status_code, 200)
+        self.assertIn('E 3 · W 3', updated.json['html'])
 
     def test_cutover_and_rollback_preserve_native_evidence(self):
         op = seed_sort(self.gateway)

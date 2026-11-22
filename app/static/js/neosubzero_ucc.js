@@ -557,6 +557,31 @@
     let loading = null;
     let mutationEpoch = 0;
     let deferredRevision = null;
+    function expandStaffingOptions(next) {
+        const pool = next.querySelector('template[data-ucc-staffing-options]');
+        if (!pool) return;
+        const assignments = JSON.parse(next.querySelector('[data-ucc-assignment-index]').textContent);
+        for (const select of next.querySelectorAll('[data-ucc-crew-form] select[name="person_id"]')) {
+            const form = select.form || select.closest('form');
+            const occupied = assignments[form.dataset.assignmentScope];
+            const options = pool.content.querySelector('select').cloneNode(true);
+            for (const option of options.options) {
+                if (option.value === form.dataset.currentPersonId) {
+                    option.defaultSelected = true;
+                    option.dataset.uccAttendance = form.querySelector('[data-ucc-selected-text]').dataset.uccAttendance;
+                } else if (Object.hasOwn(occupied, option.value)) {
+                    option.hidden = true;
+                    option.dataset.uccAssignedElsewhere = '';
+                }
+            }
+            while (options.firstChild) select.appendChild(options.firstChild);
+            // Removing an option from a single-select can select its next sibling.
+            // Restore the authoritative value after all options have moved.
+            select.value = form.dataset.currentPersonId || '';
+        }
+        pool.remove();
+    }
+
     const fetchLive = async (url, read) => {
         const abort = new AbortController();
         const timeout = window.setTimeout(() => abort.abort(), 10000);
@@ -578,11 +603,13 @@
         try {
             const url = new URL(window.location.href);
             url.searchParams.set("fragment", "1");
+            url.searchParams.set("crew_options", "shared");
             const html = await fetchLive(url, response => response.text());
             const documentNext = new DOMParser().parseFromString(html, "text/html");
             const next = documentNext.querySelector("[data-subzero-ucc]");
             if (!next) throw new Error("UCC session expired. Open current UCC to sign in.");
             if (requestEpoch !== mutationEpoch || root.dataset.saving === "true") return false;
+            expandStaffingOptions(next);
             const deferred = editing();
             // Keep the complete committed source for TV, even if TV is entered
             // later and the management view still contains an unsaved draft.

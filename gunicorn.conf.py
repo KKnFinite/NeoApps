@@ -1,5 +1,9 @@
 """Use the existing web worker for archive scheduling, never Gunicorn's parent."""
 
+# Route templates preserve per-endpoint metrics without logging request targets,
+# query strings, referrers or dynamic URL segments. Unmatched routes log '-'.
+access_log_format = '%(t)s "%(m)s %({neoapps.route}e)s %(H)s" %(s)s %(b)s %(L)s'
+
 
 def on_starting(server):
     # Collect once, before any worker exists. Frozen startup objects stay shared

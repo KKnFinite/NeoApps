@@ -55,6 +55,16 @@ class SecurityHeadersTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
+    def test_private_route_metadata_and_referrer_policy(self):
+        response = self.client.get('/reset-password/synthetic-example?context=test',
+                                   base_url='https://neoapps.example.test')
+        self.assertEqual(response.headers['Referrer-Policy'], 'no-referrer')
+        self.assertTrue(response.cache_control.no_store)
+        from werkzeug.test import EnvironBuilder
+        environ = EnvironBuilder(path='/reset-password/synthetic-example').get_environ()
+        list(self.app.wsgi_app(environ, lambda status, headers: None))
+        self.assertEqual(environ['neoapps.route'], '/reset-password/<token>')
+
     def test_production_https_response_has_hsts_csp_and_existing_security_headers(self):
         response = self.client.get(
             "/login",

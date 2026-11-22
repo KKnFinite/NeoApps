@@ -83,6 +83,43 @@ class UccBrowserTest(unittest.TestCase):
             item.stop()
         MobileDrawerBrowserTest.tearDownClass.__func__(cls)
 
+    def test_compact_fragment_restores_all_authorized_crew_choices_after_save(self):
+        for engine in ('chromium', 'webkit'):
+            with self.subTest(engine=engine):
+                browser = getattr(self.pw, engine).launch()
+                try:
+                    context = browser.new_context(viewport={'width': 1440, 'height': 900}, service_workers='block')
+                    page = context.new_page()
+                    self.login(page)
+                    self.ready(page, '/neosubzero/ucc')
+                    team = page.locator('[data-ucc-editor="Alpha-2"]')
+                    select = team.locator('[data-ucc-crew-form="driver"] select')
+                    if not select.is_visible():
+                        team.locator('[data-ucc-crew-edit="driver"]').click()
+                    # A real save triggers the existing authenticated live replacement.
+                    choice = '' if select.input_value() else str(self.people[2])
+                    with page.expect_response(lambda r: 'crew_options=shared' in r.url) as refreshed:
+                        select.select_option(choice)
+                    compact = refreshed.value
+                    self.assertEqual(compact.status, 200)
+                    body = compact.body()
+                    self.assertIn(b'data-ucc-staffing-options', body)
+                    canonical = page.request.get(self.origin + '/neosubzero/ucc?fragment=1').body()
+                    self.assertLess(len(body), len(canonical))
+                    print(engine, 'DUCC fragment bytes', len(canonical), len(body))
+                    reference = page.context.new_page()
+                    self.ready(reference, '/neosubzero/ucc')
+                    read = """() => Object.fromEntries(Array.from(document.querySelectorAll('[data-ucc-crew-form] select[name=person_id]'),
+                        s => [s.id, [s.value, Array.from(s.options, o => [o.value, o.text, o.hidden, o.disabled, o.dataset.uccAttendance])]]))"""
+                    expected = reference.evaluate(read)
+                    self.assertGreater(len(expected), 4)
+                    actual = page.evaluate(read)
+                    self.assertEqual(actual.keys(), expected.keys())
+                    for slot in expected:
+                        self.assertEqual(actual[slot], expected[slot], slot)
+                finally:
+                    browser.close()
+
     def test_physical_parking_rows_and_recorded_start_in_all_views(self):
         order = ((4, 8), (3, 7), (2, 6), (1, 5))
         ramp_names = ("Alpha", "Bravo", "Charlie", "Delta", "Echo")

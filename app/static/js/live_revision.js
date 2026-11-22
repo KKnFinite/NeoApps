@@ -146,6 +146,36 @@
         // No lock API: correctness takes precedence over request deduplication.
         return read();
     };
+    // Driver displays need their own authorized state response. Coordinate the
+    // request start times only; the storage slot contains no operational data.
+    const pacedState = async (url, options, eligible) => {
+        const requireVisibleSort = () => {
+            if (document.hidden || !eligible()) throw new DOMException('Automatic state read is paused', 'AbortError');
+        };
+        requireVisibleSort();
+        const target = new URL(url, window.location.href);
+        if (scope && target.origin === window.location.origin && navigator.locks?.request) {
+            const key = 'neo-state-slot:' + target.pathname;
+            const abort = new AbortController();
+            const timeout = window.setTimeout(() => abort.abort(), 30000);
+            try {
+                await navigator.locks.request(key, {signal: abort.signal}, async () => {
+                    let previous;
+                    try { previous = JSON.parse(window.localStorage.getItem(key)); } catch (_) { return; }
+                    const elapsed = Date.now() - previous?.at;
+                    if (previous?.scope === scope && elapsed >= 0 && elapsed < 5100) {
+                        await new Promise(resolve => window.setTimeout(resolve, 5100 - elapsed));
+                    }
+                    requireVisibleSort();
+                    try { window.localStorage.setItem(key, JSON.stringify({scope, at: Date.now()})); }
+                    catch (_) { /* Server cadence still applies when storage is disabled. */ }
+                });
+            } finally { window.clearTimeout(timeout); }
+        }
+        requireVisibleSort();
+        return fetchLive(url, options);
+    };
     window.addEventListener('pagehide', () => { channel?.close(); channel = null; entries.clear(); });
-    window.NeoLiveRevision = Object.freeze({fetch: fetchLive, revision: fetchRevision, resume: () => { freshResume = true; }});
+    window.NeoLiveRevision = Object.freeze({fetch: fetchLive, revision: fetchRevision, pacedState,
+        resume: () => { freshResume = true; }});
 })();

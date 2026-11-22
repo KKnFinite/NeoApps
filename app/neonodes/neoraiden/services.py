@@ -60,7 +60,47 @@ def _clock(value):
     return value.strftime("%H:%M") if value is not None else None
 
 
-def snapshot(user, gateway, operation):
+def board_sources(user, gateway, operation):
+    access = _source_access(user, gateway)
+    uld = native_uld_summary(gateway, operation.sort_date, operation.sort_name) if "sektor" in access else None
+    return access, uld
+
+
+def postgres_board_versions(gateway, operation, access):
+    """One Sort-scoped read. Ordered IDs plus MVCC row versions cover inserts, edits and removals."""
+    from sqlalchemy import String, cast, func, literal_column, select
+    from sqlalchemy.dialects.postgresql import aggregate_order_by
+
+    op_id = operation.id
+    def versions(model, *where):
+        version = func.concat(cast(model.id, String), ':', literal_column('xmin::text'))
+        return select(func.md5(func.string_agg(version, aggregate_order_by(',', model.id)))).where(*where).scalar_subquery()
+
+    summary = StaffingAttendanceSummary
+    summary_scope = (summary.sort_date_operation_id == op_id, summary.scope_type == "operation")
+    columns = [
+        func.pg_postmaster_start_time(),
+        versions(SortDateMission, SortDateMission.sort_date_operation_id == op_id, SortDateMission.master_retirement.is_(None)),
+        versions(SortDateParkingAssignment, SortDateParkingAssignment.sort_date_operation_id == op_id),
+        versions(StaffingDailyAttendance, StaffingDailyAttendance.sort_date_operation_id == op_id,
+                 StaffingDailyAttendance.attendance_date == operation.sort_date),
+        versions(summary, *summary_scope),
+        versions(StaffingUnit, StaffingUnit.id.in_(select(summary.scope_unit_id).where(*summary_scope))),
+    ]
+    if 'ermac' in access:
+        columns.append(versions(NeoErmacDoorPull, NeoErmacDoorPull.gateway_id == gateway.id,
+                                NeoErmacDoorPull.sort_date_operation_id == op_id))
+    if 'subzero' in access:
+        columns.extend((
+            versions(NeoSubZeroDepartureDeiceEvent, NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == op_id,
+                     NeoSubZeroDepartureDeiceEvent.reset_at_utc.is_(None)),
+            versions(SortDateTailState, SortDateTailState.gateway_code == gateway.code,
+                     SortDateTailState.sort_date == operation.sort_date, SortDateTailState.sort_name == operation.sort_name),
+        ))
+    return tuple(str(value) for value in db.session.execute(select(*columns)).one())
+
+
+def snapshot(user, gateway, operation, *, sources=None):
     result = dict(gateway=gateway.code, operation_id=operation.id if operation else None,
                   sort_label=None, arrivals=[], departures=[], staffing=[], marked_here=None, window=None, uld=None)
     if operation is None:
@@ -84,9 +124,7 @@ def snapshot(user, gateway, operation):
             SortDateParkingAssignment.ramp_code, SortDateParkingAssignment.position_code,
             SortDateParkingAssignment.lane_number).filter_by(sort_date_operation_id=op_id)
         if tail and position}
-    access = _source_access(user, gateway)
-    if "sektor" in access:
-        result["uld"] = native_uld_summary(gateway, operation.sort_date, operation.sort_name)
+    access, result["uld"] = sources if sources is not None else board_sources(user, gateway, operation)
     pulls = defaultdict(list)
     if "ermac" in access:
         for pull in NeoErmacDoorPull.query.filter_by(gateway_id=gateway.id, sort_date_operation_id=op_id

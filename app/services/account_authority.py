@@ -90,8 +90,11 @@ def read_authority(user_id, *, proposed=False):
     with db.session.no_autoflush:
         from app.services.account_scope_runtime import scoped_active
         explicit=scoped_active()
-        user = db.session.query(User.id, User.role, User.is_active, User.auth_session_version).filter(User.id == user_id).one()
-        restricted = db.session.query(NeoScorpionVendorAccount.user_id).filter_by(user_id=user_id).first() is not None
+        user = db.session.query(User.id, User.role, User.is_active, User.auth_session_version,
+            NeoScorpionVendorAccount.user_id.label("vendor_id")).outerjoin(
+                NeoScorpionVendorAccount, NeoScorpionVendorAccount.user_id == User.id
+            ).filter(User.id == user_id).one()
+        restricted = user.vendor_id is not None
         apps = db.session.query(PortalAppAccess.app_code, PortalAppAccess.status, PortalAppAccess.is_active, PortalAppAccess.role).filter_by(user_id=user_id).all()
         memberships = db.session.query(GatewayMembership.id, GatewayMembership.gateway_id, GatewayMembership.status,
                                        GatewayMembership.is_active, Gateway.is_active.label("gateway_active"))\

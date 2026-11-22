@@ -332,7 +332,6 @@ def fuel_dispatch_live_panel():
         current = current_sort_operation(gateway)
         if request.args['operation_id'] != str(current.id if current else 'none'):
             return _json_no_store({'ok':False, 'error':'Current sort changed. Refresh the current operation.'}, 409)
-    notes_revision = tail_notes_revision(gateway)
     spear_only = request.args.get('spear_only') == '1'
     if spear_only:
         # The existing cadence still recalculates SPEAR, without operational
@@ -362,6 +361,7 @@ def fuel_dispatch_live_panel():
             **spear_fragments(context, gateway, access,
                 request.headers.get('X-Neo-Spear-Fingerprints', ''),
                 settings_view=user_can(SETTINGS_VIEW_PERMISSION))})
+    notes_revision = tail_notes_revision(gateway)
     if request.args.get("completion_only") == "1" and request.args.get("delta") == "1":
         from app.services.neoscorpion_dispatch_fragments import critical_fragments
         return _json_no_store({"ok": True, "operation_id": operation.id if operation else None,

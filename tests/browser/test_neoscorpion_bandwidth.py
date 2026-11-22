@@ -1,6 +1,7 @@
 """Essential Chromium proof: small SPEAR refresh and draft-safe handoff."""
 from dataclasses import replace
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from threading import Thread
 import json
@@ -15,6 +16,7 @@ from app.models import NeoScorpionSortAssetState
 from app.services import neoscorpion as fuel
 from app.services.live_screen_refresh import live_screen_refresh_value
 from tests import test_dispatch_refresh_fragments as fixtures
+from tests.test_neorain_sort_refresh import configure_sort_window
 
 
 class NeoScorpionBandwidthBrowserTest(unittest.TestCase):
@@ -23,6 +25,9 @@ class NeoScorpionBandwidthBrowserTest(unittest.TestCase):
         case.prepare();case.save(case.start+timedelta(minutes=10),**case.final_data())
         case.settings.spear_recommendations_enabled=True;db.session.commit()
         app=case.client.application;app.config['SESSION_COOKIE_SECURE']=False
+        _, opening = configure_sort_window(case.gateway, case.operation.sort_date)
+        inside = (opening + timedelta(minutes=30)).replace(tzinfo=ZoneInfo('America/Chicago'))
+        app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = inside
         server=make_server('127.0.0.1',0,app,threaded=True)
         thread=Thread(target=server.serve_forever,daemon=True);thread.start()
         origin=f'http://127.0.0.1:{server.server_port}'
@@ -42,6 +47,7 @@ window.__scorpionPoll=options.poll;window.__scorpionController=result;return res
                 browser=pw.chromium.launch()
                 context=browser.new_context(viewport={'width':1440,'height':950},service_workers='block')
                 page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
+                page.clock.set_fixed_time(inside)
                 page.route('**/js/live_updates.js*',lambda route:route.fulfill(body=script,content_type='application/javascript'))
                 page.add_init_script('''window.__timeOffset=0;const originalNow=Date.now;Date.now=()=>originalNow()+window.__timeOffset;''')
                 page.on('request',lambda r:requests.append(r.url) if 'live-panel' in r.url else None)

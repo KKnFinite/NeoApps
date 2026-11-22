@@ -122,6 +122,25 @@ class DispatchFragmentsTest(unittest.TestCase):
         self.assertEqual(result.status_code,409)
         self.assertNotIn('html',result.json)
 
+    def test_compact_response_only_acknowledges_exact_current_manifest(self):
+        self.ready()
+        path = '/neoscorpion/fuel-dispatch/live-panel?completion_only=1&delta=1'
+        manifest = self.capture().json['fingerprints']
+        self.assertTrue(manifest)
+        headers = {'X-Neo-Dispatch-Fingerprints': json.dumps(manifest)}
+        original = self.client.get(path, headers=headers)
+        headers['X-Neo-Compact-Fingerprints'] = '1'
+        compact = self.client.get(path, headers=headers)
+        self.assertEqual(compact.status_code, 200)
+        self.assertEqual(original.json['html'], compact.json['html'])
+        self.assertTrue(compact.json['fingerprints_unchanged'])
+        self.assertNotIn('fingerprints', compact.json)
+        self.assertLess(len(compact.data), len(original.data))
+        print('Dispatch unchanged response bytes:', len(original.data), len(compact.data))
+        headers['X-Neo-Dispatch-Fingerprints'] = json.dumps(dict(manifest, obsolete='absent'))
+        updated = self.client.get(path, headers=headers)
+        self.assertEqual(updated.json['fingerprints'], manifest)
+
     def test_bounded_header_omits_unchanged_rows_without_a_large_query_url(self):
         self.ready();first=self.capture().json
         result=self.client.get('/neoscorpion/fuel-dispatch/live-panel?completion_only=1&delta=1',

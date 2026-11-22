@@ -660,9 +660,14 @@ def register_security_headers(app):
 
     @app.after_request
     def add_security_headers(response):
+        if request.url_rule is not None:
+            request.environ["neoapps.route"] = request.url_rule.rule
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if "token" in (request.view_args or {}):
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.cache_control.no_store = True
         response.headers.setdefault(
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=()",
