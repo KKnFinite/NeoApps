@@ -132,7 +132,9 @@ class FuelRollback(cancel.CancelUnassignTest):
 
 class StaffingUpdates(flow.ShiftFlowTest):
     def setUp(self):
-        postgres(self, flow, super().setUp)
+        # The inherited setup installs every schema trigger. Operational calls
+        # run on the separately configured runtime connection after setup.
+        postgres(self, flow, super().setUp, fixture_lock_ms=30000)
 
     def test_unit(self):
         unit = neostaffing.update_unit(self.other, dict(name='Spare', parent_id=self.shift.id,
