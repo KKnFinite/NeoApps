@@ -10,6 +10,8 @@ function harness() {
     const timers = new Map(), requests = [], events = {};
     const listen = (name, fn) => (events[name] ||= []).push(fn);
     const context = {URL, Date: {now: () => now}, document: {hidden: false,
+        querySelector: selector => selector === 'meta[name="physical-sort-windows"]'
+            ? {content: JSON.stringify([[95000, 135000]])} : null,
         addEventListener: listen, removeEventListener() {}}, window: {
         location: {href: 'https://neo.test/neosektor/driver-routing'},
         addEventListener: listen,
@@ -23,6 +25,7 @@ function harness() {
         continuousWhileVisible: true, immediate: false, poll: () => watch.refresh()});
     const signal = () => ({version, sort_date: '2026-11-04', sort_name: 'night'});
     watch = context.window.NeoSektorRoutingWatch.create({versionUrl: '/version', initial: signal(),
+        insideSort: context.window.NeoLiveUpdates.insidePhysicalSort,
         requestRefresh: () => controller.refreshNow(),
         fetchState: async () => {
             const status = now - accepted < 5000 ? 429 : 200;

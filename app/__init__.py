@@ -72,6 +72,10 @@ def create_app(config_class=Config, auto_bootstrap=False):
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
 
     db.init_app(app)
+    if _is_production_environment(app):
+        from app.services.database_transfer import instrument_database_transfer
+        with app.app_context():
+            instrument_database_transfer(db.engine)
     login_manager.init_app(app)
 
     sync_existing_local_schema(app)

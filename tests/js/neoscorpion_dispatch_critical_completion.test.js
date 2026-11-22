@@ -150,11 +150,11 @@ test('a changed visit never leaves the old READY accent on a protected row',()=>
 });
 
 test('an adopted autosave revision still reconciles a missed critical GET while dirty',async()=>{
-    const start=source.indexOf('    const poll = async () => {');
+    const start=source.indexOf('    const poll = async (');
     const end=source.indexOf('    const autosaveField = async',start);
     let reconciled=0;
     const context={revisionUrl:'/revision',pollIntervalMs:5000,operationId:'1',revision:8,tailRevision:'tail',tailNotesRevision:0,
-        pendingFuelDataRefresh:true,criticalRefreshKey:'1:7:tail',window:{},root:{dataset:{}},
+        pendingFuelDataRefresh:true,criticalRefreshKey:'1:7:tail',window:{NeoLiveUpdates:{insidePhysicalSort:()=>true}},root:{dataset:{}},
         fetch:async()=>({ok:true,json:async()=>({operation_id:1,revision:8,tail_revision:'tail'})}),
         observeLiveState:()=>true,hasUnsavedControls:()=>true,
         handleChangedFingerprint:async()=>{reconciled++;},reloadPage:async()=>{throw Error('must preserve draft');}};

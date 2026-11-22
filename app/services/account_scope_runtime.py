@@ -5,6 +5,8 @@ GatewayNodeRole (node), Phase 2 AccountScopedRole (gateway). Staged candidates
 at other scopes never override or union with these sources. Operational
 resource/Sort/HR/company checks remain mandatory after permission evaluation.
 """
+from sqlalchemy.orm import load_only
+
 from app.extensions import db
 from app.models import AccountAuthorizationState
 from app.services.request_cache import request_cached
@@ -18,14 +20,15 @@ GATEWAY_PROTECTED=frozenset({
     'neomotherbrain.manage_api.view','neomotherbrain.node_refresh_timings.edit',
     'neoscorpion.refresh_settings.edit','neoermac.refresh_settings.edit','neorain.refresh_settings.edit',
 })
+SCOPED_ACTIVE_CACHE = 'account.scoped_active'
 
 
 def scoped_active():
     def read():
         with db.session.no_autoflush:
-            row=db.session.get(AccountAuthorizationState,1)
+            row = db.session.get(AccountAuthorizationState, 1, options=(load_only(AccountAuthorizationState.active),))
             return bool(row and row.active)
-    return request_cached('account.scoped_active',(),read)
+    return request_cached(SCOPED_ACTIVE_CACHE,(),read)
 
 
 def owner_scope(key,gateway_id=None):

@@ -11,6 +11,27 @@ from tests.test_google_motherbrain_sheets import reader_config
 
 
 class GoogleSheetsTimeoutTest(unittest.TestCase):
+    def test_live_mission_read_is_one_read_only_request_and_closes_only_owned_session(self):
+        ranges = [entry[1] for entry in sheets.GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS]
+        ranges.extend(sheets.GOOGLE_MOTHERBRAIN_LIVE_CANCELLATION_RANGES)
+        for owned in (True, False):
+            with self.subTest(owned=owned):
+                transport = Mock()
+                transport.request.return_value.json.return_value = {
+                    'valueRanges': [{'values': []} for _ in ranges]}
+                client = gspread.Client(auth=None, session=transport)
+                with patch.object(sheets.gspread, 'service_account_from_dict', return_value=client):
+                    data = sheets.read_google_motherbrain_live_rows(
+                        reader_config(), client_factory=None if owned else lambda _: client)
+                self.assertIn('inbound_source_cancellations', data)
+                self.assertEqual(transport.request.call_count, 1)
+                call = transport.request.call_args.kwargs
+                self.assertEqual(call['method'].lower(), 'get')
+                self.assertTrue(call['url'].endswith('/values:batchGet'))
+                self.assertEqual(call['params']['ranges'], ranges)
+                self.assertEqual(call['params']['valueRenderOption'], 'FORMATTED_VALUE')
+                self.assertEqual(transport.close.call_count, int(owned))
+
     def test_google_service_account_signing_with_runtime_crypto(self):
         # Real local RSA/Google-auth path; no credentials or network integration.
         from cryptography.hazmat.primitives import hashes, serialization

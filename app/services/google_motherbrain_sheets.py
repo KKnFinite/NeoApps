@@ -242,23 +242,24 @@ def read_google_motherbrain_live_rows(config=None, client_factory=None):
     config = config or current_app.config
     credentials, spreadsheet_id = _configured_reader_inputs(config)
     client = client_factory(credentials) if client_factory else _create_gspread_client(credentials, config)
-    spreadsheet = _google_call(
-        "open_spreadsheet",
-        lambda: client.open_by_key(spreadsheet_id),
-    )
     ranges = [spec[1] for spec in GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS]
     ranges.extend(GOOGLE_MOTHERBRAIN_LIVE_CANCELLATION_RANGES)
-    response = _google_call(
-        "read_live_ranges",
-        lambda: spreadsheet.values_batch_get(
-            ranges,
-            params={
-                "valueRenderOption": "FORMATTED_VALUE",
-                "dateTimeRenderOption": "FORMATTED_STRING",
-                "majorDimension": "ROWS",
-            },
-        ),
-    )
+    params = {"valueRenderOption": "FORMATTED_VALUE", "dateTimeRenderOption": "FORMATTED_STRING",
+              "majorDimension": "ROWS"}
+    try:
+        if hasattr(client, "http_client"):
+            # Spreadsheet.open_by_key fetches metadata. This read uses only the
+            # configured spreadsheet ID and ranges, both enforced by batchGet.
+            response = _google_call("read_live_ranges", lambda: client.http_client.values_batch_get(
+                spreadsheet_id, ranges, params=params))
+        else:
+            # Compatibility with existing injected spreadsheet-level adapters.
+            spreadsheet = _google_call("open_spreadsheet", lambda: client.open_by_key(spreadsheet_id))
+            response = _google_call("read_live_ranges", lambda: spreadsheet.values_batch_get(ranges, params=params))
+    finally:
+        if client_factory is None:
+            from app.services.google_diagnostic_transport import close_google_clients
+            close_google_clients([client])
     range_values = _range_values(response, ranges)
     live_rows = {}
     for index, (key, _a1, row_count, columns, start_row) in enumerate(
@@ -724,7 +725,8 @@ def _google_call(action, callback):
         response = getattr(exc, "response", None)
         status_code = getattr(response, "status_code", None)
         exception_name = type(exc).__name__.lower()
-        if status_code in {401, 403} or exception_name in {"spreadsheetnotfound", "permissionerror"}:
+        if (status_code in {401, 403} or exception_name in {"spreadsheetnotfound", "permissionerror"}
+                or (action == "read_live_ranges" and status_code == 404)):
             message = (
                 "The locked Google workbook was not found or is not shared "
                 "with the configured service account as Viewer."

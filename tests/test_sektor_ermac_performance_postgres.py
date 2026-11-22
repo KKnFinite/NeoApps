@@ -76,7 +76,10 @@ class SektorPostgresPerformanceTest(sektor.SektorPerformanceTest):
 
     def test_independent_concurrent_readers_and_committed_update(self):
         c=self.case;f=c.fixture;app=f.app
+        from tests.test_neorain_sort_refresh import configure_sort_window
+        configure_sort_window(f.gateway, c.day)
         initial=f.client.get('/neosektor/driver-routing/state').json
+        self.assertTrue(initial['refresh']['auto_refresh_enabled'])
         cookie=f.client.get_cookie('session').value;db.session.commit()
         barrier=Barrier(2);writes=[];pids=set();engine=db.engine
         def record(conn,cur,sql,*args):

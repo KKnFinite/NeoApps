@@ -3,12 +3,14 @@ from types import SimpleNamespace
 
 from flask import current_app, g, has_request_context, request
 from flask_login import current_user
-from sqlalchemy import and_
+from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import load_only
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.extensions import db
 from app.models import (
+    AccountAuthorizationState,
     Gateway,
     GatewayMembership,
     GatewayNodeRole,
@@ -231,12 +233,21 @@ def prime_lightweight_live_request_scope(
             normalized_operation_id = None
 
     query = (
-        db.session.query(
+        select(
             Gateway,
             GatewayMembership,
             PortalAppAccess,
             NeoNode,
             GatewayNodeRole,
+        )
+        .options(
+            load_only(Gateway.id, Gateway.code, Gateway.name, Gateway.is_active),
+            load_only(GatewayMembership.user_id, GatewayMembership.gateway_id,
+                      GatewayMembership.status, GatewayMembership.is_active),
+            load_only(PortalAppAccess.user_id, PortalAppAccess.app_code, PortalAppAccess.status,
+                      PortalAppAccess.role, PortalAppAccess.is_active),
+            load_only(NeoNode.code, NeoNode.is_active),
+            load_only(GatewayNodeRole.role, GatewayNodeRole.is_active),
         )
         .outerjoin(
             GatewayMembership,
@@ -274,9 +285,9 @@ def prime_lightweight_live_request_scope(
         operation_join = SortDateOperation.id == normalized_operation_id
 
         query = (
-            query.add_entity(SortDateOperation)
+            query.add_columns(SortDateOperation)
             .outerjoin(SortDateOperation, operation_join)
-            .add_entity(SortTimelineSortSetting)
+            .add_columns(SortTimelineSortSetting)
             .outerjoin(
                 SortTimelineSortSetting,
                 and_(
@@ -286,6 +297,12 @@ def prime_lightweight_live_request_scope(
                 ),
             )
         )
+
+    from app.services.account_scope_runtime import SCOPED_ACTIVE_CACHE
+    explicit = get_request_cached(SCOPED_ACTIVE_CACHE, ())
+    if explicit is MISSING:
+        activation = select(AccountAuthorizationState.active).where(AccountAuthorizationState.id == 1)
+        query = query.add_columns(activation.scalar_subquery().label("scoped_authority_active"))
 
     signal_scope = None
     if include_sektor_routing_signal and node_code == "sektor" and has_request_context():
@@ -300,7 +317,9 @@ def prime_lightweight_live_request_scope(
             # Correlate to the same authorized Gateway; no extra entity hydration.
             query = query.add_columns(*routing_signal_columns(Gateway.id, *signal_scope))
 
-    row = query.filter(Gateway.code == gateway_code, ~_driver_profile_exists(user.id)).first()
+    row = db.session.execute(
+        query.where(Gateway.code == gateway_code, ~_driver_profile_exists(user.id)).limit(1)
+    ).first()
     if row is None:
         set_request_cached("access.default_gateway", gateway_code, None)
         return SimpleNamespace(
@@ -324,8 +343,9 @@ def prime_lightweight_live_request_scope(
     if operation is not None and operation.gateway_id == gateway.id:
         set_committed_value(operation, "gateway", gateway)
 
-    from app.services.account_scope_runtime import scoped_active
-    explicit=scoped_active()
+    if explicit is MISSING:
+        explicit = bool(row.scoped_authority_active)
+        set_request_cached(SCOPED_ACTIVE_CACHE, (), explicit)
     if app_access is None and not explicit:
         app_access = _legacy_neogateway_app_access(user, membership)
 

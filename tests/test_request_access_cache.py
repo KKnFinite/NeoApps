@@ -87,6 +87,18 @@ class RequestAccessCacheTest(unittest.TestCase):
         self.assertEqual(second.id, third.id)
         self.assertEqual(self._table_query_count(statements, "gateways"), 1)
 
+    def test_session_loader_defers_credentials_but_authentication_can_read_them(self):
+        from sqlalchemy import inspect
+        from app.extensions import load_user
+        identity = self.user.id
+        db.session.remove()
+        loaded = load_user(str(identity))
+        self.assertTrue({'mfa_secret', 'password_hash', 'access_reason', 'last_password_reset_reason'}
+                        <= inspect(loaded).unloaded)
+        self.assertEqual(loaded.id, identity)
+        self.assertTrue(loaded.password_hash)
+        self.assertNotIn('password_hash', inspect(loaded).unloaded)
+
     def test_repeated_user_can_reuses_role_and_permission_resolution(self):
         statements = []
         with self.app.test_request_context("/_cache-direct"), self._capture_selects(statements):
