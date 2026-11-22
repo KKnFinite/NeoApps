@@ -67,6 +67,12 @@ class ScopedAuthorizationPostgresTest(unittest.TestCase):
             self.assertEqual(AccountSecurityEvent.query.filter_by(subject_user_id=self.target_id,action='scoped_role_changed').count(),1)
 
     def test_revoked_actor_is_rechecked_after_lock_wait(self):
+        self.check_authority_change_during_lock_wait(require_factor=False)
+
+    def test_actor_requiring_a_second_factor_is_rechecked_after_lock_wait(self):
+        self.check_authority_change_during_lock_wait(require_factor=True)
+
+    def check_authority_change_during_lock_wait(self, *, require_factor):
         self.cutover();token=self.run_as(self.master_id,lambda:review_token(db.session.get(User,self.target_id)))
         waiting=Event()
         def before(_conn,_cursor,statement,*_args):
@@ -78,8 +84,13 @@ class ScopedAuthorizationPostgresTest(unittest.TestCase):
                 with ThreadPoolExecutor(max_workers=1) as pool:
                     future=pool.submit(self.run_as,self.master_id,lambda:management.set_role(self.target_id,self.scope,'simulator',token,'Waited review'))
                     self.assertTrue(waiting.wait(5))
-                    actor=db.session.get(User,self.master_id);actor.auth_session_version+=1
-                    management.existing_role(actor,self.scope).is_active=False;db.session.commit()
+                    actor=db.session.get(User,self.master_id)
+                    if require_factor:
+                        actor.mfa_required = True
+                    else:
+                        actor.auth_session_version+=1
+                        management.existing_role(actor,self.scope).is_active=False
+                    db.session.commit()
                     self.assertEqual(future.result(timeout=12),'ValueError')
             finally:event.remove(self.engine,'before_cursor_execute',before);db.session.rollback()
             self.assertEqual(AccountSecurityEvent.query.filter_by(action='scoped_role_changed').count(),0)

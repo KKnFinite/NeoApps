@@ -39,6 +39,7 @@ from app.services.permission_rules import (
 from app.services.auth_session_security import (
     clear_authenticated_session_security_state,
     establish_authenticated_session,
+    password_session_allowed,
     forced_password_change_session_is_fresh,
     temporary_password_expiration,
     temporary_password_is_expired,
@@ -244,7 +245,7 @@ def login():
         if vendor and not user.email_verified_at:
             flash("Verify your NeoApps email before signing in.", "error")
             return render_template("auth/login.html"), 403
-        if user.mfa_required or user.mfa_enabled:
+        if not password_session_allowed(user):
             # The shared login has no MFA challenge handler. A password alone
             # must never establish a session for an account that requires MFA.
             flash("This account requires additional verification. Contact your NeoApps administrator.", "error")

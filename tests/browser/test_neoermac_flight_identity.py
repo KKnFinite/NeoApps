@@ -1,6 +1,7 @@
 """Native lineup choices and real pull saves across desktop/mobile live refresh."""
 from contextlib import ExitStack
 from datetime import datetime, time
+from zoneinfo import ZoneInfo
 import unittest
 from unittest.mock import patch
 from playwright.sync_api import expect
@@ -25,6 +26,10 @@ class FlightIdentityBrowserTest(unittest.TestCase):
                         c.f.operation_creator=User.query.filter_by(username='drawer-admin').one()
                         a=c.add_flight('UPS101','N101UP','A01',time(23,40),time(0,10))
                         b=c.add_flight('UPS202','N202UP','B06',time(0,20),time(0,40))
+                        from tests.test_neorain_sort_refresh import configure_sort_window
+                        _, opening = configure_sort_window(c.gateway, a.sort_date)
+                        physical_now = opening.replace(tzinfo=ZoneInfo('America/Chicago'))
+                        Fixture.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = physical_now
                         from app.services.neoermac_building_lineup import get_building_lineup_rows
                         get_building_lineup_rows(c.gateway)
                         db.session.commit(); aid,bid,opid,mastera,masterb=a.id,b.id,a.sort_date_operation_id,a.master_flight_schedule_id,b.master_flight_schedule_id
@@ -42,6 +47,7 @@ class FlightIdentityBrowserTest(unittest.TestCase):
                         browser=getattr(Fixture.pw,engine).launch()
                         context=browser.new_context(viewport={'width':width,'height':900},has_touch=width<900,is_mobile=width<900)
                         page=context.new_page(); errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+                        page.clock.install(time=physical_now)
                         Fixture().login(page);Fixture().ready(page,'/neoermac/building-lineup')
                         select=page.locator('[name="lineup_runout_9_west_destination_1"]')
                         self.assertIn('UPS101',select.inner_text());self.assertIn('UPS202',select.inner_text())

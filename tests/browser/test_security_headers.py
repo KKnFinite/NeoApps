@@ -7,6 +7,7 @@ from contextlib import contextmanager
 import unittest
 from unittest.mock import patch
 from weakref import WeakSet
+from urllib.parse import urlsplit
 
 from flask import render_template_string
 from flask_login import login_required
@@ -36,7 +37,7 @@ def enforced_csp():
                     if message.type == 'error' and any(value in message.text.lower()
                         for value in ['content security policy', 'content-security-policy', 'refused to execute', 'violates the following']) else None)
         response = original_goto(page, *args, **kwargs)
-        if response and response.url.startswith(fixtures.MobileDrawerBrowserTest.origin):
+        if response and urlsplit(response.url).hostname in {'localhost', '127.0.0.1'}:
             assert 'Content-Security-Policy'.lower() in response.headers, response.url
         return response
 

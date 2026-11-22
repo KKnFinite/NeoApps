@@ -5,6 +5,7 @@ from app.extensions import db
 from app.models import AccountSecurityEvent, NeoNode, User
 from app.models.user import ROLE_LEVELS
 from app.services.request_cache import clear_request_cache
+from app.services.auth_session_security import password_session_allowed
 
 
 PUBLIC_ACCOUNT_PERMISSIONS = frozenset({
@@ -39,7 +40,7 @@ def lock_administration():
     db.session.expire_all()
     actor = User.query.filter_by(id=actor_id).populate_existing().with_for_update().first()
     clear_request_cache()
-    if (not actor or not actor.is_active or actor.scorpion_vendor
+    if (not password_session_allowed(actor) or actor.scorpion_vendor
             or actor.auth_session_version != session_version):
         raise ValueError("Administrative authority changed. Sign in again.")
     return actor

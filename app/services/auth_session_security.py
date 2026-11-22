@@ -45,6 +45,11 @@ def session_version_matches_user(session_data, user):
     return session_data.get(AUTH_SESSION_VERSION_SESSION_KEY) == user_session_version(user)
 
 
+def password_session_allowed(user):
+    """Apply the shared login's factor requirement to existing sessions as well."""
+    return bool(user and user.is_active and not (user.mfa_required or user.mfa_enabled))
+
+
 def establish_authenticated_session(session_data, user, *, forced_password_change=False):
     """Record a fresh login and, when needed, its short-lived forced-change grant."""
     session_data[AUTH_SESSION_VERSION_SESSION_KEY] = user_session_version(user)

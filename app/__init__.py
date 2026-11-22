@@ -39,6 +39,7 @@ from app.services.permission_rules import permission_access, user_can
 from app.services.auth_session_security import (
     clear_authenticated_session_security_state,
     session_version_matches_user,
+    password_session_allowed,
 )
 from app.services.auth_rate_limits import initialize_auth_rate_limit_storage
 from app.services.browser_titles import browser_tab_title
@@ -570,7 +571,8 @@ def register_request_guards(app):
             return None
 
         vendor = getattr(g, "scorpion_vendor_account", None)
-        if not session_version_matches_user(session, current_user) or (vendor and not vendor.enabled):
+        if (not password_session_allowed(current_user) or not session_version_matches_user(session, current_user)
+                or (vendor and not vendor.enabled)):
             logout_user()
             clear_authenticated_session_security_state(session)
             flash("Your session has expired. Please sign in again.", "info")

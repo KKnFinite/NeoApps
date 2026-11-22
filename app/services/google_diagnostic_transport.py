@@ -7,6 +7,7 @@ wire and decompressed limits before gspread/google-auth can access content.
 from functools import partial
 import json
 import logging
+import sys
 
 import gspread
 from google.auth.transport.requests import AuthorizedSession, Request
@@ -20,6 +21,52 @@ METADATA_MAX_BYTES = 1024 * 1024  # Workbook metadata and fixed, small cell rang
 AUTH_MAX_BYTES = 256 * 1024
 AUTH_TIMEOUT_SECONDS = 5
 logger = logging.getLogger(__name__)
+
+
+class _GoogleTransfer:
+    """Count declared Sheets body lengths on an existing operation's session."""
+
+    def __init__(self, component):
+        self.component = component
+        self.responses = self.sent = self.received = self.unknown_out = self.unknown_in = 0
+
+    def observe(self, response, **kwargs):
+        try:
+            self.responses += 1
+            request = response.request
+            outgoing = request.headers.get('Content-Length', '0' if request.body is None else '')
+            incoming = response.headers.get('Content-Length', '')
+            if request.method == 'HEAD' or response.status_code in (204, 304):
+                incoming = '0'
+            if outgoing.isascii() and outgoing.isdecimal() and len(outgoing) <= 20:
+                self.sent += int(outgoing)
+            else:
+                self.unknown_out += 1
+            if incoming.isascii() and incoming.isdecimal() and len(incoming) <= 20:
+                self.received += int(incoming)
+            else:
+                self.unknown_in += 1
+        except Exception:
+            # Diagnostics have no authority over a provider call.
+            pass
+
+    def emit(self):
+        if self.responses:
+            print(f'INFO NeoApps google_sheets_transfer component={self.component} responses={self.responses} '
+                  f'declared_out_body_bytes={self.sent} declared_in_body_bytes={self.received} '
+                  f'unknown_out_lengths={self.unknown_out} unknown_in_lengths={self.unknown_in}',
+                  file=sys.stderr, flush=True)
+
+
+def observe_google_transfer(client, component):
+    if component not in ('motherbrain_missions', 'staffing_hours_log'):
+        return
+    transport = getattr(getattr(client, 'http_client', None), 'session', None)
+    session = transport.session if isinstance(transport, _Transport) else transport
+    if isinstance(session, Session) and not isinstance(getattr(transport, '_transfer_meter', None), _GoogleTransfer):
+        meter = _GoogleTransfer(component)
+        session.hooks['response'].append(meter.observe)
+        transport._transfer_meter = meter
 
 
 def _close(resource):
@@ -42,6 +89,13 @@ def close_google_clients(clients):
         if id(session) not in seen:
             seen.add(id(session))
             _close(session)
+            meter = getattr(session, '_transfer_meter', None)
+            if isinstance(meter, _GoogleTransfer):
+                session._transfer_meter = None
+                try:
+                    meter.emit()
+                except (OSError, ValueError):
+                    pass
 
 
 def _bounded_response(response, *, maximum, **_kwargs):

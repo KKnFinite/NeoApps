@@ -2,6 +2,7 @@
 import json
 import unittest
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from playwright.sync_api import expect
 from app.extensions import db
@@ -55,6 +56,14 @@ class OperationsBrowserTest(unittest.TestCase):
         fixtures.UccBrowserTest.setUpClass.__func__(cls)
         with cls.app.app_context():
             fixture=fixtures.NeoSubZeroUccTest();fixture.operation=db.session.get(SortDateOperation,cls.operation_id)
+            from tests.test_neorain_sort_refresh import configure_sort_window
+            _, opening = configure_sort_window(fixture.operation.gateway, fixture.operation.sort_date)
+            from app.services.live_screen_refresh import save_live_screen_refresh_override
+            from app.neonodes.neosubzero import routes
+            for screen in (routes.OUTBOUND_REFRESH_KEY, routes.PRETREAT_REFRESH_KEY):
+                save_live_screen_refresh_override(fixture.operation.gateway, screen, '5')
+            cls.sort_now = opening.replace(tzinfo=ZoneInfo('America/Chicago')) + timedelta(minutes=70)
+            cls.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = cls.sort_now
             mission=fixture._departure('UPS7777','N777UP','DEN',4)
             mission.planned_datetime_utc=datetime(2026,10,23,5);mission.planned_datetime_local=datetime(2026,10,23,0)
             db.session.add(SortDateParkingAssignment(sort_date_operation_id=cls.operation_id,tail_number=mission.assigned_tail_number,ramp_code='D',position_code='D04'))
@@ -92,6 +101,25 @@ class OperationsBrowserTest(unittest.TestCase):
             db.session.add(SortDateTailState(sort_date=op.sort_date,gateway_code='RFD',sort_name='night',tail_number='N440UP',pretreat_status=True))
             db.session.commit()
 
+    def test_recorded_pretreatment_visible_only_on_its_aircraft_in_both_dispatch_layouts(self):
+        self.seed()
+        for engine in ('chromium', 'webkit'):
+            with self.subTest(engine=engine):
+                browser = getattr(self.pw, engine).launch()
+                try:
+                    page = browser.new_page(viewport={'width': 1440, 'height': 900})
+                    page.clock.install(time=self.sort_now)
+                    self.login(page)
+                    self.ready(page, '/neosubzero/operations?mode=outbound')
+                    for layout in ('list', 'visual'):
+                        self.layout(page, layout)
+                        treated = page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"]')
+                        adjacent = page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"]')
+                        expect(treated.locator('.ops-pretreated:visible')).to_have_text('PRETREATED')
+                        expect(adjacent.locator('.ops-pretreated')).to_have_count(0)
+                finally:
+                    browser.close()
+
     def test_layouts_preferences_forms_live_drafts_and_tail_identity(self):
         evidence=Path('instance/browser-evidence/subzero-operations').resolve();evidence.mkdir(parents=True,exist_ok=True)
         measurements=[]
@@ -99,6 +127,7 @@ class OperationsBrowserTest(unittest.TestCase):
             self.seed()
             browser=getattr(self.pw,engine).launch();context=browser.new_context(viewport={'width':1440,'height':1000},service_workers='block')
             page=context.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+            page.clock.install(time=self.sort_now)
             self.login(page);self.ready(page,'/neosubzero/operations')
             root=page.locator('[data-ops-workspace]')
             for mode in ('outbound','pretreat'):
@@ -195,7 +224,7 @@ class OperationsBrowserTest(unittest.TestCase):
                 card=page.locator('[data-ops-row][data-status="'+status+'"]').first
                 self.assertNotEqual(card.evaluate('e=>getComputedStyle(e).backgroundColor'),'rgba(0, 0, 0, 0)')
             self.assertEqual(page.locator('[data-ops-row]').last.get_attribute('data-status'),'gone')
-            expect(page.locator(f'[data-mission-id="{self.missions[0]}"] .ops-pretreated')).to_be_visible()
+            expect(page.locator(f'[data-mission-id="{self.missions[0]}"] .ops-pretreated:visible')).to_have_count(1)
             expect(page.locator(f'[data-mission-id="{self.missions[1]}"] .ops-pretreated')).to_have_count(0)
             # Canonical coordinator-capable workflow, with no gallon gate on FIN/CLEAR.
             page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] [data-ops-accordion] > summary').click()

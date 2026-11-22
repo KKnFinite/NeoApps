@@ -68,8 +68,15 @@ class EmployeeEditorBrowserTest(unittest.TestCase):
             self.assertAlmostEqual(scroll.evaluate('el=>el.scrollLeft'),x,delta=2)
             expect(page.locator(f'[data-roster-person="{pid}"]')).to_have_class('shift-door-person is-wave-2 is-search-match is-search-current')
             helper.ready(page,'/neostaffing/people?classification=part_time&search=EDITOR-DESKTOP&per_page=25')
-            original=page.url
             page.locator(f'.neostaffing-people-roster-table a[href*="person_id={pid}"]').click()
+            original=page.evaluate("""() => {
+                const url = new URL(location.href);
+                url.searchParams.delete('person_id');
+                return url.href;
+            }""")
+            self.assertIn('classification=part_time', original)
+            self.assertIn('search=EDITOR-DESKTOP', original)
+            page.get_by_role('link', name='Edit employee', exact=True).click()
             expect(dialog).to_be_visible()
             expect(dialog.locator('[name="first_name"]')).to_have_value('Atomic')
             expect(dialog.locator('[name="shift_flow_ballmat_transition"]')).to_have_value('2')

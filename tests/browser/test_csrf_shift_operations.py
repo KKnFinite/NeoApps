@@ -2,6 +2,8 @@
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import urlsplit
+from flask import current_app, g, has_request_context, request
 import time
 import unittest
 from tests.browser import test_mobile_drawer as fixtures
@@ -11,22 +13,28 @@ from tests.browser import test_neostaffing_employee_editor as staffing
 
 @contextmanager
 def aged_screens():
-    state={'seconds':0,'renewed':0};observed=set()
+    state={'renewed':0};observed=set();initial_pages=set()
     original=fixtures.MobileDrawerBrowserTest.ready
     def ready(instance,page,path):
-        original(instance,page,path)
+        initial_pages.add(urlsplit(path).path)
         if id(page) not in observed:
             observed.add(id(page))
             def response(result):
                 if '/csrf-token' in result.url and result.status==200:state['renewed']+=1
             page.on('response',response)
-        state['seconds']+=3*3600
-        for tab in page.context.pages:
-            if tab.url.startswith(fixtures.MobileDrawerBrowserTest.origin):
-                tab.evaluate('''offset=>{window.csrfOffset=offset;
-                    if(!window.originalNow){window.originalNow=Date.now;Date.now=()=>window.originalNow()+window.csrfOffset;}
-                }''',state['seconds']*1000)
-    with patch('app.services.csrf.time',SimpleNamespace(time=lambda:time.time()+state['seconds'])),patch.object(fixtures.MobileDrawerBrowserTest,'ready',ready):
+        original(instance,page,path)
+    def issuance_time():
+        if not has_request_context():
+            return time.time()
+        clock = current_app.config.get('CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE')
+        now = clock.timestamp() if clock and clock.tzinfo else time.time()
+        # Age only the original signed form tokens. Renewal and validation see
+        # current time; the operational clock stays inside its configured Sort.
+        if request.method == 'GET' and request.path in initial_pages:
+            initial_pages.remove(request.path)
+            g.age_initial_csrf_token = True
+        return now - 3 * 3600 if g.get('age_initial_csrf_token') else now
+    with patch('app.services.csrf.time',SimpleNamespace(time=issuance_time)),patch.object(fixtures.MobileDrawerBrowserTest,'ready',ready):
         yield state
 
 

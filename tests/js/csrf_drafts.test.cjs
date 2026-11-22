@@ -7,11 +7,10 @@ test('SubZero Operations drafts retain notes/revision but exclude CSRF',()=>{
     const start=script.indexOf('    const saveDraft =');const end=script.indexOf('    const sync =',start);
     const fields=[{name:'csrf_token',value:'private-token',type:'hidden'},{name:'expected_revision',value:'original-revision',type:'hidden'},
         {name:'notes',value:'Operator draft',type:'text'}];
-    const context={dataset:{dirty:'true'},elements:fields};
-    const form={dataset:{unlocked:'true'},elements:fields};
+    const form={dataset:{dirty:'true',unlocked:'true'},elements:fields};
     const content={querySelectorAll:()=>[form]},sessionStorage=storage();
-    const root={dataset:{userId:'1',operationId:'2'},querySelector:()=>context};
-    vm.runInNewContext(script.slice(start,end)+'saveDraft();',{root,detail:()=>content,formKey:()=>'/pass',draftKey:()=>'/draft',sessionStorage,notify(){},draftMessage(){}});
+    vm.runInNewContext(script.slice(start,end)+'saveDraft();',{draftContents:()=>[content],formKey:()=>'/pass',draftKey:()=>'/draft',sessionStorage});
+    assert.equal(sessionStorage.rows.size,1);
     for(const value of sessionStorage.rows.values()){
         assert.ok(!value.includes('private-token'));assert.ok(!value.includes('csrf_token'));
         assert.ok(value.includes('original-revision'));assert.ok(value.includes('Operator draft'));
@@ -22,8 +21,13 @@ test('SubZero restored drafts cannot overwrite current CSRF or replace original 
     const sessionStorage=storage();sessionStorage.setItem('/draft',JSON.stringify([{key:'/pass',fields:[
         {name:'csrf_token',value:'stale-private-token'},{name:'expected_revision',value:'original-revision'},{name:'notes',value:'Saved draft'}]}]));
     const fields={csrf_token:{value:'fresh-private-token'},expected_revision:{value:'current-revision'},notes:{value:'Initial notes'}};
-    const form={dataset:{},elements:fields};const pane={querySelectorAll:()=>[form]};
-    vm.runInNewContext(script.slice(start,end)+'initialize(true);',{pane,sync(){},detail:()=>({}),draftKey:()=>'/draft',formKey:()=>'/pass',sessionStorage,draftMessage(){}});
+    const autosaveSelector='[data-ops-pretreat-autosave]';
+    const form={dataset:{},elements:fields,matches:selector=>selector===autosaveSelector,closest:()=>null,querySelector:()=>null};
+    const accordion={open:false};
+    const pane={querySelectorAll:()=>[form],querySelector:()=>null,closest:()=>accordion};
+    vm.runInNewContext(script.slice(start,end)+'initialize(true);',{draftContents:()=>[pane],isPretreat:false,autosaveSelector,
+        sync(){},rememberAutosave(){},draftKey:()=>'/draft',formKey:()=>'/pass',sessionStorage,inlineMessage(){}});
+    assert.equal(accordion.open,true);
     assert.equal(fields.csrf_token.value,'fresh-private-token');assert.equal(fields.expected_revision.value,'original-revision');
     assert.equal(fields.notes.value,'Saved draft');assert.ok(!sessionStorage.getItem('/draft').includes('csrf_token'));
 });

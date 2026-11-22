@@ -242,6 +242,9 @@ def read_google_motherbrain_live_rows(config=None, client_factory=None):
     config = config or current_app.config
     credentials, spreadsheet_id = _configured_reader_inputs(config)
     client = client_factory(credentials) if client_factory else _create_gspread_client(credentials, config)
+    if client_factory is None:
+        from app.services.google_diagnostic_transport import observe_google_transfer
+        observe_google_transfer(client, 'motherbrain_missions')
     ranges = [spec[1] for spec in GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS]
     ranges.extend(GOOGLE_MOTHERBRAIN_LIVE_CANCELLATION_RANGES)
     params = {"valueRenderOption": "FORMATTED_VALUE", "dateTimeRenderOption": "FORMATTED_STRING",

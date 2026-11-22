@@ -158,11 +158,12 @@ class GoogleAdapter:
     def __init__(self, workbook_id=HOURS_LOG_WORKBOOK_ID):
         if workbook_id!=HOURS_LOG_WORKBOOK_ID:raise StaffingSheetError('production Hours Log only.')
         from app.services.google_motherbrain_sheets import _credential_json, _parse_service_account_json, _create_gspread_writer
-        from app.services.google_diagnostic_transport import diagnostic_http_client
+        from app.services.google_diagnostic_transport import diagnostic_http_client, observe_google_transfer
         from functools import partial
         credentials,_=_credential_json(current_app.config)
         self.client=_create_gspread_writer(_parse_service_account_json(credentials),current_app.config,
             http_client=partial(diagnostic_http_client,maximum=4*1024*1024))
+        observe_google_transfer(self.client, 'staffing_hours_log')
 
     def __enter__(self):return self
     def __exit__(self,*_args):

@@ -20,6 +20,9 @@ def check_node_navigation(page, origin, width, *, administrator):
     assert page.goto(origin + '/neoscorpion').status == 200
     if width == 1280:
         account = page.locator('.operational-account-menu')
+        # The desktop landing screen shows the one-time SPEAR introduction.
+        if page.locator('[data-spear-splash-close]:visible').count():
+            page.locator('[data-spear-splash-close]').click()
         account.locator('summary').click()
         switcher = page.locator('[data-operational-topbar] [data-character-switcher]')
     else:
@@ -44,7 +47,7 @@ def check_node_navigation(page, origin, width, *, administrator):
     destination = switcher.locator('a[href="/neosektor"]')
     expect(destination).to_be_visible()
     destination.click()
-    expect(page).to_have_url(origin + '/neosektor')
+    expect(page).to_have_url(origin + ('/neosektor/tunnel-conductor' if width == 1280 else '/neosektor'))
 
 
 class ScopedAuthorizationBrowserTest(TestCase):
@@ -60,6 +63,10 @@ class ScopedAuthorizationBrowserTest(TestCase):
         with app.app_context():
             db.create_all();ensure_account_history_guards(db.session.connection())
             prepare_scope_fixture()
+            from app.models import Gateway, NeoSektorOperationalSetting
+            gateway = Gateway.query.filter_by(code='RFD').one()
+            db.session.add(NeoSektorOperationalSetting(gateway_id=gateway.id, gateway_code=gateway.code,
+                                                       integration_mode='neo_only'))
             admin=fixture_user('scope-app-admin',platform='master')
             db.session.add(PortalAppAccess(user_id=admin.id,app_code='neostaffing',role='grandmaster',status='approved',is_active=True))
             subjects={}

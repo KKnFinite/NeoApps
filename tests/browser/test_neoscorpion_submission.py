@@ -44,11 +44,16 @@ class SubmissionBrowserTest(unittest.TestCase):
         finally:F.tearDownClass()
 
     def test_chromium_webkit_preparation_off_handoff_and_correction(self):
+        from zoneinfo import ZoneInfo
+        from tests.test_neorain_sort_refresh import configure_sort_window
         F=fixtures.MobileDrawerBrowserTest;F.setUpClass();F.app.config['LIVE_SCREEN_REFRESH_INTERVAL_MS']=1000
         try:
             with F.app.app_context():
                 gateway=ensure_default_gateway_and_nodes();u=User.query.filter_by(username='drawer-admin').one()
                 op=SortDateOperation(generated_by_user_id=u.id,gateway_id=gateway.id,gateway_code=gateway.code,sort_date=date.today(),sort_name='night',window_minutes=60)
+                _, opening = configure_sort_window(gateway, op.sort_date)
+                inside = opening.replace(tzinfo=ZoneInfo('America/Chicago')) + timedelta(minutes=15)
+                F.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = inside
                 db.session.add(op);db.session.flush();oid=op.id
                 db.session.add(NeoScorpionSortFueler(sort_date_operation_id=oid,user_id=u.id))
                 ids=[]
@@ -64,7 +69,8 @@ class SubmissionBrowserTest(unittest.TestCase):
                 for engine,(aid,mid) in zip((F.pw.chromium,F.pw.webkit),ids):
                     browser=engine.launch()
                     try:
-                        context=browser.new_context(viewport={'width':1440,'height':900});page=context.new_page();F().login(page)
+                        context=browser.new_context(viewport={'width':1440,'height':900});page=context.new_page()
+                        page.clock.install(time=inside);F().login(page)
                         page.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1','seen')")
                         F().ready(page,'/neoscorpion/fueler')
                         card=page.locator(f'[data-fuel-data-card][data-assignment-id="{aid}"]')
@@ -77,7 +83,8 @@ class SubmissionBrowserTest(unittest.TestCase):
                         expect(card.locator('[data-fuel-data-status]')).to_contain_text('Saved');expect(off).to_be_disabled()
                         with F.app.app_context():
                             work=NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=aid).one();self.assertIsNone(work.manual_on_at_utc);self.assertIsNone(work.on_at_utc)
-                        dispatch=context.new_page();F().ready(dispatch,'/neoscorpion/fuel-dispatch')
+                        dispatch=context.new_page();dispatch.clock.install(time=inside)
+                        F().ready(dispatch,'/neoscorpion/fuel-dispatch')
                         row=dispatch.locator(f'[data-dispatch-mission-id="{mid}"]')
                         expect(row.locator('select[name="assigned_fueler_user_id"]')).to_have_count(1)
                         expect(row.locator('select[name="assigned_truck_id"]')).to_have_count(1)

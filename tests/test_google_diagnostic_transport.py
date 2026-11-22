@@ -85,6 +85,34 @@ class GoogleTransportTest(unittest.TestCase):
         provider.response.close.assert_called_once()
         self.assertTrue(provider.body.closed)
 
+    def test_observation_counts_provider_bodies_once_without_extra_io_or_sensitive_fields(self):
+        from contextlib import redirect_stderr
+        for label in ('staffing_hours_log', 'motherbrain_missions'):
+            with self.subTest(component=label):
+                client, adapter, _ = self.client(b'{"ok":true}', headers={'Content-Length': '11'})
+                owner = SimpleNamespace(http_client=client)
+                transport.observe_google_transfer(owner, label)
+                transport.observe_google_transfer(owner, label)
+                response = client.request('post', 'https://provider.invalid/private-id', data=b'private')
+                self.assertEqual(response.json(), {'ok': True})
+                output = io.StringIO()
+                with redirect_stderr(output):
+                    transport.close_google_clients([owner, owner])
+                self.assertEqual(len(adapter.calls), 1)
+                self.assertEqual(adapter.body.bytes_read, 11)
+                self.assertEqual(output.getvalue().strip(), f'INFO NeoApps google_sheets_transfer component={label} '
+                    'responses=1 declared_out_body_bytes=7 declared_in_body_bytes=11 unknown_out_lengths=0 unknown_in_lengths=0')
+
+    def test_unknown_response_length_does_not_consume_a_stream(self):
+        meter = transport._GoogleTransfer('staffing_hours_log')
+        response = requests.Response()
+        response.request = requests.Request('GET', 'https://provider.invalid').prepare()
+        response.status_code = 200
+        response.raw = Mock()
+        meter.observe(response)
+        self.assertEqual((meter.responses, meter.sent, meter.received, meter.unknown_in), (1, 0, 0, 1))
+        response.raw.read.assert_not_called()
+
     def test_exact_limit_and_one_over_reject_before_entire_body_is_buffered(self):
         cap = transport.METADATA_MAX_BYTES
         exact = b'{"value":"' + b'a' * (cap-12) + b'"}'

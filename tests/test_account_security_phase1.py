@@ -70,6 +70,24 @@ class AccountSecurityPhase1Test(TestCase):
             form[f"description_{rule.id}"] = rule.description
         return self.client.post("/motherbrain/permissions", data=form)
 
+    def test_password_session_observes_current_factor_policy(self):
+        for flag in ('mfa_required', 'mfa_enabled'):
+            with self.subTest(flag=flag):
+                admin = fixture_user('factor-' + flag, platform='grandmaster')
+                self.login(admin)
+                self.assertEqual(self.client.get('/accounts').status_code, 200)
+                setattr(admin, flag, True)
+                db.session.commit()
+                g.pop('_login_user', None)
+                response = self.client.get('/accounts')
+                self.assertEqual(response.status_code, 302)
+                self.assertIn('/login', response.headers['Location'])
+                with self.client.session_transaction() as cookie:
+                    self.assertNotIn('_user_id', cookie)
+                denied = self.client.post('/login', data=dict(username=admin.username, password=PASSWORD))
+                self.assertEqual(denied.status_code, 403)
+                self.assertEqual(admin.role, 'grandmaster')
+
     def test_node_admin_cannot_change_platform_or_foreign_policy_atomic(self):
         actor = fixture_user("motherbrain-only", nodes={"motherbrain": "grandmaster"})
         self.login(actor)
