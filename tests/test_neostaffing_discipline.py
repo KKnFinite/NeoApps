@@ -559,6 +559,14 @@ class DisciplineWorkflowTest(employee_fixture.SektorEmployeesTest):
         with self.assertRaises(ValueError):
             discipline.reconcile_history(self.user, self.worker.id, "history", [{"date": "2026-08-01", "status": "call_in"}], self.today)
 
+        earlier = self.today - timedelta(days=35)
+        reopened = discipline.reconcile_history(self.user, self.worker.id, "first", [], earlier)
+        db.session.commit()
+        db.session.refresh(reopened)
+        self.assertEqual(reopened.person_id, self.worker.id)
+        self.assertEqual(reopened.complete_since, discipline.occurrence_cutoff(earlier))
+        self.assertEqual(self.state()["count"], 3)
+
     def test_bounded_retention_keeps_unexpired_formal_source_identity(self):
         old = discipline.occurrence_cutoff(self.today) - timedelta(days=1)
         groups = [Workday(person_id=self.worker.id, workday_date=old, imported_status="call_in") for _ in range(4)]
