@@ -310,7 +310,12 @@ class DeadlineTest(unittest.TestCase):
         worker.wake(worker.generation)
         self.assertEqual(len(self.captures),1)
         self.assertEqual(self.captures[0],self.at)
-        self.assertEqual(Task.query.filter_by(kind='auto_gap',status='missed').one().summary['intervals'],1)
+        gap=Task.query.filter_by(kind='auto_gap',status='missed').one()
+        self.assertEqual(gap.summary['intervals'],1)
+        self.assertLessEqual(len(gap.identity),32)
+        self.assertTrue(gap.identity.startswith('gap-'))
+        self.assertEqual(gap.summary['from_utc'],auto.stamp(self.at-timedelta(hours=24)))
+        self.assertEqual(gap.summary['to_utc'],auto.stamp(self.at))
         self.assertEqual(Task.query.filter_by(kind='auto_capture',status='ready').count(),2)
 
     def test_page_reads_and_wake_notifications_never_acquire_a_database_connection(self):
