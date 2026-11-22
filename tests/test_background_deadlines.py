@@ -305,6 +305,8 @@ class DeadlineTest(unittest.TestCase):
 
     def test_forward_clock_gap_is_recorded_without_replaying_old_predictions(self):
         self.seed_capture()
+        first = Task.query.filter_by(kind='auto_capture', status='ready').one()
+        original = first.id, first.identity, first.result_key, dict(first.summary)
         worker=self.start_worker()
         self.at+=timedelta(hours=24)
         worker.wake(worker.generation)
@@ -317,6 +319,13 @@ class DeadlineTest(unittest.TestCase):
         self.assertEqual(gap.summary['from_utc'],auto.stamp(self.at-timedelta(hours=24)))
         self.assertEqual(gap.summary['to_utc'],auto.stamp(self.at))
         self.assertEqual(Task.query.filter_by(kind='auto_capture',status='ready').count(),2)
+        restarted = self.start_worker()
+        restarted.wake(restarted.generation)
+        self.assertEqual(Task.query.filter_by(kind='auto_gap').one().id, gap.id)
+        self.assertEqual(self.captures, [self.at])
+        db.session.expire_all()
+        saved = db.session.get(Task, original[0])
+        self.assertEqual((saved.id, saved.identity, saved.result_key, saved.summary), original)
 
     def test_page_reads_and_wake_notifications_never_acquire_a_database_connection(self):
         worker=self.start_worker()

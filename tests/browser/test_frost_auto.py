@@ -1,4 +1,5 @@
 """Authenticated AUTO status, bounded private registration, mobile CSV regression."""
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 from playwright.sync_api import expect
@@ -14,8 +15,12 @@ class AutoBrowserTest(FrostVaultBrowserTest):
         from tests.test_frost_phase12 import ProspectiveTest
         helper=ProspectiveTest();helper.setUp();self.addCleanup(helper.doCleanups)
         self.enterContext(patch.object(auto,'frozen_models',return_value=helper.baseline['models']))
+        from tests.frost_schedule_fixture import configure
+        opening = (datetime.now(timezone.utc) + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        self.enterContext(patch.object(auto, 'now', return_value=opening + timedelta(minutes=5)))
         with self.f.app.app_context():
             gateway=Gateway.query.first()
+            configure(gateway, at=opening)
             with patch.object(auto,'acquire',return_value=dict(station=STATION,cutoff_at_utc=auto.stamp(auto.now()),
                     observations=[],sources=[],native_forecasts=[])):
                 self.assertEqual(auto.tick(gateway.id),1)
@@ -26,7 +31,8 @@ class AutoBrowserTest(FrostVaultBrowserTest):
             try:
                 page=browser.new_page(viewport=dict(width=1920,height=900),service_workers='block')
                 self.f().login(page);self.f().ready(page,'/neosubzero/frost-vault')
-                expect(page.locator('[data-auto-field="state"]')).to_have_text('AUTOMATIC COLLECTION ACTIVE')
+                expect(page.locator('[data-auto-field="state"]')).to_have_text(
+                    'WEATHER CAPTURED · PREDICTIONS UNAVAILABLE 0/8 · ARCHIVE VERIFIED')
                 expect(page.locator('[data-auto-field="archived"]')).to_have_text('1')
                 expect(page.locator('[data-auto-field="unavailable"]')).to_have_text('8')
                 expect(page.locator('[data-model-approved]')).to_have_text('NONE')
