@@ -49,8 +49,15 @@ class FuelDriverPhase4BrowserTest(TestCase):
         tokens={}
         def capture(user,token):tokens[user.email]=token;return {'sent':False}
         def current(_gateway):return db.session.get(SortDateOperation,op_id)
+        def physical_windows(_gateway):
+            at=datetime.utcnow()
+            return [[(at-timedelta(minutes=1)).isoformat()+'Z',
+                (at+timedelta(hours=1)).isoformat()+'Z']]
         try:
-            with patch('app.services.neoscorpion.current_sort_operation',side_effect=current),patch('app.auth.routes.email_service.send_email_verification',side_effect=capture),patch('app.auth.routes.email_service.send_access_approved',return_value={'sent':False}),patch('requests.sessions.Session.request',side_effect=AssertionError('External provider forbidden')),sync_playwright() as pw:
+            with patch('app.services.neoscorpion.current_sort_operation',side_effect=current), \
+                    patch('app.neonodes.neoscorpion.vendor_routes.vendor_refresh_windows',side_effect=physical_windows), \
+                    patch('app.neonodes.neoscorpion.vendor_routes.vendor_revision_in_sort',return_value=True), \
+                    patch('app.auth.routes.email_service.send_email_verification',side_effect=capture),patch('app.auth.routes.email_service.send_access_approved',return_value={'sent':False}),patch('requests.sessions.Session.request',side_effect=AssertionError('External provider forbidden')),sync_playwright() as pw:
                 for engine in ('chromium','webkit'):
                     browser=getattr(pw,engine).launch()
                     try:
