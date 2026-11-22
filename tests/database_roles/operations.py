@@ -17,6 +17,7 @@ from tests import test_neostaffing_shift_flow as flow
 from tests import test_neorain_load_planner_routes as planners
 from tests import test_neoscorpion_cancel_unassign as cancel
 from tests import test_neostaffing_daily_attendance as attendance
+from tests import test_neostaffing_management_vacation_picks as vacation
 from tests.test_sektor_ermac_performance_postgres import postgres
 
 
@@ -162,6 +163,16 @@ class AccountUpdates(accounts.AccountsWorkspaceTest):
         self.assertEqual(save(preferred_app='neobid').status_code, 400)
         db.session.expire_all()
         self.assertEqual(row.version, version + 1)
+
+
+class VacationReset(vacation.NeoStaffingManagementVacationPicksTest):
+    def setUp(self):
+        postgres(self, vacation, super().setUp)
+        self.historical = super()._seed_legacy_holiday()
+        db.session.commit()
+
+    def _seed_legacy_holiday(self):
+        return self.historical
 
 
 class RetiredCompanies(FuelDriverAccountsTest):

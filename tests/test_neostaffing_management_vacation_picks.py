@@ -1594,6 +1594,13 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
             0,
         )
 
+    def _seed_legacy_holiday(self):
+        holiday = StaffingVacationQualifyingHoliday(
+            holiday_date=date(self.YEAR, 12, 25), name="Preserved Holiday",
+        )
+        db.session.add(holiday)
+        return holiday
+
     def test_grandmaster_management_reset_restores_fresh_year_only(self):
         person, user = self._management_user(
             "MRESET1",
@@ -1701,11 +1708,7 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
                 created_by_user_id=grandmaster.id,
             )
         )
-        holiday = StaffingVacationQualifyingHoliday(
-            holiday_date=date(self.YEAR, 12, 25),
-            name="Preserved Holiday",
-        )
-        db.session.add(holiday)
+        holiday = self._seed_legacy_holiday()
         db.session.commit()
         selection_id = selection.id
         later_id = later.id

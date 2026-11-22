@@ -1,5 +1,6 @@
 {
   "account_preferences": "preferred_app show_cryocheck version",
+  "fuel_vendor_memberships": "ended_at",
   "neorain_google_fuel_values": "neo_fuel center_fuel updated_at",
   "neoscorpion_sort_fuelers": "on_break updated_at",
   "neoscorpion_spear_calibration_resets": "observed_after_utc reset_by_user_id",
@@ -36,6 +37,6 @@
   "staffing_units": "name parent_id display_order active required_headcount updated_at",
   "staffing_unmarked_attendance_notes": "note updated_by_user_id updated_at",
   "staffing_vacation_management_change_requests": "status resolved_at resolved_by_user_id updated_at",
-  "staffing_vacation_management_selections": "selected_by_user_id cancelled_at cancelled_by_user_id cancellation_reason updated_at",
+  "staffing_vacation_management_selections": "week_ending selected_by_user_id cancelled_at cancelled_by_user_id cancellation_reason updated_at",
   "staffing_vacation_management_turn_resolutions": "id"
 }

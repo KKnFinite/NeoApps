@@ -23,7 +23,7 @@ from tests.test_neorain_overrides_postgres import RainOverridePostgresTest
 from tests import test_google_rain_integration_mode_transition as manual
 from tests.test_sektor_ermac_performance_postgres import postgres
 from run_local import DBNAME, FALLBACK, MIGRATOR, RUNTIME
-from operations import AccountUpdates, CrewUpdates, FuelRollback, GatewayUpdates, HistoricalOperations, StaffingUpdates, RetiredCompanies
+from operations import AccountUpdates, CrewUpdates, FuelRollback, GatewayUpdates, HistoricalOperations, StaffingUpdates, RetiredCompanies, VacationReset
 
 
 class Gateway(gateway.GatewayShellTest):
@@ -48,6 +48,8 @@ class ManualSort(manual.GoogleRainIntegrationModeTransitionTest):
 
 
 CASES = {
+    "vacation_reset": "__main__.VacationReset.test_grandmaster_management_reset_restores_fresh_year_only",
+    "legacy_conversion": "__main__.RetiredCompanies.test_conversion_cannot_resurrect_old_supervisor_company_authority",
     "rate_reset": "__main__.GatewayUpdates.test_aircraft_rate",
     "refresh_default": "__main__.GatewayUpdates.test_refresh_default",
     "cancel_new_tail": "__main__.FuelRollback.test_cancel_new_tail",

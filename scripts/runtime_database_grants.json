@@ -169,7 +169,7 @@
   "staffing_vacation_management_change_requests": "DELETE INSERT SELECT",
   "staffing_vacation_management_selections": "DELETE INSERT SELECT",
   "staffing_vacation_management_turn_resolutions": "DELETE INSERT SELECT",
-  "staffing_vacation_management_turn_states": "INSERT SELECT UPDATE",
+  "staffing_vacation_management_turn_states": "DELETE INSERT SELECT UPDATE",
   "staffing_vacation_management_week_overrides": "DELETE INSERT SELECT",
   "staffing_vacation_qualifying_holidays": "SELECT",
   "staffing_vacation_union_calendar_scopes": "DELETE INSERT SELECT",
