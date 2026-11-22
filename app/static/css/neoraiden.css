@@ -66,6 +66,7 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-uld-foot {flex-wrap:wrap; column-gap:14px; row-gap:2px; border-top:1px solid var(--line); margin-top:3px; padding-top:4px; font-size:.86em}
 .raiden b {color:var(--ink)}
 .rd-totals {display:flex; gap:20px; color:var(--muted)}
+.raiden:not(.rd-tv) .rd-tv-here {display:none}
 .rd-totals b {display:block; color:var(--accent); font-size:1.65em; line-height:1.1}
 .rd-staff {margin-top:7px}
 .rd-tools {justify-content:flex-end; margin-block:8px}

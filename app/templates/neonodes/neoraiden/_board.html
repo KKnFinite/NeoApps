@@ -12,7 +12,8 @@
       {{ metric('On ballmats',u.unloaded) }}{{ metric('Plan',u.planned) }}{% if u.percent is not none %}<span>Progress <b>{{ u.percent }}%</b></span>{% endif %}</div>
     {% else %}<p>Native ULD counts unavailable.</p>{% endif %}
   </section>
-  <aside class="rd-sort"><div class="rd-totals">{{ metric('Arrivals',board.arrivals|length) }}{{ metric('Departures',board.departures|length) }}</div>
+  <aside class="rd-sort"><div class="rd-totals">{{ metric('Arrivals',board.arrivals|length) }}{{ metric('Departures',board.departures|length) }}
+    <span class="rd-tv-here">Staffing HERE <b>{{ val(board.marked_here) }}</b></span></div>
     <details class="rd-staff"><summary>Staffing{% if board.marked_here is not none %} · {{ board.marked_here }} HERE{% endif %}{% if board.window is not none %} · {{ board.window }} min window{% endif %}</summary>
     {% for s in board.staffing %}<p>{{ s.area }} · {{ s.worked }} worked / {{ s.payroll }} payroll</p>{% else %}<p>Finalized staffing totals unavailable.</p>{% endfor %}</details>
   </aside>

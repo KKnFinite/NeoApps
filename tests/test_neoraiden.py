@@ -37,6 +37,29 @@ class RaidenTest(unittest.TestCase):
     setUp = fixtures.GatewayShellTest.setUp
     tearDown = fixtures.GatewayShellTest.tearDown
 
+    def test_native_staffing_distinguishes_missing_zero_and_here(self):
+        from app.models import StaffingDailyAttendance
+        from tests.neoraiden_fixtures import record_attendance
+
+        op = seed_sort(self.gateway)
+        with self.app.test_request_context(), patch("requests.sessions.Session.request",
+                side_effect=AssertionError("native staffing attempted external HTTP")):
+            def here(operation):
+                return snapshot(self.user, self.gateway, operation)["marked_here"]
+
+            self.assertIsNone(here(op))
+            record_attendance(op)
+            self.assertEqual(here(op), 1)
+            attendance = StaffingDailyAttendance.query.filter_by(sort_date_operation_id=op.id)
+            attendance.filter_by(status="here").one().status = "vacation"
+            db.session.commit()
+            self.assertEqual(here(op), 0)
+            other = SortDateOperation(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+                                      sort_date=date(2026, 4, 13), sort_name="night")
+            db.session.add(other)
+            db.session.commit()
+            self.assertIsNone(here(other))
+
     def test_automatic_state_is_bounded_by_physical_sort_hours(self):
         from datetime import timedelta
         from tests.test_neorain_sort_refresh import configure_sort_window

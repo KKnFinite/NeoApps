@@ -75,6 +75,32 @@ class RaidenMirrorTest(unittest.TestCase):
             self.assertFalse(sync.drain(adapter_factory=lambda: Adapter()))
             self.assertGreater(db.session.get(Receipt, 1).retry_at, sync.now())
 
+    def test_disabled_attendance_and_due_retry_leave_historical_receipt_untouched(self):
+        self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = False
+        self.person('NOT-QUEUED', self.door, 'here')
+        self.assertIsNone(db.session.get(Receipt, 1))
+        row = Receipt(id=1, requested_revision=9, delivered_revision=8,
+                      delivered_count=3, delivered_operation_id=self.operation.id,
+                      attempts=1, last_error='prior provider failure',
+                      retry_at=sync.now() - timedelta(minutes=5), verified_at=sync.now())
+        db.session.add(row)
+        db.session.commit()
+
+        def receipt_values():
+            saved = db.session.get(Receipt, 1, populate_existing=True)
+            return tuple(getattr(saved, col.key) for col in Receipt.__table__.columns)
+
+        before = receipt_values()
+        with patch.object(sync, 'current_operation', return_value=self.operation) as active_sort, \
+             patch.object(sync, 'source_snapshot') as snapshot, patch.object(sync, 'GoogleAdapter') as adapter:
+            self.person('ALSO-NOT-QUEUED', self.door, 'here')
+            self.assertIsNone(sync.next_deadline(sync.now()))
+            self.assertFalse(sync.drain(adapter_factory=adapter))
+            active_sort.assert_not_called()
+            snapshot.assert_not_called()
+            adapter.assert_not_called()
+        self.assertEqual(receipt_values(), before)
+
     def test_counts_only_eligible_here_at_night_ramp_shift(self):
         self.person('RAIDEN-HERE', self.door, 'here')
         self.person('RAIDEN-ABSENT', self.door, 'call_in')
@@ -190,10 +216,16 @@ class RaidenMirrorTest(unittest.TestCase):
         self.app.config['NEOSTAFFING_RAIDEN_SYNC_ENABLED'] = True
         self.person('RAIDEN-CLOSE',self.door,'here')
         adapter=Adapter()
-        with patch.object(sync,'current_operation',side_effect=[
-                self.operation, self.operation, self.operation, None]):
-            self.due_now()
-            self.assertFalse(sync.drain(adapter_factory=lambda:adapter))
+        self.due_now()
+        read_snapshot = sync.source_snapshot
+        with patch.object(sync, 'current_operation', return_value=self.operation) as active_sort:
+            def snapshot_at_close():
+                result = read_snapshot()
+                active_sort.return_value = None
+                return result
+
+            with patch.object(sync, 'source_snapshot', side_effect=snapshot_at_close):
+                self.assertFalse(sync.drain(adapter_factory=lambda:adapter))
         self.assertEqual(adapter.closed,0)
         receipt=db.session.get(Receipt,1,populate_existing=True)
         self.assertGreater(receipt.requested_revision,receipt.delivered_revision)

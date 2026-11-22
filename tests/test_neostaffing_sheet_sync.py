@@ -124,8 +124,8 @@ class StaffingSheetSyncTest(unittest.TestCase):
         self.assertEqual(good.closed,1);self.assertIsNone(sync.next_deadline(sync.now()))
 
     def test_no_hours_log_check_or_google_io_outside_night_sort(self):
-        person=self.employee()
         self.app.config['NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED']=True
+        self.employee()
         row=db.session.get(Receipt,1)
         revision=row.requested_revision
         adapter=Adapter()

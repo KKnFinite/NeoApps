@@ -4,9 +4,9 @@ from pathlib import Path
 from playwright.sync_api import expect
 
 from app.extensions import db
-from app.models import Gateway, NeoSektorOpenBayState, SortDateMission
+from app.models import Gateway, NeoSektorOpenBayState, SortDateMission, StaffingDailyAttendance
 from tests.browser import test_mobile_drawer as shell_tests
-from tests.neoraiden_fixtures import busy_sort
+from tests.neoraiden_fixtures import busy_sort, record_attendance
 
 
 class GodModeBrowser(unittest.TestCase):
@@ -15,7 +15,9 @@ class GodModeBrowser(unittest.TestCase):
         ShellFixture.setUpClass()
         self.addCleanup(ShellFixture.tearDownClass)
         with ShellFixture.app.app_context():
-            op_id = busy_sort(Gateway.query.one()).id
+            operation = busy_sort(Gateway.query.one())
+            record_attendance(operation)
+            op_id = operation.id
         output = Path("instance/browser-evidence/god-mode")
         output.mkdir(parents=True, exist_ok=True)
         for engine in ("chromium", "webkit"):
@@ -29,6 +31,8 @@ class GodModeBrowser(unittest.TestCase):
                     self.assertEqual(page.title(),"NeoRaiden — God Mode")
                     expect(page.locator("[data-mission]")).to_have_count(52)
                     stats = []
+                    expect(page.locator(".rd-staff summary")).to_contain_text("1 HERE")
+                    expect(page.locator(".rd-tv-here")).to_be_hidden()
                     def check_uld_first():
                         bounds = page.evaluate("""() => {
                             const rect = sel => document.querySelector(sel).getBoundingClientRect();
@@ -78,6 +82,7 @@ class GodModeBrowser(unittest.TestCase):
                         bays = NeoSektorOpenBayState.query.filter_by(side="EAST").one()
                         bays.open_count = 4 if engine == "chromium" else 3
                         east = bays.open_count
+                        StaffingDailyAttendance.query.filter_by(sort_date_operation_id=op_id, status="call_in").one().status = "here"
                         db.session.commit()
                     with page.expect_response(lambda response: "/neoraiden/state" in response.url and response.status == 200):
                         page.locator("[data-refresh]").click()
@@ -85,6 +90,7 @@ class GodModeBrowser(unittest.TestCase):
                     expect(item.locator(".rd-detail")).to_be_visible()
                     expect(item.locator(".rd-detail")).to_contain_text(str(fuel))
                     expect(page.locator(".rd-uld-foot")).to_contain_text(f"E {east} · W 3")
+                    expect(page.locator(".rd-staff summary")).to_contain_text("2 HERE")
                     page.get_by_role("searchbox").fill("")
                     page.reload()
                     expect(page.locator("[data-raiden]")).to_have_attribute("data-list","departures")
@@ -104,6 +110,8 @@ class GodModeBrowser(unittest.TestCase):
                         stats.append([width,"desktop",desktop])
                         check_uld_first()
                         self.assertEqual(desktop["top"],desktop["secondTop"])
+                        expect(page.locator(".rd-staff summary")).to_be_visible()
+                        expect(page.locator(".rd-tv-here")).to_be_hidden()
                         self.assertGreater(desktop["second"],desktop["left"]+desktop["panel"]-1)
                         self.assertLess(desktop["top"],height*.62)
                         self.assertGreater(desktop["content"],desktop["scroll"])
@@ -124,6 +132,8 @@ class GodModeBrowser(unittest.TestCase):
                         page.evaluate("() => new Promise(ok=>requestAnimationFrame(()=>requestAnimationFrame(ok)))")
                         check_uld_first()
                         num_pages=int(page.locator("[data-page]").inner_text().split("/")[-1])
+                        expect(page.locator(".rd-tv-here")).to_be_visible()
+                        expect(page.locator(".rd-tv-here b")).to_have_text("2")
                         seen=set()
                         for _ in range(num_pages):
                             state=page.evaluate("""() => {
@@ -156,11 +166,13 @@ class GodModeBrowser(unittest.TestCase):
                         m=SortDateMission.query.filter_by(sort_date_operation_id=op_id,flight_number="FX101").one()
                         m.planned_fuel_load = 30001 if engine=="chromium" else 30002
                         NeoSektorOpenBayState.query.filter_by(side="EAST").one().open_count = 0
+                        StaffingDailyAttendance.query.filter_by(sort_date_operation_id=op_id).order_by(StaffingDailyAttendance.id.desc()).first().status = "call_in"
                         db.session.commit()
                     with page.expect_response(lambda r:'/neoraiden/state' in r.url and r.status==200):
                         page.locator("[data-refresh]").click()
                     expect(page.locator("[data-page]")).to_have_text(current)
                     expect(page.locator(".rd-uld-foot")).to_contain_text("E 0 · W 3")
+                    expect(page.locator(".rd-tv-here b")).to_have_text("1")
                     expect(page.locator("[data-pause]")).to_have_text("Resume")
                     page.locator("[data-prev]").click()
                     page.get_by_role("button",name="Exit TV Mode").click()

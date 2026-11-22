@@ -59,6 +59,16 @@ class StaffingSheetPostgresTest(base.StaffingSheetSyncTest):
         with ThreadPoolExecutor(2) as pool:list(pool.map(commit,(0,1)))
         self.assertEqual(db.session.get(Receipt,1,populate_existing=True).requested_revision,3)
 
+    def test_production_postgres_defaults_enable_hours_log_only(self):
+        from app.services import neostaffing_raiden_sync as raiden
+        with patch.dict(self.app.config, TESTING=False):
+            for key in ('NEOSTAFFING_RAIDEN_SYNC_ENABLED', 'NEOSTAFFING_HOURS_LOG_SYNC_ENABLED',
+                        'NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED'):
+                self.app.config.pop(key, None)
+            self.assertTrue(sync.enabled())
+            self.assertFalse(raiden.enabled())
+            self.assertIsNone(raiden.next_deadline(raiden.now()))
+
     def test_two_workers_claim_once_and_never_hold_db_during_google(self):
         self.employee();self.app.config['NEOSTAFFING_TEST_SHEETS_SYNC_ENABLED']=True
         sync._dirty(db.session(),initial=True);db.session.commit();ready=Barrier(2);calls=[];lock=Lock()

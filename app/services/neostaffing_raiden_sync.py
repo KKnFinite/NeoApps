@@ -47,10 +47,7 @@ def next_check(at):
 
 
 def enabled():
-    override = current_app.config.get('NEOSTAFFING_RAIDEN_SYNC_ENABLED')
-    if override is not None:
-        return override is True
-    return not current_app.testing and db.engine.dialect.name == 'postgresql'
+    return current_app.config.get('NEOSTAFFING_RAIDEN_SYNC_ENABLED') is True
 
 
 def current_operation():

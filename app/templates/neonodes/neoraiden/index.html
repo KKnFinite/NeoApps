@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='god-mode-1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='staffing-here-1') }}">
 <section class="raiden" data-raiden data-theme="dark" data-list="arrivals" aria-label="NeoRaiden — God Mode"
          data-windows='{{ poll_windows|tojson }}' data-revision="{{ revision }}" data-state="{{ url_for('neoraiden.state', gateway=gateway.code, operation_id=selected_id) }}">
     <header class="rd-header">

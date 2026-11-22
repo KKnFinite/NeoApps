@@ -5,9 +5,23 @@ from app.extensions import db
 from app.models import (
     NeoSektorBallmatCount, NeoSektorBallmatWaveCount, NeoSektorOpenBayState,
     NeoSektorSortState, NeoSektorWaveState, NeoSubZeroDepartureDeiceEvent,
-    SortDateMission,
+    SortDateMission, StaffingDailyAttendance, StaffingPerson, StaffingUnit,
 )
 from tests.test_neoraiden import seed_sort
+
+
+def record_attendance(operation):
+    """Seed one HERE, one call-in and one employee without an attendance mark."""
+    unit = StaffingUnit(unit_type="sort", name="Night")
+    db.session.add(unit)
+    for index, status in enumerate(("here", "call_in", None)):
+        person = StaffingPerson(employee_id=f"RD-{index}", first_name="Test",
+                                last_name=str(index), classification="seasonal")
+        db.session.add(person)
+        if status:
+            db.session.add(StaffingDailyAttendance(person=person, sort=unit, status=status,
+                attendance_date=operation.sort_date, sort_date_operation=operation))
+    db.session.commit()
 
 
 def record_counts(gateway, operation):
