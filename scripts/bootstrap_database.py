@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -32,6 +33,9 @@ def deployment_bootstrap_config():
             "DATABASE_BOOTSTRAP_STATEMENT_TIMEOUT_MILLISECONDS",
             15000,
         )
+        schema = os.environ.get("DATABASE_BOOTSTRAP_EXPECTED_SCHEMA")
+        if schema and not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}', schema):
+            raise ValueError("Invalid expected bootstrap schema")
         engine_options = {
             "pool_pre_ping": True,
             "pool_timeout": connect_timeout,
@@ -40,6 +44,7 @@ def deployment_bootstrap_config():
                 "options": (
                     f"-c lock_timeout={lock_timeout}ms "
                     f"-c statement_timeout={statement_timeout}ms"
+                    + (f" -c search_path={schema}" if schema else "")
                 ),
             },
         }
@@ -149,4 +154,10 @@ def _positive_float_env(name, default):
 
 
 if __name__ == "__main__":
-    main()
+    if os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"):
+        # Render's existing pre-deploy command uses this entry point. Hosted
+        # deployments can verify a signed-off release, never initialize it.
+        from scripts.runtime_database_access import verify_hosted_release
+        verify_hosted_release()
+    else:
+        main()

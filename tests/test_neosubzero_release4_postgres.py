@@ -37,6 +37,8 @@ class Release4PostgresTest(contracts.FrostVaultTest):
                 tail_number=mission.assigned_tail_number,ramp_code='ABCDE'[index],position_code='ABCDE'[index]+'03'))
             missions.append(mission)
         missions.append(f.remote)
+        from app.services.neosubzero_trucks import manage_truck
+        manage_truck(f.gateway, 'add_truck', {'truck_number': 'T-REPLACEMENT'}, actor_id=None)
         for index,ramp in enumerate(ramps):
             for role in ('driver','flyer'):
                 if ramp=='Alpha' and role=='driver':person=f.permanent

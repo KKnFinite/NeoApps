@@ -533,7 +533,7 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         blank = self.client.get('/neoscorpion/hanzo').get_data(as_text=True)
         self.assertIn('<dt>EST OFF</dt><dd data-hanzo-est-off>-</dd>', blank)
         self.assertIn('<dt>ACTUAL OFF</dt><dd data-hanzo-actual-off>-</dd>', blank)
-        def canonical_prediction(rows, *_args):
+        def canonical_prediction(rows, *_args, **_kwargs):
             for row in rows:
                 row['physical_off_forecast'] = {'likely': datetime(2026, 8, 18, 7, 45)}
         with patch('app.services.neoscorpion._attach_fueling_timing', side_effect=canonical_prediction):

@@ -15,6 +15,8 @@ import tempfile
 
 import psycopg2
 from psycopg2 import sql
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.review_runtime_temp import prepare
 
 ROOT = Path(__file__).resolve().parents[2]
 DBNAME = "neostaffing_test_acl"
@@ -37,6 +39,8 @@ def process_env(home):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bin", type=Path, required=True)
+    parser.add_argument("--matrix", type=Path, help="Write per-case PostgreSQL operation coverage as JSON lines")
+    parser.add_argument("--workloads", type=Path, help="Additional real application unittest IDs, one per line")
     parser.add_argument("cases", nargs="*")
     args = parser.parse_args()
     binary = args.bin.resolve(strict=True)
@@ -47,6 +51,13 @@ def main():
             raise RuntimeError("Unexpected disposable cluster path")
         data = home / "data"
         env = process_env(home)
+        if args.workloads:
+            env["ROLE_WORKLOADS"] = str(args.workloads.resolve(strict=True))
+            args.cases.append("catalog_paths")
+        if args.matrix:
+            matrix = args.matrix.resolve()
+            matrix.touch(exist_ok=False)
+            env["ROLE_TEST_MATRIX"] = str(matrix)
         passwords = {role: secrets.token_urlsafe(32) for role in ("fixture_admin", MIGRATOR, RUNTIME, FALLBACK, LEGACY)}
         pwfile = home / "init.pass"
         pwfile.write_text(passwords["fixture_admin"] + "\n", encoding="ascii")
@@ -82,7 +93,17 @@ def main():
             status = 0
             for database, cases in groups:
                 with closing(psycopg2.connect(url("fixture_admin", database))) as conn, conn, conn.cursor() as cur:
-                    cur.execute(sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(sql.Identifier(database)))
+                    # Start with PostgreSQL's real default, as on the hosted
+                    # database. The reviewed consumer retains TEMP and a new
+                    # runtime retains CONNECT while losing TEMP.
+                    had_public_temp = prepare(cur, database, [MIGRATOR], apply=True)
+                    if not had_public_temp or prepare(cur, database, [MIGRATOR]):
+                        raise RuntimeError("Database TEMP preparation did not narrow the default")
+                    cur.execute("SELECT has_database_privilege(%s,current_database(),'TEMPORARY'),"
+                                "has_database_privilege(%s,current_database(),'TEMPORARY'),"
+                                "has_database_privilege(%s,current_database(),'CONNECT')", (MIGRATOR,RUNTIME,RUNTIME))
+                    if cur.fetchone() != (True, False, True):
+                        raise RuntimeError("Database TEMP exception or runtime CONNECT differs from policy")
                     for role in (MIGRATOR, RUNTIME, FALLBACK, LEGACY):
                         cur.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(database), sql.Identifier(role)))
                     cur.execute(sql.SQL("GRANT USAGE,CREATE ON SCHEMA public TO {}").format(sql.Identifier(MIGRATOR)))
@@ -101,7 +122,12 @@ def main():
                                          env=env, cwd=ROOT, check=False).returncode
             return status
         finally:
-            pg("pg_ctl", "-D", data, "-m", "fast", "-w", "stop")
+            try:
+                pg("pg_ctl", "-D", data, "-m", "fast", "-t", "100", "-w", "stop")
+            except subprocess.CalledProcessError:
+                # A large synthetic run can exceed the checkpoint timeout on
+                # Windows. Only our new disposable data directory is affected.
+                pg("pg_ctl", "-D", data, "-m", "immediate", "-w", "stop")
 
 
 if __name__ == "__main__":

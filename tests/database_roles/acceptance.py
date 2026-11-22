@@ -1,13 +1,18 @@
 """Run unchanged operational assertions on independent restricted PG connections."""
 from contextlib import nullcontext
 import os
+import json
 import sys
 import unittest
+from pathlib import Path
+from uuid import uuid4
 from unittest.mock import patch
 
 from flask import current_app, has_app_context
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.sql import visitors
+from sqlalchemy.sql.schema import Table
 
 from app.extensions import db
 from scripts.runtime_database_access import configure
@@ -16,7 +21,8 @@ from tests import test_neorain_sort_refresh as windows
 from tests.test_neorain_overrides_postgres import RainOverridePostgresTest
 from tests import test_google_rain_integration_mode_transition as manual
 from tests.test_sektor_ermac_performance_postgres import postgres
-from run_local import DBNAME, MIGRATOR, RUNTIME
+from run_local import DBNAME, FALLBACK, MIGRATOR, RUNTIME
+from operations import AccountUpdates, GatewayUpdates, StaffingUpdates
 
 
 class Gateway(gateway.GatewayShellTest):
@@ -36,6 +42,29 @@ class ManualSort(manual.GoogleRainIntegrationModeTransitionTest):
 
 
 CASES = {
+    "transfer": "test_neostaffing_transfers_postgres.EmployeeTransferPostgresTest.test_competing_transfers_accept_one_revision_and_keep_one_active_placement",
+    "timecard": "test_neostaffing_timecards_postgres.TimecardsPostgresTest.test_concurrent_distinct_employees_both_persist",
+    "employee_record": "test_neostaffing_employee_records_postgres.EmployeeRecordPostgresTest.test_two_finalizations_only_one_wins",
+    "delay": "test_neorain_delay_entry_postgres.RainDelayEntryPostgresTest.test_concurrent_corrections_preserve_one_winner",
+    "password": "test_password_reset_atomic_postgres.AtomicPasswordResetPostgresTest.test_invalid_password_does_not_consume_token_postgres",
+    "subzero_archive": "test_neosubzero_release4_postgres.Release4PostgresTest.test_complete_multi_aircraft_sort_and_archive_handoff",
+    "vendor": "test_neoscorpion_vendor_postgres.VendorPostgresTest.test_reading_never_crosses_another_sort_physical_visit",
+    "usage": "__main__.GatewayUpdates.test_usage",
+    "ground_time": "__main__.GatewayUpdates.test_ground_time",
+    "fluid": "__main__.GatewayUpdates.test_fluid",
+    "truck": "__main__.GatewayUpdates.test_truck",
+    "flow": "__main__.StaffingUpdates.test_green_drop_moves_home_final_and_matching_setup_and_stays_green",
+    "unit": "__main__.StaffingUpdates.test_unit",
+    "preferences": "__main__.AccountUpdates.test_edit_preferences",
+    "reptile_unavailable": "__main__.Gateway.test_gateway_marks_unavailable_nodes_disabled_without_changing_launch_contracts",
+    "sort_forwarding": "__main__.Gateway.test_gateway_preserves_operation_forwarding_for_node_launches",
+    "recovery_rollback": "test_account_deletion_postgres.AccountDeletionPostgresTest.test_post_audit_failure_rolls_back_all_security_changes",
+    "commission": "test_grandmaster_commissioning_postgres.GrandmasterCommissioningPostgresTest.test_actor_revocation_after_wait_is_rechecked",
+    "roster_rollback": "test_neostaffing_historical_records_postgres.StaffingHistoricalRecordsPostgresTest.test_rollback_excludes_source_changes_and_restores_unsealed_close",
+    "closeout": "test_neorain_rainrock_postgres.RainrockPostgresTest.test_rainrock_and_briefing_simultaneous_first_insert_share_one_identity",
+    "conditional_uld": "test_neosektor_raiden_postgres.SektorRaidenMigrationTest.test_conditional_read_skips_mission_projection_and_tracks_committed_sources",
+    "manual_negative": "__main__.ManualSort.test_test_archive_refuses_unauthorized_scheduled_and_operational_sorts",
+    "sort_gap": "__main__.ManualSort.test_unscheduled_manual_friday_operation_still_blocks_until_its_window_ends",
     "gateway": "__main__.Gateway.test_gateway_renders_its_own_header_launcher_and_locked_node_logos",
     "portal": "__main__.Gateway.test_gateway_shell_does_not_change_portal_or_staffing_shells",
     "sort_hours": "__main__.SortHours.test_all_automatic_endpoints_honor_the_overnight_window",
@@ -72,7 +101,7 @@ def assert_disposable():
             raise RuntimeError("Only the locally generated, isolated acceptance database is supported")
 
 
-def restricted_method(case, method):
+def restricted_method(case, method, role=RUNTIME):
     # setUp and tearDown own the fixture. All application transactions inside
     # the assertion (including separate request threads) use this fresh pool.
     app = current_app._get_current_object() if has_app_context() else case.app
@@ -81,9 +110,12 @@ def restricted_method(case, method):
         db.session.commit()
         with owner_engine.begin() as conn:
             schema = conn.scalar(text("SELECT current_schema()"))
-            with conn.connection.driver_connection.cursor() as cursor:
-                configure(cursor, schema, RUNTIME, apply=True)
-        runtime_engine = create_engine(os.environ['ROLE_TEST_RUNTIME_URL'], connect_args={
+            if role != MIGRATOR:
+                with conn.connection.driver_connection.cursor() as cursor:
+                    configure(cursor, schema, role, apply=True)
+        url_key = {MIGRATOR: "NEOSTAFFING_TEST_POSTGRES_URL", RUNTIME: "ROLE_TEST_RUNTIME_URL",
+                   FALLBACK: "ROLE_TEST_FALLBACK_URL"}[role]
+        runtime_engine = create_engine(os.environ[url_key], connect_args={
             'options': f'-csearch_path={schema} -clock_timeout=10000 -cstatement_timeout=30000'})
         db.engines[None] = runtime_engine
         # Some concurrency assertions attach their listener to the saved
@@ -91,9 +123,18 @@ def restricted_method(case, method):
         saved_application_handle = getattr(case, 'engine', None) is owner_engine
         if saved_application_handle:
             case.engine = runtime_engine
-        def require_runtime(conn, *unused):
-            if conn.dialect.name != "postgresql" or conn.connection.driver_connection.info.user != RUNTIME:
+        observations = set()
+        def require_runtime(conn, cursor, statement, parameters, context, executemany):
+            if conn.dialect.name != "postgresql" or conn.connection.driver_connection.info.user != role:
                 raise AssertionError("An operational assertion used a different database login")
+            if os.getenv('ROLE_TEST_MATRIX') and context.compiled:
+                clause = context.compiled.statement
+                verbs = ('insert', 'update', 'delete')
+                if clause.__visit_name__ in verbs:
+                    observations.add((clause.table.name, clause.__visit_name__.upper()))
+                elif getattr(clause, 'is_select', False):
+                    observations.update((node.name, 'SELECT') for node in visitors.iterate(clause)
+                                        if isinstance(node, Table))
         def report_denial(context):
             error = context.original_exception
             if getattr(error, 'pgcode', None) == '42501':
@@ -101,9 +142,12 @@ def restricted_method(case, method):
         event.listen(Engine, 'before_cursor_execute', require_runtime)
         event.listen(Engine, 'handle_error', report_denial)
         try:
-            assert db.session.execute(text("SELECT session_user,current_user")).one() == (RUNTIME, RUNTIME)
+            assert db.session.execute(text("SELECT session_user,current_user")).one() == (role, role)
             db.session.commit()
             method()
+            if path := os.getenv('ROLE_TEST_MATRIX'):
+                with open(path, 'a', encoding='utf-8') as file:
+                    print(json.dumps(dict(test=case.id(), role=role, orm_operations=sorted(observations))), file=file)
         finally:
             event.remove(Engine, 'handle_error', report_denial)
             event.remove(Engine, 'before_cursor_execute', require_runtime)
@@ -114,6 +158,40 @@ def restricted_method(case, method):
             runtime_engine.dispose()
 
 
+def portable_suite(role):
+    """Replay ordinary SQLite-backed application tests with isolated PG setup."""
+    suite = unittest.TestSuite()
+    for name in Path(os.environ['ROLE_WORKLOADS']).read_text(encoding='utf-8-sig').splitlines():
+        if not name or name.startswith('#'):
+            continue
+        module, cls, method = name.split('.')
+        case = unittest.defaultTestLoader.loadTestsFromName('tests.' + name)._tests[0]
+        original = case.setUp
+        def setup(test=case, original=original):
+            uri = os.environ['NEOSTAFFING_TEST_POSTGRES_URL']
+            schema = 'operational_' + uuid4().hex
+            setup_engine = create_engine(uri)
+            with setup_engine.begin() as connection:
+                connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+            def cleanup():
+                with setup_engine.begin() as connection:
+                    connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+                setup_engine.dispose()
+            test.addCleanup(cleanup)
+            init = db.init_app
+            def initialize(app):
+                if not app.testing:
+                    raise RuntimeError("Expected an isolated test application")
+                app.config.update(SQLALCHEMY_DATABASE_URI=uri, SQLALCHEMY_ENGINE_OPTIONS={
+                    'connect_args': {'options': f'-csearch_path={schema} -clock_timeout=5000 -cstatement_timeout=30000'}})
+                return init(app)
+            with patch.object(db, 'init_app', initialize):
+                original()
+        case.setUp = setup
+        suite.addTest(case)
+    return suite
+
+
 def main():
     assert_disposable()
     names = list(CASES) if sys.argv[1:] == ['paths'] else sys.argv[1:]
@@ -121,18 +199,25 @@ def main():
     if 'boundary' in names:
         from boundary import RoleBoundary
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(RoleBoundary))
-    operational = unittest.TestSuite()
-    for name in names:
-        if name == 'boundary':
-            continue
-        case = CASES[name]
-        operational.addTests(unittest.defaultTestLoader.loadTestsFromName(
-            case if case.startswith('__main__.') else 'tests.' + case))
     runner = unittest.TextTestRunner(verbosity=2)
     boundary = runner.run(suite) if suite.countTestCases() else None
-    with patch.object(unittest.TestCase, '_callTestMethod', restricted_method):
-        results = runner.run(operational) if operational.countTestCases() else None
-    return int(any(not result.wasSuccessful() or result.skipped for result in (boundary, results) if result))
+    results = [boundary] if boundary else []
+    for role in (MIGRATOR, RUNTIME, FALLBACK):
+        operational = unittest.TestSuite()
+        if 'catalog_paths' in names and role == RUNTIME:
+            operational.addTests(portable_suite(role))
+        for name in names:
+            if name in ('boundary', 'catalog_paths'):
+                continue
+            case = CASES[name]
+            operational.addTests(unittest.defaultTestLoader.loadTestsFromName(
+                case if case.startswith('__main__.') else 'tests.' + case))
+        if operational.countTestCases():
+            print("Testing independently authenticated role", role, flush=True)
+            with patch.object(unittest.TestCase, '_callTestMethod',
+                              lambda case, method: restricted_method(case, method, role)):
+                results.append(runner.run(operational))
+    return int(any(not result.wasSuccessful() or result.skipped for result in results))
 
 
 if __name__ == '__main__':

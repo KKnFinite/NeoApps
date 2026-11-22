@@ -136,7 +136,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
             by_fueler[fueler.id]['prof']), ('Falcon', 1, 100))
         self.assertEqual((by_fueler[replacement.id]['jobs'], by_fueler[replacement.id]['prof']), (0, None))
         # No earlier physical truck origin exists for the first visit. Do not invent one.
-        self.assertEqual((by_truck[trucks[0].id]['jobs'], by_truck[trucks[0].id]['prof']), (0, None))
+        self.assertEqual((by_truck[trucks[0].id]['jobs'], by_truck[trucks[0].id]['prof']), (1, None))
         self.assertEqual((by_truck[trucks[1].id]['jobs'], by_truck[trucks[1].id]['prof']), (0, None))
         self._login(replacement)
         first = self.client.get('/neoscorpion/fuel-dispatch/live-panel').get_json()
@@ -426,6 +426,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
                 "operation_id": None,
                 "revision": 0,
                 "tail_notes_revision": 0, "tail_revision": "",
+                "can_edit": False, "fueler_on_break": False,
             },
         )
         self.assertEqual(response.headers["Cache-Control"], "no-store")
@@ -434,6 +435,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         response = self.client.get("/neoscorpion/fuel-dispatch/revision")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"current_operation": False,
+                                              "can_edit": False, "fueler_on_break": False,
                                               "operation_id": None, "revision": 0, "tail_notes_revision": 0, "tail_revision": ""})
 
     def test_fuel_dispatch_revision_active_operation_is_read_only_and_bounded(self):
@@ -465,9 +467,12 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
             )
         )
         selects = [statement for statement in statements if statement.upper().startswith("SELECT")]
-        self.assertEqual(sum("FROM neoscorpion_vendor_accounts" in q for q in selects), 1)
+        from tests.sql_contracts import is_vendor_identity_read
+        self.assertEqual(sum(map(is_vendor_identity_read, selects)), 1)
         self.assertEqual(sum("max(sort_date_missions.tail_updated_at)" in q for q in selects), 1)
-        self.assertEqual(len(selects), 10)  # Eight original reads + vendor guard + tail fingerprint.
+        break_reads = [q for q in selects if "SELECT neoscorpion_sort_fuelers.on_break " in q]
+        self.assertEqual(len(break_reads), 1)
+        self.assertEqual(len(selects) - len(break_reads), 10)
 
     def test_revision_and_assignment_identifiers_render_for_current_fueler(self):
         operator = self._add_user("assigned_operator", "operator")

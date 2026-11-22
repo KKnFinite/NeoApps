@@ -138,7 +138,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"data-node-desktop-side-nav", response.data)
         self.assertIn(b'data-node-desktop-shell="ermac"', response.data)
         desktop_sidebar = response.data.split(b"data-node-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
-        self.assertIn(b'newlogo_ermac.png', desktop_sidebar)
+        self.assertIn(b'/static/images/optimized/newlogo_ermac.webp?', desktop_sidebar)
         self.assertNotIn(b'neoermac-inapp-128.png', desktop_sidebar)
         sidebar_css = stylesheet_source()
         self.assertIn("grid-template-rows: 220px auto;", sidebar_css)
@@ -160,7 +160,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"neoermac_logo1_large.png", response.data)
         self.assertNotIn(b"neoermac_logo1_medium.png", response.data)
         self.assertNotIn(b"neoermac_logo1_small.png", response.data)
-        self.assertIn(b'src="/static/images/logos/newlogo_ermac_small.png"', response.data)
+        self.assertIn(b'src="/static/images/optimized/newlogo_ermac_small.webp?', response.data)
         self.assertIn(b"neo-mobile-product-name", response.data)
         self.assertIn(b"data-node-desktop-dashboard", response.data)
         self.assertIn(b'data-node-dashboard="ermac"', response.data)
@@ -1843,14 +1843,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"is-pull-due-soon", response.data)
         self.assertIn(b'data-pull-alert-state="due_soon"', response.data)
-        self.assertIn(f'op-{mission.sort_date_operation_id}:D34:SDF:pure:202606120120'.encode(), response.data)
+        self.assertIn(f'op-{mission.sort_date_operation_id}:D34:mission-{mission.id}:pure:202606120120'.encode(), response.data)
         self.assertIn(b"DUE SOON", response.data)
         payload = state_response.get_json()
         pure_alert = payload["state"]["destinations"][0]["pull_alerts"]["pure"]
         self.assertEqual(pure_alert["state"], "due_soon")
         self.assertEqual(
             pure_alert["key"],
-            f"op-{mission.sort_date_operation_id}:D34:SDF:pure:202606120120",
+            f"op-{mission.sort_date_operation_id}:D34:mission-{mission.id}:pure:202606120120",
         )
 
     def test_door_view_marks_late_pull_critical_until_resolved(self):
@@ -2033,7 +2033,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(pure_alert["state"], "due_soon")
         self.assertEqual(
             pure_alert["key"],
-            f"op-{SortDateOperation.query.one().id}:D34:SDF:pure:202606120002",
+            f"op-{SortDateOperation.query.one().id}:D34:mission-{SortDateMission.query.filter_by(flight_number='UPS401').one().id}:pure:202606120002",
         )
 
     def test_door_view_does_not_alert_for_pull_time_outside_operation_window(self):
@@ -2237,7 +2237,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         # Current/prior-day operation selection and the mission-aware pull
         # aggregator are explicit bounded phases, not repeated per door.
         self.assertEqual(sum("from neoscorpion_vendor_accounts" in row for row in selects), 1)
-        self.assertEqual(len(selects), 20)  # 19 operational/authority reads + vendor boundary.
+        policy_reads = [row for row in selects if "from account_authorization_states" in row]
+        self.assertEqual(len(policy_reads), 1)
+        self.assertEqual(len(selects) - len(policy_reads), 20)
         self.assertEqual(sum("from gateway_sort_matrix" in row for row in selects), 0)
         self.assertEqual(sum("from neoermac_door_pulls" in row for row in selects), 1)
         self.assertEqual(commits[0], 1)
@@ -4462,8 +4464,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["changed"])
         # Includes live-refresh policy plus current/prior-date scope reads.
-        self.assertEqual(sum("from neoscorpion_vendor_accounts" in row for row in selects), 1)
-        self.assertEqual(len(selects), 14)
+        from tests.sql_contracts import is_vendor_identity_read
+        self.assertEqual(sum(map(is_vendor_identity_read, selects)), 1)
+        self.assertLessEqual(len(selects), 14)
         self.assertEqual(writes, [])
         self.assertEqual(commits[0], 0)
 

@@ -7,15 +7,17 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import psycopg2
 from psycopg2 import sql
 
 MANIFEST = Path(__file__).with_name("runtime_database_grants.json")
-COLUMN_MANIFEST = Path(__file__).with_name("runtime_lock_columns.json")
+COLUMN_MANIFEST = Path(__file__).with_name("runtime_update_columns.json")
 DML = {"SELECT", "INSERT", "UPDATE", "DELETE"}
 RECEIPT = "neoapps_reviewed_deployments"
+FUNCTION_MANIFEST = Path(__file__).with_name("runtime_database_functions.json")
 
 
 def read_manifest():
@@ -57,7 +59,8 @@ def check_principal(cursor, schema, role):
 
 def configure(cursor, schema, role, apply=False):
     manifest = read_manifest()
-    lock_columns = json.loads(COLUMN_MANIFEST.read_text(encoding="utf-8"))
+    update_columns = {table: columns.split() for table, columns in
+                      json.loads(COLUMN_MANIFEST.read_text(encoding="utf-8")).items()}
     check_principal(cursor, schema, role)
     ident = sql.Identifier
     cursor.execute("""
@@ -90,9 +93,9 @@ def configure(cursor, schema, role, apply=False):
                 sql.SQL(", ").join(map(sql.SQL, sorted(actions))), ident(schema), ident(table), ident(role)))
         for seq in sorted(sequences):
             cursor.execute(sql.SQL("GRANT USAGE ON SEQUENCE {}.{} TO {}").format(ident(schema), ident(seq), ident(role)))
-        for table, column in lock_columns.items():
+        for table, columns in update_columns.items():
             cursor.execute(sql.SQL("GRANT UPDATE ({}) ON {}.{} TO {}").format(
-                ident(column), ident(schema), ident(table), ident(role)))
+                sql.SQL(", ").join(map(ident, columns)), ident(schema), ident(table), ident(role)))
     # Compare actual effective rights including PUBLIC, column grants and grant options.
     cursor.execute("SELECT has_schema_privilege(%s,%s,'USAGE'),has_schema_privilege(%s,%s,'USAGE WITH GRANT OPTION')",
                    (role, schema, role, schema))
@@ -113,16 +116,16 @@ def configure(cursor, schema, role, apply=False):
                                         ({'MAINTAIN'} if cursor.connection.server_version >= 170000 else set())), schema))
     for table, privilege, actual, delegable, column, column_delegable in cursor:
         expected = privilege in manifest.get(table, ())
-        lock_only = privilege == 'UPDATE' and table in lock_columns
-        if actual != expected or delegable or column_delegable or (column and not (expected or lock_only)):
+        column_update = privilege == 'UPDATE' and table in update_columns
+        if actual != expected or delegable or column_delegable or (column and not (expected or column_update)):
             raise ValueError(f"Unreviewed or missing table privilege: {table} {privilege}")
-    for table, column in lock_columns.items():
+    for table, columns in update_columns.items():
         cursor.execute("""
             SELECT attname FROM pg_attribute WHERE attrelid=%s AND attnum>0 AND NOT attisdropped
             AND has_column_privilege(%s,attrelid,attnum,'UPDATE')
         """, (objects[table][0], role))
-        if {row[0] for row in cursor} != {column}:
-            raise ValueError(f"Row-lock grant differs from the reviewed column for {table}")
+        if {row[0] for row in cursor} != set(columns):
+            raise ValueError(f"UPDATE privileges differ from the reviewed columns for {table}")
     cursor.execute("""
         SELECT c.relname,p,has_sequence_privilege(%s,c.oid,p),
                has_sequence_privilege(%s,c.oid,p||' WITH GRANT OPTION')
@@ -158,6 +161,26 @@ def check_ambient(cursor, schema, role):
     """, (role, sql.Identifier(schema).as_string(cursor.connection)))
     if cursor.fetchone()[0]:
         raise ValueError("Default privileges open future objects before explicit review")
+    # An invoker routine is still callable via PUBLIC unless its ACL says
+    # otherwise. Refuse unexpected routines even if their owner is not web.
+    expected = json.loads(FUNCTION_MANIFEST.read_text(encoding="utf-8"))
+    cursor.execute("""
+        SELECT n.nspname,p.proname,oidvectortypes(p.proargtypes),p.prorettype::regtype::text,
+               p.prosecdef,has_function_privilege(%s,p.oid,'EXECUTE WITH GRANT OPTION')
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname !~ '^pg_' AND n.nspname<>'information_schema'
+          AND has_schema_privilege(%s,n.oid,'USAGE') AND has_function_privilege(%s,p.oid,'EXECUTE')
+    """, (role, role, role))
+    seen = set()
+    for namespace, name, args, returns, definer, delegable in cursor:
+        signature = f"{name}({args})"
+        if namespace != schema or expected.get(signature) != returns or definer or delegable:
+            raise ValueError(f"Unreviewed executable routine: {namespace}.{signature}")
+        seen.add(signature)
+    # Trigger functions are invoked by installed triggers; direct EXECUTE is not
+    # required for firing. Helpers used by those invoker routines must resolve.
+    if any(name not in seen for name, returns in expected.items() if returns != 'trigger'):
+        raise ValueError("Missing required executable application helper")
 
 
 def verify_release(cursor, schema, revision, record=False):
@@ -175,41 +198,88 @@ def verify_release(cursor, schema, revision, record=False):
             raise ValueError("This release has no off-service migration receipt")
 
 
-def main():
+def verify_hosted_release():
+    if any(os.getenv(key) for key in ('BOOTSTRAP_ADMIN_PASSWORD', 'MIGRATION_DATABASE_URL',
+                                      'DEPLOYMENT_DATABASE_URL')):
+        raise ValueError("Remove privileged credentials from the Render service")
+    main(['--database', os.environ['NEOAPPS_RUNTIME_DATABASE'],
+          '--schema', os.environ['NEOAPPS_RUNTIME_SCHEMA'],
+          '--runtime', os.environ['NEOAPPS_RUNTIME_ROLE'],
+          '--release', os.environ['RENDER_GIT_COMMIT']])
+
+
+def prepare_release(conn, args, revision):
+    if not args.migrator or not args.standby or len({args.migrator, args.runtime, args.standby}) != 3:
+        raise ValueError("Specify separate migration, runtime and standby logins")
+    if not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}', args.schema):
+        raise ValueError("Unsupported application schema for bootstrap")
+    root = Path(__file__).resolve().parents[1]
+    head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+    dirty = subprocess.check_output(["git", "-C", str(root), "status", "--porcelain"], text=True)
+    if head != revision or dirty.strip():
+        raise ValueError("Apply requires the reviewed SHA and a clean application checkout")
+    with conn, conn.cursor() as cursor:
+        cursor.execute("""SELECT current_database(),current_user,session_user,current_schema(),
+            NOT (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls),
+            has_schema_privilege(current_user,%s,'CREATE'),
+            NOT EXISTS (SELECT FROM pg_auth_members WHERE member=r.oid),
+            NOT has_database_privilege(current_user,current_database(),'CREATE')
+            FROM pg_roles r WHERE rolname=current_user""", (args.schema,))
+        expected = (args.database, args.migrator, args.migrator, args.schema, True, True, True, True)
+        if cursor.fetchone() != expected:
+            raise ValueError("Unexpected target database or grantor")
+        for role in (args.runtime, args.standby):
+            check_principal(cursor, args.schema, role)
+        # This session stays alive while bootstrap uses its own connections.
+        cursor.execute("SELECT pg_try_advisory_lock(hashtext(current_database()),hashtext(%s))",
+                       ('neoapps-release-' + args.schema,))
+        if not cursor.fetchone()[0]:
+            raise ValueError("Another database release is in progress")
+    subprocess.run([sys.executable, str(root / 'scripts' / 'bootstrap_database.py')], cwd=root,
+                   env=dict(os.environ, DATABASE_BOOTSTRAP_EXPECTED_SCHEMA=args.schema), check=True)
+    with conn, conn.cursor() as cursor:
+        cursor.execute("SET LOCAL search_path TO pg_catalog")
+        cursor.execute("SET LOCAL lock_timeout='5s'")
+        cursor.execute("SET LOCAL statement_timeout='30s'")
+        verify_release(cursor, args.schema, revision, record=True)
+        for role in (args.runtime, args.standby):
+            configure(cursor, args.schema, role, apply=True)
+            check_ambient(cursor, args.schema, role)
+    print("Bootstrap completed and both runtime policies verified for", revision)
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--database', required=True)
     parser.add_argument('--schema', required=True)
     parser.add_argument('--runtime', required=True)
-    parser.add_argument('--apply', action='store_true', help='Grant the reviewed ACL in one transaction')
+    parser.add_argument('--apply', action='store_true', help='Prepare an off-service release and both runtime policies')
+    parser.add_argument('--migrator', help='Expected off-service migration login in apply mode')
+    parser.add_argument('--standby', help='Independently held restricted fallback login in apply mode')
     parser.add_argument('--release', help='Reviewed Git SHA (defaults to RENDER_GIT_COMMIT in verify mode)')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.apply and (os.getenv('RENDER') or os.getenv('RENDER_SERVICE_ID')):
+        raise ValueError("Apply release privileges only from the off-service deployment environment")
     conn = psycopg2.connect(os.environ["DATABASE_URL"], connect_timeout=5)
     try:
-        conn.set_session(readonly=not args.apply)
+        if args.apply:
+            prepare_release(conn, args, args.release)
+            return
+        conn.set_session(readonly=True)
         with conn, conn.cursor() as cursor:
             cursor.execute("SET LOCAL search_path TO pg_catalog")
             cursor.execute("SET LOCAL lock_timeout='5s'")
             cursor.execute("SET LOCAL statement_timeout='30s'")
             cursor.execute("SELECT current_database(),current_user,session_user")
             database, actor, login = cursor.fetchone()
-            if database != args.database or login != actor or (actor == args.runtime) == args.apply:
+            if database != args.database or login != actor or actor != args.runtime:
                 raise ValueError("Unexpected target database or grantor")
-            revision = args.release or (None if args.apply else os.getenv("RENDER_GIT_COMMIT"))
+            revision = args.release or os.getenv("RENDER_GIT_COMMIT")
             if not revision:
                 raise ValueError("Missing release revision")
-            if args.apply:
-                root = Path(__file__).resolve().parents[1]
-                head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
-                dirty = subprocess.check_output(["git", "-C", str(root), "status", "--porcelain",
-                                                 "--", "app", "scripts", "run.py", "gunicorn.conf.py",
-                                                 "requirements.txt"], text=True)
-                if revision != head or dirty.strip():
-                    raise ValueError("Apply requires the reviewed SHA and a clean application checkout")
-                verify_release(cursor, args.schema, revision, record=True)
-            tables, sequences = configure(cursor, args.schema, args.runtime, args.apply)
+            tables, sequences = configure(cursor, args.schema, args.runtime)
             check_ambient(cursor, args.schema, args.runtime)
-            if not args.apply:
-                verify_release(cursor, args.schema, revision)
+            verify_release(cursor, args.schema, revision)
         print(f"Verified {tables} table policies and {sequences} insert sequences")
     finally:
         conn.close()

@@ -1,0 +1,98 @@
+"""Previously uncovered updates, exercised through the same services and forms as the app."""
+from datetime import datetime
+
+from app.extensions import db
+from app.models import NeoSubZeroTruck
+from app.models.account_preference import AccountPreference
+from app.services import neostaffing
+from app.services.live_collaboration import entity_version
+from app.services.neorain_ground_time_settings import set_neorain_ground_time_threshold_minutes
+from app.services.neosubzero_trucks import manage_truck
+from app.services.sort_timeline import record_sort_timeline_api_attempt
+from tests import test_accounts_workspace as accounts
+from tests import test_gateway_shell as gateways
+from tests import test_neostaffing_shift_flow as flow
+from tests.test_sektor_ermac_performance_postgres import postgres
+
+
+class GatewayUpdates(gateways.GatewayShellTest):
+    def setUp(self):
+        postgres(self, gateways, super().setUp)
+
+    def test_usage(self):
+        instant = datetime(2026, 1, 20, 3)
+        first = record_sort_timeline_api_attempt(self.gateway, instant, 2)
+        db.session.commit()
+        second = record_sort_timeline_api_attempt(self.gateway, instant, 3)
+        db.session.commit()
+        db.session.expire_all()
+        self.assertEqual(first.id, second.id)
+        self.assertEqual((second.attempted_call_count, second.units_consumed), (2, 5))
+
+    def test_ground_time(self):
+        from app.services.neorain_rainrock import set_default_planned_fph
+        row = set_neorain_ground_time_threshold_minutes(self.gateway, 120)
+        db.session.commit()
+        set_neorain_ground_time_threshold_minutes(self.gateway, 95)
+        set_default_planned_fph(self.gateway, '76000')
+        db.session.commit()
+        db.session.expire_all()
+        self.assertEqual((row.ground_time_threshold_minutes, row.default_planned_fph), (95, 76000))
+
+    def test_fluid(self):
+        from app.services.neosubzero_departure_deice import set_neosubzero_fluid_settings
+        row = set_neosubzero_fluid_settings(self.gateway, 'A', 40, 'B')
+        db.session.commit()
+        set_neosubzero_fluid_settings(self.gateway, 'C', 50, 'D')
+        db.session.commit()
+        db.session.expire_all()
+        self.assertEqual((row.type_i_fluid_name, row.type_i_concentration_percent,
+                          row.type_iv_fluid_name), ('C', 50, 'D'))
+
+    def test_truck(self):
+        row = manage_truck(self.gateway, 'add_truck', {'truck_number': 'T01'}, actor_id=self.user.id)
+        db.session.commit()
+        for action, changes in [('edit_truck', {'truck_number': 'T02'}), ('deactivate_truck', {}),
+                                ('activate_truck', {}), ('delete_truck', {})]:
+            manage_truck(self.gateway, action, dict(truck_id=row.id, confirm='yes',
+                         expected_version=entity_version(row), **changes), actor_id=self.user.id)
+            db.session.commit()
+            db.session.expire_all()
+            self.assertEqual(row.history[-1]['action'], action)
+            self.assertEqual(row.active, action in ('edit_truck', 'activate_truck'))
+        self.assertIsNotNone(db.session.get(NeoSubZeroTruck, row.id).archived_at_utc)
+
+
+class StaffingUpdates(flow.ShiftFlowTest):
+    def setUp(self):
+        postgres(self, flow, super().setUp)
+
+    def test_unit(self):
+        unit = neostaffing.update_unit(self.other, dict(name='Spare', parent_id=self.shift.id,
+            display_order='7', required_headcount='3', active='1'))
+        db.session.commit()
+        db.session.expire_all()
+        self.assertEqual((unit.name, unit.display_order, unit.required_headcount), ('Spare', 7, 3))
+        with self.assertRaises(ValueError):
+            neostaffing.update_unit(unit, dict(name='Spare', unit_type='sort'))
+
+
+class AccountUpdates(accounts.AccountsWorkspaceTest):
+    def setUp(self):
+        postgres(self, accounts, super().setUp)
+
+    def test_edit_preferences(self):
+        self.login(self.target)
+        def save(**values):
+            token = accounts.Inputs(self.client.get('/my-account').data).values['review_token']
+            return self.client.post('/my-account/preferences', data=dict(review_token=token, **values))
+        self.assertEqual(save(show_cryocheck='1').status_code, 302)
+        row = db.session.get(AccountPreference, self.target.id)
+        version = row.version
+        self.assertEqual(save().status_code, 302)
+        db.session.expire_all()
+        self.assertFalse(row.show_cryocheck)
+        self.assertEqual(row.version, version + 1)
+        self.assertEqual(save(preferred_app='neobid').status_code, 400)
+        db.session.expire_all()
+        self.assertEqual(row.version, version + 1)

@@ -22,6 +22,14 @@
             </button>
             {% else %}<p>No areas available.</p>{% endfor %}
         </div>
+        {% if attendance.staffing_groups %}
+        <details>
+            <summary>Staffing groups</summary>
+            {% for row in attendance.staffing_groups %}
+            <div>{{ row.group.name }}</div>
+            {% endfor %}
+        </details>
+        {% endif %}
     </aside>
     <section class="v11-panel v11-attendance-roster" data-attendance-roster data-save-url="{{ url_for('neostaffing.attendance_save') }}">
         <input type="hidden" name="sort_date_operation_id" value="{{ attendance.sort_date_operation.id }}">

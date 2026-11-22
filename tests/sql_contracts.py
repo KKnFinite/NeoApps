@@ -40,6 +40,13 @@ def is_vendor_identity_read(statement):
     ))
 
 
+def assert_service_read_budget(test, statements, maximum):
+    """Service-level budgets include one independently required vendor identity check."""
+    boundary = [statement for statement in statements if is_vendor_identity_read(statement)]
+    test.assertEqual(len(boundary), 1)
+    test.assertLessEqual(len(statements) - len(boundary), maximum)
+
+
 class RequestSql(list):
     """Domain statements plus separately asserted mandatory boundary reads.
 
