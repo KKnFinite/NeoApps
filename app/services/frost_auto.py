@@ -5,6 +5,7 @@ FrostHistoryTask is a receipt/index, not a second operational activity database.
 """
 import base64
 import gzip
+import hashlib
 import gc
 import json
 import re
@@ -236,12 +237,18 @@ def predictions(gateway_id,source):
     return result
 
 
+def missed_gap_identity(prior, current):
+    """Stable 32-character receipt key; full UTC endpoints remain in summary."""
+    pair = identity(prior) + '|' + identity(current)
+    return 'gap-' + hashlib.sha256(pair.encode('ascii')).hexdigest()[:28]
+
+
 def record_gap(ctrl,current,schedule):
     previous=(ctrl.summary or {}).get('last_slot')
     if previous:
         prior=clock.instant(previous);missed=schedule.missed(prior,current)
         if missed>0:
-            gap=jobs.task(ctrl.gateway_id,'auto_gap',identity(prior)+'-'+identity(current),VERSION)
+            gap=jobs.task(ctrl.gateway_id,'auto_gap',missed_gap_identity(prior,current),VERSION)
             gap.status='missed';gap.summary=dict(from_utc=stamp(prior),to_utc=stamp(current),intervals=missed,
                 schedule='sort-opening-midpoint-v1',
                 reason='No heartbeat capture during service downtime/suspension; never reconstruct pre-event predictions.')
