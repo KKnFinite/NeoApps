@@ -91,4 +91,8 @@ The staffed-night comparison must also include 429s per authorized display, miss
 
 ## Release and rollback
 
+**Verified LIVE on November 22 at 11:24:49 UTC:** application commit `0345f76a424d46a5ced70f003eed21db6ff27e08`, Render deployment `dep-dc1d1bjtqb8s73acl190`, existing Starter service. The health endpoint returned HTTP 200 with `ok`. Six served assets exactly matched the Git blobs, including the updated SubZero Operations script (SHA-256 `3b17b209c7e5cb1378c750c7a99734d8049866450f3d0144257de7ab6fe37971`). The four anonymous NeoRaiden, Sektor, SubZero and Scorpion protected requests each returned 302. Render logged a Gunicorn worker boot. The release-window check through 11:25 UTC found zero request 5xx, application error/fatal entries or tracebacks. Authenticated writes and browser workflows were exercised on isolated records. The smoke checks created no production test records.
+
+The documentation-only receipt on main uses the repository's existing deploy-skip convention. It adds these observed production results after the application deployment. Issue #29 stays open for the four external evidence and approval items above.
+
 Starting production release: `9396026a300f07663ae0c7b9e10159fc652722af`, Render `dep-dc1b8ce417fc73bc46j0`. The release verification comment on [issue #29](https://github.com/KKnFinite/NeoApps/issues/29) records the final application SHA, deployment ID, health, asset checks and protected routes. Use the starting deployment for rollback, or revert the application commit and allow AutoDeploy. Check health, exact asset digests, protected-route responses, the physical window gate and archive/recovery logs. No data reversal is required.
