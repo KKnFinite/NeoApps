@@ -3,7 +3,8 @@ import json
 import re
 import unittest
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
 from playwright.sync_api import expect
@@ -36,6 +37,10 @@ class UccBrowserTest(unittest.TestCase):
             db.session.add(fixture.operation)
             db.session.flush()
             cls.operation_id = fixture.operation.id
+            from tests.test_neorain_sort_refresh import configure_sort_window
+            _, opening = configure_sort_window(gateway, fixture.operation.sort_date)
+            cls.sort_now = (opening + timedelta(hours=1)).replace(tzinfo=ZoneInfo('America/Chicago'))
+            cls.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = cls.sort_now
             from app.services.neosubzero_trucks import manage_truck
             manage_truck(gateway,'add_truck',{'truck_number':'UCC-831'},actor_id=None)
             manage_truck(gateway,'add_truck',{'truck_number':'12'},actor_id=None)
@@ -127,6 +132,7 @@ class UccBrowserTest(unittest.TestCase):
         browser = self.pw.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": 1366, "height": 900}, service_workers="block")
+            page.clock.install(time=self.sort_now)
             self.login(page)
             self.ready(page, "/neosubzero/ucc")
             alpha = page.locator('[data-ucc-ramp="Alpha"]')
@@ -211,6 +217,7 @@ class UccBrowserTest(unittest.TestCase):
             browser = getattr(self.pw, engine).launch()
             context = browser.new_context(viewport={"width":1440, "height":1000})
             page = context.new_page()
+            page.clock.install(time=self.sort_now)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             self.login(page)
@@ -334,6 +341,7 @@ class UccBrowserTest(unittest.TestCase):
             page.screenshot(path=str(self.evidence / f"ucc-{engine}-tv.png"), full_page=True)
             other = browser.new_context(viewport={"width":390,"height":844})
             mobile = other.new_page()
+            mobile.clock.install(time=self.sort_now)
             self.login(mobile)
             self.ready(mobile,"/neosubzero/ucc")
             expect(mobile.locator('[data-ucc-weather-toggle]')).to_be_hidden()
@@ -411,7 +419,11 @@ class UccBrowserTest(unittest.TestCase):
             expect(page.locator('[data-ucc-editor="Bravo-2"] .ucc-team-controls')).to_contain_text('UCC-831',timeout=10000)
             self.assertLessEqual(mobile.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
             mobile.screenshot(path=str(self.evidence / f"ucc-{engine}-mobile-staff-editor.png"), full_page=True)
-            with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation",return_value=None), patch("app.neonodes.neosubzero.routes.neosubzero_weather_context",return_value={**self.weather_data,"current_sort":None}):
+            # DUCC can also use the eligible staffing Sort before dispatch opens.
+            # Exercise the genuine empty state by removing both fixture targets.
+            with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation",return_value=None), \
+                    patch("app.neonodes.neosubzero.routes.night_staffing_operation",return_value=None), \
+                    patch("app.neonodes.neosubzero.routes.neosubzero_weather_context",return_value={**self.weather_data,"current_sort":None}):
                 self.ready(page,"/neosubzero/ucc")
                 self.assertEqual(page.locator('[data-ucc-ramp]').count(),6)
                 self.assertEqual(page.locator('[data-ucc-parking]').count(),54)

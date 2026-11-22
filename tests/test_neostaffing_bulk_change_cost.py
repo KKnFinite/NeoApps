@@ -83,11 +83,11 @@ class BulkChangeCostTest(unittest.TestCase):
                 action='stage_person', extra={'person_id':self.employee_ids[0],
                     'change_work_area_unit_id':'1', 'work_area_unit_id':self.target_id})
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],1)
+            self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],0)
             counts = Counter(s.split()[0] for s, _, _ in sql)
             print(method, dict(counts), dict(hydrated))
-            # My Alerts now checks access-request visibility once in the shell.
-            self.assertEqual(counts['SELECT'], 16)
+            # The current shell does not request an administration badge.
+            self.assertEqual(counts['SELECT'], 22)
             self.assertEqual(hydrated['StaffingPerson'], 119)
             self.assertEqual(hydrated['StaffingWorkAssignment'], 112)
             self.assertEqual(sum(counts[verb] for verb in ('UPDATE', 'INSERT', 'DELETE')), 0)
@@ -103,7 +103,11 @@ class BulkChangeCostTest(unittest.TestCase):
             print('BULK', count, dict(counts), dict(hydrated), writes)
             # Six fresh snapshot reads after one set-based dependency-lock CTE.
             # Fixed overhead buys narrow locks; never per-employee query fanout.
-            self.assertEqual(counts['SELECT'], 22)
+            # Authorization state and person qualifications are read once on
+            # each side of the lock, independent of the number of employees.
+            self.assertEqual(counts['SELECT'], 26)
+            for table in ('account_authorization_states', 'staffing_person_qualifications'):
+                self.assertEqual(sum(f'from {table}' in s.lower() for s, _, _ in sql), 2)
             self.assertEqual(counts['WITH'], 1)
             self.assertEqual(counts['UPDATE'], 2)
             self.assertEqual(counts['INSERT'], 0)
@@ -134,7 +138,7 @@ class BulkChangeCostTest(unittest.TestCase):
         print('NOOP', dict(Counter(s.split()[0] for s, _, _ in sql)),
               [s for s, _, _ in sql if s.startswith('UPDATE')])
         self.assertFalse(any(s.startswith('UPDATE') for s, _, _ in sql))
-        self.assertEqual(sum(s.startswith('SELECT') for s, _, _ in sql), 19)
+        self.assertEqual(sum(s.startswith('SELECT') for s, _, _ in sql), 23)
         self.assertEqual(sum(s.startswith('WITH') for s, _, _ in sql), 1)
         db.session.remove()
         self.assertEqual(StaffingWorkAssignment.query.filter_by(person_id=pid, active=True).count(), 2)
@@ -148,7 +152,7 @@ class BulkChangeCostTest(unittest.TestCase):
             self.assertEqual(response.status_code, 302)
             counts = Counter(s.split()[0] for s, _, _ in sql)
             print('STATUS', count, dict(counts))
-            self.assertEqual(counts['SELECT'], 20)
+            self.assertEqual(counts['SELECT'], 24)
             self.assertEqual(counts['WITH'], 1)
             self.assertEqual(counts['UPDATE'], 1)
             db.session.remove()
@@ -228,10 +232,10 @@ class BulkChangeCostTest(unittest.TestCase):
         self.assertIn(service.LIVE_DATA_CHANGED_MESSAGE, response.get_data(as_text=True))
         counts = Counter(s.split()[0] for s, _, _ in sql)
         print('STALE', dict(counts))
-        # Base and fixed route both use 24 reads: rollback invalidates loaded
-        # access/identity rows and the error page needs a fresh display snapshot.
-        self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],1)
-        self.assertLessEqual(counts['SELECT'], 25)
+        # Rollback invalidates cached authority; rendering the error requires
+        # a fresh access, qualification, and scoped navigation projection.
+        self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],0)
+        self.assertLessEqual(counts['SELECT'], 33)
         self.assertEqual(sum(counts[v] for v in ('INSERT', 'UPDATE', 'DELETE')), 0)
         db.session.remove()
         self.assertEqual(StaffingWorkAssignment.query.filter_by(person_id=ids[0], active=True).count(), 0)

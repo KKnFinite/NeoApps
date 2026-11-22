@@ -60,6 +60,40 @@ class OperationLifecycleTest(unittest.TestCase):
         db.session.flush()
         self.client = self.app.test_client()
 
+    def test_render_reuses_active_matrix_across_dates_and_refresh_without_crossing_gateways(self):
+        from app.services.gateway_matrix import active_sorts_for_gateway_date, physical_poll_windows, save_gateway_matrix
+        from app.services.sort_timeline import ensure_sort_timeline_settings
+
+        other = Gateway(code="TST", name="Synthetic", is_active=True)
+        db.session.add(other)
+        db.session.commit()
+        monday = date(2026, 11, 23)
+        for gateway, days in ((self.gateway, {("monday", "night")}), (other, {("tuesday", "night")})):
+            save_gateway_matrix(gateway, days)
+            settings = ensure_sort_timeline_settings(gateway)
+            night = next(row for row in settings.sort_settings if row.sort_name == "night")
+            night.sort_window_start_local, night.sort_window_end_local = time(21), time(5)
+        db.session.commit()
+        reads = []
+        def record(_conn, _cursor, statement, *_):
+            if "from gateway_sort_matrix" in " ".join(statement.lower().split()):
+                reads.append(statement)
+        event.listen(db.engine, "before_cursor_execute", record)
+        self.addCleanup(event.remove, db.engine, "before_cursor_execute", record)
+        with self.app.test_request_context("/rfd"):
+            self.assertEqual(active_sorts_for_gateway_date(self.gateway, date(2026, 11, 22)), [])
+            self.assertEqual(active_sorts_for_gateway_date(self.gateway, monday), ["night"])
+            now = datetime(2026, 11, 24, 1)
+            self.assertEqual(len(physical_poll_windows(self.gateway, monday, "night", now=now)), 1)
+            self.assertEqual(physical_poll_windows(other, monday, "night", now=now), [])
+            self.assertEqual(len(reads), 2)
+            save_gateway_matrix(self.gateway, set())
+            self.assertEqual(physical_poll_windows(self.gateway, monday, "night", now=now), [])
+        with self.app.test_request_context("/rfd"):
+            reads.clear()
+            self.assertEqual(active_sorts_for_gateway_date(self.gateway, monday), [])
+            self.assertEqual(len(reads), 1)
+
     def test_manual_sort_database_error_is_sanitized(self):
         from app.services.operation_lifecycle import create_manual_current_sort_operation, ManualSortCreationError
         error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))

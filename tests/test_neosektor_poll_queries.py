@@ -72,11 +72,11 @@ class PollQueriesTest(unittest.TestCase):
         self.assertEqual(sum('from sort_timeline_sort_settings' in s for s in old_sql), 1)
         self.assertEqual(sum('from sort_timeline_settings' in s
                              and 'left outer join sort_timeline_sort_settings' in s for s in sql), 1)
-        # Both weekday reads and every other query are unchanged, in order.
+        # Lifecycle and physical gates share one active matrix projection.
         without_timeline = lambda statements: [s for s in statements
             if 'from sort_timeline_settings' not in s and 'from sort_timeline_sort_settings' not in s]
         self.assertEqual(without_timeline(sql), without_timeline(old_sql))
-        self.assertEqual(sum('from gateway_sort_matrix' in s for s in sql), 2)
+        self.assertEqual(sum('from gateway_sort_matrix' in s for s in sql), 1)
         self.assertEqual(after['changed'], not unchanged)
         if unchanged:
             self.assertNotIn('state', after)
@@ -105,10 +105,10 @@ class PollQueriesTest(unittest.TestCase):
             for path in ('/neosektor/live-counts/state', '/neosektor/ballmat/state?side=east',
                          '/neosektor/ballmat/state?side=west'):
                 with self.subTest(mode=mode, path=path):
-                    baseline = 13 if mode == 'google_primary' else 12
+                    baseline = 12 if mode == 'google_primary' else 11
                     initial = self.check_pair(path, baseline)
                     url = path + ('&' if '?' in path else '?') + 'revision=' + initial['revision']
-                    self.check_pair(url, 10, unchanged=True)
+                    self.check_pair(url, 9, unchanged=True)
                     if mode == 'google_primary':
                         worksheet.values['B2'] += 1
                         clear_neosektor_google_cache()
@@ -145,7 +145,8 @@ class PollQueriesTest(unittest.TestCase):
         self.assertFalse(response['changed'])
         self.assertFalse(response['refresh']['auto_refresh_enabled'])
         self.assertEqual(response['revision'], initial['revision'])
-        self.assertEqual(sum(s.startswith(('select ', 'with ')) for s in sql), 4)
+        self.assertEqual(sum('from gateway_sort_matrix' in s for s in sql), 1)
+        self.assertEqual(sum(s.startswith(('select ', 'with ')) for s in sql), 5)
 
     def test_missing_timeline_and_empty_collection_preserve_defaults(self):
         parent = SortTimelineSettings.query.filter_by(gateway_id=self.fixture.gateway.id).one()

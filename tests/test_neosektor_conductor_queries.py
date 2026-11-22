@@ -138,7 +138,14 @@ class ConductorMutationQueriesTest(unittest.TestCase):
             with self.subTest(path=name):
                 new_counts, new_payload, new_sql, new_writes, new_stored = after[name]
                 early_failure = name in ('invalid_side', 'back_pickup_invalid', 'priority_invalid')
-                baseline = 7 if name == 'invalid_side' else 16 if early_failure else 23 + active
+                # Compared with the original receipt, every private command
+                # reads the scoped policy. Successful validation also projects
+                # the physical schedule and checks native mission evidence,
+                # including cases where the fixture has no block-in.
+                self.assertEqual(sum('from account_authorization_states ' in s for s in sql), 1)
+                baseline = 8 if name == 'invalid_side' else 17 if early_failure else 26
+                if not early_failure:
+                    self.assertEqual(sum('from sort_date_missions ' in s for s in sql), 1)
                 self.assertEqual(counts[0], baseline)
                 self.assertEqual(new_counts, (baseline - (not early_failure), *counts[1:]))
                 self.assertEqual(counts[1], 0)

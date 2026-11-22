@@ -116,8 +116,10 @@ class BallmatMutationQueriesTest(unittest.TestCase):
         }
         for key, (counts, payload, _) in before.items():
             with self.subTest(side=key[0], mutation=key[1]):
-                self.assertEqual(counts[0], 23)
-                self.assertEqual(after[key][0], (22, *counts[1:]))
+                # Current private command includes scoped policy, physical
+                # schedule and canonical block-in reads in both paths.
+                self.assertEqual(counts[0], 26)
+                self.assertEqual(after[key][0], (25, *counts[1:]))
                 self.assertEqual(counts[1], 0)
                 self.assertEqual(counts[2], update_budgets[key[0]][key[1]])
                 self.assertEqual(counts[3], 0)
@@ -139,8 +141,8 @@ class BallmatMutationQueriesTest(unittest.TestCase):
             with self.subTest(side=key[0], mutation=key[1]):
                 new_counts, new_payload, new_statements = after[key]
                 reduction = 0 if key[1] in ("open", "open_minus", "absolute_equal") else 1
-                self.assertEqual(new_counts, (22, 0, counts[2] - reduction, 0))
-                self.assertEqual(counts[0], 22)  # No extra reads to save a write.
+                self.assertEqual(new_counts, (25, 0, counts[2] - reduction, 0))
+                self.assertEqual(counts[0], 25)  # No extra reads to save a write.
                 self.assertEqual(new_payload, payload)
                 writes = [sql for sql in statements if sql.startswith("update ")]
                 new_writes = [sql for sql in new_statements if sql.startswith("update ")]
@@ -177,7 +179,7 @@ class BallmatMutationQueriesTest(unittest.TestCase):
                 new_counts, new_payload, new_statements = after[key]
                 self.assertEqual(new_counts, (counts[0] - 1, *counts[1:]))
                 if not key[1].startswith("stale_"):
-                    self.assertEqual(new_counts[0], 22)
+                    self.assertEqual(new_counts[0], 25)
                 else:
                     self.assertEqual(new_counts[1:], (0, 1, 0))  # SQLite lock only; rolled back.
                 self.assertEqual(new_payload, payload)

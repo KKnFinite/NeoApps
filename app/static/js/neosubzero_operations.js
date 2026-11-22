@@ -865,9 +865,7 @@
             fetchPage().catch(error => notify(error.message,true));
         }
     });
-    if (!isPretreat && requestedDrafts().length) {
-        fetchPage().catch(error => notify(error.message,true));
-    }
+    let restoreDraftRows = !isPretreat && requestedDrafts().length > 0;
     window.addEventListener('beforeunload',saveDraft);
     window.addEventListener('pagehide',event=>{ if (!event.persisted) stopLive(); });
     // The cached document retains its drafts, revision and live controller.
@@ -877,6 +875,14 @@
     if (!window.NeoLiveUpdates || interval < 1000) return;
     controller = window.NeoLiveUpdates.create({intervalMs:interval,continuousWhileVisible:true,poll:async()=>{
         if (busy || preferenceBusy) return;
+        // Draft reconciliation uses the same server eligibility and physical
+        // window as every other automatic operational read.
+        if (restoreDraftRows && requestedDrafts().length) {
+            await fetchPage();
+            restoreDraftRows = false;
+            return;
+        }
+        restoreDraftRows = false;
         const url = new URL(root.dataset.revisionUrl,location.origin); url.searchParams.set('revision',revision);
         url.searchParams.set('mode',root.dataset.mode);
         if (media.matches) url.searchParams.set('presentation','inline');

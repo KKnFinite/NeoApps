@@ -1,4 +1,5 @@
 from tests.html_contracts import document
+from tests.sql_contracts import measure_authority_reads
 import unittest
 
 from sqlalchemy import event
@@ -455,7 +456,9 @@ class AccessControlTest(unittest.TestCase):
             for statement in statements
             if statement.upper().startswith(("INSERT", "UPDATE", "DELETE"))
         ]
-        self.assertEqual(len(selects), 1)
+        self.assertEqual(len(selects), 2)
+        self.assertEqual(sum('from account_authorization_states' in s.lower() for s in selects), 1)
+        self.assertEqual(sum('from gateways' in s.lower() for s in selects), 1)
         self.assertEqual(writes, [])
         self.assertEqual(user.id, user_id)
 
@@ -475,7 +478,8 @@ class AccessControlTest(unittest.TestCase):
 
         event.listen(db.engine, "before_cursor_execute", capture)
         try:
-            response = client.get("/neoermac")
+            with measure_authority_reads() as authority_reads:
+                response = client.get("/neoermac")
         finally:
             event.remove(db.engine, "before_cursor_execute", capture)
 
@@ -490,7 +494,9 @@ class AccessControlTest(unittest.TestCase):
             for statement in statements
             if statement.upper().startswith(("INSERT", "UPDATE", "DELETE"))
         ]
-        self.assertLessEqual(len(selects), 10)
+        self.assertTrue(all(s.lstrip().upper().startswith('SELECT') for s in authority_reads))
+        self.assertLessEqual(len(authority_reads), 6)
+        self.assertLessEqual(len(selects) - len(authority_reads), 10)
         self.assertEqual(writes, [])
 
     def test_user_can_have_rfd_access_without_dfw_access(self):

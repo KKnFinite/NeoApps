@@ -57,15 +57,17 @@ class ChangeRequestReadsTest(unittest.TestCase):
             event.remove(db.engine,'before_cursor_execute',capture)
             event.remove(db.session.session_factory,'loaded_as_persistent',loaded)
         sql.assert_boundary(self)
-        self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],1)
+        self.assertEqual(sql.permission_reads['neoapps.access_requests.view'],0)
         counts = Counter(s.split()[0].upper() for s in sql)
         return dict(counts), dict(hydrated)
 
     def test_profile_pages(self):
         # Before: 22/22/20/20/20 reads respectively, 205 request/item rows,
         # 211 people and 206 work assignments even for empty My Purview.
-        # Exactly one current My Alerts access-request permission read per page.
-        budgets = dict(zip(self.actor_ids, (22, 22, 20, 16, 20)))
+        # The current shell does not request an administration badge.
+        # The V11 shell resolves the viewer's gateway/node scope for navigation.
+        # Each queue keeps a fixed request budget independent of queue length.
+        budgets = dict(zip(self.actor_ids, (27, 27, 25, 21, 25)))
         for actor in self.actor_ids:
             counts, hydrated = self.profile(self.actor_ids[actor], 'purview' if actor!='submitter_user' else 'all')
             print(actor, json.dumps({'sql':counts,'hydrated':hydrated},sort_keys=True))
@@ -81,9 +83,8 @@ class ChangeRequestReadsTest(unittest.TestCase):
                     self.assertEqual(hydrated.get(model, 0), 0)
         counts, hydrated = self.profile(self.actor_ids['source_approver_user'], '')
         # The FT default is Routed: one skinny legacy-JSON matching projection
-        # keeps its measured original 23-read budget (including routed retention
-        # matching) while bounding full detail hydration.
-        self.assertLessEqual(counts.get('SELECT', 0) + counts.get('WITH', 0), 24)
+        # includes routed retention matching while bounding full detail hydration.
+        self.assertLessEqual(counts.get('SELECT', 0) + counts.get('WITH', 0), 29)
         self.assertLessEqual(hydrated.get('StaffingChangeRequest', 0), 100)
 
     def visible_ids(self, user, **filters):

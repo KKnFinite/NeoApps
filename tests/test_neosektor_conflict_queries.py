@@ -96,16 +96,16 @@ class BallmatConflictQueriesTest(unittest.TestCase):
                 counts = sum(s.startswith('select ') for s in old_sql), sum(s.startswith('select ') for s in sql)
                 self.assertLess(counts[1], counts[0])
                 if path.startswith('ballmat/update'):
-                    self.assertEqual(counts, (26, 22))
+                    self.assertEqual(counts, (29, 25))
                 else:
-                    self.assertEqual(counts, (27, 23))
+                    self.assertEqual(counts, (30, 26))
                 if name.startswith('confirm_'):
                     self.assertTrue(after.json['confirmation_required'])
                 print(f"Conflict {name}: SELECTs {counts[0]} -> {counts[1]}")
                 # The rejection releases the lock and does not poison the session.
                 valid, valid_sql, valid_commits, _ = self.fresh('/neosektor/ballmat/update?side=east', self.count_command())
                 self.assertEqual(valid.status_code, 200)
-                self.assertEqual(sum(s.startswith('select ') for s in valid_sql), 22)
+                self.assertEqual(sum(s.startswith('select ') for s in valid_sql), 25)
                 self.assertEqual(len(valid_commits), 1)
                 canonical = self.client.get('/neosektor/ballmat/state?side=east').json['state']
                 # Existing POST status uses the shared default; GET applies the

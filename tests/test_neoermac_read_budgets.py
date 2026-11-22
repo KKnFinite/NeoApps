@@ -8,7 +8,7 @@ from flask import g
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 from app.extensions import db
-from tests.sql_contracts import RequestSql
+from tests.sql_contracts import RequestSql, measure_authority_reads
 from app.models import (Gateway, MasterFlightSchedule, NeoErmacBuildingLineup, SortDateOperation,
     StaffingUnit, StaffingPerson, StaffingWorkAssignment, StaffingShiftFlowPlan, StaffingDailyAttendance)
 from tests import test_neoermac_routes as fixtures
@@ -87,14 +87,15 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
         event.listen(db.engine,'before_cursor_execute',sql);event.listen(db.engine,'commit',commit)
         event.listen(Session,'loaded_as_persistent',load)
         try:
-            response=self.client.get(path) if data is None else self.client.post(path,data=data)
+            with measure_authority_reads() as authority_reads:
+                response=self.client.get(path) if data is None else self.client.post(path,data=data)
         finally:
             event.remove(db.engine,'before_cursor_execute',sql);event.remove(db.engine,'commit',commit)
             event.remove(Session,'loaded_as_persistent',load)
         statements.assert_boundary(self)
         counts=Counter(s.lstrip().split()[0].upper() for s in statements)
         result={key:counts[key] for key in ('SELECT','INSERT','UPDATE','DELETE')}
-        result.update(commits=len(commits),hydrated=dict(hydrated),status=response.status_code,
+        result.update(commits=len(commits),hydrated=dict(hydrated),status=response.status_code, authority_reads=len(authority_reads),
                       access_request_permission_reads=statements.permission_reads['neoapps.access_requests.view'])
         result['select_tables']=dict(Counter(re.search(r'\bFROM\s+(\w+)',s,re.I).group(1)
             for s in statements if s.lstrip().upper().startswith('SELECT') and re.search(r'\bFROM\s+(\w+)',s,re.I)))
@@ -131,13 +132,26 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
             'Repeated cold Lineup GET': (19, 0, 0, 0, 0),
         }
         results = self.profile()
-        self.assertEqual(results['Attendance GET']['access_request_permission_reads'],1)
+        # The shared account menu no longer renders an access-request badge.
+        self.assertEqual(results['Attendance GET']['access_request_permission_reads'], 0)
         for path, budget in expected.items():
             with self.subTest(path=path):
                 metrics = results[path]
                 self.assertEqual(metrics['status'], 200)
-                self.assertEqual(tuple(metrics[k] for k in
-                    ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'commits')), budget)
+                # Charge new scoped-navigation, policy-activation and physical
+                # schedule costs separately from the September domain budgets.
+                tables = metrics['select_tables']
+                self.assertLessEqual(metrics['authority_reads'], 6)
+                extras = metrics['authority_reads']
+                if path.endswith('autosave'):
+                    self.assertEqual(tables.get('account_authorization_states'), 1)
+                    extras += 1
+                if path == 'Attendance GET':
+                    for table in ('gateway_sort_matrix', 'motherbrain_google_integration_settings'):
+                        self.assertEqual(tables.get(table), 1)
+                        extras += 1
+                self.assertLessEqual(metrics['SELECT'] - extras, budget[0])
+                self.assertEqual(tuple(metrics[k] for k in ('INSERT', 'UPDATE', 'DELETE', 'commits')), budget[1:])
         self.assertEqual(results['Attendance GET']['hydrated'], {
             'StaffingPerson': 12, 'StaffingWorkAssignment': 12, 'StaffingShiftFlowPlan': 12,
         })

@@ -42,13 +42,27 @@ class OperationsBrowserTest(unittest.TestCase):
     def ramp(self, page, value):
         # Ramp selection is now mobile-only. Establish its real per-user
         # preference through that UI, then restore the caller's desktop width.
-        viewport=page.viewport_size
-        if viewport['width']>900:page.set_viewport_size({'width':390,'height':viewport['height']})
-        with page.expect_response(lambda r:r.url.endswith('/operations/preferences') and r.request.method=='POST') as pending:
-            page.locator('[data-ops-ramp]').select_option(value)
-        self.assertEqual(pending.value.status,200,pending.value.text())
-        self.assertTrue(pending.value.json()['ok'])
-        expect(page.locator('[data-ops-ramp]')).to_be_enabled()
+        viewport = page.viewport_size
+        workspace = page.locator('[data-ops-workspace]')
+        if workspace.get_attribute('data-ramp') == value and not workspace.get_attribute('data-ramp-override'):
+            return
+        if viewport['width'] > 900:
+            page.set_viewport_size({'width':390, 'height':viewport['height']})
+            # Enter the mobile screen with its saved preference, just as a
+            # phone would. The desktop's transient All filter is independent.
+            page.reload()
+            expect(workspace).to_have_attribute('data-ready', 'true')
+        ramp = page.locator('[data-ops-ramp]')
+        expect(ramp).to_be_visible()
+        expect(ramp).to_be_enabled()
+        expect(ramp).to_have_value(workspace.get_attribute('data-ramp-override') or workspace.get_attribute('data-ramp'))
+        if ramp.input_value() != value:
+            with page.expect_response(lambda r:r.url.endswith('/operations/preferences') and r.request.method=='POST') as pending:
+                ramp.select_option(value)
+            self.assertEqual(pending.value.status,200,pending.value.text())
+            self.assertTrue(pending.value.json()['ok'])
+            expect(ramp).to_be_enabled()
+        expect(workspace).to_have_attribute('data-ramp', value)
         if viewport['width']>900:page.set_viewport_size(viewport)
 
     @classmethod
@@ -60,7 +74,8 @@ class OperationsBrowserTest(unittest.TestCase):
             _, opening = configure_sort_window(fixture.operation.gateway, fixture.operation.sort_date)
             from app.services.live_screen_refresh import save_live_screen_refresh_override
             from app.neonodes.neosubzero import routes
-            for screen in (routes.OUTBOUND_REFRESH_KEY, routes.PRETREAT_REFRESH_KEY):
+            from app.services.neosubzero_departure_deice import COORDINATOR_REFRESH_KEY
+            for screen in (routes.OUTBOUND_REFRESH_KEY, routes.PRETREAT_REFRESH_KEY, COORDINATOR_REFRESH_KEY):
                 save_live_screen_refresh_override(fixture.operation.gateway, screen, '5')
             cls.sort_now = opening.replace(tzinfo=ZoneInfo('America/Chicago')) + timedelta(minutes=70)
             cls.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = cls.sort_now
@@ -100,6 +115,42 @@ class OperationsBrowserTest(unittest.TestCase):
             db.session.add(state);op=db.session.get(SortDateOperation,self.operation_id)
             db.session.add(SortDateTailState(sort_date=op.sort_date,gateway_code='RFD',sort_name='night',tail_number='N440UP',pretreat_status=True))
             db.session.commit()
+
+    def test_restoring_a_draft_obeys_the_physical_window(self):
+        self.seed()
+        before = self.sort_now - timedelta(minutes=71)
+        path = f'/neosubzero/operations?mode=outbound&mission={self.missions[0]}'
+        self.addCleanup(self.app.config.update, CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE=self.sort_now)
+        for engine, width in (('chromium', 1440), ('webkit', 390)):
+            with self.subTest(engine=engine), getattr(self.pw, engine).launch() as browser:
+                self.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = before
+                page = browser.new_page(viewport={'width':width,'height':844}, service_workers='block')
+                page.clock.install(time=before)
+                self.login(page)
+                self.ready(page, path)
+                root = page.locator('[data-ops-workspace]')
+                key = ':'.join(('neoapps.subzero.operations.draft', root.get_attribute('data-user-id'),
+                                str(self.operation_id), 'outbound', str(self.missions[0]), 'N440UP'))
+                draft = json.dumps([{'key':'/neosubzero/operations/mutate::::save_treatment',
+                                     'fields':[{'name':'pass1_start','value':'21:45'}]}])
+                page.add_init_script(f'sessionStorage.setItem({json.dumps(key)}, {json.dumps(draft)})')
+                requests = []
+                page.on('request', lambda r: requests.append(r.url) if r.resource_type == 'fetch'
+                        and '/neosubzero/operations' in r.url else None)
+                self.ready(page, path)
+                page.wait_for_load_state('networkidle')
+                self.assertEqual(requests, [])
+                stored = json.loads(page.evaluate('key => sessionStorage.getItem(key)', key))
+                self.assertEqual(stored[0]['fields'][0]['value'], '21:45')
+                self.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = before + timedelta(minutes=2)
+                # The server classified this off-hours selection as historical.
+                # Keep it idle; a manual reopening obtains current eligibility.
+                self.assertFalse(json.loads(root.get_attribute('data-refresh-status'))['auto_refresh_enabled'])
+                page.clock.fast_forward(120000)
+                self.assertEqual(requests, [])
+                with page.expect_response(lambda r: 'draft=' in r.url and r.request.resource_type == 'fetch') as refreshed:
+                    self.ready(page, path)
+                self.assertEqual(refreshed.value.status, 200)
 
     def test_recorded_pretreatment_visible_only_on_its_aircraft_in_both_dispatch_layouts(self):
         self.seed()
@@ -227,40 +278,74 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(page.locator(f'[data-mission-id="{self.missions[0]}"] .ops-pretreated:visible')).to_have_count(1)
             expect(page.locator(f'[data-mission-id="{self.missions[1]}"] .ops-pretreated')).to_have_count(0)
             # Canonical coordinator-capable workflow, with no gallon gate on FIN/CLEAR.
-            page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] [data-ops-accordion] > summary').click()
-            pane=page.locator('[data-ops-inline]:visible');expect(pane).to_be_visible()
-            self.submit(page,page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] button[value="initial_contact"]'))
-            expect(page.locator('[data-ops-feedback]')).to_contain_text('SAVED')
+            flow = page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')
+            pane = flow.locator('[data-ops-inline]')
+            def save_field(field, value):
+                if field.input_value() == value:
+                    return
+                old_form = field.evaluate_handle('field => field.form').as_element()
+                with page.expect_response(lambda r: r.url.endswith('/operations/mutate') and r.request.method == 'POST') as pending:
+                    if field.evaluate("field => field.tagName === 'SELECT'"):
+                        field.select_option(value)
+                    else:
+                        field.fill(value)
+                        field.press('Tab')
+                self.assertEqual(pending.value.status, 200, pending.value.text())
+                self.assertTrue(pending.value.json()['ok'])
+                page.wait_for_function('form => !form.isConnected', arg=old_form)
+            self.submit(page,flow.locator('button[value="initial_contact"]:visible'))
+            expect(flow.locator('button[value="toggle_configured"]:visible')).to_be_enabled()
             expect(pane.locator('select[name="treatment_plan"]')).to_be_visible()
-            self.submit(page,page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] button[value="toggle_configured"]'))
+            self.submit(page,flow.locator('button[value="toggle_configured"]:visible'))
             expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','configured')
-            form=pane.locator('[data-subzero-deice-form]');form.locator('[name="treatment_plan"]').select_option('type_i_type_iv')
-            form.locator('[name="pass1_surface_area"]').select_option('wings_tail');form.locator('[name="pass2_surface_area"]').select_option('wings_only')
-            for name,value in (('pass1_start','22:00'),('pass1_end','22:02'),('pass2_start','22:04'),('pass2_end','22:08')):form.locator('[name="'+name+'"]').fill(value)
-            self.submit(page,form.locator('button[type="submit"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','fin')
-            self.submit(page,page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"] button[value="clear"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','radio-pending')
+            form = pane.locator('.ops-outbound-pass-form')
+            for name, value in (('treatment_plan','type_i_type_iv'), ('pass1_surface_area','wings_tail'),
+                                ('pass2_surface_area','wings_only'), ('pass1_start','22:00'), ('pass1_end','22:02'),
+                                ('pass2_start','22:04'), ('pass2_end','22:08')):
+                save_field(form.locator(f'[name="{name}"]'), value)
+            expect(flow).to_have_attribute('data-status','fin')
+            self.submit(page,flow.locator('button[value="clear"]:visible'))
+            expect(flow).to_have_attribute('data-status','radio-pending')
+            flow.locator('[data-ops-radio]:visible').click()
             expect(pane.locator('[data-radio-script]')).to_contain_text('2204')
             self.submit(page,pane.locator('button[value="radio_complete"]'));expect(page.locator(f'[data-ops-row][data-mission-id="{self.flow_id}"]')).to_have_attribute('data-status','gone')
             expect(page.locator('[data-ops-row][data-status="radio-pending"]')).to_have_count(0)
             page.screenshot(path=str(evidence/f'{engine}-completed-detail.png'))
             # Radio confirmation collapsed the mission.
             # Draft, caret/focus and primary updates survive a live response and reload.
-            page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"] [data-ops-accordion] > summary').click()
+            edited = page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"]')
+            pane = edited.locator('[data-ops-inline]')
             field=pane.locator('[name="pass1_start"]');field.fill('21:45');field.focus()
             with self.app.app_context():
                 mission=db.session.get(SortDateMission,self.missions[1]);mission.eta_datetime_utc=datetime(2026,10,23,6,40);db.session.commit()
-            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-location')).to_contain_text('01:40',timeout=10000)
+            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-outbound-location')).to_contain_text('01:40',timeout=10000)
             expect(field).to_have_value('21:45');expect(field).to_be_focused()
-            page.reload();self.ready(page,f'/neosubzero/operations?mode=outbound&mission={self.missions[0]}')
+            # Reload restores persisted drafts and fetches their current rows.
+            # Complete that fetch before simulating the independent tail swap.
+            with page.expect_response(lambda r: '/operations?' in r.url and 'draft=' in r.url
+                                      and r.request.resource_type == 'fetch') as restored:
+                self.ready(page,f'/neosubzero/operations?mode=outbound&mission={self.missions[0]}')
+            self.assertEqual(restored.value.status, 200)
+            restored.value.finished()
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
             with self.app.app_context():
                 mission=db.session.get(SortDateMission,self.missions[0]);mission.assigned_tail_number='N-REPLACED';db.session.commit()
-            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"]')).to_have_attribute('data-status','gone',timeout=10000)
+            # An unparked replacement tail can leave the board. The original
+            # tail's dirty editor must survive with an explicit identity warning.
+            expect(pane.locator('[data-ops-inline-feedback]')).to_contain_text('Original-tail draft retained',timeout=12000)
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
-            pane.locator('[data-subzero-deice-form] button[type="submit"]').click();expect(pane.locator('[data-ops-inline-feedback]')).to_contain_text('identity changed')
-            expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
+            field.fill('21:46')
+            with page.expect_response(lambda r: r.url.endswith('/operations/mutate') and r.request.method == 'POST') as mismatch:
+                field.press('Tab')
+            self.assertEqual(mismatch.value.status, 409)
+            expect(pane.locator('[data-ops-inline-feedback]')).to_contain_text('identity changed')
+            expect(pane.locator('[name="pass1_start"]')).to_have_value('21:46')
+            with self.app.app_context():
+                original = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.missions[0]).one()
+                self.assertEqual(original.tail_number, 'N440UP')
+                self.assertIsNone(original.pass1_started_at_utc)
             # Actual phone Pretreat editing, failure recovery and independent completion.
-            pane.locator('[data-ops-collapse-inline]').click();page.set_viewport_size({'width':375,'height':900})
+            page.set_viewport_size({'width':375,'height':900})
             page.locator('[data-ops-mode="pretreat"]').click();expect(root).to_have_attribute('data-mode','pretreat')
             expect(root).to_have_attribute('data-ready','true')
             row = page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"]')
@@ -387,13 +472,16 @@ class OperationsBrowserTest(unittest.TestCase):
                 window.fetch = (url, options) => {
                     if (!String(url).endsWith('/operations/mutate')) return fetch(url, options);
                     window.fetch = fetch;
-                    return new Promise(resolve => { window.releasePretreat = () => resolve(fetch(url, options)); });
+                    return new Promise(resolve => {
+                        window.releasePretreat = () => resolve(fetch(url, options));
+                        document.documentElement.dataset.testTreatmentHeld = 'true';
+                    });
                 };
             }""")
             with page.expect_response(lambda r: 'Queued during a treatment save' in (r.request.post_data or '')) as queued:
                 start.fill('21:00')
                 start.press('Tab')
-                page.wait_for_function('typeof window.releasePretreat === "function"')
+                expect(page.locator('html')).to_have_attribute('data-test-treatment-held','true')
                 expect(row).to_have_attribute('aria-busy','true')
                 notes_form.locator('summary').click()
                 notes.fill('Queued during a treatment save')
@@ -405,13 +493,19 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(configure).to_have_attribute('aria-pressed','true')
             expect(row).to_have_attribute('data-status','configured')
             expect(row.locator('.ops-pretreat-state')).to_have_text('IN PROGRESS')
+            # Wait for the page's responsive layout handler before editing.
+            # It reparents the live cards when the viewport crosses 900px.
+            page.evaluate("""() => matchMedia('(max-width:900px)').addEventListener('change', () => {
+                document.documentElement.dataset.testPhoneLayout = 'ready';
+            }, {once:true})""")
             page.set_viewport_size({'width':375,'height':900})
+            expect(page.locator('html')).to_have_attribute('data-test-phone-layout','ready')
             if not inline.is_visible():
                 row.locator('.ops-pretreat-summary').click()
             end = treatment.locator('[name="pass1_end"]')
             end.focus()
             end.fill('24')
-            end.evaluate('field => field.blur()')
+            end.press('Tab')
             expect(inline.locator('[data-ops-inline-feedback]')).to_contain_text('Enter a valid time')
             expect(end).to_have_value('24')
             for name,value in (('pass1_end','21:00'),('pass2_start','21:00'),('pass2_end','21:00')):
@@ -459,7 +553,7 @@ class OperationsBrowserTest(unittest.TestCase):
                 self.assertEqual(saved.notes, 'Mobile pretreat independent notes')
             page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound')
             expect(root).to_have_attribute('data-ready','true')
-            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-mobile-status')).to_contain_text('PRETREATED')
+            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[1]}"] .ops-pretreated:visible')).to_have_text('PRETREATED')
             with self.app.app_context():
                 self.assertEqual(NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.missions[1]).one().status,'configured')
             # Shared filter resets on the next canonical operation, not a wall-clock guess.
@@ -471,6 +565,9 @@ class OperationsBrowserTest(unittest.TestCase):
                 if future is None:
                     future=SortDateOperation(gateway_id=operation.gateway_id,gateway_code='RFD',sort_date=operation.sort_date+timedelta(days=1),sort_name=operation.sort_name);db.session.add(future);db.session.commit()
                 type(self).operation_id=future.id
+            # Reopen the workspace on the next operation. An old tab with an
+            # unsaved original-tail draft cannot silently follow another Sort.
+            self.ready(page, '/neosubzero/operations?mode=outbound')
             expect(root).to_have_attribute('data-operation-id',str(type(self).operation_id),timeout=10000)
             expect(root).to_have_attribute('data-ramp','All');expect(root).to_have_attribute('data-mode','outbound')
             expect(page.locator('[data-ops-row]')).to_have_count(0)

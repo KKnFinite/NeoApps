@@ -1,5 +1,6 @@
 from tests.css_contracts import stylesheet_source
 from tests.html_contracts import document, assert_mobile_drawer
+from tests.sql_contracts import is_vendor_identity_read, measure_authority_reads
 import re
 import unittest
 from datetime import date, datetime, time, timedelta, timezone
@@ -98,7 +99,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(after, before)
                 self.assertEqual(sum("from users" in s for s in sql), 1)
                 self.assertEqual(sum("neosektor_sort_states.updated_at" in s and "gateway_memberships" in s for s in sql), 1)
-                state, _ = fresh(canonical_url+'?revision='+revision, 10 if changed else 9)
+                state, _ = fresh(canonical_url+'?revision='+revision, 10 if changed else 8)
                 self.assertEqual(state["changed"], changed)
                 if changed:
                     self.assertNotEqual(after["version"], initial["state"]["routing_watch"]["version"])
@@ -227,8 +228,23 @@ class NeoSektorRoutesTest(unittest.TestCase):
                             "integration", "refresh_status", "ballmat_routing", "live_revision"):
                     if key in context:
                         rendered[key] = context[key]
-            with template_rendered.connected_to(capture, self.app):
+            with template_rendered.connected_to(capture, self.app), measure_authority_reads() as scope_sql:
                 response, sql, commits, _ = self._capture_get_metrics(path)
+            self.assertIn(len(scope_sql), (5, 6))
+            for statement in scope_sql:
+                normalized = " ".join(statement.lower().split())
+                self.assertTrue(normalized.startswith('select '))
+                sql.remove(normalized)
+            # Dashboard/settings acquire the physical schedule for the shell.
+            # Discharge already accounted for its timeline before matrix gating.
+            if path in ('/neosektor', '/neosektor/settings', '/neosektor/discharge'):
+                matrix = [s for s in sql if 'from gateway_sort_matrix ' in s]
+                self.assertEqual(len(matrix), 1)
+                sql.remove(matrix[0])
+                if path != '/neosektor/discharge':
+                    timeline = [s for s in sql if 'from sort_timeline_sort_settings ' in s]
+                    self.assertEqual(len(timeline), 1)
+                    sql.remove(timeline[0])
             self.assertEqual(response.status_code, 200)
             self.assertEqual(commits, 0)
             self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
@@ -348,7 +364,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.assertEqual(commits, 0)
             return response.get_json()
         self.assertEqual(measured(signal_url, 1)["version"], scope["version"])
-        self.assertFalse(measured(state_url + "?revision=" + initial["revision"], 8)["changed"])
+        self.assertFalse(measured(state_url + "?revision=" + initial["revision"], 7)["changed"])
         # Each existing write endpoint commits a signal with the routing inputs.
         changes = [
             ("ballmat/update?side=east", {"side": "east", "waves": {"first": {"count": 3}}}),
@@ -538,8 +554,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(after.status_code, 200)
                 self.assertEqual(after.get_json(), before.get_json())
                 self.assertEqual(after.get_json()["changed"], changed)
-                self._assert_read_budget(old_sql, budget + 1)
-                self._assert_read_budget(sql, budget)
+                # Discharge reads the physical operating matrix even when its
+                # payload is unchanged. Keep the original work budget intact.
+                for statements, domain_budget in ((old_sql, budget + 1), (sql, budget)):
+                    matrix = [s for s in statements if 'from gateway_sort_matrix ' in s]
+                    self.assertEqual(len(matrix), 1)
+                    self._assert_read_budget([s for s in statements if s not in matrix], domain_budget)
                 self.assertEqual((old_commits, commits), (0, 0))
                 self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
                 permissions.assert_any_call("neosektor.discharge.view")
@@ -699,7 +719,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"neo-brand__neo neo-word", response.data)
         self.assertIn(b"neo-brand__node node-word", response.data)
         self.assertIn(
-            b'src="/static/images/logos/newlogo_sektor_small.png"',
+            b'src="/static/images/optimized/newlogo_sektor_small.webp?v=',
             response.data,
         )
         self.assertIn(b"neo-mobile-product-name", response.data)
@@ -777,7 +797,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         root=document(response)
         bar=root.one('header', **{'data-operational-topbar':None})
         self.assertEqual(bar.one('a', 'operational-node-identity').attrs['href'], '/neosektor')
-        self.assertEqual(bar.one('details', 'operational-account-menu').one('a', role='menuitem').attrs['href'], '/portal')
+        self.assertEqual([link.attrs['href'] for link in bar.one('details', 'operational-account-menu').findall('a', role='menuitem')],
+                         ['/portal', '/my-account'])
         self.assertEqual(len(bar.findall(**{'data-character-switcher':None})),1)
         self.assertEqual(bar.one('form', action='/logout').attrs['method'],'post')
         sidebar=root.one(**{'data-operational-sidebar':None})
@@ -831,9 +852,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     self.assertEqual(context.one('span').text, 'Current page')
                     menu = sidebar.one('nav', 'node-desktop-side-menu')
                     self.assertEqual([link.attrs['href'] for link in menu.findall('a')],
-                                     ['/neosektor', '/neosektor/live-counts', '/neosektor/settings', '/neosektor/tunnel-conductor',
-                                      '/neosektor/ebm', '/neosektor/wbm', '/neosektor/driver-routing',
-                                      '/neosektor/discharge', '/neosektor/stats'])
+                                     ['/neosektor/tunnel-conductor', '/neosektor/driver-routing',
+                                      '/neosektor/ebm', '/neosektor/wbm', '/neosektor/live-counts',
+                                      '/neosektor/discharge', '/neosektor/stats', '/neosektor/settings'])
                     self.assertTrue(sidebar.findall(**{'data-operational-sidebar-toggle': None}))
                 if '?tv=1' in path:
                     self.assertEqual(root.one('html').attrs['id'], 'sektor-tv')
@@ -851,9 +872,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn('letter-spacing: .1em;', shell)
         desktop = shell.split('@media (min-width: 901px) {', 1)[1].split('@media (max-width: 900px)', 1)[0]
         self.assertIn('body.operational-shell-page { --operational-topbar-height: 84px; }', desktop)
-        self.assertIn('grid-template-rows: auto auto minmax(0,1fr) auto;', desktop)
+        self.assertIn('grid-template-rows: minmax(0,1fr) auto;', desktop)
         self.assertIn('body.operational-shell-page.operational-sidebar-collapsed .operational-desktop-sidebar', desktop)
-        self.assertIn('grid-template-rows: auto auto auto minmax(0,1fr) auto;', desktop)
+        collapsed = desktop.split('body.operational-shell-page.operational-sidebar-collapsed .operational-desktop-sidebar {', 1)[1].split('}', 1)[0]
+        self.assertIn('grid-template-rows: minmax(0,1fr) auto;', collapsed)
         self.assertIn('body.operational-board-view .operational-node-topbar { display: none; }', desktop)
         self.assertIn('@media (max-width: 900px) {\n    .operational-node-topbar { display: none; }', shell)
         self.assertIn('#sektor-tv .operational-node-topbar { display: none; }', shell)
@@ -1079,12 +1101,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 header=root.one('header', **{'data-operational-mobile-header':None})
                 self.assertEqual(header.one('a').attrs['href'],'/neosektor')
 
-    def test_neosektor_dashboard_mobile_menu_has_portal_and_logout_only(self):
+    def test_neosektor_dashboard_mobile_menu_has_account_portal_and_logout(self):
         self._login_approved_user(role='simulator')
         root,drawer,dock=assert_mobile_drawer(self,self.client.get('/neosektor'))
         self.assertEqual(dock.one('a').attrs['href'],'/neosektor')
         menu=drawer.one(**{'data-drawer-view':'menu'})
-        self.assertEqual([link.attrs['href'] for link in menu.findall('a')], ['/portal'])
+        self.assertEqual([link.attrs['href'] for link in menu.findall('a')], ['/my-account', '/portal'])
         self.assertEqual(menu.one('a',href='/portal').text,'NeoPortal')
         self.assertEqual(menu.one('button').text,'Logout')
 
@@ -1138,7 +1160,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"motherbrain-header-nav", response.data)
                 self.assertNotIn(b"data-neosektor-internal-menu", response.data)
                 dashboard_menu = document(response).one(**{'data-drawer-view': 'menu'})
-                self.assertEqual([link.text.strip() for link in dashboard_menu.findall('a')], ['NeoPortal'])
+                self.assertEqual([link.text.strip() for link in dashboard_menu.findall('a')], ['My Account', 'NeoPortal'])
                 screen_menu = document(self.client.get('/neosektor/live-counts')).one(**{'data-drawer-view': 'menu'})
                 for label in expected_labels[role]:
                     self.assertIn(label.decode(), screen_menu.text)
@@ -4486,6 +4508,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_direct_lightweight_state_request_does_not_seed_access_rows(self):
         self._login_approved_user(role="watcher")
+        original_grants = PortalAppAccess.query.count(), GatewayNodeRole.query.count()
         statements = {"writes": 0, "commits": 0}
 
         def track_statement(_conn, _cursor, statement, _params, _context, _many):
@@ -4511,8 +4534,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(statements["writes"], 0)
         self.assertEqual(statements["commits"], 0)
-        self.assertEqual(PortalAppAccess.query.count(), 0)
-        self.assertEqual(GatewayNodeRole.query.count(), 0)
+        self.assertEqual((PortalAppAccess.query.count(), GatewayNodeRole.query.count()), original_grants)
 
     def test_read_only_polls_skip_unused_edit_permission_and_preserve_view_gate(self):
         from app.neonodes.neosektor import routes
@@ -4560,11 +4582,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.client.get("/neosektor/live-counts")
         for path, budget in (
-            ("/neosektor/live-counts/state", 8),
-            ("/neosektor/driver-routing/state", 8),
-            ("/neosektor/tunnel-conductor/state", 8),
-            ("/neosektor/ballmat/state?side=east", 8),
-            ("/neosektor/ballmat/state?side=west", 8),
+            ("/neosektor/live-counts/state", 7),
+            ("/neosektor/driver-routing/state", 7),
+            ("/neosektor/tunnel-conductor/state", 7),
+            ("/neosektor/ballmat/state?side=east", 7),
+            ("/neosektor/ballmat/state?side=west", 7),
         ):
             with self.subTest(path=path):
                 initial = self.client.get(path).get_json()
@@ -5541,6 +5563,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         return operation
 
     def _set_sort_window(self, sort_name, start_time, end_time):
+        # Model scheduled operations explicitly. An existing Sort row alone
+        # cannot authorize polling; tests of off-days can replace the matrix.
+        scheduled = SortDateOperation.query.filter_by(gateway_id=self.gateway.id).all()
+        save_gateway_matrix(self.gateway, {(op.sort_date.strftime('%A'), op.sort_name) for op in scheduled})
         settings = ensure_sort_timeline_settings(self.gateway)
         sort_setting = next(
             row
@@ -5648,7 +5674,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         reads = [s for s in statements if s.startswith(('select', 'with'))]
         # The deployed vendor-isolation gate performs exactly one extra read on
         # every request. Do not remove/bypass it to reproduce a pre-vendor budget.
-        self.assertEqual(sum('from neoscorpion_vendor_accounts ' in s for s in reads), 1)
+        self.assertEqual(sum(is_vendor_identity_read(s) for s in reads), 1)
         if shell_scope:
             self.assertEqual(sum('from gateways ' in s and 'gateway_memberships' in s
                                  and 'gateway_node_roles' in s for s in reads), 1)

@@ -235,7 +235,8 @@ class NeoSubZeroUccTest(unittest.TestCase):
         with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation", return_value=self.operation):
             page = client.get(f"/neosubzero/operations?mode=outbound&ramp=Alpha&mission={self.alpha.id}")
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b'data-ops-detail-content', page.data)
+        selected = document(page).one('article', **{'data-mission-id': str(self.alpha.id)})
+        self.assertEqual(selected.one(**{'data-ops-inline': None}).attrs['data-mission-id'], str(self.alpha.id))
         after = self._ramp_context("Alpha")["pad"]["mission_id"]
         self.assertEqual(before, configured.id)
         self.assertEqual(after, configured.id)

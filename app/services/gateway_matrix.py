@@ -109,8 +109,20 @@ def save_gateway_matrix(gateway, active_cells):
     db.session.commit()
 
 
+def _active_matrix(gateway):
+    def read():
+        rows = db.session.query(GatewaySortMatrix.day_of_week, GatewaySortMatrix.sort_name,
+                                GatewaySortMatrix.gateway_code).filter_by(gateway_id=gateway.id, is_active=True)
+        return {(row.day_of_week, row.sort_name): row.gateway_code for row in rows}
+
+    return request_cached("active_gateway_matrix", gateway.id, read)
+
+
 def active_sorts_for_gateway_date(gateway, sort_date):
     day = sort_date.strftime("%A").lower()
+    if has_request_context() and request.method in {"GET", "HEAD"}:
+        entries = _active_matrix(gateway)
+        return [name for name, _ in SORT_OPTIONS if (day, name) in entries]
     entries = (
         GatewaySortMatrix.query.filter_by(
             gateway_id=gateway.id,
@@ -347,7 +359,7 @@ def configured_sort_window_utc(gateway, sort_date, sort_name, zone, *, sort_sett
 
 def physical_poll_windows(gateway, sort_date, sort_name, *, follow_matrix=False, within_ops=False, now=None):
     """UTC millisecond intervals for the selected operation and scheduled screen wakes."""
-    if gateway is None or not gateway.is_active:
+    if gateway is None or not gateway.is_active or not gateway.code:
         return []
     try:
         zone = ZoneInfo(gateway_timezone(gateway))
@@ -356,18 +368,16 @@ def physical_poll_windows(gateway, sort_date, sort_name, *, follow_matrix=False,
     local_now = current_gateway_local_datetime(gateway, now=now)
     today = local_now.date()
     candidates = set()
-    entries = request_cached("physical_poll_matrix", gateway.id, lambda: matrix_entries_for_gateway(gateway))
+    entries = _active_matrix(gateway)
     if sort_date and sort_name and today - timedelta(days=1) <= sort_date <= today + timedelta(days=1):
-        cell = entries.get((DAY_OPTIONS[sort_date.weekday()][0], sort_name))
-        if cell and cell.is_active and cell.gateway_code == gateway.code:
+        if entries.get((DAY_OPTIONS[sort_date.weekday()][0], sort_name)) == gateway.code:
             candidates.add((sort_date, sort_name))
     if follow_matrix:
         for offset in range(-1, 8):
             day = today + timedelta(days=offset)
             weekday = DAY_OPTIONS[day.weekday()][0]
             for name, _ in SORT_OPTIONS:
-                cell = entries.get((weekday, name))
-                if cell and cell.is_active and cell.gateway_code == gateway.code:
+                if entries.get((weekday, name)) == gateway.code:
                     candidates.add((day, name))
     now_utc = local_now.replace(tzinfo=zone).astimezone(timezone.utc)
     periods = []

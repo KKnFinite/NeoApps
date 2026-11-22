@@ -117,15 +117,13 @@ class DischargeQueriesTest(unittest.TestCase):
                     failed_lookup = name in ('wrong_door','missing_id','stale_completed')
                     # The existing Employees navigation performs one scoped
                     # staffing_units read on HTML pages (not on state polls).
-                    # Current cold initialization has fewer reads than this
-                    # legacy budget. Its one compatibility AppAccess INSERT
-                    # and commit remain exact below; warm reads stay read-only.
-                    baseline = (24+int(not current) if name=='cold_page' else
-                                19+int(not current) if name=='page' else
-                                17+int(not current) if success else
-                                10 if failed_lookup else
-                                (5 if current else 4) if name=='unchanged' else
-                                4 if name=='changed' and not current else 7)
+                    # Login initializes the grant. Both cold and warm GETs
+                    # now include scope and scheduling reads and perform no writes.
+                    baseline = (25+int(not current) if name in ('cold_page','page') else
+                                19+int(not current) if success else
+                                11 if failed_lookup else
+                                (6 if current else 5) if name=='unchanged' else
+                                5 if name=='changed' and not current else 8)
                     saving = ((1 if current else 3) if name in ('cold_page','page') else
                               (1 if current else 4) if success else
                               int(not current) if failed_lookup else 0)
@@ -135,11 +133,11 @@ class DischargeQueriesTest(unittest.TestCase):
                     self.assertEqual(new_counts,(baseline-saving,*counts[1:]))
                     self.assertEqual(new_payload,payload)
                     self.assertEqual(len(new_commits),len(commits))
-                    self.assertEqual(len(commits),int(success or name=='cold_page'))
+                    self.assertEqual(len(commits),int(success))
                     writes = [s for s in sql if s.startswith(('update ','insert ','delete '))]
                     self.assertEqual([s for s in new_sql if s.startswith(('update ','insert ','delete '))],writes)
                     expected_writes = {'partial':(1,1,0),'multi_partial':(1,3,0),
-                        'already_zero_type':(0,1,0),'complete':(0,2,1),'cold_page':(0,1,0)}
+                        'already_zero_type':(0,1,0),'complete':(0,2,1)}
                     updates, inserts, deletes = expected_writes.get(name,(0,0,0))
                     # Fulfillment now shares the request increment reservation;
                     # SQLite represents that lock as one no-op Gateway UPDATE.
