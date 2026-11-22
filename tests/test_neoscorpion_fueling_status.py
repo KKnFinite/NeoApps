@@ -569,12 +569,16 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
 
 
 class TrustedFobInheritanceTest(unittest.TestCase):
+    def setUp(self):
+        from tests import test_neoscorpion_physical_evidence as canonical
+        self.fixture = canonical.PhysicalEvidenceTest()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+
     def test_explicit_trusted_lineage_uses_apu_adjusted_fuel_and_preserves_accounting(self):
         # Create the source through ON, OFF, Fueler submission and Dispatcher
         # verification; a fabricated audit link is not proof of completion.
-        from tests import test_neoscorpion_physical_evidence as canonical
-        fixture=canonical.PhysicalEvidenceTest()
-        fixture.setUp();self.addCleanup(fixture.doCleanups)
+        fixture = self.fixture
         fixture.prepare();fixture.finish()
         source=NeoScorpionFuelingEvent.query.one()
         source_before=service._fuel_rollback_values(source)
@@ -606,7 +610,7 @@ class TrustedFobInheritanceTest(unittest.TestCase):
         self.assertEqual(row()['tail_swap_inherited_event_id'],source.id)
         self.assertFalse(row()['fuel_on_board_ready'])
 
-        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','30',
+        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','30.0',
             expected_value='25',user=fixture.dispatcher)
         db.session.commit()
 
@@ -622,7 +626,7 @@ class TrustedFobInheritanceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Insufficient verified'):
             service.complete_fuel_on_board(fixture.gateway,fixture.dispatcher,assignment.id)
         db.session.rollback()
-        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','25',
+        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','25.0',
             expected_value='30',user=fixture.dispatcher)
         db.session.commit()
         self.assertTrue(row()['fuel_on_board_ready'])

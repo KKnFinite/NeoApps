@@ -198,8 +198,9 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
 
     def test_durable_new_owner_rejects_staged_old_poll_and_preserves_new_lease(self):
         # Only this interleaving needs truly independent physical connections.
-        self.tearDown()
-        self.setUp(file_database=True)
+        if db.engine.dialect.name == 'sqlite':
+            self.tearDown()
+            self.setUp(file_database=True)
         self._enable()
         operation = self._ensure_operation()
         operation_id, sort_date = operation.id, operation.sort_date
@@ -309,52 +310,60 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(result, {'status': 'failed', 'operation_id': operation_id})
 
     def test_all_rain_failures_leave_primary_success_durable(self):
-        for failure_at in ('mode', 'reader', 'applier', 'commit'):
-            with self.subTest(failure_at=failure_at):
-                self._enable()
-                operation = self._ensure_operation()
-                operation_id = operation.id
-                rain_reader = Mock(return_value=[])
+        self._check_rain_failure('mode')
 
-                def fail(*_args, **_kwargs):
-                    db.session.expire_all()
-                    raise OperationalError('synthetic Rain failure', {}, Exception('offline'))
+    def test_rain_reader_failure_preserves_primary_success(self):
+        self._check_rain_failure('reader')
 
-                target = ('app.services.google_motherbrain_live_poll_execution.operation_mode'
-                          if failure_at == 'mode' else None)
-                rain_apply = Mock(return_value={})
-                if failure_at == 'reader':
-                    rain_reader.side_effect = TimeoutError('Google timeout')
-                if failure_at == 'applier':
-                    def apply_fail(op, **_kwargs):
-                        mission = SortDateMission.query.one()
-                        mission.flight_number = 'RAIN-ROLLBACK'
-                        db.session.flush()
-                        fail()
-                    rain_apply.side_effect = apply_fail
-                if failure_at == 'commit':
-                    def patch_commit(*_args, **_kwargs):
-                        commit_failure.start()
-                        return {}
-                    rain_apply.side_effect = patch_commit
-                commit_failure = patch.object(db.session, 'commit', side_effect=fail)
-                try:
-                    with patch(target, side_effect=fail) if target else nullcontext():
-                        result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
-                            reader=lambda: {'inbound_rows': [self._inbound(4, '947', 'N947UP', origin='SDF')]},
-                            rain_reader=rain_reader, rain_applier=rain_apply)
-                finally:
-                    commit_failure.stop()
-                self.assertEqual(result['status'], 'success')
-                self.assertEqual(result['operation_id'], operation_id)
-                self.assertEqual(result['rain_status'], 'failed')
-                self.assertEqual(SortDateMission.query.one().flight_number, 'UPS0947')
-                self.assertEqual(self._state(operation).last_success_at_utc, self.NOW)
-                self.assertEqual(self._state(operation).lease_token, '')
-                if target:
-                    rain_reader.assert_not_called()
-                MotherBrainGoogleLivePollState.query.delete()
-                db.session.commit()
+    def test_rain_applier_failure_preserves_primary_success(self):
+        self._check_rain_failure('applier')
+
+    def test_rain_commit_failure_preserves_primary_success(self):
+        self._check_rain_failure('commit')
+
+    def _check_rain_failure(self, failure_at):
+        self._enable()
+        operation = self._ensure_operation()
+        operation_id = operation.id
+        rain_reader = Mock(return_value=[])
+
+        def fail(*_args, **_kwargs):
+            db.session.expire_all()
+            raise OperationalError('synthetic Rain failure', {}, Exception('offline'))
+
+        target = ('app.services.google_motherbrain_live_poll_execution.operation_mode'
+                  if failure_at == 'mode' else None)
+        rain_apply = Mock(return_value={})
+        if failure_at == 'reader':
+            rain_reader.side_effect = TimeoutError('Google timeout')
+        if failure_at == 'applier':
+            def apply_fail(op, **_kwargs):
+                mission = SortDateMission.query.one()
+                mission.flight_number = 'RAIN-ROLLBACK'
+                db.session.flush()
+                fail()
+            rain_apply.side_effect = apply_fail
+        if failure_at == 'commit':
+            def patch_commit(*_args, **_kwargs):
+                commit_failure.start()
+                return {}
+            rain_apply.side_effect = patch_commit
+        commit_failure = patch.object(db.session, 'commit', side_effect=fail)
+        try:
+            with patch(target, side_effect=fail) if target else nullcontext():
+                result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
+                    reader=lambda: {'inbound_rows': [self._inbound(4, '947', 'N947UP', origin='SDF')]},
+                    rain_reader=rain_reader, rain_applier=rain_apply)
+        finally:
+            commit_failure.stop()
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['operation_id'], operation_id)
+        self.assertEqual(result['rain_status'], 'failed')
+        self.assertEqual(SortDateMission.query.one().flight_number, 'UPS0947')
+        self.assertEqual(self._state(operation).last_success_at_utc, self.NOW)
+        self.assertEqual(self._state(operation).lease_token, '')
+        if target:
+            rain_reader.assert_not_called()
 
     def test_before_sort_window_does_not_read_or_lease(self):
         self._enable()

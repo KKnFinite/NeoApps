@@ -3188,10 +3188,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
             [("A2", 1), ("AMP", 1), ("AMP", 4)],
         )
 
-        for event in NeoSektorUldOnTheWayEvent.query.filter_by(door="D34").all():
-            event.expires_at_utc = datetime(2026, 6, 24, 0, 0)
-        db.session.commit()
-        expired_state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
+        expiry = max(row.expires_at_utc for row in NeoSektorUldOnTheWayEvent.query.filter_by(door="D34"))
+        class AfterExpiry(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return (expiry + timedelta(seconds=1)).replace(tzinfo=tz)
+        with patch("app.services.neoermac_door_view.datetime", AfterExpiry):
+            expired_state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
         self.assertEqual(expired_state["on_the_way_events"], [])
         self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").count(), 1)
 

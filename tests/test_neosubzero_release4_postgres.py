@@ -63,6 +63,8 @@ class Release4PostgresTest(contracts.FrostVaultTest):
         for mission in missions:mission.actual_block_out_datetime_utc=datetime(2026,9,1,1)
         db.session.commit()
         coordinator=self.client('simulator');events=[]
+        with coordinator.session_transaction() as session:
+            coordinator_id = int(session['_user_id'])
         for index,(ramp,mission) in enumerate(zip(ramps,missions)):
             event=mutate_departure_deice(op,mission,'initial_contact',{});db.session.commit()
             values=dict(treatment_plan='type_i_type_iv',pass1_surface_area='wings_only',pass2_surface_area='wings_tail',pass1_start='2200')
@@ -90,6 +92,11 @@ class Release4PostgresTest(contracts.FrostVaultTest):
         second=participation_query(events[0]).filter_by(pass_number=2).one()
         self.assertEqual((second.truck_number_snapshot,second.driver_person_id),('T-REPLACEMENT',f.callout.id))
         self.assertEqual(second.concentration_percent_snapshot,100)
+        alpha_ramp=neosubzero_ucc_context(f.gateway,op)['ramps'][0]
+        self.assertEqual(alpha_ramp['pad']['mission_id'], f.alpha.id)
+        for mission, event in zip(missions, events):
+            mutate_departure_deice(op, mission, 'radio_complete', {}, event=event, actor_id=coordinator_id)
+        db.session.commit()
         alpha_ramp=neosubzero_ucc_context(f.gateway,op)['ramps'][0]
         self.assertEqual(alpha_ramp['pad']['mission_id'],waiting[0].id)
         for index,mission in enumerate(waiting):

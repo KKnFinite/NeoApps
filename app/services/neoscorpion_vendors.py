@@ -90,7 +90,7 @@ def vendor_request_boundary():
     # The boundary already loaded this request's authenticated profile, including
     # absence. Let ordinary relationship reads reuse that exact lookup. Session
     # expiration and the independent post-lock mutation checks still reload it.
-    set_committed_value(current_user._get_current_object(), 'scorpion_vendor', account)
+    set_committed_value(current_user, 'scorpion_vendor', account)
     g.scorpion_vendor_account = account
     if not account:
         return None

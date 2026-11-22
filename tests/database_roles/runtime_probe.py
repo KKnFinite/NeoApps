@@ -21,6 +21,7 @@ def check_statement_permissions(conn):
     grants['neoapps_reviewed_deployments'] = {'SELECT'}
     column_grants = json.loads(COLUMN_MANIFEST.read_text(encoding='utf-8'))
     allowed = denied = 0
+    checks = []
     with conn, conn.cursor() as cur:
         cur.execute("""SELECT table_name,column_name FROM information_schema.columns
                        WHERE table_schema=current_schema() ORDER BY table_name,ordinal_position""")
@@ -32,13 +33,13 @@ def check_statement_permissions(conn):
             assignments = set(column_grants.get(table, '').split())
             first_column = columns[table][0]
             statements = [
-                ('SELECT' in verbs, sql.SQL('SELECT * FROM {}').format(target)),
-                ('INSERT' in verbs, sql.SQL('INSERT INTO {} DEFAULT VALUES').format(target)),
-                ('DELETE' in verbs, sql.SQL('DELETE FROM {} WHERE false').format(target))]
+                ('SELECT', None, 'SELECT' in verbs, sql.SQL('SELECT * FROM {}').format(target)),
+                ('INSERT', None, 'INSERT' in verbs, sql.SQL('INSERT INTO {} DEFAULT VALUES').format(target)),
+                ('DELETE', None, 'DELETE' in verbs, sql.SQL('DELETE FROM {} WHERE false').format(target))]
             for column in columns[table] if assignments else (first_column,):
-                statements.append(('UPDATE' in verbs or column in assignments,
+                statements.append(('UPDATE', column, 'UPDATE' in verbs or column in assignments,
                     sql.SQL('UPDATE {} SET {}=DEFAULT WHERE false').format(target, sql.Identifier(column))))
-            for permitted, statement in statements:
+            for verb, column, permitted, statement in statements:
                 cur.execute('SAVEPOINT acl_probe')
                 try:
                     # EXPLAIN checks the real executor's permissions without
@@ -53,6 +54,10 @@ def check_statement_permissions(conn):
                 finally:
                     cur.execute('ROLLBACK TO SAVEPOINT acl_probe')
                     cur.execute('RELEASE SAVEPOINT acl_probe')
+                checks.append(dict(table=table, verb=verb, column=column, allowed=permitted))
+    if path := os.getenv('ROLE_ACL_EVIDENCE'):
+        with open(path, 'a', encoding='utf-8') as file:
+            print(json.dumps(dict(role=conn.info.user, statements=checks)), file=file)
     print(f'PostgreSQL statement matrix: {allowed} allowed, {denied} denied', flush=True)
 
 

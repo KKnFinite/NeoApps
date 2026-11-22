@@ -267,6 +267,9 @@ def main(argv=None):
             return
         conn.set_session(readonly=True)
         with conn, conn.cursor() as cursor:
+            cursor.execute("SELECT current_schema()")
+            if cursor.fetchone() != (args.schema,):
+                raise ValueError("Unexpected runtime search path")
             cursor.execute("SET LOCAL search_path TO pg_catalog")
             cursor.execute("SET LOCAL lock_timeout='5s'")
             cursor.execute("SET LOCAL statement_timeout='30s'")

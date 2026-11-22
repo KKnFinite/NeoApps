@@ -8,6 +8,7 @@ from app.models import (
     NeoRainGoogleFuelValue,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelingEvent,
+    NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
     SortDateMission,
     SortDateOperation,
@@ -35,7 +36,8 @@ class NeoRainFuelAuthorityTest(unittest.TestCase):
         self.mission = SortDateMission(sort_date_operation=self.operation, sort_date=date(2026,9,3), sort_name="night", gateway_code="RFD", mission_type="departure", flight_number="UPS1", origin="RFD", destination="SDF", planned_datetime_local=datetime(2026,9,4,2), planned_datetime_utc=datetime(2026,9,4,7))
         self.other = SortDateMission(sort_date_operation=self.operation, sort_date=date(2026,9,3), sort_name="night", gateway_code="RFD", mission_type="departure", flight_number="UPS2", origin="RFD", destination="SDF", planned_datetime_local=datetime(2026,9,4,3), planned_datetime_utc=datetime(2026,9,4,8))
         self.user = User(username="rain-user", email="rain@test", first_name="Rain", last_name="User", password_hash="test")
-        db.session.add_all((self.operation, self.mission, self.other, self.user)); db.session.commit()
+        self.truck = NeoScorpionFuelTruck(gateway=self.gateway, truck_number='RAIN-FUEL')
+        db.session.add_all((self.operation, self.mission, self.other, self.user, self.truck)); db.session.commit()
 
     def tearDown(self):
         db.session.remove(); db.drop_all(); self.ctx.pop()
@@ -64,7 +66,7 @@ class NeoRainFuelAuthorityTest(unittest.TestCase):
             sort_date_operation_id=self.operation.id,
             fuel_assignment_id=assignment.id,
             fuel_work_state_id=work.id,
-            tail_number="N1", fuel_truck_id=1, sequence_number=1,
+            tail_number="N1", fuel_truck_id=self.truck.id, sequence_number=1,
             neo_fuel_lbs=45600, center_fuel_lbs=49000,
             created_at=datetime(2026, 9, 4, 6, 0, 0, 100000),
             updated_at=datetime(2026, 9, 4, 6, 0, 0, 100200),
@@ -105,14 +107,14 @@ class NeoRainFuelAuthorityTest(unittest.TestCase):
         earlier = NeoScorpionFuelingEvent(
             sort_date_operation_id=self.operation.id,
             fuel_assignment_id=assignment.id, fuel_work_state_id=work.id,
-            tail_number="N1", fuel_truck_id=1, sequence_number=1,
+            tail_number="N1", fuel_truck_id=self.truck.id, sequence_number=1,
             cycle_number=1, neo_fuel_lbs=45000, center_fuel_lbs=1000,
             created_at=datetime(2026, 9, 4, 5), updated_at=datetime(2026, 9, 4, 5),
         )
         later = NeoScorpionFuelingEvent(
             sort_date_operation_id=self.operation.id,
             fuel_assignment_id=assignment.id, fuel_work_state_id=work.id,
-            tail_number="N1", fuel_truck_id=1, sequence_number=2,
+            tail_number="N1", fuel_truck_id=self.truck.id, sequence_number=2,
             cycle_number=2, neo_fuel_lbs=45000, center_fuel_lbs=1000,
             created_at=datetime(2026, 9, 4, 6), updated_at=datetime(2026, 9, 4, 6),
         )
@@ -132,7 +134,7 @@ class NeoRainFuelAuthorityTest(unittest.TestCase):
         db.session.add(assignment); db.session.flush()
         work = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id, tail_number="N1")
         db.session.add(work); db.session.flush()
-        event = NeoScorpionFuelingEvent(sort_date_operation_id=self.operation.id, fuel_assignment_id=assignment.id, fuel_work_state_id=work.id, tail_number="N1", fuel_truck_id=1, sequence_number=1, neo_fuel_lbs=12000, center_fuel_lbs=2100)
+        event = NeoScorpionFuelingEvent(sort_date_operation_id=self.operation.id, fuel_assignment_id=assignment.id, fuel_work_state_id=work.id, tail_number="N1", fuel_truck_id=self.truck.id, sequence_number=1, neo_fuel_lbs=12000, center_fuel_lbs=2100)
         db.session.add(event); db.session.commit()
         self.assertEqual(completed_scorpion_fuel_by_mission(self.operation), {})
         assignment.completed_at_utc = datetime.utcnow(); db.session.commit()

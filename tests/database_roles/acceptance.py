@@ -17,6 +17,7 @@ from sqlalchemy.sql.schema import Table
 from app.extensions import db
 from scripts.runtime_database_access import configure
 from tests import test_gateway_shell as gateway
+from tests import test_unmatched_review_alerts as review_alerts
 from tests import test_neorain_sort_refresh as windows
 from tests.test_neorain_overrides_postgres import RainOverridePostgresTest
 from tests import test_google_rain_integration_mode_transition as manual
@@ -36,12 +37,19 @@ class SortHours(windows.NeoRainSortRefreshTest):
             super().setUp()
 
 
+class ReviewAlerts(review_alerts.UnmatchedReviewAlertsTest):
+    def setUp(self):
+        postgres(self, review_alerts, super().setUp)
+
+
 class ManualSort(manual.GoogleRainIntegrationModeTransitionTest):
     def setUp(self):
         postgres(self, manual, super().setUp)
 
 
 CASES = {
+    "review_alert": "__main__.ReviewAlerts.test_alert_action_marks_only_current_user_read_and_deep_links_queue",
+    "vendor_membership": "test_fuel_driver_accounts_postgres.FuelDriverAccountsPostgresTest.test_company_capability_changes_serialize_and_preserve_history",
     "transfer": "test_neostaffing_transfers_postgres.EmployeeTransferPostgresTest.test_competing_transfers_accept_one_revision_and_keep_one_active_placement",
     "timecard": "test_neostaffing_timecards_postgres.TimecardsPostgresTest.test_concurrent_distinct_employees_both_persist",
     "employee_record": "test_neostaffing_employee_records_postgres.EmployeeRecordPostgresTest.test_two_finalizations_only_one_wins",
@@ -158,13 +166,12 @@ def restricted_method(case, method, role=RUNTIME):
             runtime_engine.dispose()
 
 
-def portable_suite(role):
+def portable_suite():
     """Replay ordinary SQLite-backed application tests with isolated PG setup."""
     suite = unittest.TestSuite()
     for name in Path(os.environ['ROLE_WORKLOADS']).read_text(encoding='utf-8-sig').splitlines():
         if not name or name.startswith('#'):
             continue
-        module, cls, method = name.split('.')
         case = unittest.defaultTestLoader.loadTestsFromName('tests.' + name)._tests[0]
         original = case.setUp
         def setup(test=case, original=original):
@@ -194,7 +201,9 @@ def portable_suite(role):
 
 def main():
     assert_disposable()
-    names = list(CASES) if sys.argv[1:] == ['paths'] else sys.argv[1:]
+    names = sys.argv[1:]
+    if 'paths' in names:
+        names = list(CASES) + [name for name in names if name != 'paths']
     suite = unittest.TestSuite()
     if 'boundary' in names:
         from boundary import RoleBoundary
@@ -205,7 +214,7 @@ def main():
     for role in (MIGRATOR, RUNTIME, FALLBACK):
         operational = unittest.TestSuite()
         if 'catalog_paths' in names and role == RUNTIME:
-            operational.addTests(portable_suite(role))
+            operational.addTests(portable_suite())
         for name in names:
             if name in ('boundary', 'catalog_paths'):
                 continue

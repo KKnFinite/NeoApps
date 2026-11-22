@@ -167,7 +167,8 @@ class LeadershipQueryTest(unittest.TestCase):
         db.session.commit()
         self.assertEqual(service._board_leadership_index(), {ids[0]: {'part_time_supervisor': 1}})
         assignment = StaffingLeadershipAssignment.query.one()
-        assignment.unit_id = ids[1]
+        service.delete_leadership_assignment(assignment)
+        service.create_leadership_assignment(person, second)
         person.classification = 'twenty_c_full_time_supervisor'
         db.session.commit()
         result, statements, _ = self.measure(service._board_leadership_index)

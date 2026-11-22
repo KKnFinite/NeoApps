@@ -43,6 +43,9 @@ def main():
     parser.add_argument("--workloads", type=Path, help="Additional real application unittest IDs, one per line")
     parser.add_argument("cases", nargs="*")
     args = parser.parse_args()
+    if not args.cases and not args.workloads:
+        args.cases = ['boundary', 'paths']
+        args.workloads = Path(__file__).with_name('workloads.txt')
     binary = args.bin.resolve(strict=True)
     temp_root = Path(tempfile.gettempdir()).resolve()
     with tempfile.TemporaryDirectory(prefix="neoapps_acl_", dir=temp_root) as scratch:
@@ -57,6 +60,7 @@ def main():
         if args.matrix:
             matrix = args.matrix.resolve()
             matrix.touch(exist_ok=False)
+            Path(str(matrix) + '.statements.jsonl').touch(exist_ok=False)
             env["ROLE_TEST_MATRIX"] = str(matrix)
         passwords = {role: secrets.token_urlsafe(32) for role in ("fixture_admin", MIGRATOR, RUNTIME, FALLBACK, LEGACY)}
         pwfile = home / "init.pass"

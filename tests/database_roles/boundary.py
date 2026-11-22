@@ -30,6 +30,8 @@ class RoleBoundary(unittest.TestCase):
         self.web_env = process_env(Path(os.environ["HOME"]))
         self.web_env.update(DATABASE_URL=self.web, RENDER_GIT_COMMIT=self.release)
         self.web_env['SECRET_KEY'] = secrets.token_urlsafe(32)
+        if path := os.getenv('ROLE_TEST_MATRIX'):
+            self.web_env['ROLE_ACL_EVIDENCE'] = path + '.statements.jsonl'
         self.legacy = self.url("ROLE_TEST_PRIOR_URL")
         self.legacy_env = dict(self.owner_env, DATABASE_URL=self.legacy)
         self.invoke("scripts/bootstrap_database.py", self.legacy_env)
@@ -132,6 +134,9 @@ class RoleBoundary(unittest.TestCase):
             hosted = dict(self.web_env, RENDER='true', NEOAPPS_RUNTIME_DATABASE=DBNAME,
                           NEOAPPS_RUNTIME_SCHEMA=self.schema, NEOAPPS_RUNTIME_ROLE=RUNTIME)
             self.invoke("scripts/bootstrap_database.py", hosted)
+            wrong_path = make_url(self.web).update_query_dict({'options': '-csearch_path=pg_catalog'})
+            self.invoke("scripts/bootstrap_database.py", dict(hosted, DATABASE_URL=wrong_path.render_as_string(
+                        hide_password=False)), expected="Unexpected runtime search path")
             self.invoke("scripts/bootstrap_database.py", dict(hosted, DATABASE_URL=self.owner),
                         expected="Unexpected target database or grantor")
             self.invoke("scripts/bootstrap_database.py", dict(hosted, RENDER_GIT_COMMIT='0'*40),
