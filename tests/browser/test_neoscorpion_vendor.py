@@ -14,8 +14,19 @@ from tests.browser import test_mobile_drawer as fixtures
 from tests.neoscorpion_handoff_fixture import submit_and_verify
 
 
+def active_browser_refresh_windows(_gateway):
+    # Tests for vendor workflow pin physical Sort eligibility independently of
+    # the machine's wall clock. Boundary behavior has a dedicated JS test.
+    now = datetime.utcnow()
+    return [[(now-timedelta(minutes=1)).isoformat()+'Z',
+             (now+timedelta(minutes=45)).isoformat()+'Z']]
+
+
 class VendorBrowserTest(unittest.TestCase):
-    def test_all_sort_missions_refresh_on_vendor_truck(self):
+    @patch('app.neonodes.neoscorpion.vendor_routes.vendor_refresh_windows',
+           side_effect=active_browser_refresh_windows)
+    @patch('app.neonodes.neoscorpion.vendor_routes.vendor_revision_in_sort', return_value=True)
+    def test_all_sort_missions_refresh_on_vendor_truck(self, *_mocks):
         F = fixtures.MobileDrawerBrowserTest
         F.setUpClass()
         browser = None
@@ -155,7 +166,10 @@ class VendorBrowserTest(unittest.TestCase):
                 browser.close()
             F.tearDownClass()
 
-    def test_vendor_approval_claim_inventory_and_responsive_board(self):
+    @patch('app.neonodes.neoscorpion.vendor_routes.vendor_refresh_windows',
+           side_effect=active_browser_refresh_windows)
+    @patch('app.neonodes.neoscorpion.vendor_routes.vendor_revision_in_sort', return_value=True)
+    def test_vendor_approval_claim_inventory_and_responsive_board(self, *_mocks):
         F=fixtures.MobileDrawerBrowserTest
         F.setUpClass();browser=None
         def submit(page,button):
