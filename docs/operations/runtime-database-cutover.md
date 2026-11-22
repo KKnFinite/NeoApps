@@ -71,3 +71,9 @@ python tests/database_roles/run_local.py --bin PATH_TO_LOCAL_POSTGRES_BIN
 ```
 
 The release rehearsal uses a separate database. It bootstraps with a prior owner, fingerprints all business relations, transfers reviewed ownership, repeats the canonical bootstrap with the migration login, tests the read-only gate, drains connections and reconnects with the fallback. Actual hosted isolation, provider-specific catalog differences and production-only paths require owner/DBA verification. This preparation creates no cloud resource or paid service.
+
+On a disposable Linux filesystem, the additional custody test uses two existing non-root identities, an empty supplementary group list and separate private directories. A local supervisor launches the two children. The runtime reads its own credential fixture and receives an OS permission denial when it tries to open the operator's fixture.
+
+```text
+python3 tests/database_roles/credential_custody.py --owner-uid OPERATOR_UID --runtime-uid WEB_UID
+```
