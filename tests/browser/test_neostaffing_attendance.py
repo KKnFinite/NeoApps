@@ -74,9 +74,13 @@ class AttendanceBrowserTest(unittest.TestCase):
     def row(self, page, employee):
         return page.locator(f'[data-attendance-employee-id="{employee}"]')
 
-    def expect_scope_here(self, page, count):
+    def expect_scope_here(self, page, count, *, outside_visible=True):
         expect(page.locator(f'[data-attendance-scope-here="{self.scope["work_area_id"]}"]')).to_have_text(str(count))
-        expect(page.locator(f'[data-attendance-scope-here="{self.outside_area_id}"]')).to_have_text('—')
+        outside = page.locator(f'[data-attendance-scope-here="{self.outside_area_id}"]')
+        if outside_visible:
+            expect(outside).to_have_text('—')
+        else:
+            expect(outside).to_have_count(0)
 
     def open(self, browser, username):
         page = browser.new_page(viewport={'width': 1920, 'height': 1080})
@@ -215,7 +219,7 @@ class AttendanceBrowserTest(unittest.TestCase):
             stale = self.row(other, 'BX200')
             stale.locator('select').select_option('call_in')
             expect(stale.locator('[data-attendance-state]')).to_contain_text('Changed by another supervisor')
-            self.expect_scope_here(other, 2)
+            self.expect_scope_here(other, 2, outside_visible=False)
             expect(stale.locator('select')).to_have_value('call_in')
             stale.get_by_role('button', name='Retry').click()
             expect(stale.locator('[data-attendance-state]')).to_have_text('Saved')

@@ -1,5 +1,6 @@
 """Previously uncovered updates, exercised through the same services and forms as the app."""
 from datetime import datetime
+from decimal import Decimal
 
 from app.extensions import db
 from app.models import NeoSubZeroTruck
@@ -14,6 +15,8 @@ from tests.test_fuel_driver_accounts import FuelDriverAccountsTest
 from tests import test_gateway_shell as gateways
 from tests import test_neostaffing_shift_flow as flow
 from tests import test_neorain_load_planner_routes as planners
+from tests import test_neoscorpion_cancel_unassign as cancel
+from tests import test_neostaffing_daily_attendance as attendance
 from tests.test_sektor_ermac_performance_postgres import postgres
 
 
@@ -30,6 +33,28 @@ class GatewayUpdates(gateways.GatewayShellTest):
         db.session.expire_all()
         self.assertEqual(first.id, second.id)
         self.assertEqual((second.attempted_call_count, second.units_consumed), (2, 5))
+
+    def test_refresh_default(self):
+        from app.services.live_screen_refresh import live_screen_refresh_value, save_live_screen_refresh_override
+        key = 'neoscorpion.fuel_dispatch'
+        for value, expected in [('15', 15), ('30', 30), ('default', None)]:
+            self.assertTrue(save_live_screen_refresh_override(self.gateway, key, value).changed)
+            db.session.commit()
+            self.assertEqual(live_screen_refresh_value(self.gateway, key).override_seconds, expected)
+
+    def test_aircraft_rate(self):
+        from app.models import NeoScorpionAircraftFuelSetting
+        from app.services import neoscorpion as fuel
+        aircraft = fuel.NEOSCORPION_APU_AIRCRAFT_TYPES[0]
+        field = fuel._apu_rate_field_name(aircraft)
+        for value in ('0.70', '0.80', ''):
+            self.assertTrue(fuel.save_aircraft_fuel_settings(self.gateway, self.user, {field: value}).changed)
+            db.session.commit()
+            row = NeoScorpionAircraftFuelSetting.query.filter_by(gateway_id=self.gateway.id, aircraft_type=aircraft).one_or_none()
+            if value:
+                self.assertEqual(row.apu_rate_thousand_lbs_per_hour, Decimal(value))
+            else:
+                self.assertIsNone(row)
 
     def test_ground_time(self):
         from app.services.neorain_rainrock import set_default_planned_fph
@@ -63,6 +88,45 @@ class GatewayUpdates(gateways.GatewayShellTest):
             self.assertEqual(row.history[-1]['action'], action)
             self.assertEqual(row.active, action in ('edit_truck', 'activate_truck'))
         self.assertIsNotNone(db.session.get(NeoSubZeroTruck, row.id).archived_at_utc)
+
+
+class HistoricalOperations(attendance.NeoStaffingDailyAttendanceTest):
+    def setUp(self):
+        postgres(self, attendance, super().setUp)
+
+    def test_purge(self):
+        from tests.test_neostaffing_history_retention import test_purge_cutoff_keeps_the_boundary_night_and_withdraws_partial_roster
+        test_purge_cutoff_keeps_the_boundary_night_and_withdraws_partial_roster(self)
+
+    def test_corrections(self):
+        from tests.test_neostaffing_historical_records import test_canonical_marks_correction_rollback_transfer_and_retention
+        test_canonical_marks_correction_rollback_transfer_and_retention(self)
+
+
+class FuelRollback(cancel.CancelUnassignTest):
+    def setUp(self):
+        postgres(self, cancel.fixture, super().setUp)
+        # Historic completion evidence can predate a separate tail-fuel row.
+        _, _, self.saved_assignment, _, _, _ = self._completed()
+        db.session.delete(cancel.NeoScorpionTailFuelState.query.one())
+        db.session.commit()
+
+    def test_cancel_new_tail(self):
+        self.assertEqual(cancel.NeoScorpionTailFuelState.query.count(), 0)
+        events = [e.id for e in cancel.NeoScorpionFuelingEvent.query.all()]
+        self.assertTrue(events)
+        assignment = self.saved_assignment
+        cancel.service.start_follow_up_fuel_cycle(
+            self.gateway, self.dispatcher, assignment.id, 'uplift', '55.0', '', '',
+            expected_cycle=assignment.current_cycle_number, expected_tail=assignment.confirmed_tail_number,
+            now_utc=datetime(2026, 8, 18, 6),
+        )
+        db.session.commit()
+        self.assertEqual(cancel.NeoScorpionTailFuelState.query.count(), 1)
+        self.assertTrue(self._cancel(self.saved_assignment).changed)
+        db.session.commit()
+        self.assertEqual(cancel.NeoScorpionTailFuelState.query.count(), 0)
+        self.assertEqual([e.id for e in cancel.NeoScorpionFuelingEvent.query.all()], events)
 
 
 class StaffingUpdates(flow.ShiftFlowTest):
