@@ -278,12 +278,18 @@ class NeoRainLoadPlannerRoutesTest(unittest.TestCase):
         self.assertNotIn(b"LEGACY", page.data)
         self.assertEqual(first.status_code, 302)
         self.assertEqual(second_saved.status_code, 302)
+        saved_contact = NeoRainLoadPlannerContact.query.filter_by(
+            gateway_id=self.gateway.id, staffing_person_id=self.eligible.id).one()
+        with self._current_operation(self.operation):
+            edited = self._post(action="save_planner_contact", planner_person_id=self.eligible.id,
+                                extension="4555", radio_channel="RAMP 3", expected_version=entity_version(saved_contact))
+        self.assertEqual(edited.status_code, 302)
         db.session.expire_all()
         contacts = NeoRainLoadPlannerContact.query.filter_by(gateway_id=self.gateway.id).all()
         self.assertEqual(
             {contact.staffing_person_id: (contact.extension, contact.radio_channel) for contact in contacts},
             {
-                self.eligible.id: ("4555", "RAMP 1"),
+                self.eligible.id: ("4555", "RAMP 3"),
                 second.id: ("4666", "RAMP 2"),
             },
         )

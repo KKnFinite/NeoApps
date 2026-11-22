@@ -172,7 +172,11 @@ class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
             self.other_operation, self.other_gateway, self.user, "SDF Ace"
         ))
         self._commit(set_nightly_fueler_nickname(
-            self.operation_b, self.gateway, self.user, "", expected_nickname="Ace"
+            self.operation_b, self.gateway, self.user, "Pilot", expected_nickname="Ace"
+        ))
+        self.assertEqual(fueler_nicknames(self.gateway, [self.user]), {self.user.id: "Pilot"})
+        self._commit(set_nightly_fueler_nickname(
+            self.operation_b, self.gateway, self.user, "", expected_nickname="Pilot"
         ))
         self.assertEqual(NeoScorpionFuelerNickname.query.filter_by(gateway_id=self.gateway.id).count(), 0)
         self.assertEqual(operational_fueler_name(self.user, fueler_nicknames(self.gateway, [self.user])), self.user.display_name)

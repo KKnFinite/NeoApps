@@ -351,6 +351,11 @@ class UnmatchedReviewAlertsTest(unittest.TestCase):
         self.assertEqual(self._context_for(self.simulator)["unread_count"], 1)
         self.assertTrue(self._arrival_alert().active)
 
+        reopened = self.client.post(f"/motherbrain/alerts/{alert.id}/open")
+        self.assertEqual(reopened.status_code, 302)
+        self.assertEqual(self._context_for(self.grandmaster)["unread_count"], 0)
+        self.assertEqual(self._context_for(self.simulator)["unread_count"], 1)
+
     def test_filtered_queue_and_live_payload_use_matching_alert(self):
         self._review("arrival:a", "arrival", "UPS100")
         self._review("departure:a", "departure", "UPS200")
