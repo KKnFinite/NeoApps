@@ -1,12 +1,14 @@
 """Operational planning layouts using the authenticated local browser fixture."""
 import unittest
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import expect
 
 from app.extensions import db
 from app.models import SortDateMission, SortDateOperation
 from app.services.access_control import ensure_default_gateway_and_nodes
+from app.services.gateway_matrix import save_gateway_matrix
 from app.services.sort_timeline import ensure_sort_timeline_settings
 from tests.browser import test_mobile_drawer as fixture
 
@@ -103,12 +105,15 @@ class MissionPlanningBrowserTest(unittest.TestCase):
         with env.app.app_context():
             gateway = ensure_default_gateway_and_nodes()
             night = next(s for s in ensure_sort_timeline_settings(gateway).sort_settings if s.sort_name == "night")
+            save_gateway_matrix(gateway, [("Wednesday", "night")])
             night.sort_window_start_local, night.sort_window_end_local = time(20), time(5)
             night.ops_window_start_local, night.ops_window_end_local = time(20), time(5)
             db.session.commit()
         browser = env.pw.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": 1440, "height": 900})
+            # Both sides enforce the physical window, including tabs left open.
+            page.clock.install(time=datetime(2026, 6, 24, 22, tzinfo=ZoneInfo("America/Chicago")))
             env().login(page)
             page.goto(env.origin + base + "/departure")
             page.get_by_role("link", name="ALP import").click()

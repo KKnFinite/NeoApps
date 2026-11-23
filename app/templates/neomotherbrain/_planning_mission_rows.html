@@ -5,7 +5,7 @@
 <tr
     data-live-row
     data-live-id="mission:{{ mission.id }}"
-    data-live-version="{{ mission.updated_at.isoformat(timespec='microseconds') if mission.updated_at else '' }}"
+    data-live-version="{{ row.display_version }}-{{ can_edit|int }}"
     {% if row.is_late %}class="is-arrival-late"{% endif %}
 >
     <td>{{ mission.wave|wave_label }}</td>
@@ -44,12 +44,12 @@
 <tr
     data-live-row
     data-live-id="mission:{{ mission.id }}"
-    data-live-version="{{ mission.updated_at.isoformat(timespec='microseconds') if mission.updated_at else '' }}"
+    data-live-version="{{ row.display_version }}-{{ can_edit|int }}"
 >
     <td>{{ mission.wave|wave_label }}</td>
     <td>{{ mission.flight_number|upper }}</td>
     <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
-    <td>{{ mission.display_destination if mission.destination else "-" }}</td>
+    <td>{{ row.destination_label if mission.destination else "-" }}</td>
     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
     <td>{{ planning_parking_cell(row, operation) }}</td>
     <td>

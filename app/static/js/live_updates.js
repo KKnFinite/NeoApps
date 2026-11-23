@@ -455,7 +455,7 @@
     const preserveLocalControls = (current, replacement) => {
         const activeElement = document.activeElement;
         const protectedForms = Array.from(current.querySelectorAll("form")).filter(
-            (form) => form.contains(activeElement)
+            (form) => (form.contains(activeElement) && form.dataset.liveSaveConfirmed !== "true")
                 || Boolean(form.querySelector("[data-live-dirty='true']"))
         );
         for (const sourceForm of protectedForms) {
@@ -609,6 +609,10 @@
             : null;
         const row = input?.closest("[data-live-row]");
         if (row) {
+            if (input.form) {
+                delete input.form.dataset.liveSaveConfirmed;
+                if (input.form.dataset.liveSubmitting === "true") input.form.dataset.liveEditedDuringSave = "true";
+            }
             input.dataset.liveDirty = "true";
             row.dataset.liveDirty = "true";
         }
@@ -686,6 +690,8 @@
             return;
         }
         form.dataset.liveSubmitting = "true";
+        delete form.dataset.liveEditedDuringSave;
+        delete form.dataset.liveSaveConfirmed;
         const interaction = window.NeoInteraction?.begin(form);
         try {
             const response = await fetch(form.action, {
@@ -698,24 +704,33 @@
                     "X-Requested-With": "XMLHttpRequest",
                 },
             });
-            const payload = await response.json().catch(() => ({}));
-            if (response.status === 409) {
+            const payload = await response.json().catch(() => null);
+            if (!response.redirected && response.status === 409 && payload?.ok === false &&
+                payload.conflict && typeof payload.conflict === "object" && !Array.isArray(payload.conflict)) {
                 interaction?.failed();
-                showConflict(form, payload.conflict || payload, refresh);
+                showConflict(form, payload.conflict, refresh);
                 return;
             }
-            if (!response.ok || payload.ok === false) {
+            if (response.redirected || !response.ok || payload?.ok !== true) {
                 interaction?.failed();
-                showActionError(form, payload.error || payload.message);
+                const reason = !response.redirected && payload?.ok === false && (payload.error || payload.message);
+                showActionError(form, reason ||
+                    "Save could not be confirmed. Check your session and the latest mission before retrying.");
                 return;
             }
             const row = form.closest("[data-live-row]");
-            if (row) {
-                row.dataset.liveDirty = "false";
+            if (!form.dataset.liveEditedDuringSave) {
+                form.dataset.liveSaveConfirmed = "true";
+                form.querySelectorAll("[data-live-dirty='true']").forEach(field => delete field.dataset.liveDirty);
+                if (row) row.dataset.liveDirty = String(Boolean(row.querySelector("[data-live-dirty='true']")));
             }
             clearConflict(row);
-            await refresh();
             interaction?.confirmed();
+            try {
+                await refresh();
+            } catch (_refreshError) {
+                showActionError(form, "Saved. Refresh the page to see the latest mission.");
+            }
         } catch (_error) {
             interaction?.failed();
             showActionError(form);

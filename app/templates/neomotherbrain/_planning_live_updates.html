@@ -29,7 +29,7 @@
         window.NeoLiveUpdates.reconcileAlertTrays(fragments.alert_tray);
     };
 
-    const poll = async () => {
+    const loadState = async () => {
         const pollUrl = new URL(stateUrl, window.location.href);
         pollUrl.searchParams.set("revision", currentRevision);
         const response = await fetch(pollUrl, {
@@ -52,12 +52,23 @@
         reconcile(payload);
     };
 
+    let pendingRead = null;
+    const poll = () => {
+        if (!pendingRead) pendingRead = loadState().finally(() => { pendingRead = null; });
+        return pendingRead;
+    };
+    const readAfterAction = async () => {
+        // A read started before the commit can still carry the old revision.
+        if (pendingRead) await pendingRead.catch(() => {});
+        return poll();
+    };
+
     controller = window.NeoLiveUpdates.create({
         intervalMs: {{ live_update_status.live_screen_refresh_interval_ms }},
         statusElement,
         poll,
     });
-    window.NeoLiveUpdates.bindConflictSafeForms(root, () => controller.refreshNow());
+    window.NeoLiveUpdates.bindConflictSafeForms(root, readAfterAction);
     controller.setServerStatus(initialStatus);
 })();
 </script>

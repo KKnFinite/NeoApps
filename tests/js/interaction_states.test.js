@@ -81,27 +81,39 @@ test("cancelled native submissions do not lock and repeated initialization does 
     assert.equal(h.window.NeoInteraction.isPending(h.form), true);
 });
 
-for (const outcome of ["success", "rejected", "conflict", "network"]) {
+for (const outcome of ["success", "rejected", "conflict", "network", "html", "redirect", "empty", "invalid-conflict", "refresh-error"]) {
     test(`live action ${outcome} waits for authority, never retries, and releases pending`, async () => {
         const h = harness(); let resolve, reject, requests = 0, refreshes = 0, onSubmit;
         h.context.fetch = () => { requests++; return new Promise((yes,no) => {resolve=yes; reject=no;}); };
         h.run("live_updates.js");
-        h.window.NeoLiveUpdates.bindConflictSafeForms({addEventListener(type, fn){if(type==='submit') onSubmit=fn;}}, async () => {refreshes++;});
+        const saved = outcome === "success" || outcome === "refresh-error";
+        h.window.NeoLiveUpdates.bindConflictSafeForms({addEventListener(type, fn){if(type==='submit') onSubmit=fn;}}, async () => {
+            refreshes++;
+            if (outcome === "refresh-error") throw Error("read disconnected");
+        });
         const event = {target:h.form, preventDefault(){}};
         onSubmit(event); onSubmit(event);
         assert.equal(requests, 1);
         assert.equal(h.form.dataset.interactionState, "pending");
         assert.equal(refreshes, 0);
         if (outcome === "network") reject(Error("private transport detail"));
-        else resolve({status:outcome === "success" ? 200 : outcome === "conflict" ? 409 : 422, ok:outcome === "success",
-            json:async()=>({ok:outcome === "success", error:"Validated action error", conflict:{can_overwrite:false}})});
+        else if (outcome === "html") resolve({status:200, ok:true, json:async()=>{throw SyntaxError();}});
+        else if (outcome === "redirect") resolve({status:200, ok:true, redirected:true, json:async()=>({ok:true})});
+        else if (outcome === "empty") resolve({status:200, ok:true, json:async()=>({})});
+        else if (outcome === "invalid-conflict") resolve({status:409, ok:false, json:async()=>({})});
+        else resolve({status:saved ? 200 : outcome === "conflict" ? 409 : 422, ok:saved,
+            json:async()=>({ok:saved, error:"Validated action error", conflict:{can_overwrite:false}})});
         await settle();
-        assert.equal(h.form.dataset.interactionState, outcome === "success" ? "confirmed" : "failed");
-        assert.equal(refreshes, outcome === "success" ? 1 : 0);
+        assert.equal(h.form.dataset.interactionState, saved ? "confirmed" : "failed");
+        assert.equal(refreshes, saved ? 1 : 0);
+        if (outcome === "refresh-error") assert.match(h.form.children.at(-1).textContent, /^Saved\./);
         assert.equal(h.form.dataset.liveSubmitting, "false");
         assert.equal(h.submit.getAttribute("aria-disabled"), null);
         assert.equal(requests, 1);
         assert.ok(!h.form.children.some(x => x.textContent?.includes("private transport")));
+        if (outcome === "invalid-conflict") {
+            assert.ok(h.form.children.some(x => x.className?.includes("is-error")));
+        }
         if (outcome === "conflict") {
             const panel=h.form.children.find(x => x.className === "live-conflict-panel");
             assert.equal(panel.children[1].children.length,1);
