@@ -6,7 +6,9 @@ const path = require("node:path");
 const source = fs.readFileSync(path.join(__dirname, "../../app/static/js/neoraiden.js"),"utf8");
 
 test("refresh serializes requests, skips hidden tabs, and honors Retry-After", async () => {
-    let pending, calls=0, now=0, tick;
+    let pending, calls=0, now=0;
+    const timers = new Map();
+    const tick = () => document.visibilitychange();
     const elements = {};
     function element(name) {
         return elements[name] ||= {
@@ -25,8 +27,9 @@ test("refresh serializes requests, skips hidden tabs, and honors Retry-After", a
     };
     class Clock extends Date { static now() {return now;} }
     vm.runInNewContext(source, {document, window:{addEventListener(){}}, localStorage:storage, fetch,
-        Date:Clock, setInterval(f){tick=f;}, setTimeout, clearTimeout, AbortController});
-    assert.equal(element("countdown").textContent,"Next refresh in 30s");
+        Date:Clock, setTimeout(fn, ms){timers.set(fn,ms);return fn;}, clearTimeout(fn){timers.delete(fn);}, AbortController});
+    assert.equal(elements.countdown,undefined);
+    assert.deepEqual([...timers.values()],[30000]);
     const request=element("refresh").click();
     await element("refresh").click();
     tick();
@@ -51,5 +54,6 @@ test("refresh serializes requests, skips hidden tabs, and honors Retry-After", a
     tick();
     document.visibilitychange();
     assert.equal(calls, 2);
-    assert.equal(element("countdown").textContent, "Outside Sort hours");
+    assert.equal(element("refresh-status").textContent, "Outside Sort hours");
+    assert.equal(timers.size,0);
 });

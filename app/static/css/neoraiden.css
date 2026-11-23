@@ -50,7 +50,7 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-settings>label {position:absolute; z-index:4; right:0; top:100%; background:var(--surface); padding:12px; box-shadow:0 4px 12px #0004; border:1px solid var(--line); border-radius:6px; white-space:nowrap}
 .rd-context {margin-block:8px; flex-wrap:wrap}
 .rd-refresh {margin-left:auto; display:flex; gap:.4em; flex-wrap:wrap; color:var(--muted); align-items:baseline; font-size:.88em}
-.rd-refresh [data-countdown] {color:var(--accent)}
+.rd-refresh [data-refresh-status] {color:var(--accent)}
 .rd-stale {color:var(--hold); font-weight:650; padding:4px 0}
 .rd-overview {display:grid; grid-template-columns:minmax(0,2fr) minmax(170px,1fr); gap:8px}
 .rd-uld,.rd-sort,.rd-panel {background:var(--surface); border:1px solid var(--line); border-radius:8px; min-width:0}
