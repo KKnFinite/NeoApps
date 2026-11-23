@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const code = fs.readFileSync('app/static/js/neorain_daily_briefing.js','utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
-function page(canEdit=true,{fallback=false,denyClipboard=false,fallbackSuccess=true,sortEndMs=Date.now()+60000}={}) {
+function page(canEdit=true,{fallback=false,denyClipboard=false,fallbackSuccess=true,sortEndMs=Date.now()+60000,physicalWindow=true}={}) {
   const requests=[], handlers={}, timers=[];
   const inputs=['briefing_safety','actual_volume'].map(name => ({name,value:'',disabled:!canEdit,
     tagName:name==='briefing_safety'?'TEXTAREA':'INPUT',style:{},scrollHeight:30,
@@ -25,7 +25,7 @@ function page(canEdit=true,{fallback=false,denyClipboard=false,fallbackSuccess=t
   let copied=null;
   let area=null;
   const timeouts=new Map();let nextTimer=0;
-  vm.runInNewContext(code,{document:{querySelector:()=>root,hidden:false,
+  vm.runInNewContext(code,{window:{NeoLiveUpdates:{insidePhysicalSort:()=>physicalWindow}},document:{querySelector:()=>root,hidden:false,
       getSelection:()=>null,activeElement:{focus(){}},body:{appendChild(){}},
       createElement:()=>area={style:{},select(){},remove(){}},
       execCommand:()=>{if(fallbackSuccess)copied=area.value;return fallbackSuccess;}},
@@ -43,6 +43,9 @@ function page(canEdit=true,{fallback=false,denyClipboard=false,fallbackSuccess=t
     idle:()=>{const jobs=[...timeouts.values()];timeouts.clear();return Promise.all(jobs.map(job=>job.fn()));},
     submit:()=>handlers.submit({preventDefault(){}})};
 }
+test('an unexpired briefing stays idle when the physical Sort is closed',async()=>{
+  const p=page(true,{physicalWindow:false});await p.timers[0].fn();assert.equal(p.requests.length,0);
+});
 test('save sends only changed values and versions; zero and exact copy text survive',async()=>{
   const p=page();p.inputs[1].value='0';const save=p.submit();await tick();
   assert.deepEqual(JSON.parse(p.requests[0].options.body),{values:{actual_volume:'0'},versions:{actual_volume:0}});

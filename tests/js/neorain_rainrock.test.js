@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const code=fs.readFileSync('app/static/js/neorain_rainrock.js','utf8');
 const tick=()=>new Promise(r=>setImmediate(r));
-function page(editable=true,{sortEndMs=Date.now()+60000}={}){
+function page(editable=true,{sortEndMs=Date.now()+60000,physicalWindow=true}={}){
  const requests=[],handlers={},intervals=[],timeouts=new Map(),notes={},buttons={};let timer=0;
  const inputs=['actual_volume','note_1'].map(name=>({name,value:'',readOnly:!editable,dataset:{savedValue:'',version:'0'}}));
  inputs.forEach(i=>{notes[i.name]={textContent:''};buttons[i.name]={hidden:true};});
@@ -16,7 +16,8 @@ function page(editable=true,{sortEndMs=Date.now()+60000}={}){
   const button=s.match(/\[data-rainrock-use-saved="(.+)"\]/);if(button)return buttons[button[1]];
   return {addEventListener:(_,fn)=>{handlers[s.includes('download')?'download':'copy']=fn;}};
  },querySelectorAll:()=>[]};
- const ctx={document:{querySelector:()=>root,hidden:false,fonts:{ready:Promise.resolve()}},window:{addEventListener(){}},
+ const ctx={document:{querySelector:()=>root,hidden:false,fonts:{ready:Promise.resolve()}},
+  window:{addEventListener(){},NeoLiveUpdates:{insidePhysicalSort:()=>physicalWindow}},
   navigator:{},setTimeout:(fn,ms)=>{const id=++timer;timeouts.set(id,{fn,ms});return id;},clearTimeout:id=>timeouts.delete(id),
   setInterval:(fn,ms)=>intervals.push({fn,ms}),clearInterval:()=>{},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))};
  vm.runInNewContext(code,ctx);
@@ -26,6 +27,9 @@ function page(editable=true,{sortEndMs=Date.now()+60000}={}){
   type:(i,value)=>{inputs[i].value=value;handlers.input({target:inputs[i]});},
   blur:i=>handlers.focusout({target:inputs[i]}),submit:()=>handlers.submit({preventDefault(){}})};
 }
+test('an unexpired report stays idle when the physical Sort is closed',async()=>{
+ const p=page(true,{physicalWindow:false});await p.intervals[0].fn();assert.equal(p.requests.length,0);
+});
 test('zero is saved with exact field/version and normalized report returned',async()=>{
  const p=page();p.type(0,'0');const save=p.blur(0);await tick();
  assert.deepEqual(JSON.parse(p.requests[0].options.body),{values:{actual_volume:'0'},versions:{actual_volume:0}});
