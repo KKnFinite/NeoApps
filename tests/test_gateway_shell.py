@@ -16,6 +16,21 @@ from app.services.permission_rules import ensure_default_permission_rules
 
 
 class GatewayShellTest(unittest.TestCase):
+    def test_regrouped_staffing_styles_use_fresh_immutable_urls(self):
+        from urllib.parse import parse_qs, urlsplit
+        from tests.presentation_contracts import asset
+
+        for route, filenames in (('/rfd', ('21-shared.css',)),
+                                 ('/neostaffing/settings', ('20-neostaffing.css', '21-shared.css'))):
+            response = self.client.get(route)
+            self.assertEqual(response.status_code, 200)
+            for filename in filenames:
+                href = asset(self, response, 'css/' + filename, tag='link').attrs['href']
+                query = parse_qs(urlsplit(href).query)
+                self.assertEqual(query['staffing'], ['20261123-settings'])
+                self.assertEqual(query['v'], [self.app.config['STATIC_ASSET_VERSION']])
+                self.assertIn('immutable', self.client.get(href).headers['Cache-Control'])
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",

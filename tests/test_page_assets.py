@@ -7,6 +7,13 @@ from app.services.page_assets import CSS_SEQUENCE, page_stylesheets
 
 
 class PageAssetsTest(unittest.TestCase):
+    def test_vacation_sharing_and_staffing_settings_styles_stay_with_staffing(self):
+        root = Path(__file__).resolve().parents[1] / 'app/static'
+        for marker in ('[data-vacation-share-results]', 'body:has(.neostaffing-settings-console)'):
+            owners = {row['scope'] for row in CSS_SEQUENCE
+                      if marker in (root / 'css' / row['file']).read_text(encoding='utf-8')}
+            self.assertEqual(owners, {'neostaffing'}, marker)
+
     def test_weather_and_outbound_fragments_are_only_delivered_to_their_nodes(self):
         for blueprint in ("neogateway", "neomotherbrain", "neoraiden", "neoermac", "neostaffing",
                           "neosektor", "neoscorpion", "neorain", "neosubzero", "auth"):
