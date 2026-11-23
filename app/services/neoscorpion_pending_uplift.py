@@ -463,7 +463,12 @@ def _promote(gateway,user,operation,assignment,mission,p,now):
         raise ValueError('Proposed Fueler is assigned to other active work.')
     if p.proposed_truck_id is not None and owners_truck.get(p.proposed_truck_id):
         raise ValueError('Proposed Truck is assigned to other active work.')
-    result=fuel.start_follow_up_fuel_cycle(gateway,user,assignment.id,'uplift',str(Decimal(p.required_fuel_lbs)/Decimal(1000)),
+    # Preserve every stored pound. Whole thousands need an explicit decimal;
+    # finer legacy targets must reach the same validator without rounding.
+    target_k_lbs = fuel.format_entered_thousands(p.required_fuel_lbs)
+    if "." not in target_k_lbs:
+        target_k_lbs += ".0"
+    result=fuel.start_follow_up_fuel_cycle(gateway,user,assignment.id,'uplift',target_k_lbs,
         None,None,expected_cycle=p.parent_cycle_number,expected_tail=p.tail_number,now_utc=now,pending_uplift_id=p.id)
     # Replace generic latest-tail carry-forward with the exact verified parent visit.
     fresh=result.fuel_work_state;by_code={t.tank_code:t for t in fresh.tank_states}
