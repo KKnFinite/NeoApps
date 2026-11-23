@@ -95,6 +95,12 @@ Fourteen JavaScript cases failed in the starting fixtures. The Rain harnesses om
 
 The two initial-page query budgets that failed on the original baseline pass with their original limits after #43. The selected Planning route and browser suite passed 24/24. The separate PostgreSQL browser regression passed with both engines. The Raiden app and browser release run passed 11/11, and the later archive-query suite passed 10/10. The SubZero cold-import change passed 19 PostgreSQL tests and four browser tests. These runs overlap and should not be added as unique test cases. Public production checks used health, redirects and deployed assets. Mutation tests used disposable data.
 
+### Integrated verification
+
+The final integrated run passed 95/95 disposable PostgreSQL tests. Seven additional browser cases exercised off-day and boundary behavior, Rain desktop and mobile, two concurrent Fuel Dispatch sessions and Sektor's two-tab routing. Four originally failed in the browser fixtures. The local HTTP server required a development-only cookie setting for WebKit. The live collaboration fixtures needed their browser clocks aligned with the seeded physical Sort. Sektor's original 6.5 s sample also ended before both five-second safety checks could use separate 5.1 s state slots. The corrected test required a state response from each tab and preserved the live route-change assertions. Over equal 14 s samples the reference issued 18 routing hints and the shared transport issued nine. All seven cases passed across the original run and focused retests.
+
+The baseline stylesheets defined 259 distinct custom properties, of which 93 had different values across component scopes or conditions. This includes deliberate palette and responsive differences. The audit found no basis for treating these 93 names as redundant theme definitions.
+
 ## Remaining measured work
 
 | Priority | Evidence | Next bounded check |
