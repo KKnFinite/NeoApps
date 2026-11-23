@@ -14,6 +14,7 @@
     let pending = false;
     let stopped = false;
     let retriesAfter = 0;
+    let timer;
     function stamp() {
         const now = new Date();
         get("success").dateTime = now.toISOString();
@@ -29,8 +30,9 @@
         if (automatic && !insideSort()) return;
         if (pending || stopped || document.hidden || Date.now() < retriesAfter) return;
         pending = true;
+        clearTimeout(timer);
         get("refresh").disabled = true;
-        get("countdown").textContent = "Updating…";
+        get("refresh-status").textContent = "Updating…";
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
         try {
@@ -75,12 +77,22 @@
         }
     }
     function tick() {
+        clearTimeout(timer);
         if (pending || document.hidden) return;
-        get("refresh").disabled = stopped || Date.now() < retriesAfter;
-        const seconds = Math.max(0, Math.ceil((due - Date.now()) / 1000));
-        get("countdown").textContent = stopped ? "Refresh stopped" : insideSort()
-            ? "Next refresh in " + seconds + "s" : "Outside Sort hours";
-        if (!stopped && !seconds && insideSort()) refresh(true);
+        const now = Date.now();
+        const active = insideSort();
+        get("refresh").disabled = stopped || now < retriesAfter;
+        get("refresh-status").textContent = stopped ? "Refresh stopped" : active ? "" : "Outside Sort hours";
+        if (stopped) return;
+        if (active && now >= due && now >= retriesAfter) {
+            refresh(true);
+            return;
+        }
+        // Wake for a due update, a physical window boundary, or a manual retry.
+        const wakes = windows.flat().filter(time => time > now);
+        if (active) wakes.push(Math.max(due, retriesAfter));
+        if (retriesAfter > now) wakes.push(retriesAfter);
+        if (wakes.length) timer = setTimeout(tick, Math.min(Math.min(...wakes) - now, 2147483647));
     }
     chooser.addEventListener("change", () => {
         try { localStorage.setItem(storageKey, chooser.value); } catch (_) {}
@@ -93,5 +105,4 @@
     window.addEventListener("pageshow", event => { if (event.persisted) refresh(true); });
     stamp();
     tick();
-    setInterval(tick, 1000);
 })();

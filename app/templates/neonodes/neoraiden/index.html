@@ -17,7 +17,7 @@
     <div class="rd-context">
         <form><select name="gateway" aria-label="Gateway" data-submit-on-change>{% for g in gateways %}<option value="{{ g.code }}"{% if g.id == gateway.id %} selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></form>
         <select aria-label="Sort" data-sort-choice><option value="{{ url_for('neoraiden.index',gateway=gateway.code) }}">Current Sort</option>{% for s in sorts %}<option value="{{ url_for('neoraiden.index',gateway=gateway.code,operation_id=s.id) }}"{% if s.id == selected_id %} selected{% endif %}>{{ s.sort_date }} · {{ s.sort_name|title }}</option>{% endfor %}</select>
-        <div class="rd-refresh">Updated <time data-success></time><span data-countdown></span></div>
+        <div class="rd-refresh">Updated <time data-success></time><span data-refresh-status></span></div>
     </div>
     <p class="rd-stale" role="status" data-stale hidden></p>
     <div data-board>{% include "neonodes/neoraiden/_board.html" %}</div>
@@ -29,5 +29,5 @@
     </nav>
 </section>
 <script defer src="{{ url_for('static', filename='js/neoraiden_workspace.js', v=config.STATIC_ASSET_VERSION, rev='god-mode-1') }}"></script>
-<script defer src="{{ url_for('static', filename='js/neoraiden.js', v=config.STATIC_ASSET_VERSION, rev='20261121-hours') }}"></script>
+<script defer src="{{ url_for('static', filename='js/neoraiden.js', v=config.STATIC_ASSET_VERSION, rev='20261123-refresh') }}"></script>
 {% endblock %}

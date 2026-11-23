@@ -45,7 +45,8 @@ class CommandCenterBrowser(unittest.TestCase):
                     page.get_by_label("Refresh settings").click()
                     page.locator("[data-interval]").select_option("15")
                     page.get_by_label("Refresh settings").click()
-                    expect(page.locator("[data-countdown]")).to_contain_text("15s")
+                    expect(page.locator("[data-countdown]")).to_have_count(0)
+                    expect(page.locator("[data-refresh-status]")).to_be_empty()
                     with page.expect_response(lambda r:"/neoraiden/state" in r.url) as first:
                         page.locator("[data-refresh]").click()
                     self.assertEqual(first.value.status,304)
@@ -74,7 +75,7 @@ class CommandCenterBrowser(unittest.TestCase):
                     page.clock.set_system_time((start + timedelta(hours=8)).replace(tzinfo=ZoneInfo("America/Chicago")))
                     page.clock.fast_forward(61000)
                     page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true}))")
-                    expect(page.locator("[data-countdown]")).to_have_text("Outside Sort hours")
+                    expect(page.locator("[data-refresh-status]")).to_have_text("Outside Sort hours")
                     self.assertEqual(automatic_requests, [])
                     with page.expect_response(lambda r:"/neoraiden/state" in r.url and r.status == 503):
                         page.locator("[data-refresh]").click()
