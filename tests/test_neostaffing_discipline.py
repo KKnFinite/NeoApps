@@ -391,8 +391,9 @@ class DisciplineWorkflowTest(employee_fixture.SektorEmployeesTest):
             "app.neostaffing.routes.attendance_history_service.maintain_current_attendance_rollover"):
             response = self.client.get(f"/neostaffing/attendance?sort_id={self.other_sort.id}")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'aria-label="Attendance Sort"', response.data)
-        self.assertIn(f'sort_id={self.other_sort.id}&amp;work_area_id={self.other_area.id}'.encode(), response.data)
+        self.assertIn(b'data-scope-picker', response.data)
+        self.assertIn(f'data-attendance-area="{self.other_area.id}"'.encode(), response.data)
+        self.assertIn(f'data-attendance-person="{self.worker.id}"'.encode(), response.data)
 
     def test_additive_table_bootstrap_and_backfill_preserve_existing_facts(self):
         from sqlalchemy import inspect

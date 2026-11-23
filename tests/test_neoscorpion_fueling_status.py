@@ -606,7 +606,7 @@ class TrustedFobInheritanceTest(unittest.TestCase):
         self.assertEqual(row()['tail_swap_inherited_event_id'],source.id)
         self.assertFalse(row()['fuel_on_board_ready'])
 
-        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','30',
+        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','30.0',
             expected_value='25',user=fixture.dispatcher)
         db.session.commit()
 
@@ -622,7 +622,7 @@ class TrustedFobInheritanceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Insufficient verified'):
             service.complete_fuel_on_board(fixture.gateway,fixture.dispatcher,assignment.id)
         db.session.rollback()
-        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','25',
+        service.autosave_dispatch_field(fixture.gateway,mission.id,'required_fuel','25.0',
             expected_value='30',user=fixture.dispatcher)
         db.session.commit()
         self.assertTrue(row()['fuel_on_board_ready'])

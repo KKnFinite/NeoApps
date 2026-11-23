@@ -59,7 +59,7 @@ class AssignmentTimesTest(unittest.TestCase):
         self.assertEqual([r['at'] for r in receipts], [at, at])
         self.assertEqual([r['actor_id'] for r in receipts], [self.dispatcher.id]*2)
         self.assign(truck, at + timedelta(minutes=3))
-        self.target('26')
+        self.target('26.0')
         for _ in range(2): self.assertEqual(self.row()['assignment_receipt'], receipts)
         self.assertEqual(NeoScorpionFuelAuditEntry.query.count(), before)
 
@@ -114,7 +114,7 @@ class AssignmentTimesTest(unittest.TestCase):
         self.assertEqual(work.console_assignment_changes[0]['actor_id'],self.dispatcher.id)
 
     def test_second_truck_sent_time_is_dispatcher_plan_not_fueler_activation(self):
-        self.prepare(); self.target('40'); truck=self.fixture._nightly_truck('NEXT');db.session.commit()
+        self.prepare(); self.target('40.0'); truck=self.fixture._nightly_truck('NEXT');db.session.commit()
         sent = self.start + timedelta(minutes=1)
         p=plans.plan_continuation(self.gateway,self.dispatcher,dict(assignment_id=self.assignment.id,
             expected_cycle=1,expected_tail='N491UP',expected_work_ref=self.work.id,
@@ -123,7 +123,7 @@ class AssignmentTimesTest(unittest.TestCase):
         plans.plan_continuation(self.gateway,self.dispatcher,dict(assignment_id=self.assignment.id,
             expected_cycle=1,expected_tail='N491UP',pending_id=p.id,expected_version=p.version,
             proposed_truck_id=truck.id,pending_action='save'),now_utc=sent+timedelta(minutes=1));db.session.commit()
-        self.target('41')
+        self.target('41.0')
         row=self.row();self.assertEqual(row['planned_assignment_receipt'][1]['at'],sent)
         self.save(self.start+timedelta(minutes=5),**self.final_data());self.off();self.submit()
         row=self.row();child=next(w for w in row['console_visits'] if w.id==p.promoted_work_state_id)
@@ -133,7 +133,7 @@ class AssignmentTimesTest(unittest.TestCase):
         self.assertNotEqual(sent,self.assignment.truck_assigned_at_utc)
 
     def test_planned_truck_reassignment_a_b_a_records_last_intent_not_target_edit(self):
-        self.prepare();self.target('40');a=self.fixture._nightly_truck('NEXT-A');b=self.fixture._nightly_truck('NEXT-B');db.session.commit()
+        self.prepare();self.target('40.0');a=self.fixture._nightly_truck('NEXT-A');b=self.fixture._nightly_truck('NEXT-B');db.session.commit()
         sent=self.start+timedelta(minutes=1);p=None
         for i,truck in enumerate((a,b,a,a)):
             p=plans.plan_continuation(self.gateway,self.dispatcher,dict(assignment_id=self.assignment.id,
@@ -152,7 +152,7 @@ class AssignmentTimesTest(unittest.TestCase):
         at=self.start+timedelta(minutes=20)
         # DEFUEL explicitly assigns resources at cycle creation; UPLIFT leaves
         # its new resource selections blank until Dispatcher assigns them.
-        result=fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'defuel','20',
+        result=fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'defuel','20.0',
             self.fueler.id,self.truck.id,now_utc=at,expected_cycle=1,expected_tail='N491UP');db.session.commit()
         row=self.row();self.assertEqual([r['at'] for r in row['assignment_receipt']],[at,at])
         self.assertEqual(row['console_visits'][0].console_assignment_receipt,old)

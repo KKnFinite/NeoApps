@@ -1090,7 +1090,8 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
             db.session.commit()
         finally:
             event.remove(db.engine, "before_cursor_execute", record_reset)
-        self.assertLessEqual(len(reset_selects), 12)
+        from tests.sql_contracts import assert_service_read_budget
+        assert_service_read_budget(self, reset_selects, 12)
         self.assertIsNone(db.session.get(StaffingVacationUnionSelection, selection_id))
         self.assertIsNotNone(db.session.get(StaffingVacationUnionSelection, other_selection_id))
         self.assertIsNotNone(db.session.get(StaffingVacationUnionSelection, later_selection_id))
@@ -1136,7 +1137,8 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", record)
         self.assertEqual(len(context["my_view_calendars"]), 5)
         # The active Aug-Jul Optional Day usage is one additional bounded aggregate.
-        self.assertLessEqual(len(statements), 17)
+        from tests.sql_contracts import assert_service_read_budget
+        assert_service_read_budget(self, statements, 17)
         admin = vacation_service.union_calendar_admin_context(grandmaster)
         self.assertEqual(len(admin["calendars"]), 5)
         with self.assertRaisesRegex(ValueError, "Grandmaster"):
@@ -1431,7 +1433,8 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
             db.session.commit()
         finally:
             event.remove(db.engine, "before_cursor_execute", record)
-        self.assertLessEqual(len(selects), 22)
+        from tests.sql_contracts import assert_service_read_budget
+        assert_service_read_budget(self, selects, 22)
         self.assertEqual((moved.week_ending, moved.status), (full_week, "approved"))
         context = vacation_service.union_calendars_context(
             self.YEAR, ft_actor, today=date(self.YEAR, 1, 1)
@@ -1750,7 +1753,8 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
 
         self.assertEqual(len(result["calendars"]), 3)
         # Generic days, cycle usage, and durable awards are bounded bulk reads.
-        self.assertLessEqual(len(statements), 9)
+        from tests.sql_contracts import assert_service_read_budget
+        assert_service_read_budget(self, statements, 9)
 
     def test_union_optional_day_context_uses_active_august_july_cycle(self):
         grandmaster = self._user("optional_cycle_gm", "grandmaster")

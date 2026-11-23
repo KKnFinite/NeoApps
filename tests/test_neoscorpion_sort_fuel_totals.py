@@ -214,7 +214,8 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
 
     def test_dispatch_reuses_single_cycle_event_query_and_report_reads_are_batched(self):
         for index in range(2):
-            mission = self.fixture._mission("UPS901", f"N49{index}UP", 25_400, index)
+            mission = self.fixture._mission(f"UPS{901+index}", f"N49{index}UP", 25_400, index)
+            mission.wave = str(index + 1)
             self._event(self.fixture._assignment(mission, self.truck), 1, 500)
         db.session.commit()
 
@@ -233,18 +234,20 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
 
         statements = reads(lambda: _manual_fuel_dispatch_context(self.gateway))
         ledger_reads = [s for s in statements if "FROM neoscorpion_fueling_events" in s]
-        # Only the compact cycle-total projection must be reused once. Dispatch
-        # also reads finalized recency facts and immutable resource evidence;
-        # those are different, bounded contracts introduced after this test.
-        cycle_reads = [s for s in ledger_reads if 'transfer_fuel_gallons' in s
-                       and 'cycle_number' in s and 'fuel_assignment_id' not in s]
-        self.assertEqual(len(cycle_reads), 1)
-        self.assertEqual(len(ledger_reads), 3)
+        # Totals, cycle identity and assignment receipt facts share one Sort-scoped ledger read.
+        self.assertEqual(len(ledger_reads), 1)
+        for column in ('transfer_fuel_gallons', 'cycle_number', 'fuel_assignment_id', 'sort_date_operation_id'):
+            self.assertIn(column, ledger_reads[0])
         small = len(reads(lambda: fuel_report_context(self.gateway)))
         for index in range(2, 12):
-            mission = self.fixture._mission("UPS901", f"N49{index}UP", 25_400, index)
+            mission = self.fixture._mission(f"UPS{901+index}", f"N49{index}UP", 25_400, index)
             self._event(self.fixture._assignment(mission, self.truck), 1, 500)
         db.session.commit()
         self.assertEqual(len(reads(lambda: fuel_report_context(self.gateway))), small)
+        labels = {row["flight_number"]: row["destination"]
+                  for row in fuel_report_context(self.gateway)["fuel_report_rows"]}
+        self.assertEqual(labels["UPS901"], "1st SDF")
+        self.assertEqual(labels["UPS902"], "2nd SDF")
+        self.assertTrue(all(labels[f"UPS{901+index}"] == "SDF" for index in range(2, 12)))
         larger = reads(lambda: _manual_fuel_dispatch_context(self.gateway))
-        self.assertEqual(sum('FROM neoscorpion_fueling_events' in s for s in larger), 3)
+        self.assertEqual(sum('FROM neoscorpion_fueling_events' in s for s in larger), 1)

@@ -70,6 +70,18 @@ class DetailsTest(unittest.TestCase):
         allowed.update({('select','replacement_fueler_user_id',f'neoscorpion-dispatch-assignment-{self.assignment.id}'),
                         ('button','/neoscorpion/fuel-dispatch/swap-fueler')})
         extra=current.controls-before.controls
+        # Assignment removal was added after both reference layouts. Account
+        # for one guarded form, then compare every remaining control as before.
+        remove_form = ("form", "/neoscorpion/fuel-dispatch/remove-assignment")
+        if extra[remove_form]:
+            removal = Counter({remove_form: 1})
+            removal.update(("input", name, None) for name in (
+                "assignment_id", "expected_cycle", "expected_tail", "expected_work_ref",
+                "expected_assigned_fueler_user_id", "expected_assigned_truck_id",
+                "expected_assignment_version", "reason", "confirm_remove",
+            ))
+            self.assertFalse(removal - extra, removal - extra)
+            extra -= removal
         self.assertTrue(set(extra)<=allowed,extra)
         self.assertTrue(all(count==guard_additions.get(control,1)
                             for control,count in extra.items()),extra)
@@ -191,7 +203,7 @@ class DetailsTest(unittest.TestCase):
 
     def test_active_uplift_and_defuel_keep_operations_and_existing_cancel_workflow(self):
         self.complete_physical()
-        fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'defuel','20',
+        fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'defuel','20.0',
             self.fueler.id,self.truck.id,expected_cycle=1,expected_tail=self.mission.assigned_tail_number);db.session.commit()
         html=self.html()
         self.assertEqual(Operations(html).states,{'second-truck':False,'start-uplift':False,'start-defuel':False})
@@ -199,7 +211,7 @@ class DetailsTest(unittest.TestCase):
 
     def test_active_uplift_allows_second_truck_but_not_an_overlapping_follow_up(self):
         self.complete_physical()
-        fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'uplift','40',
+        fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'uplift','40.0',
             None,None,expected_cycle=1,expected_tail=self.mission.assigned_tail_number);db.session.commit()
         html=self.html()
         self.assertEqual(Operations(html).states,{'second-truck':True,'start-uplift':False,'start-defuel':False})

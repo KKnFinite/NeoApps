@@ -24,7 +24,7 @@ class TruckQueueTest(ContinuationTest):
         db.session.commit();fuel.mark_fueler_off(self.gateway,self.fueler,self.assignment.id);db.session.commit();self.submit()
 
     def test_five_trucks_planned_in_advance_each_receipt_handoff_and_reverse_verification(self):
-        self.prepare();self.target('60')
+        self.prepare();self.target('60.0')
         b=self.fixture._nightly_truck('B');db.session.commit()
         queue=[self.add_plan(t) for t in (b,self.truck,b,self.truck)]
         self.assertEqual(len(plans.outstanding_plans(self.assignment.id)),4)
@@ -74,7 +74,7 @@ class TruckQueueTest(ContinuationTest):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),2)
 
     def test_cancel_middle_and_unnecessary_head_keeps_other_plans_explicit(self):
-        self.prepare();self.target('40');b=self.fixture._nightly_truck('B');db.session.commit()
+        self.prepare();self.target('40.0');b=self.fixture._nightly_truck('B');db.session.commit()
         first=self.add_plan(b);middle=self.add_plan(self.truck);last=self.add_plan(b)
         self.plan(self.truck,pending_action='cancel',pending_id=middle.id,expected_version=middle.version)
         self.save(self.start+timedelta(minutes=1),**{**self.final_data(),'actual_left':'21','actual_right':'21'})
@@ -89,7 +89,7 @@ class TruckQueueTest(ContinuationTest):
         self.prepare();b=self.fixture._nightly_truck('B');db.session.commit()
         first=self.add_plan(b);last=self.add_plan(self.truck)
         self.save(self.start+timedelta(minutes=1),remaining_left='6',actual_left='15')
-        self.target('50')
+        self.target('50.0')
         self.assertEqual([p.required_fuel_lbs for p in (first,last)],[50000,50000])
         self.assertEqual(NeoScorpionPendingUplift.query.count(),2)
         self.assertEqual(NeoScorpionFuelWorkState.query.count(),1)

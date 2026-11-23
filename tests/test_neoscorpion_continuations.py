@@ -33,7 +33,7 @@ class ContinuationTest(unittest.TestCase):
         db.session.commit()
 
     def handoff(self):
-        self.prepare();self.target('40');p=self.plan()
+        self.prepare();self.target('40.0');p=self.plan()
         self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit()
         return p,db.session.get(NeoScorpionFuelWorkState,self.assignment.active_work_state_id)
 
@@ -45,7 +45,7 @@ class ContinuationTest(unittest.TestCase):
         fuel.mark_fueler_off(self.gateway,self.fueler,self.assignment.id);db.session.commit();self.submit()
 
     def test_explicit_mobile_submit_returns_new_visit_and_duplicate_is_idempotent(self):
-        self.prepare();self.target('40');p=self.plan()
+        self.prepare();self.target('40.0');p=self.plan()
         self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();expected=self.baseline()
         self.login(self.fueler)
         import json
@@ -119,7 +119,7 @@ class ContinuationTest(unittest.TestCase):
         fuel.submit_fueler_assignment(self.gateway,self.fueler,self.assignment.id,expected=source['edit_baseline'],
             physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number);db.session.commit()
         fuel.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,actual_left='18'));db.session.commit()
-        self.target('45');next_plan=plans.outstanding(self.assignment.id)
+        self.target('45.0');next_plan=plans.outstanding(self.assignment.id)
         self.assertEqual(self.row()['action_count'],3)
         self.plan(self.truck,pending_action='cancel',pending_id=next_plan.id,expected_version=next_plan.version)
         row=self.row();self.assertEqual(row['action_count'],2)
@@ -127,15 +127,15 @@ class ContinuationTest(unittest.TestCase):
         self.assertEqual(len(row['console_dependencies']),1)
 
     def test_decrease_reconciles_existing_plan_no_new_visit(self):
-        self.prepare();self.target('40');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data())
-        self.target('28');self.assertEqual(p.status,'review');self.off();self.submit()
+        self.prepare();self.target('40.0');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data())
+        self.target('28.0');self.assertEqual(p.status,'review');self.off();self.submit()
         self.assertEqual(NeoScorpionPendingUplift.query.count(),1)
         self.assertEqual(NeoScorpionFuelWorkState.query.count(),1)
         self.assertEqual(p.required_fuel_lbs,28000);self.assertEqual(p.status,'review')
         self.assertIn('NOT REQUIRED',p.review_reason)
 
     def test_reduced_target_after_activation_requires_explicit_cancel_and_preserves_source(self):
-        p,child=self.handoff();self.target('28')
+        p,child=self.handoff();self.target('28.0')
         self.assertIn('NOT REQUIRED',child.continuation_review_reason)
         self.assertEqual(self.assignment.active_work_state_id,child.id)
         plans.review_handoff(self.gateway,self.dispatcher,dict(assignment_id=self.assignment.id,pending_id=p.id,
@@ -151,7 +151,7 @@ class ContinuationTest(unittest.TestCase):
     def test_reduced_target_never_cancels_a_physically_started_child(self):
         p,child=self.handoff()
         fuel.confirm_fueler_truck_on(self.gateway,self.fueler,self.assignment.id,expected_cycle=1,expected_tail='N491UP',expected_truck_id=p.proposed_truck_id);db.session.commit()
-        self.target('28');on=child.manual_on_at_utc
+        self.target('28.0');on=child.manual_on_at_utc
         with self.assertRaisesRegex(ValueError,'physically started'):
             plans.review_handoff(self.gateway,self.dispatcher,dict(assignment_id=self.assignment.id,pending_id=p.id,
                 expected_version=p.version,pending_action='cancel_unstarted_handoff',reason='Target reduced'))
@@ -161,14 +161,14 @@ class ContinuationTest(unittest.TestCase):
 
     def test_missing_planned_asset_preserves_successful_source_submission(self):
         from app.models import NeoScorpionSortTruck
-        self.prepare();self.target('40');p=self.plan()
+        self.prepare();self.target('40.0');p=self.plan()
         NeoScorpionSortTruck.query.filter_by(fuel_truck_id=p.proposed_truck_id).delete();db.session.commit()
         self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit()
         self.assertEqual(p.status,'review');self.assertIn('NEXT TRUCK NEEDS REVIEW',p.review_reason)
         self.assertTrue(self.row()['normal_completion_ready']);self.assertEqual(self.assignment.active_work_state_id,self.work.id)
 
     def test_tail_swap_cannot_carry_source_actuals_into_replacement(self):
-        self.prepare();self.target('40');p=self.plan()
+        self.prepare();self.target('40.0');p=self.plan()
         self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
         self.mission.assigned_tail_number='N492UP';db.session.commit()
         fuel.confirm_assignment_tail(self.gateway,self.dispatcher,self.assignment.id,expected_cycle=1,expected_tail='N492UP');db.session.commit()
@@ -223,7 +223,7 @@ class ContinuationTest(unittest.TestCase):
 
     def test_busy_next_truck_can_be_planned_but_cannot_start_until_real_off(self):
         from app.models import NeoScorpionSortFueler
-        self.prepare();self.target('40')
+        self.prepare();self.target('40.0')
         truck=self.fixture._nightly_truck('BUSY')
         operator=self.fixture._login_user('other-physical-fueler','operator')
         db.session.add(NeoScorpionSortFueler(sort_date_operation_id=self.operation.id,user_id=operator.id))
@@ -241,7 +241,7 @@ class ContinuationTest(unittest.TestCase):
         self.assertIsNotNone(db.session.get(NeoScorpionFuelWorkState,self.assignment.active_work_state_id).manual_on_at_utc)
 
     def test_old_tail_plan_can_be_cancelled_without_changing_physical_source(self):
-        self.prepare();self.target('40');p=self.plan()
+        self.prepare();self.target('40.0');p=self.plan()
         self.save(self.start+timedelta(minutes=1),remaining_left='6',actual_left='15')
         self.mission.assigned_tail_number='N492UP';db.session.commit()
         fuel.confirm_assignment_tail(self.gateway,self.dispatcher,self.assignment.id,expected_cycle=1,expected_tail='N492UP');db.session.commit()
@@ -250,7 +250,7 @@ class ContinuationTest(unittest.TestCase):
         self.assertEqual(self.work.tail_number,'N491UP');self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
     def test_frozen_source_off_after_tail_swap_uses_its_own_physical_identity(self):
-        self.prepare();self.save(self.start+timedelta(minutes=1),remaining_left='6',actual_left='15');self.target('40')
+        self.prepare();self.save(self.start+timedelta(minutes=1),remaining_left='6',actual_left='15');self.target('40.0')
         self.mission.assigned_tail_number='N492UP';db.session.commit()
         fuel.confirm_assignment_tail(self.gateway,self.dispatcher,self.assignment.id,expected_cycle=1,expected_tail='N492UP');db.session.commit()
         self.off(physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number)
@@ -259,7 +259,7 @@ class ContinuationTest(unittest.TestCase):
 
     def test_failed_handoff_rolls_back_receipt_and_resource_changes(self):
         from unittest.mock import patch
-        self.prepare();self.target('40');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
+        self.prepare();self.target('40.0');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
         with patch.object(fuel,'new_work',side_effect=ValueError('Injected handoff failure')):
             with self.assertRaisesRegex(ValueError,'Injected'):self.submit()
         db.session.rollback()
@@ -280,7 +280,7 @@ class ContinuationTest(unittest.TestCase):
     def test_sort_rollover_never_activates_old_planned_truck(self):
         from unittest.mock import patch
         from app.models import SortDateOperation
-        self.prepare();self.target('40');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
+        self.prepare();self.target('40.0');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
         other=SortDateOperation(generated_by_user_id=self.dispatcher.id,gateway_id=self.gateway.id,gateway_code=self.gateway.code,
             sort_date=self.operation.sort_date+timedelta(days=1),sort_name='night',window_minutes=60)
         db.session.add(other);db.session.commit();old=self.baseline()
@@ -291,7 +291,7 @@ class ContinuationTest(unittest.TestCase):
 
     def test_same_truck_reverse_verification_after_baseline_correction_keeps_unposted_usage_unverified(self):
         from app.services.neoscorpion_inventory import correct_baseline
-        self.prepare();self.target('40');p=self.plan(self.truck)
+        self.prepare();self.target('40.0');p=self.plan(self.truck)
         self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit()
         fuel.confirm_fueler_truck_on(self.gateway,self.fueler,self.assignment.id,expected_cycle=1,expected_tail='N491UP',expected_truck_id=self.truck.id);db.session.commit()
         correct_baseline(self.gateway,self.operation,self.dispatcher,self.truck.id,'5500',self.selection.inventory_epoch);db.session.commit()
@@ -309,7 +309,7 @@ class ContinuationTest(unittest.TestCase):
     def test_increase_without_actual_stays_same_work_and_notifies(self):
         self.prepare();self.save(self.start+timedelta(minutes=1),remaining_left='6',apu_running='no')
         old=(self.work.id,self.work.manual_on_at_utc,self.work.apu_running)
-        self.target('40')
+        self.target('40.0')
         self.assertEqual((self.assignment.active_work_state_id,self.work.manual_on_at_utc,self.work.apu_running),old)
         self.assertEqual(NeoScorpionPendingUplift.query.count(),0)
         self.assertIn('25.0 -> 40.0',self.assignment.fueler_update_message)
@@ -317,19 +317,19 @@ class ContinuationTest(unittest.TestCase):
     def test_increase_after_off_preserves_visit_while_decrease_alone_creates_no_plan(self):
         self.prepare();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
         on,off=self.work.manual_on_at_utc,self.work.off_at_utc
-        self.target('24');self.assertEqual(NeoScorpionPendingUplift.query.count(),0)
-        self.target('40');self.assertEqual(NeoScorpionPendingUplift.query.count(),1)
+        self.target('24.0');self.assertEqual(NeoScorpionPendingUplift.query.count(),0)
+        self.target('40.0');self.assertEqual(NeoScorpionPendingUplift.query.count(),1)
         self.assertEqual((self.work.manual_on_at_utc,self.work.off_at_utc),(on,off))
         self.assertEqual(self.work.physical_required_fuel_lbs,24000)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
     def test_zero_actual_is_saved_measurement_and_defuel_cannot_be_mixed_with_continuation(self):
         self.prepare();self.save(self.start+timedelta(minutes=1),remaining_ctr='0',actual_ctr='0')
-        self.target('40');p=plans.outstanding(self.assignment.id)
+        self.target('40.0');p=plans.outstanding(self.assignment.id)
         self.assertIsNotNone(p);self.plan(self.truck,pending_action='cancel',pending_id=p.id,expected_version=p.version)
         self.save(self.start+timedelta(minutes=2),**self.final_data());self.off();self.submit()
         fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
-        fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'defuel','20',
+        fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'defuel','20.0',
             self.fueler.id,self.truck.id,expected_cycle=1,expected_tail='N491UP');db.session.commit()
         with self.assertRaisesRegex(ValueError,'DEFUEL'):
             self.plan(self.truck,expected_cycle=2)
@@ -338,7 +338,7 @@ class ContinuationTest(unittest.TestCase):
 
     def test_one_actual_increase_reconciles_one_plan_and_freezes_target(self):
         self.prepare();self.save(self.start+timedelta(minutes=1),remaining_left='6',actual_left='15')
-        on=self.work.manual_on_at_utc;self.target('40');self.target('41')
+        on=self.work.manual_on_at_utc;self.target('40.0');self.target('41.0')
         p=NeoScorpionPendingUplift.query.one()
         self.assertEqual(p.plan_kind,'increase');self.assertEqual(p.required_fuel_lbs,41000)
         self.assertEqual(self.work.physical_required_fuel_lbs,25000)
@@ -349,7 +349,7 @@ class ContinuationTest(unittest.TestCase):
         self.assertEqual(self.row()['mission'].planned_datetime_utc,self.mission.planned_datetime_utc)
 
     def test_second_truck_activates_on_submission_and_both_verify_independently(self):
-        self.prepare();self.target('40');p=self.plan();first=self.work
+        self.prepare();self.target('40.0');p=self.plan();first=self.work
         self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
         self.assertEqual(p.status,'pending');self.assertEqual(self.assignment.active_work_state_id,first.id)
         self.submit()
@@ -381,7 +381,7 @@ class ContinuationTest(unittest.TestCase):
         self.assertIsNotNone(self.assignment.completed_at_utc);self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
 
     def test_source_correction_never_rewrites_started_child(self):
-        self.prepare();self.target('40');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit()
+        self.prepare();self.target('40.0');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit()
         second=db.session.get(NeoScorpionFuelWorkState,self.assignment.active_work_state_id)
         readings=[(t.remaining_lbs,t.actual_lbs) for t in second.tank_states]
         fuel.confirm_fueler_truck_on(self.gateway,self.fueler,self.assignment.id,expected_cycle=1,expected_tail='N491UP',expected_truck_id=p.proposed_truck_id);db.session.commit()

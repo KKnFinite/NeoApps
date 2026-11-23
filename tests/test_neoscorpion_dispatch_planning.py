@@ -557,7 +557,7 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         # pinning an obsolete absolute count as batch enrichment evolves.
         self.assertEqual(query_counts[0],query_counts[1],query_counts)
         self.assertEqual(sum("FROM neoscorpion_fuel_cycle_history " in sql for sql in statements), 1)
-        for table,expected in (("neoscorpion_fuel_assignments",1),("neoscorpion_fuel_work_states",2)):
+        for table,expected in (("neoscorpion_fuel_assignments",1),("neoscorpion_fuel_work_states",1)):
             self.assertEqual(sum(f"FROM {table} " in sql for sql in statements),expected)
 
     def test_spear_queries_remain_batched_within_and_beyond_optimizer_job_limit(self):

@@ -223,7 +223,7 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         self.assertTrue({
             "neosubzero.index", "neosubzero.pretreat", "neosubzero.settings",
             "neosubzero.pretreat_revision_endpoint", "neosubzero.outbound",
-            "neosubzero.coordinator", "neosubzero.departure_deice_mutate",
+            "neosubzero.legacy_coordinator_redirect", "neosubzero.operations", "neosubzero.departure_deice_mutate",
             "neosubzero.outbound_revision_endpoint",
             "neosubzero.coordinator_revision_endpoint",
         } <= endpoints)
