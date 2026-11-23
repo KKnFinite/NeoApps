@@ -6,6 +6,8 @@ from pathlib import Path
 from playwright.sync_api import expect
 from tests.browser import test_neosubzero_ucc as fixtures
 from tests.browser import test_neosubzero_operations as ops
+from app.services.live_screen_refresh import save_live_screen_refresh_override
+from app.neonodes.neosubzero.routes import OUTBOUND_REFRESH_KEY
 from app.extensions import db
 from app.models import Gateway,SortDateOperation,SortDateMission,SortDateParkingAssignment,NeoSubZeroDepartureDeiceEvent,NeoSubZeroAuditEntry
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
@@ -20,6 +22,7 @@ class RadioBrowserTest(unittest.TestCase):
         try:
             with case.app.app_context():
                 operation=db.session.get(SortDateOperation,case.operation_id)
+                save_live_screen_refresh_override(operation.gateway, OUTBOUND_REFRESH_KEY, "5")
                 fixture=fixtures.NeoSubZeroUccTest();fixture.operation=operation
                 gone=fixture._departure('UPS-GONE','N-GONE','DEN',1);gone_id=gone.id
                 gone.actual_block_out_datetime_utc=datetime.utcnow()
@@ -32,6 +35,7 @@ class RadioBrowserTest(unittest.TestCase):
                 set_neosubzero_ucc_truck(operation,'Alpha',1,'RADIO-10');db.session.commit()
             browser=getattr(case.pw,engine).launch()
             context=browser.new_context(viewport={'width':1920,'height':900},service_workers='block')
+            context.clock.install(time=case.sort_now)
             errors=[]
             def page():
                 p=context.new_page();p.on('pageerror',lambda e:errors.append(str(e)));return p
@@ -42,21 +46,43 @@ class RadioBrowserTest(unittest.TestCase):
             self.assertEqual(dispatch.url, f'{case.origin}/neosubzero/operations?mode=outbound&ramp=Alpha&mission={case.missions[0]}')
             expect(dispatch.locator('[data-ops-ramp]')).to_have_value('Alpha')
             expect(dispatch.locator('[data-ops-row]:visible:not([data-ramp="Alpha"])')).to_have_count(0)
-            detail = dispatch.locator('[data-ops-detail]')
+            first = dispatch.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')
+            detail = first.locator('[data-ops-inline]')
             dispatch.on('dialog', lambda dialog: dialog.accept())
-            treatment = detail.locator('[data-subzero-deice-form]')
-            treatment.locator('[name="treatment_plan"]').select_option('one_type_i')
-            treatment.locator('[name="pass1_surface_area"]').select_option('wings_only')
-            treatment.locator('[name="pass1_start"]').fill('22:10')
-            ops.OperationsBrowserTest.submit(case, dispatch, treatment.locator('button[type="submit"]'))
-            treatment.locator('[name="pass1_end"]').fill('22:15')
-            ops.OperationsBrowserTest.submit(case, dispatch, treatment.locator('button[type="submit"]'))
-            ops.OperationsBrowserTest.submit(case, dispatch, detail.locator('button[value="clear"]'))
-            detail.locator('.subzero-undo-clear summary').click()
-            detail.locator('.subzero-undo-clear [name="correction_reason"]').fill('Synthetic CLEAR correction')
-            ops.OperationsBrowserTest.submit(case, dispatch, detail.locator('button[value="undo_clear"]'))
-            expect(treatment.locator('[name="pass1_end"]')).to_have_value('22:15')
-            ops.OperationsBrowserTest.submit(case, dispatch, detail.locator('button[value="clear"]'))
+
+            def autosave(page, field, value, expected=200):
+                if expected == 200 and field.input_value() == value:
+                    return
+                old = field.evaluate_handle('element => element.form')
+                with page.expect_response(lambda r: r.url.endswith('/operations/mutate') and r.request.method == 'POST') as saved:
+                    if field.evaluate("element => element.tagName === 'SELECT'"):
+                        field.select_option(value)
+                    else:
+                        field.fill(value)
+                        field.press('Tab')
+                self.assertEqual(saved.value.status, expected, saved.value.text())
+                if expected == 200:
+                    self.assertTrue(saved.value.json()['ok'])
+                    page.wait_for_function('form => !form.isConnected', arg=old)
+                old.dispose()
+
+            def treatment(pane, name):
+                return pane.locator(f'.ops-outbound-pass-form [name="{name}"]:visible')
+
+            for name, value in (('treatment_plan', 'one_type_i'), ('pass1_surface_area', 'wings_only'),
+                                ('pass1_start', '22:10'), ('pass1_end', '22:15')):
+                autosave(dispatch, treatment(detail, name), value)
+            ops.OperationsBrowserTest.submit(case, dispatch, first.locator('button[value="clear"]:visible'))
+            first.locator('[data-ops-radio]:visible').click()
+            correction = detail.locator('[data-ops-disclosure="evidence"]')
+            correction.locator('summary').first.click()
+            undo = correction.locator('form:has(button[value="undo_clear"])')
+            undo.locator('[name="correction_reason"]').fill('Synthetic CLEAR correction')
+            ops.OperationsBrowserTest.submit(case, dispatch, undo.locator('button[value="undo_clear"]'))
+            expect(first).to_have_attribute('data-status', 'fin')
+            expect(detail.locator('[data-ops-disclosure="evidence"] [name="pass1_end"]').first).to_have_value('22:15')
+            ops.OperationsBrowserTest.submit(case, dispatch, first.locator('button[value="clear"]:visible'))
+            first.locator('[data-ops-radio]:visible').click()
             expect(detail.locator('[data-radio-script]')).to_contain_text('2210')
             expect(detail.locator('button[value="radio_complete"]')).to_be_visible()
             with case.app.app_context():
@@ -96,21 +122,18 @@ class RadioBrowserTest(unittest.TestCase):
                     measurements.append(dict(engine=engine,layout=layout,**geometry))
                     if width in (390,1920):board.screenshot(path=str(EVIDENCE/f'{engine}-operations-{layout}-{width}-pending.png'))
             # Opening the readback through either screen never confirms it.
-            row.locator('a').click();expect(board.locator('[data-ops-detail] [data-radio-script]')).to_contain_text('2210')
+            row.locator('[data-ops-radio]:visible').click();expect(row.locator('[data-radio-script]')).to_contain_text('2210')
             with case.app.app_context():
                 event=db.session.get(NeoSubZeroDepartureDeiceEvent,event_id)
                 self.assertIsNone(event.radio_completed_at_utc);self.assertEqual(NeoSubZeroAuditEntry.query.count(),before)
-            board.locator('[data-ops-close]').click()
-            board.locator(f'[data-ops-row][data-mission-id="{case.missions[1]}"] a').click()
-            form=board.locator('[data-ops-detail] [data-subzero-deice-form]')
-            form.locator('[name="treatment_plan"]').select_option('one_type_i')
-            form.locator('[name="pass1_surface_area"]').select_option('wings_only')
-            form.locator('[name="pass1_start"]').fill('22:16')
-            with board.expect_response(lambda r:r.url.endswith('/operations/mutate') and r.request.method=='POST') as rejected:
-                form.locator('button[type="submit"]').click()
-            self.assertEqual(rejected.value.status,409)
-            expect(form.locator('[name="pass1_start"]')).to_have_value('22:16')
-            expect(board.locator('[data-ops-detail-feedback]')).to_contain_text('CLEAR and RADIO COMPLETE before START')
+            second = board.locator(f'[data-ops-row][data-mission-id="{case.missions[1]}"]')
+            second.locator('[data-ops-ramp-chevron]').click()
+            form = second.locator('[data-ops-inline]')
+            autosave(board, treatment(form, 'treatment_plan'), 'one_type_i')
+            autosave(board, treatment(form, 'pass1_surface_area'), 'wings_only')
+            autosave(board, treatment(form, 'pass1_start'), '22:16', expected=409)
+            expect(treatment(form, 'pass1_start')).to_have_value('22:16')
+            expect(form.locator('[data-ops-inline-feedback]')).to_contain_text('CLEAR and RADIO COMPLETE before START')
             # Synthetic MotherBrain identity change: the recorded physical tail
             # stays pink at its pad instead of advancing the next aircraft.
             with case.app.app_context():
@@ -134,7 +157,7 @@ class RadioBrowserTest(unittest.TestCase):
                 expect(pad).to_have_attribute('data-ucc-aircraft',str(case.missions[1]),timeout=10000)
                 expect(p.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[2]))
             expect(board.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')).to_have_attribute('data-status','gone',timeout=10000)
-            expect(form.locator('[name="pass1_start"]')).to_have_value('22:16')
+            expect(treatment(form, 'pass1_start')).to_have_value('22:16')
             for p in (desktop,phone):p.screenshot(path=str(EVIDENCE/f'{engine}-ducc-{p.viewport_size["width"]}-advanced.png'))
             with case.app.app_context():
                 event=db.session.get(NeoSubZeroDepartureDeiceEvent,event_id)
