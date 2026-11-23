@@ -346,6 +346,21 @@
     const storageKey = "neorain:inbound:mobile-ui:" + window.location.pathname;
     const items = () => Array.from(board.querySelectorAll(".neorain-mobile-mission[data-neorain-mission-id]"));
     const itemFor = (missionId) => items().find((candidate) => candidate.dataset.neorainMissionId === String(missionId)) || null;
+    // One native editor per mission keeps its values and pending saves across rotations.
+    const mobileWidth = window.matchMedia("(max-width: 900px)");
+    const placeNotes = (item) => {
+        const missionId = item.dataset.neorainMissionId;
+        const desktop = document.getElementById("delay-info-" + missionId)?.querySelector(".neorain-delay-panel");
+        const mobile = item.querySelector("[data-neorain-mobile-inline-detail]");
+        const target = mobileWidth.matches ? mobile : desktop;
+        const source = mobileWidth.matches ? desktop : mobile;
+        const notes = source?.querySelector("[data-mission-notes]");
+        if (target && notes) target.appendChild(notes);
+    };
+    mobileWidth.addEventListener("change", () => {
+        items().filter(item => item.classList.contains("is-expanded") || item.querySelector("[data-mission-notes]"))
+            .forEach(placeNotes);
+    });
     const readStored = () => {
         try {
             const value = JSON.parse(sessionStorage.getItem(storageKey) || "{}");
@@ -382,6 +397,7 @@
         if (!item) return;
         const detail = item.querySelector("[data-neorain-mobile-inline-detail]");
         if (!detail) return;
+        if (open) placeNotes(item);
         detail.hidden = !open;
         item.classList.toggle("is-expanded", open);
         item.querySelectorAll("[data-neorain-mobile-row-open]").forEach((button) => {

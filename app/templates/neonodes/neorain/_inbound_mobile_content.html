@@ -90,7 +90,6 @@
                     <div><dt>GROUND TIME</dt><dd class="{% if row.ground_time_warning %}neorain-ground-time-warning{% endif %}">{{ row.ground_time or '-' }}</dd></div>
                 </dl>
                 {{ delay_info_mobile(row) }}
-                {% with board='inbound' %}{% include "neonodes/neorain/_mission_notes.html" %}{% endwith %}
             </div>
         </article>
         {% endfor %}
