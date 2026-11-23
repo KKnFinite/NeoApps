@@ -1074,7 +1074,7 @@ def register_blueprints(app):
     from app.neonodes.neoermac import bp as neoermac_bp
     from app.neonodes.neoraiden import bp as neoraiden_bp
     from app.neonodes.neorain import bp as neorain_bp
-    from app.neonodes.neosubzero import bp as neosubzero_bp
+    from app.neonodes.neosubzero import operational_blueprint as subzero_blueprint
     from app.neonodes.neosektor import bp as neosektor_bp
     from app.neonodes.neoscorpion import bp as neoscorpion_bp
     from app.neostaffing import bp as neostaffing_bp
@@ -1087,7 +1087,7 @@ def register_blueprints(app):
     app.register_blueprint(neoermac_bp, url_prefix="/neoermac")
     app.register_blueprint(neoraiden_bp, url_prefix="/neoraiden")
     app.register_blueprint(neorain_bp, url_prefix="/neorain")
-    app.register_blueprint(neosubzero_bp, url_prefix="/neosubzero")
+    app.register_blueprint(subzero_blueprint(), url_prefix="/neosubzero")
     app.register_blueprint(neosektor_bp, url_prefix="/neosektor")
     app.register_blueprint(neoscorpion_bp, url_prefix="/neoscorpion")
     app.register_blueprint(neostaffing_bp, url_prefix="/neostaffing")
