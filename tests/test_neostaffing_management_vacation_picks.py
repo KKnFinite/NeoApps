@@ -1,4 +1,5 @@
 from tests.html_contracts import csrf_token
+from tests.sql_contracts import assert_service_read_budget
 from datetime import date, datetime
 import re
 import unittest
@@ -605,12 +606,11 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         self._capacity(self.units["ramp"], 4)
         db.session.commit()
         db.session.expire_all()
-        select_count = 0
+        selects = []
 
         def count_selects(_connection, _cursor, statement, _parameters, _context, _many):
-            nonlocal select_count
             if statement.lstrip().upper().startswith("SELECT"):
-                select_count += 1
+                selects.append(statement)
 
         event.listen(db.engine, "before_cursor_execute", count_selects)
         try:
@@ -628,7 +628,7 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         )
         # Day selections and durable Floating Holiday awards are two additional
         # bounded collections; query count must remain roster-size invariant.
-        self.assertLessEqual(select_count, 12)
+        assert_service_read_budget(self, selects, 12)
 
     def test_management_split_schedule_cancel_and_recombine(self):
         person, person_user = self._management_user(
@@ -2092,12 +2092,11 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         )
         self._capacity(self.units["ramp"], 3)
         db.session.commit()
-        select_count = 0
+        selects = []
 
         def count_selects(_connection, _cursor, statement, _parameters, _context, _many):
-            nonlocal select_count
             if statement.lstrip().upper().startswith("SELECT"):
-                select_count += 1
+                selects.append(statement)
 
         event.listen(db.engine, "before_cursor_execute", count_selects)
         try:
@@ -2109,7 +2108,7 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         self.assertEqual(context["default_area_id"], self.units["ramp"].id)
         self.assertEqual(context["areas"][0]["area"].id, self.units["ramp"].id)
         self.assertGreater(len(context["areas"]), 1)
-        self.assertLessEqual(select_count, 12)
+        assert_service_read_budget(self, selects, 12)
 
     def _management_user(
         self,

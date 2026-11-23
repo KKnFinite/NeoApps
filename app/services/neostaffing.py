@@ -4754,6 +4754,7 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False, *
             staffing_sort,
             hierarchy,
             work_area_ids=group_area_ids,
+            visible_groups_only=allowed_area_ids is not None,
         )
 
     summary = _daily_attendance_summary({row["person"].id: row for row in rows}.values())
@@ -5436,7 +5437,8 @@ def _staffing_group_definitions(hierarchy, active_only):
     return list(definitions_by_id.values())
 
 
-def _attendance_group_aggregate_rollups(definitions, operation, staffing_sort, hierarchy, *, work_area_ids=None):
+def _attendance_group_aggregate_rollups(definitions, operation, staffing_sort, hierarchy, *,
+                                       work_area_ids=None, visible_groups_only=False):
     """Group totals from bounded area/status counts, not sort-wide ORM rows.
 
     A Work Assignment is unique per person. Unioning each group's member areas
@@ -5478,6 +5480,8 @@ def _attendance_group_aggregate_rollups(definitions, operation, staffing_sort, h
             by_area.setdefault(area_id, {})[status] = count
     rollups = []
     for definition, area_ids in zip(definitions, areas_by_group):
+        if visible_groups_only and not area_ids:
+            continue
         totals = {}
         for area_id in area_ids:
             for status, count in by_area.get(area_id, {}).items():

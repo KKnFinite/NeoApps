@@ -365,6 +365,13 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         self.assertEqual(StaffingUnmarkedAttendanceNote.query.one().note, "Keep this note")
         self.assertEqual(StaffingDailyAttendance.query.count(), 0)
 
+        corrected = {**form, f"original_{person.id}": cleared.json["rows"][0]["original"],
+                     f"note_{person.id}": "Corrected private note"}
+        staffing_service.save_attendance(corrected, supervisor)
+        db.session.commit()
+        self.assertEqual(StaffingUnmarkedAttendanceNote.query.one().note, "Corrected private note")
+        self.assertNotIn(b"Corrected private note", self.client.get(path).data)
+
     def test_multi_area_scope_post_autosave_all_here_and_reject_outside(self):
         from werkzeug.datastructures import MultiDict
 

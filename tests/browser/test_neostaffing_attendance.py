@@ -22,14 +22,14 @@ class AttendanceBrowserTest(unittest.TestCase):
         browser_fixture.MobileDrawerBrowserTest.setUpClass.__func__(cls)
         cls.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = datetime(2026, 8, 15, 21)
         cls.delayed = None
-        cls.fail_note = False
+        cls.fail_save = False
 
         @cls.app.before_request
         def attendance_test_network():
             if request.endpoint != 'neostaffing.attendance_save':
                 return None
-            if cls.fail_note:
-                cls.fail_note = False
+            if cls.fail_save:
+                cls.fail_save = False
                 return jsonify(error='Temporary failure'), 503
             if cls.delayed:
                 name, edits, arrived, release = cls.delayed
@@ -43,10 +43,11 @@ class AttendanceBrowserTest(unittest.TestCase):
         with cls.app.app_context():
             fixture = attendance_fixture.NeoStaffingDailyAttendanceTest()
             fixture.gateway = Gateway.query.filter_by(code='RFD').one()
-            sort, operation_unit, department, area, outside = fixture._hierarchy()
+            sort, _, department, area, outside = fixture._hierarchy()
+            staffing.create_staffing_group({'name': 'Department coverage', 'active': '1',
+                                            'staffing_unit_ids': [department.id]})
             operation = fixture._night_operation()
             cls.scope = {'sort_date_operation_id': operation.id, 'work_area_id': area.id, 'sort_id': sort.id}
-            cls.scope_chain = [sort.id, operation_unit.id, department.id, area.id]
             cls.outside_area_id = outside.id
             cls.path = f'/neostaffing/attendance?sort_id={sort.id}'
             cls.people = {}
@@ -74,10 +75,13 @@ class AttendanceBrowserTest(unittest.TestCase):
     def row(self, page, employee):
         return page.locator(f'[data-attendance-employee-id="{employee}"]')
 
-    def expect_scope_here(self, page, count):
-        for unit_id in self.scope_chain:
-            expect(page.locator(f'[data-attendance-scope-here="{unit_id}"]')).to_have_text(str(count))
-        expect(page.locator(f'[data-attendance-scope-here="{self.outside_area_id}"]')).to_have_text('—')
+    def expect_scope_here(self, page, count, *, outside_visible=True):
+        expect(page.locator(f'[data-attendance-scope-here="{self.scope["work_area_id"]}"]')).to_have_text(str(count))
+        outside = page.locator(f'[data-attendance-scope-here="{self.outside_area_id}"]')
+        if outside_visible:
+            expect(outside).to_have_text('—')
+        else:
+            expect(outside).to_have_count(0)
 
     def open(self, browser, username):
         page = browser.new_page(viewport={'width': 1920, 'height': 1080})
@@ -99,13 +103,14 @@ class AttendanceBrowserTest(unittest.TestCase):
         try:
             page = self.open(browser, 'drawer-admin')
             other = self.open(browser, 'drawer-watcher')
+            groups = page.locator('details').filter(has_text='Department coverage')
+            groups.locator('summary').click()
+            expect(groups.get_by_text('Department coverage', exact=True)).to_be_visible()
+            groups.locator('summary').click()
             search = page.get_by_role('searchbox', name='Search employees')
-            bulk = page.get_by_role('button', name='ALL HERE — CURRENT SCOPE')
+            bulk = page.get_by_role('button', name='All Here', exact=True)
             self.expect_scope_here(page, 0)
-            for unit_id in self.scope_chain[:-1]:
-                toggle = page.locator(f'[data-attendance-tree-id="unit-{unit_id}"] > div > [data-attendance-tree-toggle]')
-                if toggle.get_attribute('aria-expanded') == 'false':
-                    toggle.click()
+            expect(page.get_by_role('button', name='All Areas')).to_have_attribute('aria-pressed', 'true')
             expect(self.row(page, 'OUT999').locator('select')).to_be_disabled()
             rejected = page.request.post(self.origin + '/neostaffing/attendance/save',
                 headers={'Accept': 'application/json'}, form=self.scope)
@@ -124,12 +129,12 @@ class AttendanceBrowserTest(unittest.TestCase):
                                     for left, right, control_width in geometry['controls']), (engine, width, geometry))
                 count_edges = page.locator('[data-attendance-scope-here]').evaluate_all('''elements => elements.map(el => {
                     const {left, right, width} = el.getBoundingClientRect();
-                    return {left, right, width, align: getComputedStyle(el).textAlign};
+                    return {left, right, width, inset: el.closest('button').getBoundingClientRect().right - right};
                 })''')
-                self.assertEqual(len(count_edges), 5)
+                self.assertEqual(len(count_edges), 2)
                 self.assertTrue(all(edge['width'] > 0 and edge['left'] >= 0 and edge['right'] <= width
-                                    and edge['align'] == 'right' for edge in count_edges), (engine, width, count_edges))
-                self.assertLessEqual(max(e['right'] for e in count_edges) - min(e['right'] for e in count_edges), 1)
+                                    for edge in count_edges), (engine, width, count_edges))
+                self.assertLessEqual(max(e['inset'] for e in count_edges) - min(e['inset'] for e in count_edges), 1)
                 if width in (1920, 1024, 390):
                     page.screenshot(path=str(self.evidence / f'attendance-{engine}-{width}.png'))
 
@@ -144,10 +149,13 @@ class AttendanceBrowserTest(unittest.TestCase):
             page.get_by_role('button', name='Clear', exact=True).click()
             expect(page.locator('[data-attendance-matches]')).to_have_text('6 matches')
 
-            # Debounced note save on mobile, while the employee remains Unmarked.
+            # The V11 roster withholds private notes and supports mobile status autosave.
             first = self.row(page, 'AX100')
-            first_note = first.locator('input[name^="note_"]')
-            first_note.fill('Debounced note')
+            expect(page.locator('input[name^="note_"]')).to_have_count(0)
+            expect(page.get_by_text('Approved vacation', exact=True)).to_have_count(0)
+            first.locator('select').select_option('call_in')
+            expect(first.locator('[data-attendance-state]')).to_have_text('Saved')
+            first.locator('select').select_option('')
             expect(first.locator('[data-attendance-state]')).to_have_text('Saved')
             expect(first.locator('select')).to_have_value('')
 
@@ -175,17 +183,17 @@ class AttendanceBrowserTest(unittest.TestCase):
             type(self).delayed = None
 
             # A failed save retains the draft, and deliberate Retry persists it.
-            type(self).fail_note = True
+            type(self).fail_save = True
             second = self.row(page, 'BX200')
-            second_note = second.locator('input[name^="note_"]')
-            second_note.fill('Preserve with bulk')
-            second_note.press('Tab')
+            second.locator('select').select_option('call_in')
             expect(second.locator('[data-attendance-state]')).to_contain_text('Error: Temporary failure')
-            expect(second_note).to_have_value('Preserve with bulk')
+            expect(second.locator('select')).to_have_value('call_in')
             second.get_by_role('button', name='Retry').click()
             expect(second.locator('[data-attendance-state]')).to_have_text('Saved')
 
             # Search hides eligible Sam and Jordan as well as a stale Casey row.
+            second.locator('select').select_option('')
+            expect(second.locator('[data-attendance-state]')).to_have_text('Saved')
             search.fill('Alina')
             bulk.click()
             expect(page.locator('[data-attendance-bulk-result]')).to_have_text('2 marked Here.')
@@ -194,12 +202,14 @@ class AttendanceBrowserTest(unittest.TestCase):
             self.expect_scope_here(page, 2)
             page.get_by_role('button', name='Clear', exact=True).click()
             expect(second.locator('select')).to_have_value('here')
-            expect(second_note).to_have_value('Preserve with bulk')
+            with self.app.app_context():
+                prior = StaffingDailyAttendance.query.filter_by(person_id=self.people['EX500']).one()
+                self.assertEqual(prior.note, 'Approved vacation')
             expect(self.row(page, 'CX300').locator('select')).to_have_value('no_call')
             expect(self.row(page, 'EX500').locator('select')).to_have_value('vacation')
             expect(self.row(page, 'OUT999').locator('select')).to_have_value('')
 
-            type(self).fail_note = True
+            type(self).fail_save = True
             second.locator('select').select_option('call_in')
             expect(second.locator('[data-attendance-state]')).to_contain_text('Temporary failure')
             self.expect_scope_here(page, 2)
@@ -210,24 +220,22 @@ class AttendanceBrowserTest(unittest.TestCase):
             expect(second.locator('[data-attendance-state]')).to_have_text('Saved')
             self.expect_scope_here(page, 2)
 
-            # A stale note edit cannot overwrite a status set by another supervisor.
+            # A stale status edit requires explicit retry against the current version.
             stale = self.row(other, 'BX200')
-            stale_note = stale.locator('input[name^="note_"]')
-            stale_note.fill('Reviewed new note')
+            stale.locator('select').select_option('call_in')
             expect(stale.locator('[data-attendance-state]')).to_contain_text('Changed by another supervisor')
-            self.expect_scope_here(other, 2)
-            expect(stale_note).to_have_value('Reviewed new note')
-            expect(stale.locator('select')).to_have_value('here')
+            self.expect_scope_here(other, 2, outside_visible=False)
+            expect(stale.locator('select')).to_have_value('call_in')
             stale.get_by_role('button', name='Retry').click()
             expect(stale.locator('[data-attendance-state]')).to_have_text('Saved')
             page.reload()
-            expect(second_note).to_have_value('Reviewed new note')
+            expect(second.locator('select')).to_have_value('call_in')
             expect(first.locator('select')).to_have_value('scheduled_off')
         finally:
             if type(self).delayed:
                 type(self).delayed[3].set()
                 type(self).delayed = None
-            type(self).fail_note = False
+            type(self).fail_save = False
             browser.close()
 
     def test_chromium(self):
