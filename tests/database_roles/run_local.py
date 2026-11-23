@@ -93,6 +93,8 @@ def main():
            "--auth-host=scram-sha-256", "--auth-local=scram-sha-256", "--pwfile", pwfile)
         pwfile.unlink()
         enable_fixture_tls(data)
+        with (data / "postgresql.conf").open("a", encoding="ascii") as config:
+            config.write("\nunix_socket_directories = ''\n")
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]

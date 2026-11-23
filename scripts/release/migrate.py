@@ -19,6 +19,9 @@ def run(env, execute=subprocess.run):
         raise ValueError("Expected TLS-verified dedicated migration target")
     root = Path(__file__).resolve().parents[2]
     child_env = {k: env[k] for k in ("PATH", "HOME", "LANG", "SYSTEMROOT", "WINDIR") if k in env}
+    if os.name == "nt":
+        # Libraries expect these directories on Windows. Use the isolated release home.
+        child_env.update(APPDATA=child_env["HOME"], USERPROFILE=child_env["HOME"])
     # The CLI creates a Flask app context but serves no sessions. Keep the live signing key on Render.
     child_env.update(DATABASE_URL=env["DATABASE_URL"], SECRET_KEY=secrets.token_urlsafe(48),
                      PYTHONDONTWRITEBYTECODE="1", FLASK_SKIP_DOTENV="1",

@@ -2,7 +2,6 @@
 import io
 import json
 from pathlib import Path
-import subprocess
 import sys
 import unittest
 from unittest.mock import Mock
@@ -87,7 +86,7 @@ class ReleaseChecks(unittest.TestCase):
         self.assertEqual(self.gate("neoapps-live-verification"), "authorized")
 
     def test_migration_subprocess_receives_only_necessary_inputs(self):
-        env = dict(self.env, DATABASE_URL="postgresql://migration@fixture/db?sslmode=verify-full", RELEASE_MIGRATOR="migration",
+        env = dict(self.env, HOME="fixture", DATABASE_URL="postgresql://migration@fixture/db?sslmode=verify-full", RELEASE_MIGRATOR="migration",
                    RELEASE_STANDBY="fallback", RELEASE_RUNTIME="runtime", RELEASE_DATABASE="db", RELEASE_SCHEMA="public",
                    BOOTSTRAP_ADMIN_USERNAME="fixture", BOOTSTRAP_ADMIN_EMAIL="fixture@example.invalid",
                    GH_TOKEN="fixture-token", RENDER_DEPLOY_HOOK="fixture-hook", BOOTSTRAP_ADMIN_PASSWORD="unused")
