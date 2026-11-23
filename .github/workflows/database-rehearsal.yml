@@ -1,0 +1,59 @@
+name: Disposable database release rehearsal
+on:
+  workflow_call:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/database-*.yml'
+      - '.github/CODEOWNERS'
+      - 'scripts/release/**'
+      - 'scripts/*database*.py'
+      - 'scripts/runtime_*.json'
+      - 'app/services/database_bootstrap.py'
+      - 'tests/database_roles/**'
+      - 'requirements.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    outputs:
+      boot: ${{ steps.marker.outputs.boot }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Mark this disposable runner
+        id: marker
+        run: |
+          umask 077
+          head -c 32 /dev/urandom > "$HOME/.neoapps-rehearsal-canary"
+          echo "boot=$(cat /proc/sys/kernel/random/boot_id)" >> "$GITHUB_OUTPUT"
+      - name: Install reviewed release dependencies
+        run: bash scripts/release/install.sh
+      - name: Exercise release authorization and failure paths
+        run: "$RUNNER_TEMP/neoapps-release/bin/python -m unittest discover -s tests/database_roles -p test_release_workflow.py"
+      - name: Exercise migration, worker replacement, rollback and seven application operations
+        run: |
+          "$RUNNER_TEMP/neoapps-release/bin/python" tests/database_roles/run_local.py \
+            --bin "$(pg_config --bindir)" boundary usage ground_time fluid truck flow unit preferences
+      - name: Check independent OS credential custody
+        run: sudo /usr/bin/python3 tests/database_roles/credential_custody.py --owner-uid "$(id -u nobody)" --runtime-uid "$(id -u daemon)"
+
+  isolation:
+    needs: rehearse
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions: {}
+    steps:
+      - name: Verify fresh runner cannot see migration-runner fixture
+        env:
+          MIGRATION_JOB_BOOT: ${{ needs.rehearse.outputs.boot }}
+        run: |
+          test -n "$MIGRATION_JOB_BOOT"
+          test "$(cat /proc/sys/kernel/random/boot_id)" != "$MIGRATION_JOB_BOOT"
+          test ! -e "$HOME/.neoapps-rehearsal-canary"
+          test -z "${MIGRATION_DATABASE_URL:-}${DATABASE_URL:-}"

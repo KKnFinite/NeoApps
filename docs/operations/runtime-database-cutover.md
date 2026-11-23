@@ -54,9 +54,9 @@ The gate checks effective rights including PUBLIC, column ACLs, grant options, s
 
 7. Confirm Render's live revision, health and deployment logs. From each new web/worker process confirm the runtime identity, credential-source inventory and absence of access to the operator's vault, deployment token or owner DSN. Verify old pools have drained, worker receipts still progress at their normal deadlines, and authorized/unauthorized application access still behaves correctly. Use existing read-only evidence and natural events. Compare fingerprints over a quiescent interval or account for concurrent legitimate writes. Sign off before retiring or rotating the former broad credential. Never leave it accessible from the running service.
 
-## Alternate release operator
+## Device-independent release
 
-The independently authorized DBA or release custodian obtains the reviewed commit from the trusted repository on a separately controlled workstation. Verify its SHA against the owner-approved release record. Use their existing audited vault access to obtain the off-service migration credential and bootstrap secret. Supply them only to that run. Use the same database, schema, role pins and release command as the primary operator. A held advisory lock or missing approval stops the attempt. Clear the private session afterward. Record only the receipt, operator and revision. A second local checkout tests tool portability. Independent human custody requires an actual witnessed rehearsal.
+For ordinary releases and emergency fixes, an authorized maintainer starts the protected GitHub workflow in a browser. GitHub runs the migration outside Render. The release environments, approvals, exact-SHA deployment and fallback evidence are described in the [protected database release procedure](protected-database-release.md). The alternate-checkout exercise below remains part of disposable recovery testing.
 
 ## Rollback
 

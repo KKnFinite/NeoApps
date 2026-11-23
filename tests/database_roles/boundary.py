@@ -114,7 +114,22 @@ class RoleBoundary(unittest.TestCase):
                 cur.execute("SELECT to_regclass('neoapps_reviewed_deployments')")
                 self.assertIsNone(cur.fetchone()[0])
                 cur.execute("REVOKE SELECT (private_value) ON fixture_migration_private FROM PUBLIC")
-            self.invoke(TOOL, self.owner_env, *self.apply_args)
+            release_env = dict(self.web_env, GITHUB_SHA=self.release, APPROVED_SHA=self.release,
+                               RELEASE_DATABASE=DBNAME, RELEASE_SCHEMA=self.schema, RELEASE_MIGRATOR=MIGRATOR,
+                               RELEASE_RUNTIME=RUNTIME, RELEASE_STANDBY=FALLBACK,
+                               BOOTSTRAP_ADMIN_USERNAME="Kessler", BOOTSTRAP_ADMIN_EMAIL="bootstrap-admin@local.neoapps")
+            tls_url = make_url(self.owner).update_query_dict({
+                "sslmode": "verify-full", "sslrootcert": str(Path(os.environ["HOME"]) / "data" / "server.crt")})
+            release_env["DATABASE_URL"] = tls_url.render_as_string(hide_password=False)
+            migrate = "scripts/release/migrate.py"
+            for invalid in ({"APPROVED_SHA": "0"*40}, {"BOOTSTRAP_ADMIN_USERNAME": "absent",
+                                                       "BOOTSTRAP_ADMIN_EMAIL": "absent@example.invalid"}):
+                self.invoke(migrate, dict(release_env, **invalid), expected="Migration or verification failed")
+                self.assertEqual(self.fingerprint(old), before)
+                with old, old.cursor() as cur:
+                    cur.execute("SELECT to_regclass('neoapps_reviewed_deployments')")
+                    self.assertIsNone(cur.fetchone()[0])
+            self.invoke(migrate, release_env)
             alternate = Path(os.environ['HOME']) / 'alternate-checkout'
             # A self-contained checkout and independent home simulate the
             # second workstation without access to the primary checkout.

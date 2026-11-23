@@ -5,6 +5,8 @@ No network service or existing database URL is used.
 """
 import argparse
 from contextlib import closing
+from datetime import datetime, timedelta, timezone
+import ipaddress
 import os
 from pathlib import Path
 import secrets
@@ -15,6 +17,9 @@ import tempfile
 
 import psycopg2
 from psycopg2 import sql
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.review_runtime_temp import prepare
 
@@ -24,6 +29,22 @@ MIGRATOR = "fixture_migrator"
 RUNTIME = "fixture_runtime"
 FALLBACK = "fixture_previous_runtime"
 LEGACY = "fixture_prior_owner"
+
+
+def enable_fixture_tls(data):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "127.0.0.1")])
+    now = datetime.now(timezone.utc)
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(x509.random_serial_number()).not_valid_before(now - timedelta(minutes=5))
+            .not_valid_after(now + timedelta(days=1))
+            .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), False)
+            .sign(key, hashes.SHA256()))
+    with (data / "server.key").open("wb") as dest:
+        (data / "server.key").chmod(0o600)
+        dest.write(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                     serialization.NoEncryption()))
+    (data / "server.crt").write_bytes(cert.public_bytes(serialization.Encoding.PEM))
 
 
 def process_env(home):
@@ -71,10 +92,11 @@ def main():
         pg("initdb", "-D", data, "-U", "fixture_admin", "--encoding=UTF8", "--locale=C",
            "--auth-host=scram-sha-256", "--auth-local=scram-sha-256", "--pwfile", pwfile)
         pwfile.unlink()
+        enable_fixture_tls(data)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
-        pg("pg_ctl", "-D", data, "-l", home/"server.log", "-o", f"-h 127.0.0.1 -p {port}", "-w", "start")
+        pg("pg_ctl", "-D", data, "-l", home/"server.log", "-o", f"-h 127.0.0.1 -p {port} -c ssl=on", "-w", "start")
         try:
             def url(user, database=DBNAME):
                 return f"postgresql://{user}:{passwords[user]}@127.0.0.1:{port}/{database}"

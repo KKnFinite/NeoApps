@@ -49,6 +49,8 @@ def bootstrap_database(app=None):
 
 
 def _bootstrap_database_once(app, username, email, password, used_fallback):
+    if os.environ.get("NEOAPPS_EXISTING_BOOTSTRAP_ONLY") == "1":
+        _find_or_create_bootstrap_user(username, email)
     db.create_all()
     sync_database_schema(app)
     from app.services.account_foundation_schema import ensure_account_history_guards
@@ -159,6 +161,10 @@ def _resolve_bootstrap_credentials(app):
     if not email:
         email = DEFAULT_BOOTSTRAP_EMAIL
 
+    if os.environ.get("NEOAPPS_EXISTING_BOOTSTRAP_ONLY") == "1":
+        # A release of an initialized database never needs an administrator password.
+        return username, email, None, False
+
     if password:
         return username, email, password, False
 
@@ -184,6 +190,9 @@ def _find_or_create_bootstrap_user(username, email):
 
     if user:
         return user, False
+
+    if os.environ.get("NEOAPPS_EXISTING_BOOTSTRAP_ONLY") == "1":
+        raise RuntimeError("Existing bootstrap identity required for a protected release")
 
     user = User(username=username)
     db.session.add(user)

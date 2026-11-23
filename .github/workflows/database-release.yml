@@ -1,0 +1,115 @@
+name: Approved database release
+run-name: Database release ${{ inputs.revision }}
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full approved SHA at the tip of main
+        type: string
+        required: true
+      previous_live:
+        description: Full LIVE SHA verified in Render for fallback review
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: neoapps-database-release
+  cancel-in-progress: false
+
+env:
+  APPROVED_SHA: ${{ inputs.revision }}
+  PREVIOUS_LIVE_SHA: ${{ inputs.previous_live }}
+
+jobs:
+  policy:
+    if: github.repository == 'KKnFinite/NeoApps' && github.ref == 'refs/heads/main' && inputs.revision == github.sha && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify repository and release environment protections
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/release/github_gate.py
+
+  rehearsal:
+    needs: policy
+    uses: ./.github/workflows/database-rehearsal.yml
+
+  migrate:
+    needs: rehearsal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: neoapps-migration
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - run: bash scripts/release/install.sh
+      - name: Verify approval of this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/release/github_gate.py --approved-environment neoapps-migration
+      - name: Migrate and seal the exact SHA
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          RELEASE_DATABASE: ${{ vars.RELEASE_DATABASE }}
+          RELEASE_SCHEMA: ${{ vars.RELEASE_SCHEMA }}
+          RELEASE_MIGRATOR: ${{ vars.RELEASE_MIGRATOR }}
+          RELEASE_RUNTIME: ${{ vars.RELEASE_RUNTIME }}
+          RELEASE_STANDBY: ${{ vars.RELEASE_STANDBY }}
+          BOOTSTRAP_ADMIN_USERNAME: ${{ vars.BOOTSTRAP_ADMIN_USERNAME }}
+          BOOTSTRAP_ADMIN_EMAIL: ${{ vars.BOOTSTRAP_ADMIN_EMAIL }}
+        run: '"$RUNNER_TEMP/neoapps-release/bin/python" scripts/release/migrate.py'
+      - name: Record migration outcome
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+        run: |
+          printf 'Migration job %s. Release `%s`. Prior LIVE `%s`. See the rehearsal job for rollback evidence.\n' "$RESULT" "$GITHUB_SHA" "$PREVIOUS_LIVE_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    environment: neoapps-render-release
+    outputs:
+      deployment: ${{ steps.trigger.outputs.deployment }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify Render release approval and current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/release/github_gate.py --approved-environment neoapps-render-release
+      - name: Request this exact Render commit
+        id: trigger
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          RENDER_TARGET_SERVICE: ${{ vars.RENDER_TARGET_SERVICE }}
+        run: python3 -I scripts/release/render_deploy.py
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    environment: neoapps-live-verification
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check the operator's live authorization and worker observations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYMENT_ID: ${{ needs.deploy.outputs.deployment }}
+        run: python3 -I scripts/release/github_gate.py --approved-environment neoapps-live-verification
+      - name: Verify the service answers its read-only health check
+        run: |
+          test "$(curl --proto '=https' --max-time 15 --fail --silent --show-error https://neoapps.onrender.com/healthz)" = ok
