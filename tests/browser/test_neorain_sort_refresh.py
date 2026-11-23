@@ -26,7 +26,7 @@ class NeoRainSortRefreshBrowserTest(TestCase):
         case.setUp()
         self.addCleanup(case.doCleanups)
         app = case.app
-        app.config.update(LIVE_SCREEN_REFRESH_INTERVAL_MS=5000, RAINROCK_REFRESH_INTERVAL_MS=1000,
+        app.config.update(SESSION_COOKIE_SECURE=False, LIVE_SCREEN_REFRESH_INTERVAL_MS=5000, RAINROCK_REFRESH_INTERVAL_MS=1000,
                           NEORAIN_BRIEFING_REFRESH_MS=1000)
         old = SortDateOperation(gateway_id=case.case.gateway.id, gateway_code="RFD",
                                 sort_date=case.operation.sort_date - timedelta(days=1), sort_name="night")

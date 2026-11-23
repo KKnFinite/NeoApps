@@ -4,6 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 from threading import Thread
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 import json
 import re
 import tempfile
@@ -19,6 +20,7 @@ from app.models import (GatewayMembership, GatewayNodeRole, NeoNode, NeoScorpion
 from app.services.live_screen_refresh import live_screen_refresh_value
 from tests import test_dispatch_refresh_fragments as fixtures
 from tests import test_neoscorpion_dispatch_planning as database_fixture
+from tests.test_neorain_sort_refresh import configure_sort_window
 
 EVIDENCE = Path('instance/scorpion-phase3-20261104/browser')
 
@@ -38,6 +40,7 @@ class DispatchDeltaBrowserTest(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         c = self.case
         c.prepare(); c.save(c.start + timedelta(minutes=10), **c.final_data())
+        configure_sort_window(c.fixture.gateway, c.operation.sort_date)
         self.other = c.fixture._mission('UPS222', 'N222UP', 30000, 20)
         for i in range(5): c.fixture._mission('UPS'+str(300+i), 'N'+str(300+i)+'UP', 30000, 30+i)
         self.observer = c.fixture._login_user('delta-observer', 'simulator')
@@ -59,6 +62,8 @@ class DispatchDeltaBrowserTest(unittest.TestCase):
 
     def open(self, actor):
         context = self.browser.new_context(viewport={'width':1440,'height':950},service_workers='block')
+        now = self.case.client.application.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE']
+        context.clock.install(time=now.replace(tzinfo=ZoneInfo("America/Chicago")))
         page = context.new_page()
         script = Path('app/static/js/live_updates.js').read_text(encoding='utf-8') + '''
 const original=NeoLiveUpdates;
