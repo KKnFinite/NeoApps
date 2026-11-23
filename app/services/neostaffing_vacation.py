@@ -5426,7 +5426,7 @@ def _locked_management_turn_state(
             selectinload(StaffingVacationManagementTurnState.resolutions),
         )
         .filter_by(vacation_year=vacation_year, area_unit_id=area.id)
-        .with_for_update()
+        .with_for_update(of=StaffingVacationManagementTurnState)
         .first()
     )
     if state:

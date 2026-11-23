@@ -116,6 +116,19 @@ class NeoStaffingStaffingGroupsTest(unittest.TestCase):
             db.session.rollback()
         self.assertEqual(StaffingGroup.query.count(), 0)
 
+    def test_scoped_attendance_omits_unrelated_groups_and_keeps_empty_authorized_area(self):
+        _, operation, department, nested, direct = self._hierarchy()
+        self._night_operation()
+        for name, unit in [('Both areas', operation), ('Nested only', department)]:
+            staffing_service.create_staffing_group(dict(name=name, active='1', staffing_unit_ids=[unit.id]))
+        db.session.commit()
+        def names(area):
+            context = staffing_service.attendance_context({'work_area_id': str(area.id)},
+                include_staffing_groups=True, allowed_area_ids={area.id})
+            return {entry['group'].name for entry in context['staffing_groups']}
+        self.assertEqual(names(nested), {'Both areas', 'Nested only'})
+        self.assertEqual(names(direct), {'Both areas'})
+
     def test_totals_deduplicate_overlap_and_include_direct_work_areas(self):
         staffing_sort, operation, department, nested_area, direct_area = self._hierarchy()
         current_operation = self._night_operation()
@@ -340,6 +353,12 @@ class NeoStaffingStaffingGroupsTest(unittest.TestCase):
         self.assertEqual(denied_view.status_code, 200)
         self.assertNotIn(b"CREATE GROUP", denied_view.data)
         self.assertIn(b"Master Group", watcher_attendance.data)
+
+        g.pop("_login_user", None)
+        signed_out = self.app.test_client().get("/neostaffing/attendance")
+        self.assertEqual(signed_out.status_code, 302)
+        self.assertIn("/login", signed_out.location)
+        self.assertNotIn(b"Master Group", signed_out.data)
 
         self._rule("neostaffing.staffing_groups.view").minimum_role = "watcher"
         self._rule("neostaffing.staffing_groups.edit").minimum_role = "operator"
