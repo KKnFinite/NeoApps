@@ -126,14 +126,14 @@
     {
       "file": "20-neostaffing.css",
       "scope": "neostaffing",
-      "bytes": 98591,
-      "sha256": "d102dca335c7f8fd78c8e6c400d60c2b4814bfe9a85c71781d2bc1fe03b3f909"
+      "bytes": 104041,
+      "sha256": "8f29d90944abce06d5c139daafd9f1541b9292af8716d8b007b4eb6bcab7fbaa"
     },
     {
       "file": "21-shared.css",
       "scope": "shared",
-      "bytes": 7327,
-      "sha256": "065029338e60584cd86b5d6b04dfc17dc179ebcb8c100a71fe134a1420ec07e2"
+      "bytes": 1877,
+      "sha256": "e9e83affeece0772fbfe5d70b60e0225b8e083d4ad1f7934fb0efb4b1ff0ba3c"
     },
     {
       "file": "22-neorain.css",
