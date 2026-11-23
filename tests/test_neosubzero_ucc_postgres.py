@@ -8,7 +8,7 @@ from datetime import datetime
 from unittest.mock import patch
 from uuid import uuid4
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 
 from app import create_app
@@ -66,6 +66,26 @@ class UccPostgresTest(unittest.TestCase):
                     db.session.remove()
         with ThreadPoolExecutor(max_workers=2) as pool:
             return list(pool.map(worker, (0, 1)))
+
+    def test_crew_revision_batches_reads_and_observes_a_committed_pool_change(self):
+        f = self.fixture
+        statements = []
+        def record(conn, cursor, sql, *args):
+            statements.append(sql.lower())
+
+        before = fixtures.neosubzero_ucc_revision(f.gateway, f.operation)
+        event.listen(db.engine, "before_cursor_execute", record)
+        try:
+            self.assertEqual(fixtures.neosubzero_ucc_revision(f.gateway, f.operation), before)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", record)
+        pool_reads = [sql for sql in statements if "staffing_person_qualifications" in sql]
+        self.assertEqual(len(pool_reads), 1)
+        self.assertEqual(pool_reads[0].count("union all"), 6)
+        self.assertTrue(all(sql.lstrip().startswith("select") for sql in statements))
+        fixtures.set_neosubzero_callout_membership(f.operation, f.callout, False, assignment=f.callout_row)
+        db.session.commit()
+        self.assertNotEqual(fixtures.neosubzero_ucc_revision(f.gateway, f.operation), before)
 
     def test_simultaneous_whole_unit_moves_have_exactly_one_winner(self):
         from app.models import NeoSubZeroTruck

@@ -472,6 +472,32 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertFalse(self.callout_row.active)
         self.assertEqual(self.callout_row.removal_reason, "qualification")
 
+    def test_grid_reuse_is_bound_to_the_current_session_and_authorized_representation(self):
+        client = self.app.test_client()
+        self._login(client, self._user("grid_editor", "simulator"))
+        url = "/neosubzero/ucc?fragment=1&crew_options=shared&staffing_grids=1"
+        with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation", return_value=self.operation), patch(
+            "app.neonodes.neosubzero.routes.neosubzero_weather_context", return_value=self._weather_context_fixture()
+        ):
+            original = document(client.get(url))
+            digests = [e.attrs["data-ucc-grid"] for e in original.findall("template", **{"data-ucc-grid": None})]
+            self.assertEqual(len(set(digests)), 7)
+            headers = {"X-DUCC-Staffing-Grids": ",".join(digests)}
+            reused = client.get(url, headers=headers)
+            self.assertIn("no-store", reused.headers["Cache-Control"])
+            self.assertNotIn(b'class="ucc-staffing-grid"', reused.data)
+            self.assertIn(b'data-ucc-aircraft=', reused.data)
+            self.assertIn(b'data-ucc-staffing-options', reused.data)
+
+            self._login(client, self._user("other_grid_editor", "simulator"))
+            self.assertEqual(client.get(url, headers=headers).data.count(b'class="ucc-staffing-grid"'), 7)
+            self._login(client, self._user("grid_watcher", "watcher"))
+            readonly = client.get(url, headers=headers)
+            self.assertEqual(readonly.status_code, 200)
+            self.assertNotIn(b'data-ucc-grid=', readonly.data)
+            self.assertNotIn(b'data-ucc-crew-form=', readonly.data)
+            self.assertIn(b'data-ucc-aircraft=', readonly.data)
+
     def test_ucc_permissions_route_refresh_and_settings_contract(self):
         defaults = {key: role for key, role, _ in DEFAULT_PERMISSION_RULES}
         self.assertEqual(defaults["neosubzero.ucc.view"], "watcher")

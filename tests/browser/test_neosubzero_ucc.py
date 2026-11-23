@@ -90,11 +90,13 @@ class UccBrowserTest(unittest.TestCase):
 
     def test_compact_fragment_restores_all_authorized_crew_choices_after_save(self):
         for engine in ('chromium', 'webkit'):
-            with self.subTest(engine=engine):
+            with self.subTest(engine=engine), patch.dict(self.app.config, {"CSRF_PROTECT_TESTING": True}):
                 browser = getattr(self.pw, engine).launch()
                 try:
                     context = browser.new_context(viewport={'width': 1440, 'height': 900}, service_workers='block')
                     page = context.new_page()
+                    page.clock.install(time=self.sort_now - timedelta(minutes=1))
+                    page.clock.pause_at(self.sort_now)
                     self.login(page)
                     self.ready(page, '/neosubzero/ucc')
                     team = page.locator('[data-ucc-editor="Alpha-2"]')
@@ -109,9 +111,26 @@ class UccBrowserTest(unittest.TestCase):
                     self.assertEqual(compact.status, 200)
                     body = compact.body()
                     self.assertIn(b'data-ucc-staffing-options', body)
+                    self.assertEqual(body.count(b'<template data-ucc-grid='), 7)
                     canonical = page.request.get(self.origin + '/neosubzero/ucc?fragment=1').body()
                     self.assertLess(len(body), len(canonical))
-                    print(engine, 'DUCC fragment bytes', len(canonical), len(body))
+                    expect(select).to_be_enabled()
+                    # Save on a different ramp. Its fresh grid and the six reused grids
+                    # must all agree with a fresh authorized page, including move versions.
+                    other_team = page.locator('[data-ucc-editor="Bravo-2"]')
+                    other = other_team.locator('[data-ucc-crew-form="flyer"] select')
+                    if not other.is_visible():
+                        other_team.locator('[data-ucc-crew-edit="flyer"]').click()
+                    next_choice = '' if other.input_value() else str(self.people[1])
+                    with page.expect_response(lambda r: 'staffing_grids=1' in r.url) as changed:
+                        other.select_option(next_choice)
+                    response = changed.value
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.body().count(b'class="ucc-staffing-grid"'), 1)
+                    legacy = page.request.get(self.origin + '/neosubzero/ucc?fragment=1&crew_options=shared')
+                    self.assertLess(len(response.body()), len(legacy.body()) // 2)
+                    expect(other).to_be_enabled()
+                    expect(other).to_have_value(next_choice)
                     reference = page.context.new_page()
                     self.ready(reference, '/neosubzero/ucc')
                     read = """() => Object.fromEntries(Array.from(document.querySelectorAll('[data-ucc-crew-form] select[name=person_id]'),
@@ -122,6 +141,28 @@ class UccBrowserTest(unittest.TestCase):
                     self.assertEqual(actual.keys(), expected.keys())
                     for slot in expected:
                         self.assertEqual(actual[slot], expected[slot], slot)
+                    for doc in (page, reference):
+                        self.assertTrue(doc.locator('[data-ucc-unit-form] [name=expected_version]').first.input_value())
+                    versions = '[data-ucc-unit-form] [name=expected_version]'
+                    self.assertEqual(page.locator(versions).evaluate_all('(a) => a.map(x => x.value)'),
+                                     reference.locator(versions).evaluate_all('(a) => a.map(x => x.value)'))
+                    # The response supplies a current CSRF token even for reused forms.
+                    self.assertTrue(page.locator('[data-ucc-unit-form] [name=csrf_token]').first.input_value())
+                    # A weather change during focused editing must refresh the weather
+                    # without replacing the operator's field or downloading any crew grids.
+                    focused = page.locator('[data-ucc-editor="Bravo-3"] [data-ucc-crew-form="driver"] select')
+                    focused.focus()
+                    weather_version = "weather-grid-reuse"
+                    with patch("app.neonodes.neosubzero.routes.neosubzero_weather_revision", return_value=weather_version), patch.dict(
+                        self.weather_data, revision=weather_version
+                    ), patch.dict(self.weather_data["current"], temperature="31°F"):
+                        with page.expect_response(lambda r: 'staffing_grids=1' in r.url) as refreshed_weather:
+                            page.clock.fast_forward(6000)
+                        weather_body = refreshed_weather.value.body()
+                        self.assertEqual(weather_body.count(b'<template data-ucc-grid='), 7)
+                        self.assertNotIn(b'class="ucc-staffing-grid"', weather_body)
+                        expect(page.locator('.neosubzero-weather-primary strong')).to_have_text('31°F')
+                        expect(focused).to_be_focused()
                 finally:
                     browser.close()
 

@@ -90,7 +90,7 @@
             <div class="ucc-team-controls" id="{{ editor_id }}">
             <header class="ucc-crew-editor-head"><strong id="{{ editor_id }}-title">EDIT CREW — {{ ramp.name|upper }} POSITION {{ slot.position }}</strong><button type="button" data-ucc-crew-close aria-label="Close crew editor">✕</button></header>
             <form method="post" action="{{ url_for('neosubzero.truck_mutate') }}" data-ucc-truck-form data-ucc-crew-form="truck" data-ucc-auto-save{% if slot.truck_number %} data-ucc-assigned{% endif %}>
-                {{ csrf_field() }}
+                {% if not grid_fragment %}{{ csrf_field() }}{% endif %}
                 <input type="hidden" name="board" value="ucc"><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ slot.truck_version }}">
                 {% set label = ramp.name ~ ' position ' ~ slot.position ~ ' truck' %}
                 <div class="ucc-truck-entry">
@@ -105,7 +105,7 @@
             </form>
             {% for role in ('driver', 'flyer') %}{% set person_slot = slot.roles[role] %}
             <form method="post" action="{{ url_for('neosubzero.ucc') }}" data-ucc-auto-save data-ucc-crew-form="{{ role }}" data-ucc-assignment-form data-assignment-scope="{{ scope }}" data-current-person-id="{{ person_slot.person.id if person_slot.person else '' }}" data-current-person-name="{{ person_slot.person.full_name if person_slot.person else '' }}" data-assignment-id="{{ person_slot.assignment.id if person_slot.assignment else '' }}" data-assignment-version="{{ person_slot.version }}"{% if person_slot.person %} data-ucc-assigned{% endif %}>
-                {{ csrf_field() }}
+                {% if not grid_fragment %}{{ csrf_field() }}{% endif %}
                 <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="team_role" value="{{ role }}"><input type="hidden" name="expected_version" value="{{ person_slot.version }}"><input type="hidden" name="source_assignment_id" value=""><input type="hidden" name="source_expected_version" value=""><input type="hidden" name="move_resolution" value="">
                 {% set label = ramp.name ~ ' position ' ~ slot.position ~ ' ' ~ role %}
                 <label class="ucc-pill"><span class="ucc-crew-field-label">{{ role|capitalize }}</span><select id="{{ editor_id }}-{{ role }}" name="person_id" aria-label="{{ label }}">
@@ -117,8 +117,8 @@
             </form>{% endfor %}
             {% if can_edit %}
             <details data-ucc-editor="unit-{{ ramp.name }}-{{ slot.position }}"><summary>MOVE / SWAP</summary><div class="ucc-unit-actions"><button type="button" data-ucc-enable-moves aria-pressed="false">MOVE PERSON INTO SLOT</button>{% for role in ('driver','flyer') if slot.roles[role].person and slot.roles[role].available %}<button type="button" class="ucc-move-person" draggable="true" data-ucc-drag-assignee data-person-id="{{ slot.roles[role].person.id }}">MOVE {{ role|upper }}</button>{% endfor %}<form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='unit') }}" data-ucc-unit-form data-ucc-crew-form="unit">
-                {{ csrf_field() }}
-                <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ staffing_version }}">
+                {% if not grid_fragment %}{{ csrf_field() }}{% endif %}
+                <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ '' if grid_fragment else staffing_version }}">
                 {% if detached_units %}<label>SOURCE UNIT<select name="source_slot"><option value="{{ ramp.name }}|{{ slot.position }}">THIS POSITION</option>{% for unit in detached_units %}<option value="{{ unit.ramp }}|{{ unit.position }}">{{ unit.ramp }} {{ numbered_truck(unit.position, unit.truck) if unit.truck else 'P' ~ unit.position ~ ' · TEAM' }}</option>{% endfor %}</select></label>{% endif %}
                 <label>TO RAMP<select name="destination_ramp">{% for destination in ramps if destination.slots %}<option>{{ destination.name }}</option>{% endfor %}{% if early_out %}<option>Early Out</option>{% endif %}</select></label><label>POSITION<select name="destination_position">{% for position in range(1,5) %}<option>{{ position }}</option>{% endfor %}</select></label><label>RESOLUTION<select name="resolution"><option value="move">MOVE TO EMPTY</option><option value="swap">SWAP UNITS</option></select></label><button type="submit">APPLY UNIT MOVE</button>
             </form></div></details><span class="ucc-management-only ucc-management-save" data-ucc-management-save role="status"></span>{% endif %}
@@ -152,7 +152,7 @@
     <header><h2>{{ ramp.name|upper }}</h2><span class="ucc-desktop-label">{{ ramp.aircraft|length }} aircraft</span></header>
     <div class="ucc-treatment-layout">
         {{ physical_ramp(ramp) }}
-        {{ staffing_slots(ramp) }}
+        {{ grid_fragment(staffing_slots(ramp)) if grid_fragment else staffing_slots(ramp) }}
     </div>
     {% if ramp.exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>DEICE CAPACITY REVIEW · {{ ramp.exceptions|length }} unplaced</strong><p>Four waiting positions maximum, plus one active DEICE PAD. Confirm actual location and correct the departure queue.</p>{% for row in ramp.exceptions %}<div><b>{{ row.parking }}</b>{{ aircraft(row, 'unplaced; deice capacity review') }}</div>{% endfor %}</div>{% endif %}
     {% if ramp.location_exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>LOCATION REVIEW · AFTER BLOCK-OUT</strong>{% for row in ramp.location_exceptions %}<div><b>{{ row.parking }}</b>{{ aircraft(row, 'location unconfirmed after Block-Out') }}</div>{% endfor %}</div>{% endif %}
@@ -163,7 +163,7 @@
 {% if early_out %}
 <section class="ucc-ramp ucc-early-out" data-ucc-early-out>
     <header><h2>EARLY OUT</h2></header>
-    {{ staffing_slots(early_out) }}
+    {{ grid_fragment(staffing_slots(early_out)) if grid_fragment else staffing_slots(early_out) }}
 </section>
 <section class="ucc-ramp ucc-whos-left" data-ucc-whos-left>
     <header><h2>WHO’S LEFT</h2></header>

@@ -486,19 +486,19 @@ def departure_deice_revision(gateway, operation):
         SortDateMission.mission_type == "departure",
     )
     aggregates = (
-        _aggregate(
+        revision_aggregate(
             "missions",
             SortDateMission,
             SortDateMission.updated_at,
             SortDateMission.id.in_(mission_ids),
         ),
-        _aggregate(
+        revision_aggregate(
             "parking",
             SortDateParkingAssignment,
             SortDateParkingAssignment.updated_at,
             SortDateParkingAssignment.sort_date_operation_id == operation_id,
         ),
-        _aggregate(
+        revision_aggregate(
             "tails",
             SortDateTailState,
             SortDateTailState.updated_at,
@@ -507,39 +507,39 @@ def departure_deice_revision(gateway, operation):
             SortDateTailState.sort_name
             == (operation.sort_name if operation else "night"),
         ),
-        _aggregate(
+        revision_aggregate(
             "pretreat",
             NeoSubZeroPretreatState,
             NeoSubZeroPretreatState.updated_at,
             NeoSubZeroPretreatState.sort_date_operation_id == operation_id,
         ),
-        _aggregate(
+        revision_aggregate(
             "departure_deice",
             NeoSubZeroDepartureDeiceEvent,
             NeoSubZeroDepartureDeiceEvent.updated_at,
             NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == operation_id,
         ),
-        _aggregate(
+        revision_aggregate(
             "settings",
             NeoSubZeroSetting,
             NeoSubZeroSetting.updated_at,
             NeoSubZeroSetting.gateway_id == gateway.id,
         ),
-        _aggregate(
+        revision_aggregate(
             "ucc_trucks",
             NeoSubZeroUccTruckAssignment,
             NeoSubZeroUccTruckAssignment.updated_at,
             NeoSubZeroUccTruckAssignment.sort_date_operation_id == operation_id,
         ),
-        _aggregate(
+        revision_aggregate(
             "spray_records",
             NeoSubZeroSprayRecord,
             NeoSubZeroSprayRecord.updated_at,
             NeoSubZeroSprayRecord.sort_date_operation_id == operation_id,
         ),
-        _aggregate('ucc_people',NeoSubZeroUccAssignment,NeoSubZeroUccAssignment.updated_at,NeoSubZeroUccAssignment.sort_date_operation_id==operation_id),
-        _aggregate('application_context',NeoSubZeroOperationContext,NeoSubZeroOperationContext.updated_at,NeoSubZeroOperationContext.sort_date_operation_id==operation_id),
-        _aggregate('frost_inspections',NeoSubZeroAuditEntry,NeoSubZeroAuditEntry.recorded_at_utc,
+        revision_aggregate('ucc_people',NeoSubZeroUccAssignment,NeoSubZeroUccAssignment.updated_at,NeoSubZeroUccAssignment.sort_date_operation_id==operation_id),
+        revision_aggregate('application_context',NeoSubZeroOperationContext,NeoSubZeroOperationContext.updated_at,NeoSubZeroOperationContext.sort_date_operation_id==operation_id),
+        revision_aggregate('frost_inspections',NeoSubZeroAuditEntry,NeoSubZeroAuditEntry.recorded_at_utc,
             NeoSubZeroAuditEntry.sort_date_operation_id==operation_id,NeoSubZeroAuditEntry.action=='frost_physical_inspection'),
     )
     values = db.session.execute(union_all(*aggregates)).all()
@@ -1008,7 +1008,7 @@ def _departure_hhmm(value, operation, mission):
         raise NeoSubZeroDepartureDeiceError(str(exc)) from exc
 
 
-def _aggregate(source, model, timestamp, *criteria):
+def revision_aggregate(source, model, timestamp, *criteria):
     return select(
         literal(source).label("source"),
         func.count(model.id).label("row_count"),

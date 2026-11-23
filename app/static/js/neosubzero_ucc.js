@@ -557,6 +557,38 @@
     let loading = null;
     let mutationEpoch = 0;
     let deferredRevision = null;
+    let staffingGrids = new Map();
+    function restoreStaffingGrids(next) {
+        const received = new Map();
+        const metadata = next.querySelector('[data-ucc-grid-csrf]')?.dataset;
+        for (const marker of next.querySelectorAll('template[data-ucc-grid]')) {
+            const digest = marker.dataset.uccGrid;
+            const sibling = marker.nextElementSibling;
+            const fresh = sibling?.matches('.ucc-staffing-grid');
+            const previous = staffingGrids.get(digest);
+            if (metadata?.uccUnitVersion === undefined || (!fresh && !previous)) {
+                staffingGrids.clear();
+                throw new Error("Incomplete staffing refresh. The next refresh will request full grids.");
+            }
+            let grid;
+            if (fresh) {
+                // Capture server markup before crew choices, drafts or TV modify it.
+                received.set(digest, document.importNode(sibling, true));
+                grid = sibling;
+                marker.remove();
+            } else {
+                grid = previous.cloneNode(true);
+                for (const field of grid.querySelectorAll('input[name="csrf_token"]')) field.value = metadata.uccGridCsrf;
+                marker.replaceWith(grid);
+                received.set(digest, previous);
+            }
+            // Whole-unit moves share one board-wide concurrency version.
+            for (const field of grid.querySelectorAll('[data-ucc-unit-form] [name="expected_version"]')) {
+                field.value = metadata.uccUnitVersion;
+            }
+        }
+        staffingGrids = received;
+    }
     function expandStaffingOptions(next) {
         const pool = next.querySelector('template[data-ucc-staffing-options]');
         if (!pool) return;
@@ -582,12 +614,12 @@
         pool.remove();
     }
 
-    const fetchLive = async (url, read) => {
+    const fetchLive = async (url, read, headers) => {
         const abort = new AbortController();
         const timeout = window.setTimeout(() => abort.abort(), 10000);
         try {
             const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {
-                cache: "no-store", credentials: "same-origin", signal: abort.signal,
+                cache: "no-store", credentials: "same-origin", signal: abort.signal, headers,
             });
             if (response.redirected) {
                 throw Object.assign(new Error("Sign-in changed. Reopen DUCC to reconnect."), {sessionChanged: true});
@@ -604,11 +636,14 @@
             const url = new URL(window.location.href);
             url.searchParams.set("fragment", "1");
             url.searchParams.set("crew_options", "shared");
-            const html = await fetchLive(url, response => response.text());
+            url.searchParams.set("staffing_grids", "1");
+            const headers = staffingGrids.size ? {"X-DUCC-Staffing-Grids": [...staffingGrids.keys()].join(",")} : undefined;
+            const html = await fetchLive(url, response => response.text(), headers);
             const documentNext = new DOMParser().parseFromString(html, "text/html");
             const next = documentNext.querySelector("[data-subzero-ucc]");
             if (!next) throw new Error("UCC session expired. Open current UCC to sign in.");
             if (requestEpoch !== mutationEpoch || root.dataset.saving === "true") return false;
+            restoreStaffingGrids(next);
             expandStaffingOptions(next);
             const deferred = editing();
             // Keep the complete committed source for TV, even if TV is entered
