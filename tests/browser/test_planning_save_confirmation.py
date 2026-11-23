@@ -57,5 +57,12 @@ class PlanningSaveConfirmationTest(unittest.TestCase):
                         expect(other).to_contain_text("B04" if engine == "chromium" else "B05", timeout=1500)
                     row.get_by_role("button", name="RESTORE").click()
                     expect(row.get_by_role("button", name="CANCEL", exact=True)).to_be_visible()
+                    page.set_viewport_size({"width": 390, "height": 844})
+                    mobile = page.locator("[data-live-rows=mobile-missions] [data-live-row]").filter(has_text=flight)
+                    mobile.get_by_role("button", name="Swap tail").click()
+                    choices = mobile.locator("select[name=replacement_tail]")
+                    self.assertEqual(choices.locator("option").all_text_contents(), ["TAIL", "N101", "N202"])
+                    choices.select_option("N202")
+                    expect(choices).to_have_value("N202")
                 finally:
                     browser.close()

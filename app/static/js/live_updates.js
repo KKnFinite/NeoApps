@@ -515,7 +515,7 @@
         }
     };
 
-    const reconcileRows = (container, html) => {
+    const reconcileRows = (container, html, prepareRow) => {
         if (!container) {
             return { added: 0, updated: 0, removed: 0, protected: 0 };
         }
@@ -531,6 +531,14 @@
         const currentById = new Map(
             currentRows.map((row) => [row.dataset.liveId, row])
         );
+        if (prepareRow) {
+            for (const row of incomingRows) {
+                const previous = currentById.get(row.dataset.liveId);
+                if (!previous || previous.dataset.liveVersion !== row.dataset.liveVersion) {
+                    prepareRow(row);
+                }
+            }
+        }
         const result = { added: 0, updated: 0, removed: 0, protected: 0 };
 
         currentRows.forEach((current) => {

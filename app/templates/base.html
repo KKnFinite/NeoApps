@@ -148,7 +148,7 @@
     <meta name="physical-sort-windows" content="{{ screen_poll_windows(gateway|default(none))|tojson }}">
     <meta name="live-poll-scope" content="{{ live_poll_scope(gateway|default(none)) }}">
     <script src="{{ url_for('static', filename='js/live_revision.js', hours='20261121', v='20261122-state-slots') }}"></script>
-    <script src="{{ url_for('static', filename='js/live_updates.js', v='20261123-planning-save') }}"></script>
+    <script src="{{ url_for('static', filename='js/live_updates.js', v='20261123-planning-options') }}"></script>
     {% endif %}
     {% if is_neostaffing_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20261106-sidebar-scroll-v1', attendance='20261110-autosave-v1' if request.endpoint == 'neostaffing.attendance' else none) }}">
