@@ -35,7 +35,7 @@ def gateway_operations(gateway):
     # Older canonical operations may have a code without a populated gateway FK.
     return SortDateOperation.query.options(load_only(
         SortDateOperation.id, SortDateOperation.gateway_id, SortDateOperation.gateway_code,
-        SortDateOperation.sort_date, SortDateOperation.sort_name, SortDateOperation.window_minutes,
+        SortDateOperation.sort_date, SortDateOperation.sort_name, SortDateOperation.archived_at_utc, SortDateOperation.window_minutes,
         SortDateOperation.first_wave_window_minutes, SortDateOperation.second_wave_window_minutes,
     )).filter(
         SortDateOperation.gateway_code == gateway.code,
