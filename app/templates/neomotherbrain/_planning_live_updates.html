@@ -12,6 +12,27 @@
     const initialStatus = {{ live_update_status|tojson }};
     let controller = null;
 
+    const tailOptions = root.querySelector("#tail-swap-options");
+    if (tailOptions) {
+        // Keyboard and pointer activation must have a native picker ready for the next Tab.
+        const preparePicker = details => {
+            const template = details.querySelector("template[data-tail-picker]");
+            if (!template) return;
+            const select = template.content.firstElementChild;
+            for (const option of tailOptions.options) select.add(new Option(option.value, option.value));
+            template.replaceWith(select);
+        };
+        root.addEventListener("click", event => {
+            const summary = event.target.closest(".planning-mobile-tail-swap-details > summary");
+            if (summary) preparePicker(summary.parentElement);
+        });
+        root.addEventListener("toggle", event => {
+            if (event.target.open && event.target.matches(".planning-mobile-tail-swap-details")) {
+                preparePicker(event.target);
+            }
+        }, true);
+    }
+
     const reconcile = (payload) => {
         const fragments = payload.fragments || {};
         window.NeoLiveUpdates.reconcileRows(
@@ -26,7 +47,7 @@
         if (Array.isArray(payload.tail_options)) {
             const choices = document.createDocumentFragment();
             for (const tail of payload.tail_options) choices.append(new Option(tail, tail));
-            root.querySelector("#tail-swap-options")?.replaceChildren(choices.cloneNode(true));
+            tailOptions?.replaceChildren(choices.cloneNode(true));
             prepareMobileRow = row => row.querySelector("select[name='replacement_tail']")?.append(choices.cloneNode(true));
         }
         window.NeoLiveUpdates.reconcileRows(

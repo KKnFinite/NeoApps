@@ -59,7 +59,9 @@
                 {% else %}
                 <div class="planning-mobile-departure-list" data-live-rows="mobile-missions" role="list" aria-label="Current departure missions">
                 {% endif %}
+                {% with initial_tail_pickers=true %}
                 {% include "neomotherbrain/_planning_mobile_mission_rows.html" %}
+                {% endwith %}
                 </div>
             </section>
 

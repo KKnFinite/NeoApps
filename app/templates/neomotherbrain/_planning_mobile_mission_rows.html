@@ -1,6 +1,13 @@
 {% macro mobile_flight(mission) %}
     {% if can_edit %}<a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}" aria-label="Edit {{ mission.flight_number|upper }}">{{ mission.flight_number|upper }}</a>{% else %}{{ mission.flight_number|upper }}{% endif %}
 {% endmacro %}
+{# Share the rendered markup between native fallbacks and full legacy fragments. #}
+{% if can_edit and mission_type == "departure" and not compact_tail_options %}
+{% set native_options %}{% for tail in tail_swap_options %}<option value="{{ tail }}">{{ tail }}</option>{% endfor %}{% endset %}
+{% endif %}
+{% macro tail_picker(mission, options) -%}
+<select name="replacement_tail" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required {% if not tail_swap_options %}disabled{% endif %}><option value="">TAIL</option>{{ options }}</select>
+{%- endmacro %}
 {% for row in mission_rows %}
 {% set mission = row.mission %}
 {% set parking = row.parking_context %}
@@ -43,12 +50,12 @@
                 <form class="planning-mobile-tail-swap-form" method="post" data-live-action action="{{ url_for('neomotherbrain.tail_swap_mission', operation_id=operation.id, mission_id=mission.id) }}">
                     <input type="hidden" name="mission_type" value="{{ mission_type }}">
                     <input type="hidden" name="expected_version" value="{{ mission.updated_at.isoformat(timespec='microseconds') if mission.updated_at else '' }}">
-                    <select name="replacement_tail" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required {% if not tail_swap_options %}disabled{% endif %}>
-                        <option value="">TAIL</option>
-                        {% if not compact_tail_options %}{% for tail in tail_swap_options %}
-                        <option value="{{ tail }}">{{ tail }}</option>
-                        {% endfor %}{% endif %}
-                    </select>
+                    {% if initial_tail_pickers %}
+                    <template data-tail-picker>{{ tail_picker(mission, "") }}</template>
+                    <noscript>{{ tail_picker(mission, native_options) }}</noscript>
+                    {% else %}
+                    {{ tail_picker(mission, native_options) }}
+                    {% endif %}
                     <input type="hidden" name="confirm_tail_swap" value="1">
                     <button class="table-row-button" type="submit" {% if not tail_swap_options %}disabled{% endif %}>Apply</button>
                 </form>
