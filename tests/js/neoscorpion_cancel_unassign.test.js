@@ -9,6 +9,7 @@ function actionHarness({confirmed=true, ok=true, changed=true}={}) {
     const messages=[], requests=[], refreshes=[];
     let finish;
     const context={
+        accountRowSelector: '.scorpion-asset-account',
         lifecycleSaving:false, pendingFuelDataRefresh:false, initialControlValues:new WeakMap(),controlValue:c=>c.value,
         window:{confirm:()=>confirmed}, FormData:class { constructor(form) { this.form=form; this.values=new Map(form.elements.map(c=>[c.name,c.value])); } get(name){return this.values.get(name);} },
         syncDirtyState:()=>{}, setStatus:(_element,message)=>messages.push(message),
