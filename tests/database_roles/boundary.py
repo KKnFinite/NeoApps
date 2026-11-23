@@ -34,7 +34,12 @@ class RoleBoundary(unittest.TestCase):
             self.web_env['ROLE_ACL_EVIDENCE'] = path + '.statements.jsonl'
         self.legacy = self.url("ROLE_TEST_PRIOR_URL")
         self.legacy_env = dict(self.owner_env, DATABASE_URL=self.legacy)
-        self.invoke("scripts/bootstrap_database.py", self.legacy_env)
+        self.previous_root = Path(os.environ["ROLE_PREVIOUS_CHECKOUT"]) if os.getenv("ROLE_PREVIOUS_CHECKOUT") else None
+        if self.previous_root:
+            self.prior_command("scripts/bootstrap_database.py", self.legacy_env)
+            self.employee_probe("before", self.legacy)
+        else:
+            self.invoke("scripts/bootstrap_database.py", self.legacy_env)
         self.args = ["--runtime", RUNTIME, "--schema", self.schema, "--database", DBNAME]
         self.apply_args = [*self.args, "--apply", "--release", self.release,
                            "--migrator", MIGRATOR, "--standby", FALLBACK]
@@ -42,6 +47,16 @@ class RoleBoundary(unittest.TestCase):
     def url(self, key):
         return make_url(os.environ[key]).update_query_dict(
             {'options': '-csearch_path='+self.schema}).render_as_string(hide_password=False)
+
+    def prior_command(self, script, env, *args):
+        result = subprocess.run([sys.executable, str(script), *args], cwd=self.previous_root,
+                                env=dict(env, PYTHONPATH=str(self.previous_root)), capture_output=True,
+                                text=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr.splitlines()[-1:] or str(script))
+
+    def employee_probe(self, stage, url):
+        self.prior_command(ROOT / "tests/database_roles/previous_release_probe.py",
+                           dict(self.web_env, DATABASE_URL=url), stage)
 
     def run_command(self, script, env, *args):
         return subprocess.run([sys.executable, script, *args], env=env, cwd=ROOT,
@@ -185,6 +200,12 @@ class RoleBoundary(unittest.TestCase):
         print(self.invoke("tests/database_roles/runtime_probe.py", fallback_env, FALLBACK), flush=True)
         with closing(psycopg2.connect(self.owner)) as restored:
             self.assertEqual(self.fingerprint(restored), before)
+            if self.previous_root:
+                self.employee_probe("interrupted", self.legacy)
+                self.employee_probe("rollback", self.url("ROLE_TEST_FALLBACK_URL"))
+                with restored, restored.cursor() as cur:
+                    cur.execute("SELECT count(*) FROM account_security_events WHERE action='isolated-rehearsal'")
+                    self.assertEqual(cur.fetchone()[0], 1)
         self.invoke("tests/database_roles/runtime_probe.py", self.web_env, RUNTIME, "stage")
         self.invoke("tests/database_roles/runtime_probe.py", fallback_env, FALLBACK, "recover")
         self.invoke("tests/database_roles/runtime_probe.py", self.web_env, RUNTIME, "recover")

@@ -2237,9 +2237,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         # Current/prior-day operation selection and the mission-aware pull
         # aggregator are explicit bounded phases, not repeated per door.
         self.assertEqual(sum("from neoscorpion_vendor_accounts" in row for row in selects), 1)
-        policy_reads = [row for row in selects if "from account_authorization_states" in row]
-        self.assertEqual(len(policy_reads), 1)
-        self.assertEqual(len(selects) - len(policy_reads), 20)
+        self.assertEqual(len(selects), 20)  # 19 operational/authority reads + vendor boundary.
         self.assertEqual(sum("from gateway_sort_matrix" in row for row in selects), 0)
         self.assertEqual(sum("from neoermac_door_pulls" in row for row in selects), 1)
         self.assertEqual(commits[0], 1)

@@ -1,2 +1,4 @@
 # The migration imports application code. Review requirements cover the entire tree.
+# Activation requires another owner-authorized collaborator with write access
+# when the owner below authors the release PR. Naming a reviewer here grants no access.
 * @KKnFinite

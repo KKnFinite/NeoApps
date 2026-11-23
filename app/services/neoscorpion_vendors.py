@@ -5,7 +5,6 @@ from datetime import datetime
 from flask import g, request, abort
 from flask_login import current_user
 from sqlalchemy import func
-from sqlalchemy.orm.attributes import set_committed_value
 from app.extensions import db
 from app.models import (User, UserToken, Gateway, NeoScorpionFuelTruck, NeoScorpionSortTruck,
     NeoScorpionTruckDriver, NeoScorpionVendorAccount, NeoScorpionVendorNight,
@@ -87,10 +86,6 @@ def vendor_request_boundary():
     if not current_user.is_authenticated:
         return None
     account = vendor_account(current_user)
-    # The boundary already loaded this request's authenticated profile, including
-    # absence. Let ordinary relationship reads reuse that exact lookup. Session
-    # expiration and the independent post-lock mutation checks still reload it.
-    set_committed_value(current_user, 'scorpion_vendor', account)
     g.scorpion_vendor_account = account
     if not account:
         return None

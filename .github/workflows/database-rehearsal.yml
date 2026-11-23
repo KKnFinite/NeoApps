@@ -1,15 +1,17 @@
 name: Disposable database release rehearsal
 on:
   workflow_call:
+    inputs:
+      previous_live:
+        required: true
+        type: string
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/database-*.yml'
       - '.github/CODEOWNERS'
-      - 'scripts/release/**'
-      - 'scripts/*database*.py'
-      - 'scripts/runtime_*.json'
-      - 'app/services/database_bootstrap.py'
+      - 'scripts/**'
+      - 'app/**'
       - 'tests/database_roles/**'
       - 'requirements.txt'
 
@@ -26,6 +28,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Mark this disposable runner
         id: marker
         run: |
@@ -37,9 +40,11 @@ jobs:
       - name: Exercise release authorization and failure paths
         run: "$RUNNER_TEMP/neoapps-release/bin/python -m unittest discover -s tests/database_roles -p test_release_workflow.py"
       - name: Exercise migration, worker replacement, rollback and seven application operations
+        env:
+          PREVIOUS_LIVE_SHA: ${{ inputs.previous_live || github.event.pull_request.base.sha }}
         run: |
           "$RUNNER_TEMP/neoapps-release/bin/python" tests/database_roles/run_local.py \
-            --bin "$(pg_config --bindir)" boundary usage ground_time fluid truck flow unit preferences
+            --bin "$(pg_config --bindir)" --previous-live "$PREVIOUS_LIVE_SHA" boundary usage ground_time fluid truck flow unit preferences
       - name: Check independent OS credential custody
         run: sudo /usr/bin/python3 tests/database_roles/credential_custody.py --owner-uid "$(id -u nobody)" --runtime-uid "$(id -u daemon)"
 

@@ -43,6 +43,19 @@ def validate(env, read, approval_for=None):
                 and r["parameters"]["dismiss_stale_reviews_on_push"]
                 and r["parameters"]["require_code_owner_review"] for r in rules),
             "Active main ruleset must require fresh, code-owner-reviewed changes")
+    merged = [pr for pr in read(f"commits/{sha}/pulls?per_page=100")
+              if pr["merged_at"] and pr["merge_commit_sha"] == sha
+              and pr["base"]["repo"]["full_name"] == REPOSITORY and pr["base"]["ref"] == "main"]
+    require(len(merged) == 1, "The exact release must be the result of one reviewed main pull request")
+    pr = merged[0]
+    reviews = read(f"pulls/{int(pr['number'])}/reviews?per_page=100")
+    require(len(reviews) < 100, "Review history requires independent reconciliation")
+    decisions = {}
+    for review in reviews:
+        if review["user"]["id"] != pr["user"]["id"] and review["state"] in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
+            decisions[review["user"]["id"]] = review
+    require(any(review["state"] == "APPROVED" and review["commit_id"] == pr["head"]["sha"]
+                for review in decisions.values()), "Missing independent review of the final PR revision")
     for name in (ENVIRONMENTS if not approval_for else [approval_for]):
         environment = read(f"environments/{name}")
         require(environment.get("can_admins_bypass") is not True, "Disable environment approval bypass")
@@ -54,8 +67,11 @@ def validate(env, read, approval_for=None):
                 [(r["name"], r["type"]) for r in response["branch_policies"]] == [("main", "branch")],
                 "Expected exactly one deployment branch and no deployment tags")
         reviewers = {r["reviewer"]["id"] for rule in environment["protection_rules"]
-                     if rule["type"] == "required_reviewers" for r in rule["reviewers"] if r["type"] == "User"}
-        require(reviewers, "An explicitly authorized named reviewer is required")
+                     if rule["type"] == "required_reviewers" and rule.get("prevent_self_review") is True
+                     for r in rule["reviewers"] if r["type"] == "User"}
+        initiator = int(env["GITHUB_ACTOR_ID"])
+        reviewers.discard(initiator)
+        require(reviewers, "An independent named reviewer and prevention of self-review are required")
         if approval_for:
             history = read(f"actions/runs/{env['GITHUB_RUN_ID']}/approvals")
             reviews = [a for a in history if any(e["id"] == environment["id"] for e in a["environments"])]

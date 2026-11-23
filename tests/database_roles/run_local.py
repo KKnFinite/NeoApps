@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import ipaddress
 import os
 from pathlib import Path
+import re
 import secrets
 import socket
 import subprocess
@@ -60,6 +61,7 @@ def process_env(home):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bin", type=Path, required=True)
+    parser.add_argument("--previous-live", help="Exact prior application commit for release compatibility checks")
     parser.add_argument("--matrix", type=Path, help="Write per-case PostgreSQL operation coverage as JSON lines")
     parser.add_argument("--workloads", type=Path, help="Additional real application unittest IDs, one per line")
     parser.add_argument("cases", nargs="*")
@@ -75,6 +77,17 @@ def main():
             raise RuntimeError("Unexpected disposable cluster path")
         data = home / "data"
         env = process_env(home)
+        if args.previous_live:
+            if not re.fullmatch("[0-9a-f]{40}", args.previous_live) or "boundary" not in args.cases:
+                parser.error("--previous-live requires a full commit SHA and the boundary case")
+            subprocess.run(["git", "merge-base", "--is-ancestor", args.previous_live, "HEAD"], cwd=ROOT, check=True)
+            previous = home / "previous-release"
+            subprocess.run(["git", "init", "--quiet", str(previous)], check=True)
+            subprocess.run(["git", "-C", str(previous), "fetch", "--quiet", "--depth", "1",
+                            ROOT.as_uri(), args.previous_live], check=True)
+            subprocess.run(["git", "-C", str(previous), "checkout", "--quiet", "--detach", args.previous_live], check=True)
+            env["ROLE_PREVIOUS_CHECKOUT"] = str(previous)
+            print("Rehearsing previous application " + args.previous_live, flush=True)
         if args.workloads:
             env["ROLE_WORKLOADS"] = str(args.workloads.resolve(strict=True))
             args.cases.append("catalog_paths")

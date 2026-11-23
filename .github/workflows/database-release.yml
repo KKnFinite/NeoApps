@@ -15,6 +15,8 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
+  deployments: read
 
 concurrency:
   group: neoapps-database-release
@@ -41,6 +43,8 @@ jobs:
   rehearsal:
     needs: policy
     uses: ./.github/workflows/database-rehearsal.yml
+    with:
+      previous_live: ${{ inputs.previous_live }}
 
   migrate:
     needs: rehearsal
@@ -56,6 +60,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -I scripts/release/github_gate.py --approved-environment neoapps-migration
+      - name: Verify the prior live service and exclude automatic deployments before migration
+        env:
+          RENDER_TARGET_SERVICE: ${{ vars.RENDER_TARGET_SERVICE }}
+          RENDER_VERIFICATION_KEY: ${{ secrets.RENDER_VERIFICATION_KEY }}
+        run: python3 -I scripts/release/render_verify.py
       - name: Migrate and seal the exact SHA
         env:
           DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
@@ -89,6 +98,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -I scripts/release/github_gate.py --approved-environment neoapps-render-release
+      - name: Recheck prior service health and deployment policy
+        env:
+          RENDER_TARGET_SERVICE: ${{ vars.RENDER_TARGET_SERVICE }}
+          RENDER_VERIFICATION_KEY: ${{ secrets.RENDER_VERIFICATION_KEY }}
+        run: python3 -I scripts/release/render_verify.py
       - name: Request this exact Render commit
         id: trigger
         env:
@@ -110,6 +124,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DEPLOYMENT_ID: ${{ needs.deploy.outputs.deployment }}
         run: python3 -I scripts/release/github_gate.py --approved-environment neoapps-live-verification
-      - name: Verify the service answers its read-only health check
-        run: |
-          test "$(curl --proto '=https' --max-time 15 --fail --silent --show-error https://neoapps.onrender.com/healthz)" = ok
+      - name: Independently match the live deployment, SHA, health and protected route
+        env:
+          RENDER_TARGET_SERVICE: ${{ vars.RENDER_TARGET_SERVICE }}
+          RENDER_VERIFICATION_KEY: ${{ secrets.RENDER_VERIFICATION_KEY }}
+          DEPLOYMENT_ID: ${{ needs.deploy.outputs.deployment }}
+        run: python3 -I scripts/release/render_verify.py --live
