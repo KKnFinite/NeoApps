@@ -33,7 +33,9 @@ def validate(env, read, approval_for=None):
     require(re.fullmatch("[0-9a-f]{40}", sha) and sha == env["APPROVED_SHA"]
             and re.fullmatch("[0-9a-f]{40}", previous), "Expected exact release and fallback SHAs")
     branch = read("branches/main")
-    require(branch["protected"] and branch["commit"]["sha"] == sha, "Main is unprotected or has moved")
+    require(branch["protected"], "Main must be protected")
+    if approval_for != "neoapps-live-verification":
+        require(branch["commit"]["sha"] == sha, "Main has moved since dispatch")
     require(read(f"compare/{previous}...{sha}")["status"] in ("ahead", "identical"),
             "Previous live revision is outside the approved release history")
     rules = read("rules/branches/main?per_page=100")
@@ -43,6 +45,7 @@ def validate(env, read, approval_for=None):
             "Active main ruleset must require fresh, code-owner-reviewed changes")
     for name in (ENVIRONMENTS if not approval_for else [approval_for]):
         environment = read(f"environments/{name}")
+        require(environment.get("can_admins_bypass") is not True, "Disable environment approval bypass")
         policy = environment["deployment_branch_policy"]
         require(policy and policy["custom_branch_policies"] and not policy["protected_branches"],
                 "Require only the named main branch in each release environment")

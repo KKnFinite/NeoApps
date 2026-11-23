@@ -83,7 +83,14 @@ class ReleaseChecks(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.gate("neoapps-live-verification")
         self.reviews[0]["comment"] = f"LIVE {SHA} {DEPLOY} AUTH PASS WORKERS PASS"
+        # A later merge cannot erase the evidence for the SHA actually deployed.
+        self.endpoints["branches/main"]["commit"]["sha"] = "c"*40
         self.assertEqual(self.gate("neoapps-live-verification"), "authorized")
+
+    def test_environment_with_explicit_admin_bypass_denied(self):
+        self.endpoints["environments/neoapps-migration"]["can_admins_bypass"] = True
+        with self.assertRaises(ValueError):
+            self.gate()
 
     def test_migration_subprocess_receives_only_necessary_inputs(self):
         env = dict(self.env, HOME="fixture", DATABASE_URL="postgresql://migration@fixture/db?sslmode=verify-full", RELEASE_MIGRATOR="migration",
