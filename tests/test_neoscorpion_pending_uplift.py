@@ -99,10 +99,11 @@ class PendingUpliftTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0);self.assertEqual(NeoScorpionFuelCycleHistory.query.count(),0)
         self.assertEqual(NeoScorpionFuelWorkState.query.count(),1)
     def test_promotes_exact_parent_actuals_resets_evidence_and_posts_inventory_once(self):
-        self.queue('40.12');old_id=self.work.id;on=self.work.manual_on_at_utc
+        self.queue('40.0');old_id=self.work.id;on=self.work.manual_on_at_utc
+        self.assertEqual(self.pending.required_fuel_lbs, 40000)
         self.complete_parent();p=self.pending
         self.assertEqual(p.status,'promoted',p.review_reason);self.assertEqual(self.assignment.current_cycle_number,2)
-        self.assertEqual(self.mission.planned_fuel_load,40120);self.assertIsNone(self.assignment.completed_at_utc)
+        self.assertEqual(self.mission.planned_fuel_load,40000);self.assertIsNone(self.assignment.completed_at_utc)
         current=db.session.get(NeoScorpionFuelWorkState,self.assignment.active_work_state_id)
         self.assertNotEqual(current.id,old_id);self.assertEqual({t.tank_code:t.remaining_lbs for t in current.tank_states},{'left':15000,'ctr':0,'right':15000})
         for name in ('on_at_utc','manual_on_at_utc','confirmed_on_at_utc','off_at_utc','apu_running','fueler_submitted_at_utc','fueler_submission_evidence','notes','physical_transfer_gallons'):

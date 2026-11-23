@@ -295,7 +295,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
                     "cycle_type": "uplift",
                     "expected_cycle": "1",
                     "expected_tail": mission.assigned_tail_number,
-                    "required_fuel": "55.25",
+                    "required_fuel": "40.0",
                     "assigned_fueler_user_id": str(self.other_fueler.id),
                     "assigned_truck_id": str(truck.id),
                 },
@@ -311,7 +311,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self.assertEqual(saved_assignment.current_cycle_type, "uplift")
         self.assertIsNone(saved_assignment.assigned_fueler_user_id)
         self.assertIsNone(saved_assignment.assigned_truck_id)
-        self.assertEqual(saved_mission.planned_fuel_load, 55_250)
+        self.assertEqual(saved_mission.planned_fuel_load, 40_000)
         self.assertEqual(saved_mission.fuel_status, "assigned")
         event_queries = [
             statement
@@ -370,6 +370,8 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         }
         invalid_payloads = (
             {**base, "required_fuel": ""},
+            *({**base, "expected_cycle": "1", "expected_tail": mission.assigned_tail_number,
+               "required_fuel": invalid} for invalid in ("40", "40.12", "-40.0", "0.0")),
             {**base, "assigned_fueler_user_id": "not-an-id"},
             {**base, "assigned_truck_id": "999999"},
         )
@@ -650,7 +652,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         _mission,assignment=self._assignment(operation,flight='UPS999',tail='N422UP')
         truck,nightly=self._truck(operation,assignment,'CAPACITY',990,capacity=1000)
         self._complete_cycle(operation,assignment,remaining=(10,10,10),actual=(11,10,10),transfer=10)
-        start_follow_up_fuel_cycle(self.gateway,self.dispatcher,assignment.id,'defuel','25',self.fueler.id,truck.id)
+        start_follow_up_fuel_cycle(self.gateway,self.dispatcher,assignment.id,'defuel','25.0',self.fueler.id,truck.id)
         db.session.commit()
         self._save_cycle(assignment,remaining=(10,10,10),actual=(8,10,10),transfer=30)
         db.session.commit();self._on(assignment)
@@ -668,7 +670,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
     def test_negative_transfer_fuel_is_rejected_without_revision(self):
         operation = self._operation()
         _mission, assignment = self._assignment(operation)
-        with self.assertRaisesRegex(ValueError, "cannot be negative"):
+        with self.assertRaisesRegex(ValueError, "whole number from 0 to 17,000 gallons"):
             self._save_cycle(
                 assignment,
                 remaining=(10, 10, 10),

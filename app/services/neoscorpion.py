@@ -3856,6 +3856,8 @@ def start_follow_up_fuel_cycle(
     required_fuel_lbs = parse_authoritative_fuel_load(required_fuel)
     if required_fuel_lbs is None:
         raise ValueError("Enter a new Required Fuel target.")
+    if cycle_type == "uplift" and required_fuel_lbs <= 0:
+        raise ValueError("Enter a positive TOTAL Required Fuel target.")
     fueler_user_id = _int_or_none(fueler_user_id)
     fuel_truck_id = _int_or_none(fuel_truck_id)
     if cycle_type == "defuel" and fueler_user_id is None:
