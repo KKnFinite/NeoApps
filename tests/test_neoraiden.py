@@ -75,6 +75,22 @@ class RaidenTest(unittest.TestCase):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
         self.assertEqual(self.client.get(path, headers={"X-Raiden-Automatic":"1"}).status_code, 204)
 
+    def test_explicit_selection_loads_archive_status_without_a_second_select(self):
+        from sqlalchemy import inspect
+        from app.neonodes.neoraiden.services import gateway_operations
+
+        op = seed_sort(self.gateway)
+        op.archived_at_utc = datetime(2026, 4, 14)
+        db.session.commit()
+        operation_id = op.id
+        db.session.expunge(op)
+        selected = gateway_operations(self.gateway).filter_by(id=operation_id).one()
+        self.assertNotIn("archived_at_utc", inspect(selected).unloaded)
+        self.assertEqual(selected.archived_at_utc, datetime(2026, 4, 14))
+        response = self.client.get(f"/neoraiden/state?operation_id={operation_id}",
+                                   headers={"X-Raiden-Automatic": "1"})
+        self.assertEqual(response.status_code, 204)
+
     def test_recorded_uld_projection_and_wave_lifecycle(self):
         from datetime import timedelta
         from app.models import NeoSektorOperationalSetting, NeoSektorBallmatWaveCount, NeoSektorWaveState
