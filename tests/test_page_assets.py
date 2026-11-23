@@ -7,6 +7,15 @@ from app.services.page_assets import CSS_SEQUENCE, page_stylesheets
 
 
 class PageAssetsTest(unittest.TestCase):
+    def test_weather_and_outbound_fragments_are_only_delivered_to_their_nodes(self):
+        for blueprint in ("neogateway", "neomotherbrain", "neoraiden", "neoermac", "neostaffing",
+                          "neosektor", "neoscorpion", "neorain", "neosubzero", "auth"):
+            assets = page_stylesheets(blueprint)
+            self.assertEqual("css/04-shared.css" in assets, blueprint == "neoermac")
+            self.assertEqual("css/24-shared.css" in assets, blueprint == "neosubzero")
+            self.assertEqual("css/08-shared.css" in assets, blueprint == "neostaffing")
+            self.assertEqual("css/19-shared.css" in assets, blueprint == "neostaffing")
+
     def test_every_fragment_exists_once_and_matches_its_source_digest(self):
         root = Path(__file__).resolve().parents[1] / 'app/static/css'
         self.assertEqual(len(CSS_SEQUENCE), len({row['file'] for row in CSS_SEQUENCE}))
@@ -62,5 +71,8 @@ class PageAssetsTest(unittest.TestCase):
         self.assertIn('<script src="{{ url_for(\'static\', filename=\'js/csrf.js\'', base)
         csrf = (root / 'app/static/js/csrf.js').read_text(encoding='utf-8')
         self.assertIn("headers.set('X-CSRF-Token', token())", csrf)
-        for page in ('login_hub', 'portal'):
-            self.assertIn('data-interaction-form', (root / f'app/templates/auth/{page}.html').read_text(encoding='utf-8'))
+        login = (root / 'app/templates/auth/login_hub.html').read_text(encoding='utf-8')
+        self.assertIn('data-interaction-form', login)
+        portal = (root / 'app/templates/auth/portal.html').read_text(encoding='utf-8')
+        self.assertIn('href="{{ url_for(app.endpoint) }}"', portal)
+        self.assertNotIn('data-interaction-form', portal)

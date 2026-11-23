@@ -98,11 +98,7 @@
     border-color: rgba(30, 196, 174, 0.46);
 }
 
-.live-update-status[data-live-update-state="reconnecting"] {
-    color: #ffd27a;
-    border-color: rgba(255, 180, 72, 0.52);
-}
-
+.live-update-status[data-live-update-state="reconnecting"],
 .live-update-status[data-live-update-state="inactive"] {
     color: #ffd27a;
     border-color: rgba(255, 180, 72, 0.52);
