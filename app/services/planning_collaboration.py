@@ -20,6 +20,23 @@ from app.models import (
     SortTimelineSettings,
 )
 from app.services.live_collaboration import entity_version
+from app.services.departure_labels import departure_occurrences, destination_label
+
+
+def prepare_mission_display_versions(rows, operation, departures, tail_options):
+    """Related parking, timing and flight order can change without editing a mission."""
+    ranks = departure_occurrences((m for m in departures if m.master_retirement is None), operation)
+    options_version = _digest(tail_options)
+    for row in rows:
+        mission = row["mission"]
+        outbound = mission.mission_type == "departure"
+        row["destination_label"] = destination_label(mission.destination, ranks.get(mission.id)) if outbound else None
+        row["display_version"] = _digest((
+            entity_version(mission), row["parking_context"], row["destination_label"],
+            row.get("status_label"), row.get("eta_delta_display"), _value_token(row.get("eta_time")),
+            _value_token(row.get("timing", {}).get("adjusted_planned_departure_time")),
+            options_version if outbound else None,
+        ))
 
 
 def planning_state_revision(operation, mission_type, user, *, now_utc=None):

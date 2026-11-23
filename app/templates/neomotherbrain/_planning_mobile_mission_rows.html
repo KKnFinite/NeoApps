@@ -10,7 +10,7 @@
     role="listitem"
     data-live-row
     data-live-id="mission:{{ mission.id }}"
-    data-live-version="{{ mission.updated_at.isoformat(timespec='microseconds') if mission.updated_at else '' }}"
+    data-live-version="{{ row.display_version }}-{{ can_edit|int }}"
     aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} origin {{ mission.origin|upper if mission.origin else '-' }} ETA {{ row.eta_time.strftime('%H:%M') if row.eta_time else '-' }} variance {{ row.eta_delta_display }}"
     {% if row.is_late %}data-mobile-arrival-late-row{% endif %}
 >
@@ -26,12 +26,12 @@
     role="listitem"
     data-live-row
     data-live-id="mission:{{ mission.id }}"
-    data-live-version="{{ mission.updated_at.isoformat(timespec='microseconds') if mission.updated_at else '' }}"
-    aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} destination {{ mission.display_destination if mission.destination else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }}"
+    data-live-version="{{ row.display_version }}-{{ can_edit|int }}"
+    aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} destination {{ row.destination_label if mission.destination else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }}"
 >
     <strong class="planning-mobile-departure-flight">{{ mobile_flight(mission) }}</strong>
     <span class="planning-mobile-departure-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
-    <span class="planning-mobile-departure-destination">{{ mission.display_destination if mission.destination else "-" }}</span>
+    <span class="planning-mobile-departure-destination">{{ row.destination_label if mission.destination else "-" }}</span>
     <span class="planning-mobile-departure-parking">{{ parking.label|upper if parking and parking.has_tail else "-" }}</span>
     <div class="planning-mobile-tail-swap" data-mobile-tail-swap-options>
         {% if can_edit %}

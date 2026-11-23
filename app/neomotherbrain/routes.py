@@ -146,7 +146,7 @@ from app.services.parking_plan_collaboration import (
     validate_parking_move_snapshot,
     validate_parking_source_snapshot,
 )
-from app.services.planning_collaboration import planning_state_revision
+from app.services.planning_collaboration import planning_state_revision, prepare_mission_display_versions
 from app.services.operation_lifecycle import (
     ManualSortCreationError,
     create_manual_current_sort_operation,
@@ -3888,6 +3888,8 @@ def _planning_live_collections(
         "spare_rows": [],
         "arrival_spare_candidates": [],
     }
+    prepare_mission_display_versions(mission_rows, operation, departure_missions if mission_type == "departure" else (),
+                                     collections["tail_swap_options"])
     if include_page_support and mission_type == "departure":
         parking_bundle = ParkingPlanOperationalStateBundle(
             gateway=operation.gateway,
