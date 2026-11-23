@@ -67,7 +67,7 @@ class RainBoardFuelTest(unittest.TestCase):
     def test_pending_continuation_does_not_publish_previous_visit_as_final(self):
         from app.services.neoscorpion_pending_uplift import plan_continuation
         c=self.case;c.prepare()
-        fuel.autosave_dispatch_field(c.gateway,c.mission.id,'required_fuel','40',expected_value='25.0',user=c.dispatcher);db.session.commit()
+        fuel.autosave_dispatch_field(c.gateway,c.mission.id,'required_fuel','40.0',expected_value='25.0',user=c.dispatcher);db.session.commit()
         truck=c.fixture._nightly_truck('NEXT');db.session.commit()
         plan_continuation(c.gateway,c.dispatcher,dict(assignment_id=c.assignment.id,expected_cycle=1,
             expected_tail=c.mission.assigned_tail_number,expected_work_ref=c.work.id,proposed_truck_id=truck.id));db.session.commit()

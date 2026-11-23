@@ -30,6 +30,37 @@ class NeoRainMissionNotesBrowserTest(unittest.TestCase):
             with self.subTest(engine=engine), getattr(self.env.pw, engine).launch() as browser:
                 self.exercise(browser, width, engine)
 
+    def test_inbound_note_editor_follows_its_mission_offline(self):
+        for engine in ("chromium", "webkit"):
+            with self.subTest(engine=engine), getattr(self.env.pw, engine).launch() as browser:
+                context = browser.new_context(viewport={"width": 1440, "height": 880}, service_workers="block")
+                page = context.new_page()
+                self.rain().login_for_sort(page)
+                self.env().ready(page, "/neorain/inbound")
+                flight = str(self.rain.ids["arrival"])
+                desktop = page.locator(f'#delay-info-{flight}')
+                mobile = page.locator(f'#mobile-flight-{flight}')
+                notes = page.locator(f'[data-mission-notes="{flight}"]')
+                expect(notes).to_have_count(1)
+                context.set_offline(True)
+                page.locator(f'[aria-controls="delay-info-{flight}"]').press("Enter")
+                expect(desktop.locator('[data-mission-notes]')).to_be_visible()
+                notes.get_by_text("ADD NOTE", exact=True).press("Enter")
+                editor = notes.get_by_role("textbox", name="New mission note")
+                editor.fill("Local unsaved text")
+                page.set_viewport_size({"width": 390, "height": 844})
+                opener = mobile.locator("[data-neorain-mobile-row-open]")
+                opener.press("Enter")
+                expect(mobile.locator('[data-mission-notes]')).to_be_visible()
+                expect(editor).to_have_value("Local unsaved text")
+                expect(editor.locator("xpath=..").locator('[name="mission_id"]')).to_have_value(flight)
+                opener.press("Enter")
+                page.set_viewport_size({"width": 1440, "height": 880})
+                expect(desktop.locator('[data-mission-notes]')).to_be_visible()
+                expect(editor).to_have_value("Local unsaved text")
+                expect(notes.locator('[data-mission-note-dirty="true"]')).to_have_count(1)
+                context.close()
+
     def exercise(self, browser, width, engine):
         with self.env.app.app_context():
             NeoRainMissionNote.query.delete()
