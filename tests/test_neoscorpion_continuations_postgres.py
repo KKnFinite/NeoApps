@@ -13,13 +13,20 @@ from tests import test_neoscorpion_segments_postgres as pg
 
 @unittest.skipUnless(pg.URI,'Requires disposable local PostgreSQL')
 class ContinuationPostgresTest(ContinuationTest):
-    setUp=pg.PhysicalSegmentPostgresTest.setUp
+    def setUp(self):
+        pg.PhysicalSegmentPostgresTest.setUp(self)
+        # Match the SQLite continuation scenario's parked aircraft and recorded inbound fuel.
+        from app.models import SortDateParkingAssignment
+        db.session.add(SortDateParkingAssignment(sort_date_operation_id=self.operation.id,
+            tail_number=self.mission.assigned_tail_number, ramp_code='B', position_code='B06', lane_number=1))
+        self.fixture._tail_fuel(self.mission, inbound_lbs=30000)
+        db.session.commit()
     drop_schema=pg.PhysicalSegmentPostgresTest.drop_schema
     concurrent=pg.PhysicalSegmentPostgresTest.concurrent
     prepare=pg.PhysicalSegmentPostgresTest.prepare
 
     def test_concurrent_source_submits_activate_only_one_next_visit(self):
-        self.target('40');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
+        self.target('40.0');p=self.plan();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
         expected=self.baseline();aid,wid,seq=self.assignment.id,self.work.id,self.work.physical_sequence_number
         result=self.concurrent(lambda i,g,f,d:fuel.submit_fueler_assignment(g,f,aid,expected=expected,
             physical_work_id=wid,physical_sequence=seq).changed)
@@ -58,7 +65,7 @@ class ContinuationPostgresTest(ContinuationTest):
 
     def test_two_dispatcher_plan_edits_accept_one_version_without_duplicate_work(self):
         from app.services import neoscorpion_pending_uplift as plans
-        self.target('40');p=self.plan();aid,pid,version=self.assignment.id,p.id,p.version
+        self.target('40.0');p=self.plan();aid,pid,version=self.assignment.id,p.id,p.version
         choices=[self.truck.id,p.proposed_truck_id]
         def action(index,g,f,d):
             try:

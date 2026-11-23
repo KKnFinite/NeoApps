@@ -286,7 +286,7 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
         # A real truck visit that confirmed no transfer is also retained as
         # physical history, without creating a fictitious transfer event.
         mission,other=self._assignment(operation,flight_number='UPS902',tail_number='N413UP')
-        fuel.autosave_dispatch_field(self.gateway,mission.id,'required_fuel','30',expected_value='50',user=self.dispatcher)
+        fuel.autosave_dispatch_field(self.gateway,mission.id,'required_fuel','30.0',expected_value='50',user=self.dispatcher)
         db.session.commit()
         physical,unused_truck,unused_selection=self._physical(other,movement='not_moved',transfer=0,truck_number='CHECK-ONLY')
         result=complete_fueled_assignment(self.gateway,self.dispatcher,other.id);db.session.commit()
@@ -494,7 +494,7 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
         return result.fuel_work_state,truck,selection
 
     def _fob_data(self,assignment):
-        fuel.autosave_dispatch_field(self.gateway,assignment.sort_date_mission_id,'required_fuel','30',
+        fuel.autosave_dispatch_field(self.gateway,assignment.sort_date_mission_id,'required_fuel','30.0',
             expected_value='50',user=self.dispatcher)
         db.session.commit()
         work=self._data(assignment,transfer=None,movement='not_moved').fuel_work_state

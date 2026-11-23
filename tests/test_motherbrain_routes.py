@@ -248,7 +248,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 root, drawer, dock = assert_mobile_drawer(self, response)
                 sidebar = root.one(**{'data-motherbrain-desktop-side-nav':None})
-                self.assertEqual(sidebar.one('img').attrs['src'], '/static/images/logos/newlogo_motherbrain.png')
+                self.assertEqual(sidebar.one('img').attrs['src'].split('?')[0], '/static/images/optimized/newlogo_motherbrain.webp')
                 self.assertTrue(sidebar.findall('a', href=path, **{'aria-current':'page'}))
                 self.assertEqual(len(root.findall(**{'data-operational-topbar':None})), 1)
                 menu = drawer.one(**{'data-drawer-view':'menu'})
@@ -260,7 +260,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertTrue(root.findall(**{'data-motherbrain-alert-tray':None}))
                 self.assertEqual(menu.one('form', action='/logout').attrs['method'], 'post')
         for path in ('/portal/manage', '/rfd', '/motherbrain'):
-            self.assertEqual(self.client.get(path).status_code, 200)
+            destination = self.client.get(path, follow_redirects=True)
+            self.assertEqual(destination.status_code, 200)
+            self.assertNotIn('/login', destination.request.path)
         self.assertEqual(self.client.post('/logout').status_code, 302)
         self.assertEqual(self.client.get('/motherbrain').status_code, 302)
 
@@ -1587,9 +1589,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"flight-api-auto-poll-driver", parking_response.data)
         self.assertIn(b"data-flight-api-auto-poll-timer", parking_response.data)
         self.assertNotIn(b"flight-api-auto-poll-widget", parking_response.data)
-        self.assertIn(b"flight-api-auto-poll-widget", manage_api_response.data)
-        self.assertIn(b"data-flight-api-auto-poll-timer", manage_api_response.data)
-        self.assertIn(b"AUTO POLL", manage_api_response.data)
+        self.assertIn(b"data-auto-poll-trigger", manage_api_response.data)
+        self.assertIn(b"Check auto-poll once", manage_api_response.data)
+        self.assertNotIn(b"data-auto-poll-trigger", parking_response.data)
 
     def test_gateway_matrix_displays_dynamic_gateway_and_sort_order(self):
         response = self.client.get("/motherbrain/gateway-matrix")
@@ -7513,7 +7515,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Parking Plan", response.data)
         self.assertIn(b"motherbrain-parking-plan-page", response.data)
-        self.assertIn(b"neo-page-title motherbrain-page-title", response.data)
+        self.assertIn(b"<h1>Parking Plan</h1>", response.data)
         self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
         self.assertIn(b"parking-layout-with-sidebar", response.data)
         self.assertIn(b"parking-left-rail", response.data)
@@ -13295,10 +13297,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
         db.session.commit()
+        assign_url = f"/motherbrain/parking-plan/{operation.id}/assign"
 
         response, statements, commits = self._capture_request_sql(
             lambda: self.client.post(
-                f"/motherbrain/parking-plan/{operation.id}/assign",
+                assign_url,
                 data={
                     "tail_number": "N457UP",
                     "ramp_code": "A",
@@ -14312,7 +14315,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"NIGHT SORT DATE 2026-06-18", response.data)
+        self.assertIn("RFD · Night Sort · 2026-06-18".encode(), response.data)
+        self.assertIn(f'data-operation-id="{operation.id}"'.encode(), response.data)
         self.assertIn(b"N457UP", response.data)
 
     def test_parking_plan_shows_no_planned_sort_state(self):

@@ -185,7 +185,7 @@ class FuelerHandoffTest(unittest.TestCase):
             first_actor=self.replacement();self.swap(first_actor)
         original=self.complete(first_actor);snapshot=copy.deepcopy(original.performance_snapshot)
         actor=self.replacement('uplift-operator');truck=self.fixture._nightly_truck('UPLIFT-TRUCK');db.session.commit()
-        result=fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'uplift','34',actor.id,truck.id)
+        result=fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'uplift','34.0',actor.id,truck.id)
         db.session.commit();self.work=result.fuel_work_state
         fuel.save_dispatch_assignment(self.gateway,dict(mission_id=self.mission.id,
             assigned_fueler_user_id=actor.id,assigned_truck_id=truck.id,

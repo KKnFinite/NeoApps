@@ -153,8 +153,10 @@ class DepartureTest(unittest.TestCase):
         from app.services import frost_xchange_links as links
         from app.services.frost_weather import STATION
         from tests.frost_schedule_fixture import configure
-        configure(self.f.gateway)  # Capture requires an explicit configured Sort window.
-        self.actual();capture_at=self.at.replace(tzinfo=timezone.utc)-timedelta(hours=1,minutes=40)
+        capture_at=(self.at.replace(tzinfo=timezone.utc)-timedelta(hours=2)).replace(minute=0,second=0)
+        self.at=capture_at.replace(tzinfo=None)+timedelta(hours=1,minutes=40)
+        self.actual()
+        configure(self.f.gateway, at=capture_at)
         for kind,identity,version in [('worker','memory-budget','frost-worker-v1'),
                 ('auto_capture',auto.identity(capture_at),auto.VERSION)]:
             jobs.task(self.f.gateway.id,kind,identity,version).retry_at=auto.naive(capture_at-timedelta(seconds=1))

@@ -1513,7 +1513,7 @@ def _estimated_dispatch_fuel(mission, assignment, tail_fuel_state, remaining_lbs
     )
 
 
-def _fuel_report_current_rows(gateway, operation, settings):
+def _fuel_report_current_rows(operation, settings, missions):
     """Load only canonical estimate inputs in batches, without building a board."""
     assignments = _assignments_by_mission(operation)
     work_states = _fuel_work_states_by_assignment_tail(assignments.values())
@@ -1524,7 +1524,7 @@ def _fuel_report_current_rows(gateway, operation, settings):
                 if settings and settings.planning_inbound_fuel_fallback_lbs is not None
                 else DEFAULT_PLANNING_INBOUND_FALLBACK_LBS)
     rows = []
-    for mission in _departure_missions(operation):
+    for mission in missions:
         tail = _normalize_tail(mission.assigned_tail_number)
         assignment = assignments.get(mission.id)
         work = work_states.get((assignment.id, tail)) if assignment else None
@@ -1544,7 +1544,9 @@ def fuel_report_context(gateway):
     rows = []
     counts = {"fuel": 0, "uplift": 0, "defuel": 0}
     events = []
+    missions = _departure_missions(operation) if operation else []
     if operation:
+        ranks = departure_occurrences(missions, operation)
         events = (
             NeoScorpionFuelingEvent.query.options(
                 joinedload(NeoScorpionFuelingEvent.fuel_assignment).joinedload(
@@ -1594,7 +1596,7 @@ def fuel_report_context(gateway):
                     "flight_number": (
                         mission.flight_number if mission else "-"
                     ),
-                    "destination": mission.display_destination if mission else "-",
+                    "destination": destination_label(mission.destination, ranks.get(mission.id)) if mission else "-",
                     "tail_number": event.tail_number,
                     "fueler_name": (
                         event.fueler_user.display_name
@@ -1631,7 +1633,7 @@ def fuel_report_context(gateway):
     density = (settings.fuel_density_lbs_per_gallon if settings
                else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON)
     totals = _sort_fuel_totals(
-        _fuel_report_current_rows(gateway, operation, settings) if operation else [],
+        _fuel_report_current_rows(operation, settings, missions) if operation else [],
         events, density,
     )
     return {

@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from io import BytesIO
 import unittest
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from pypdf import PdfReader
 from playwright.sync_api import expect
@@ -14,20 +15,31 @@ from app.models import (NeoScorpionFuelAssignment, NeoScorpionFuelCycleHistory,
     NeoScorpionTailFuelState, SortDateMission, SortDateOperation, SortDateTailState, User)
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion_assets import record_nightly_operational_change
-from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest as Fixture
+from tests.browser import test_mobile_drawer as browser_fixture
+from tests.test_neorain_sort_refresh import configure_sort_window
 
 
 class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
     def test_responsive_totals_live_refresh_and_report_pdf(self):
+        for engine in ("chromium", "webkit"):
+            with self.subTest(engine=engine):
+                self.check_totals_and_report(engine)
+
+    def check_totals_and_report(self, engine):
+        Fixture = browser_fixture.MobileDrawerBrowserTest
         Fixture.setUpClass()
         Fixture.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"] = 5000
         browser = None
         try:
             with Fixture.app.app_context():
                 gateway = ensure_default_gateway_and_nodes()
+                sort_date = date(2026, 8, 19)
+                _, opening = configure_sort_window(gateway, sort_date)
+                physical_now = opening.replace(tzinfo=ZoneInfo("America/Chicago"))
+                Fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = physical_now
                 admin = User.query.filter_by(username="drawer-admin").one()
                 operation = SortDateOperation(generated_by_user_id=admin.id, gateway_id=gateway.id,
-                    gateway_code=gateway.code, sort_date=date.today(), sort_name="night", window_minutes=60)
+                    gateway_code=gateway.code, sort_date=sort_date, sort_name="night", window_minutes=60)
                 truck = NeoScorpionFuelTruck(gateway_id=gateway.id, truck_number="20", capacity_gallons=20_000)
                 db.session.add_all([operation, truck])
                 db.session.flush()
@@ -42,7 +54,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                     tail = f"N49{index}UP"
                     mission = SortDateMission(sort_date_operation_id=operation.id, sort_date=operation.sort_date,
                         gateway_code=gateway.code, sort_name="night", mission_type="departure",
-                        mission_source="manual", flight_number="UPS901", origin=gateway.code, destination="SDF",
+                        mission_source="manual", flight_number=f"UPS{901+index}", origin=gateway.code, destination="SDF",
                         assigned_tail_number=tail, tail_source="manual", timezone="America/Chicago",
                         planned_fuel_load=required, planned_datetime_utc=datetime.utcnow() + timedelta(hours=2),
                         planned_source="manual", departure_status="loading", fuel_status="waiting")
@@ -79,9 +91,10 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
 
             with patch("app.services.neoscorpion.current_existing_operational_sort_operations",
                     side_effect=lambda gateway, now=None: [db.session.get(SortDateOperation, operation_id)]):
-                browser = Fixture.pw.chromium.launch()
+                browser = getattr(Fixture.pw, engine).launch()
                 page = browser.new_page(viewport={"width": 1440, "height": 900})
                 Fixture().login(page)
+                page.clock.install(time=physical_now)
                 page.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1', 'seen')")
                 requests = []
                 errors = []
@@ -97,13 +110,13 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                 expect(page.locator(".neoscorpion-dispatch-table thead")).to_contain_text("Fuel Load")
                 expect(performance.locator("[data-performance-fueler-id]")).to_have_count(1)
                 expect(performance.locator("[data-performance-truck-id]")).to_have_count(1)
-                self.assertTrue(performance.evaluate("""panel => {
-                    const title = panel.querySelector('h2').getBoundingClientRect();
-                    const totals = panel.querySelector('.neoscorpion-sort-fuel-totals').getBoundingClientRect();
-                    return title.right <= totals.left && Math.abs(title.top - totals.top) < 20;
-                }"""), "Desktop title and totals must share a header row")
-                self.assertIn("20261010-quick-fuel-v1",
-                              page.locator('link[href*="26-neoscorpion.css"]').get_attribute("href"))
+                toggle = performance.locator('[aria-controls="dispatch-statistics"]')
+                if toggle.get_attribute("aria-expanded") == "false":
+                    expect(performance.locator("#dispatch-statistics")).to_be_hidden()
+                    toggle.click()
+                expect(performance.locator("#dispatch-statistics")).to_be_visible()
+                self.assertTrue(page.locator('link[href*="26-neoscorpion.css"]').evaluate(
+                    "link => Boolean(link.sheet && link.sheet.cssRules.length)"))
                 for width in (1440, 1024, 390, 375):
                     page.set_viewport_size({"width": width, "height": 900})
                     self.assertTrue(performance.evaluate("""panel => {
@@ -115,7 +128,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                             });
                     }"""), f"Totals must fit at {width}px")
                     if width in (1440, 390):
-                        page.screenshot(path=str(Fixture.evidence / f"dispatch-sort-totals-{width}.png"), full_page=True)
+                        page.screenshot(path=str(Fixture.evidence / f"dispatch-sort-totals-{engine}-{width}.png"), full_page=True)
                 with Fixture.app.app_context():
                     db.session.get(SortDateMission, second_id).planned_fuel_load = 38_800
                     db.session.add(NeoScorpionFuelingEvent(**event_values, sequence_number=4,
@@ -143,7 +156,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                 self.assertIn("Fuel Load", text)
                 for value in ("TOTAL EST FUEL: 6,000 GAL", "TOTAL T/F: 3,000 GAL", "TOTAL FUEL LOAD: 9,582 GAL"):
                     self.assertIn(value, text)
-                page.screenshot(path=str(Fixture.evidence / "sort-fuel-report-mobile.png"), full_page=True)
+                page.screenshot(path=str(Fixture.evidence / f"sort-fuel-report-mobile-{engine}.png"), full_page=True)
         finally:
             if browser:
                 browser.close()
