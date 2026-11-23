@@ -8,7 +8,7 @@ The release tooling separates migration execution from the hosted application. T
 | --- | --- | --- |
 | Web and in-process workers | Connect to the application database, use the application schema, explicit relation privileges in `scripts/runtime_database_grants.json`, reviewed column updates in `scripts/runtime_update_columns.json`, usage on sequences belonging to insertable tables, read the deployment receipt | The one runtime DSN on the existing Render service |
 | Prior compatible runtime | Independently generated credential and independently verified restricted grants for fallback | Owner's existing secret store until rollback |
-| Migration | Connect, usage and create in the application schema, ownership of inventoried application objects and newly created objects, canonical bootstrap/seed access | Existing operator workstation under a separate OS account, outside Render |
+| Migration | Connect, usage and create in the application schema, ownership of inventoried application objects and newly created objects, canonical bootstrap/seed access | Owner-confirmed GitHub migration environment on a fresh hosted runner, outside Render |
 | DBA | Provision identities, review ownership, network access, existing ACLs and recovery | Existing DBA custody |
 
 Create ordinary SQL login roles with SCRAM secrets. Use NOSUPERUSER, NOCREATEROLE, NOCREATEDB, NOREPLICATION and NOBYPASSRLS. The runtime identities have no role memberships, object ownership or grant options. Supply secrets through the existing protected credential store and process environment. Use provider-supported TLS with server identity verification. Check the effective role on the actual connection. [Neon role guide](https://neon.com/docs/manage/roles)
@@ -27,8 +27,8 @@ The gate checks effective rights including PUBLIC, column ACLs, grant options, s
 
 1. Owner and DBA identify the exact production database, schema, release SHA, migration host, operators and credential stores. Compare production-only objects, routines, custom types, extensions, foreign access, RLS policies, connectable databases, default privileges and shared-schema consumers to the rehearsed catalog. Keep object lists private. An unclassified object or a required permission absent from the policy blocks the switch.
 2. Use the existing restricted DBA channel to create the migration login and two runtime logins. Apply CONNECT to the target database and USAGE on the application schema. Give the migration login CREATE in that schema. Review PUBLIC database TEMP, schema CREATE and all shared grants first. Any proposed change affecting another principal requires its own reviewed impact assessment. Use `python scripts/review_runtime_temp.py --database DB` for the read-only inspection. Only after the DBA inventories legitimate direct consumers, use its explicit DBA-only `--apply --keep-temp` with the reviewed exception logins. Rehearse their access and verify runtime CONNECT and denial of TEMP.
-3. Obtain a clean checkout of the exact release on the owner machine. Record the current deployment, release commands, accessible rollback build, credential versions, durable worker receipts and applicable business/audit fingerprints. Store references without credential values. Pause concurrent schema changes and reserve the first release so AutoDeploy cannot publish it early.
-4. Using the authorized transfer identity on the owner machine, generate a private catalog inventory. The file records object IDs, names, routine signatures, database and roles. The DBA compares **every entry** with the application inventory. Abort if extensions, custom types, another application or unrelated objects need special handling. The transfer changes only reviewed relations, column-owned sequences and routines. It never uses a database-wide ownership reassignment.
+3. Verify the exact release checkout, current deployment, rollback build, credential versions, due worker receipts and business/audit fingerprints. Store references without credential values. Pause concurrent schema changes and turn automatic deployment off before merging.
+4. Using the separately authorized DBA channel, generate a private catalog inventory. The file records object IDs, names, routine signatures, database and roles. The DBA compares **every entry** with the application inventory. Abort if extensions, custom types, another application or unrelated objects need special handling. The transfer changes only reviewed relations, column-owned sequences and routines.
 
    ```text
    python scripts/review_database_ownership.py --database DB --schema SCHEMA --previous PREVIOUS_OWNER --target MIGRATOR --inventory PRIVATE_PLAN
@@ -36,7 +36,7 @@ The gate checks effective rights including PUBLIC, column ACLs, grant options, s
    ```
 
    PostgreSQL requires the transfer operator to be entitled to transfer each object to the target. Only the DBA performs this step. Existing web and worker traffic must be drained or have its required explicit runtime grants staged before its old ownership is removed. For the first switch, use a brief controlled drain with an operator available. Preserve the old login under private custody until the fallback passes.
-5. Run the canonical migration off-service with the dedicated migration DSN and its bootstrap secret. Use a shell or release job that aborts on **each** nonzero exit. Verify the release SHA matches the clean checkout. Stop on schema repair proposals, changed historical rows or unexpected bootstrap effects. The release runner pins the three identities, holds a migration lock, runs the real bootstrap, and verifies both restricted policies before committing the receipt.
+5. Dispatch the protected GitHub workflow and confirm the migration of this exact SHA. Its migration step supplies the dedicated DSN and validates the existing bootstrap account without an administrator password. Stop on schema repair proposals, changed historical rows or unexpected bootstrap effects. The runner pins the three identities, holds a migration lock and verifies both restricted policies before committing the receipt. It invokes the following command internally.
 
    ```text
    python scripts/runtime_database_access.py --database DB --schema SCHEMA --runtime WEB --standby FALLBACK --migrator MIGRATOR --release FULL_SHA --apply
@@ -56,7 +56,7 @@ The gate checks effective rights including PUBLIC, column ACLs, grant options, s
 
 ## Device-independent release
 
-For ordinary releases and emergency fixes, an authorized maintainer starts the protected GitHub workflow in a browser. GitHub runs the migration outside Render. The release environments, approvals, exact-SHA deployment and fallback evidence are described in the [protected database release procedure](protected-database-release.md). The alternate-checkout exercise below remains part of disposable recovery testing.
+For ordinary releases and emergency fixes, the repository owner starts and confirms the protected GitHub workflow in a browser. GitHub runs the migration outside Render. The [protected database release procedure](protected-database-release.md) covers environment custody, owner confirmation, exact-SHA deployment and fallback evidence. The alternate checkout is a disposable recovery test.
 
 ## Rollback
 

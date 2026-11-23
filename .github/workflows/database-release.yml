@@ -19,7 +19,7 @@ permissions:
   deployments: read
 
 concurrency:
-  group: neoapps-database-release
+  group: neoapps-database-release-${{ github.repository_id }}-${{ github.actor_id }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -28,10 +28,12 @@ env:
 
 jobs:
   policy:
-    if: github.repository == 'KKnFinite/NeoApps' && github.ref == 'refs/heads/main' && inputs.revision == github.sha && github.run_attempt == 1
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
+      - name: Require a first-attempt dispatch by the repository owner for this exact main SHA
+        if: github.repository_id != '1247201616' || github.repository_owner_id != '271867764' || github.actor_id != '271867764' || github.ref != 'refs/heads/main' || inputs.revision != github.sha || github.run_attempt != 1
+        run: exit 1
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
@@ -56,7 +58,7 @@ jobs:
         with:
           persist-credentials: false
       - run: bash scripts/release/install.sh
-      - name: Verify approval of this release
+      - name: Verify the owner's exact-SHA migration confirmation
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -I scripts/release/github_gate.py --approved-environment neoapps-migration
@@ -119,7 +121,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
-      - name: Check the operator's live authorization and worker observations
+      - name: Check the owner's live authorization and worker observations
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOYMENT_ID: ${{ needs.deploy.outputs.deployment }}

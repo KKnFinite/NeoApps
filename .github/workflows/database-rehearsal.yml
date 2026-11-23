@@ -7,13 +7,6 @@ on:
         type: string
   pull_request:
     branches: [main]
-    paths:
-      - '.github/workflows/database-*.yml'
-      - '.github/CODEOWNERS'
-      - 'scripts/**'
-      - 'app/**'
-      - 'tests/database_roles/**'
-      - 'requirements.txt'
 
 permissions:
   contents: read
@@ -29,6 +22,24 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Check which workflow jobs can request protected environments
+        run: ruby tests/database_roles/workflow_isolation.rb
+      - name: Confirm the actual pull request event cannot enter release policy
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 - <<'PY'
+          import os
+          from scripts.release.github_gate import validate
+          def unexpected_read(path):
+              raise AssertionError("Release gate requested provider access on a pull request")
+          try:
+              validate(os.environ, unexpected_read)
+          except ValueError as error:
+              assert str(error) == "Use a new manual dispatch of the main release workflow"
+          else:
+              raise AssertionError("Pull request entered the release path")
+          print("GitHub pull request event denied before provider access")
+          PY
       - name: Mark this disposable runner
         id: marker
         run: |
@@ -50,10 +61,14 @@ jobs:
 
   isolation:
     needs: rehearse
+    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions: {}
     steps:
+      - name: Propagate failed or skipped rehearsal to the required check
+        if: needs.rehearse.result != 'success'
+        run: exit 1
       - name: Verify fresh runner cannot see migration-runner fixture
         env:
           MIGRATION_JOB_BOOT: ${{ needs.rehearse.outputs.boot }}
