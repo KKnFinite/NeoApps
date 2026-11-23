@@ -1,5 +1,8 @@
+import hashlib
+
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user
+from markupsafe import Markup
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
@@ -22,7 +25,7 @@ from app.neonodes.neosubzero.services import (
     current_neosubzero_operation, has_departed_pretreat, mutate_pretreat,
     pretreat_refresh_status, pretreat_revision, subzero_refresh_status,
 )
-from app.services.live_screen_refresh import live_screen_refresh_status
+from app.services.live_screen_refresh import live_poll_scope, live_screen_refresh_status
 from app.services.live_screen_registry import UCC_TV_REFRESH_KEY, live_screen_definition
 from app.services.neosubzero_departure_deice import (
     OUTBOUND_REFRESH_KEY,
@@ -386,11 +389,16 @@ def ucc():
         return redirect(url_for("neosubzero.ucc"))
     weather = neosubzero_weather_context(gateway, operation)
     live_fragment = request.args.get("fragment") == "1"
+    grid_fragment = None
+    if (live_fragment and operation and access["can_edit"]
+            and request.args.get("crew_options") == "shared" and request.args.get("staffing_grids") == "1"):
+        grid_fragment = _staffing_grid_renderer(gateway, operation)
     html = render_template(
         "neonodes/neosubzero/ucc.html",
         gateway=gateway,
         can_edit=access["can_edit"],
         live_fragment=live_fragment,
+        grid_fragment=grid_fragment,
         revision=neosubzero_ucc_revision(
             gateway,
             operation,
@@ -409,6 +417,21 @@ def ucc():
         **neosubzero_ucc_context(gateway, operation),
     )
     return (html, {"Cache-Control": "no-store"}) if live_fragment else html
+
+
+def _staffing_grid_renderer(gateway, operation):
+    # Each match is against the freshly authorized, rendered grid in this response.
+    # The page keeps its own pristine copies. The server stores no operational HTML.
+    scope = f"{live_poll_scope(gateway)}:{operation.id}:".encode()
+    supplied = request.headers.get("X-DUCC-Staffing-Grids", "")
+    known = set(supplied.split(",")) if len(supplied) <= 512 else set()
+
+    def render(grid):
+        digest = hashlib.sha256(scope + grid.encode()).hexdigest()
+        marker = Markup('<template data-ucc-grid="{}"></template>').format(digest)
+        return marker if digest in known else marker + grid
+
+    return render
 
 
 def _ucc_json_request():

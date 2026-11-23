@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, union_all
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -797,7 +797,7 @@ def clear_neosubzero_ucc_assignments_for_person_all_sorts(person_id):
 
 def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
     """Revision covering exactly UCC-visible aircraft, staffing, and fluid inputs."""
-    from app.services.neosubzero_departure_deice import departure_deice_revision
+    from app.services.neosubzero_departure_deice import departure_deice_revision, revision_aggregate
     from app.models import NeoSubZeroTruck
 
     operation_id = getattr(operation, "id", None)
@@ -828,13 +828,12 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
         ("people", StaffingPerson, StaffingPerson.active.is_(True)),
         ("work", StaffingWorkAssignment, StaffingWorkAssignment.active.is_(True)),
     )
-    for label, model, criterion in models:
-        count, latest, max_id = db.session.query(
-            func.count(model.id),
-            func.max(model.updated_at),
-            func.max(model.id),
-        ).filter(criterion).one()
-        payload.append((label, int(count or 0), str(latest or ""), int(max_id or 0)))
+    aggregates = (revision_aggregate(label, model, model.updated_at, criterion)
+                  for label, model, criterion in models)
+    by_source = {row.source: row for row in db.session.execute(union_all(*aggregates))}
+    for label, _, _ in models:
+        row = by_source[label]
+        payload.append((label, int(row.row_count or 0), str(row.latest or ""), int(row.max_id or 0)))
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 

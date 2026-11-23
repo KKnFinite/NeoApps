@@ -57,3 +57,20 @@ For comparison after release, collect both physical Sorts beginning November 23 
 The groups overlap. The broader legacy SubZero CSP scenario passed its original pretreatment assertion after the repair, then stopped at a hidden desktop accordion summary. The compact desktop list exposes an inline chevron and autosaves pass fields. This older end-to-end scenario still requires migration; its later steps are unverified by that scenario. The separate current Outbound lifecycle exercises actual actions in both engines. No operational rule was relaxed for these tests.
 
 The changes require no migration. Roll back the release commit through the existing Render service, verify health and static-asset hashes, exercise the protected routes and check worker receipts. The release does not reconfigure Google integrations, credentials, grants, worker discovery or database suspension.
+
+## DUCC and Fuel Dispatch measurements before the November 23–24 Sorts
+
+Compared the same signed-in local requests at `4bfb8ff3` and with the DUCC crew-grid change. The DUCC fixture had two departures, two eligible employees and 28 crew positions. CSRF protection was enabled. Both screens used a five-second revision interval in these fixtures. A revision change or an authorized save can fetch a board. An idle five-second interval does not imply a full-board transfer.
+
+| Request | Response bytes, before → after | Gzip bytes, before → after | SQL reads, before → after |
+|---|---:|---:|---:|
+| DUCC first crew fragment | 259,266 → 239,740 | 11,627 → 11,547 | 48 → 42 |
+| DUCC subsequent weather change | 259,266 → 22,868 | 11,622 → 4,165 | 48 → 42 |
+| DUCC subsequent change to one ramp’s crew | 259,815 → 54,329 | 11,859 → 6,488 | 50 → 44 |
+| DUCC revision check | 282 → 282 | approximately 200 | 18 → 12 |
+
+Gzip figures are local level-six measurements and can vary slightly with session tokens. A warm request sends up to 454 bytes of grid hashes plus the header name and framing. All measured GETs issued zero database writes. The server still renders and authorizes the current board. Only byte-identical crew grids from the same session and operation are eligible for reuse. A current unit-move version and form token accompany every negotiated fragment.
+
+Fuel Dispatch on the one-mission fixture returned 140 bytes and used 10 reads for the revision, 464 bytes and 51 reads for an unchanged critical delta, 43,915 bytes and 51 reads for a changed critical delta, and 57,609 bytes and 62 reads for the full recovery panel. These measurements matched on both revisions. The unchanged critical projection is a remaining database cost to compare with its production request frequency.
+
+Keep the November 18–19 production figures above as the pre-release baseline. The comparison windows are November 24 and 25, 03:00–11:00 UTC, corresponding to the two physical Night Sorts beginning November 23 and 24 Central. Match Render deployment finish times to those windows, record any revision changes within each window, and normalize DUCC fragment bytes per response and revision requests per active screen-hour alongside mission volume. Use the existing provider and application telemetry. Keep HTTP bytes, database reads, CU-hours and invoiced charges separate. The release receipt in issue #29 identifies the deployed revision.

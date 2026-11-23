@@ -1,15 +1,12 @@
 """Real compact crew editor interactions with isolated DUCC data."""
-from datetime import datetime
 from pathlib import Path
 import unittest
-from unittest.mock import patch
 
 from playwright.sync_api import expect
 
 from app.extensions import db
 from app.models import NeoSubZeroTruck, SortDateOperation, StaffingDailyAttendance, StaffingPerson, StaffingUnit
 from app.services.live_collaboration import entity_version
-from app.services.live_screen_refresh import save_live_screen_refresh_override
 from app.services.neosubzero_staffing import DEICE_QUALIFICATION_KEY, set_staffing_person_qualification
 from app.services.neosubzero_trucks import manage_truck
 from tests.browser import test_neosubzero_ucc as fixtures
@@ -23,13 +20,7 @@ class CrewEditorBrowserTest(unittest.TestCase):
         fixture = fixtures.UccBrowserTest()
         fixture.setUpClass()
         self.addCleanup(fixture.tearDownClass)
-        fixture.refresh.stop()
-        clock = patch("app.services.node_refresh.current_gateway_local_datetime", return_value=datetime(2026, 10, 22, 22))
-        clock.start()
-        self.addCleanup(clock.stop)
         with fixture.app.app_context():
-            operation = db.session.get(SortDateOperation, fixture.operation_id)
-            save_live_screen_refresh_override(operation.gateway, "neosubzero.ucc", "5")
             home = db.session.get(StaffingPerson, fixture.people[1]).work_assignments[0].work_area
             duplicate = fixtures.NeoSubZeroUccTest()._person("UCC-DUP", "Terry", "Longname-Deicer-1", home)
             set_staffing_person_qualification(duplicate, DEICE_QUALIFICATION_KEY, True)
@@ -41,7 +32,7 @@ class CrewEditorBrowserTest(unittest.TestCase):
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         fixture.login(page)
-        page.clock.install()
+        page.clock.install(time=fixture.sort_now)
         with page.expect_response(lambda response: "/ucc/revision" in response.url) as initial:
             fixture.ready(page, "/neosubzero/ucc")
         self.assertTrue(initial.value.json()["refresh"]["auto_refresh_enabled"])

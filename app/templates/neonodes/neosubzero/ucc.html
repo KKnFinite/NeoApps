@@ -100,6 +100,7 @@
     </div>
     {% if not live_fragment %}<div class="ucc-mobile-projection" data-ucc-mobile-projection></div>{% endif %}
     {% include "neonodes/neosubzero/_ucc_board.html" %}
+    {% if grid_fragment %}<template data-ucc-grid-csrf="{{ csrf_token() }}" data-ucc-unit-version="{{ staffing_version }}"></template>{% endif %}
     {% if can_edit and not live_fragment %}
     <dialog class="neosubzero-ucc-move-dialog" data-ucc-move-dialog>
         <h2>OCCUPIED SLOT</h2>
@@ -114,7 +115,7 @@
     {% endif %}
 </section></div>
 {% if not live_fragment %}
-<script src="{{ url_for('static', live='20261122-shared-options', filename='js/neosubzero_ucc.js', hours='20261121', v=STATIC_ASSET_VERSION, ucc='20261112-mobile-ramp-v1') }}" defer></script>
+<script src="{{ url_for('static', live='20261122-staffing-grids', filename='js/neosubzero_ucc.js', hours='20261121', v=STATIC_ASSET_VERSION, ucc='20261112-mobile-ramp-v1') }}" defer></script>
 <script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='ducc-tv-crew-v1') }}" defer></script>
 {% endif %}
 {% endblock %}
