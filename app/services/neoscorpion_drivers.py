@@ -12,7 +12,7 @@ DRIVER_VIEW = "neoscorpion.truck_driver.view"
 DRIVER_EDIT = "neoscorpion.truck_driver.edit"
 
 
-def driver_roster(gateway, operation, *, include_choices=False):
+def driver_roster(gateway, operation, *, include_choices=False, active_users=None):
     if operation is None:
         return dict(driver_trucks=[], drivers_by_truck_id={}, eligible_drivers=[])
     def read():
@@ -29,7 +29,8 @@ def driver_roster(gateway, operation, *, include_choices=False):
     trucks, drivers = (request_cached('scorpion.driver_roster', (gateway.id,operation.id), read)
         if has_request_context() and request.method in {'GET','HEAD'} else read())
     return dict(driver_trucks=trucks, drivers_by_truck_id={d.fuel_truck_id:d for d in drivers},
-        eligible_drivers=eligible_nightly_fueler_users(gateway, permission_key=DRIVER_EDIT) if include_choices else [])
+        eligible_drivers=eligible_nightly_fueler_users(
+            gateway, permission_key=DRIVER_EDIT, active_users=active_users) if include_choices else [])
 
 
 def change_driver(gateway, operation, actor, truck_id, driver_id, *, dispatcher=False,

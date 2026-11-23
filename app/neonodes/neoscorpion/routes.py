@@ -2139,8 +2139,7 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
         capture_manual=captured.append if capture_manual else None)
     from app.services.neoscorpion_dispatch_preferences import dispatch_preferences
     preferences = dispatch_preferences(gateway, current_user)
-    from app.models import NeoScorpionVendorRequest, NeoScorpionSortTruck, NeoScorpionFuelingEvent
-    from sqlalchemy import func
+    from app.models import NeoScorpionVendorRequest
     from app.services.neoscorpion_vendors import driver_name
     operation=context.get('operation')
     roster=driver_roster(gateway,operation)
@@ -2149,15 +2148,13 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
         for item in NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,kind='fuel',status='pending').all():
             pending.setdefault(item.fuel_truck_id,[]).append(item)
         selections=context['nightly_truck_states_by_truck_id']
-        postings=dict(db.session.query(NeoScorpionFuelingEvent.fuel_truck_id,func.max(NeoScorpionFuelingEvent.id)).filter_by(
-            sort_date_operation_id=operation.id).group_by(NeoScorpionFuelingEvent.fuel_truck_id).all())
     # Presentation-only pointers to existing truck controls: never duplicate
     # inventory/approval mutations inside a mission's DETAILS.
     dispatch_editable = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)['can_edit']
     driver_admin = None
     if dispatch_editable and include_asset_choices:
         from app.neonodes.neoscorpion.vendor_routes import driver_management_context
-        driver_admin = driver_management_context(gateway, operation)
+        driver_admin = driver_management_context(gateway, operation, active_users=context["fuelers"])
     def present(context):
         rows = [dict(row) for row in context["rows"]]
         # Browser reorders existing DOM groups using ranks derived from full UTC
@@ -2171,7 +2168,6 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
                 from app.services.neoscorpion_assets import top_off_action_state
                 visual['top_off_action_state'] = top_off_action_state(selection) if selection else ''
                 visual['inventory_epoch']=selection.inventory_epoch if selection else None
-                visual['inventory_posting_id']=postings.get(visual['truck_id'],0)
                 visual['driver_name']=driver_name(gateway,operation,visual['truck_id'],roster['drivers_by_truck_id'])
         for row in rows:
             truck = row.get('assigned_truck')

@@ -4,12 +4,14 @@ from threading import Barrier, Event
 from unittest.mock import patch
 from uuid import uuid4
 import os
+import json
 import unittest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
 from app import create_app
 from app.extensions import db
-from app.models import NeoScorpionFuelingEvent, NeoScorpionFuelWorkState, NeoScorpionSortTruck
+from app.models import NeoScorpionFuelingEvent, NeoScorpionFuelWorkState, NeoScorpionSortTruck, SortDateMission
 from tests import test_neoscorpion_dispatch_delta as cases
 from tests import test_neoscorpion_dispatch_planning as fixtures
 
@@ -34,6 +36,64 @@ class DispatchDeltaPostgresTest(cases.DispatchDeltaTest):
                 SQLALCHEMY_ENGINE_OPTIONS={'connect_args':{'connect_timeout':5,'options':
                     f'-csearch_path={schema} -clock_timeout=3000 -cstatement_timeout=10000'}})))
         with patch.object(fixtures,'create_app',local): super().setUp()
+
+    def test_arrival_changes_reach_critical_rows_without_full_arrival_hydration(self):
+        case = self.case
+        app = case.client.application
+        _, previous = self.initial()
+        revision = case.client.get('/neoscorpion/fuel-dispatch/revision').json
+        case.arrival.arrival_status = 'unloaded'
+        db.session.commit()
+        self.assertEqual(case.client.get('/neoscorpion/fuel-dispatch/revision').json, revision)
+
+        arrivals, selects = [], []
+        def loaded(session, item):
+            if isinstance(item, SortDateMission) and item.mission_type == 'arrival':
+                arrivals.append(item.id)
+        def record(conn, cursor, sql, *args):
+            selects.append(' '.join(sql.lower().split()))
+        with app.app_context():
+            engine = db.engine
+            event.listen(Session, 'loaded_as_persistent', loaded)
+            event.listen(engine, 'before_cursor_execute', record)
+            try:
+                response = case.client.get('/neoscorpion/fuel-dispatch/live-panel',
+                    query_string={'completion_only': '1', 'delta': '1'},
+                    headers={'X-Neo-Dispatch-Fingerprints': json.dumps(previous)})
+            finally:
+                event.remove(engine, 'before_cursor_execute', record)
+                event.remove(Session, 'loaded_as_persistent', loaded)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Unloaded', response.json['html'])
+        self.assertIn('>COMPLETE</button>', response.json['html'])
+        self.assertEqual(arrivals, [])
+        self.assertEqual(sum('from neoscorpion_fueling_events ' in sql for sql in selects), 1)
+        self.assertEqual(sum('from users where users.is_active' in sql for sql in selects), 1)
+        self.assertEqual(sum('from gateway_memberships join neo_nodes' in sql for sql in selects), 1)
+        _, full_page_critical = self.initial()
+        self.assertEqual(response.json['fingerprints'], full_page_critical)
+
+    def test_new_uplift_keeps_posted_inventory_and_matches_initial_controls(self):
+        from app.services import neoscorpion as fuel
+        c = self.case
+        fuel.complete_fueled_assignment(c.gateway, c.dispatcher, c.assignment.id)
+        db.session.commit()
+        posting = NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=c.assignment.id).one()
+        _, completed = self.initial()
+        fuel.start_follow_up_fuel_cycle(c.gateway, c.dispatcher, c.assignment.id, "uplift", "55.0",
+                                       c.fueler.id, c.truck.id)
+        db.session.commit()
+        critical = c.capture(completed).json
+        self.assertIn("UPLIFT", critical["html"])
+        self.assertEqual(c.assignment.current_cycle_number, 2)
+        self.assertEqual(c.selection.current_gallons, 7000)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 1)
+        with c.client.application.test_request_context():
+            context = fuel.fuel_dispatch_context(c.gateway, include_spear=False)
+            truck = next(v for v in context["truck_visuals"] if v["truck_id"] == c.truck.id)
+            self.assertEqual(truck["inventory_posting_id"], posting.id)
+        _, expected = self.initial()
+        self.assertEqual(critical["fingerprints"], expected)
 
     def test_independent_simultaneous_readers_preserve_visit_event_and_inventory(self):
         c=self.case;app=c.client.application;email=c.dispatcher.email
