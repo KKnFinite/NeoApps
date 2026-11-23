@@ -111,7 +111,7 @@ from app.services.night_sorting import (
     mission_board_sort_key,
     sort_datetime_for_local_time,
 )
-from app.services.permission_rules import permission_access, user_can
+from app.services.permission_rules import permission_access, preload_permission_rules, user_can
 from app.services.parking_plan import (
     PARKING_RAMP_GROUPS,
     STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS,
@@ -2705,6 +2705,16 @@ def alp_import(operation_id, mission_type):
     mission_type = (mission_type or "").strip().lower()
     if mission_type not in {"arrival", "departure"}:
         abort(404)
+    # The full Planning page renders these permission-filtered navigation and action controls.
+    # Only rule definitions are batched; each control still checks the current user's scope.
+    preload_permission_rules((
+        "neomotherbrain.arrival_planning.view", "neomotherbrain.departure_planning.view",
+        _planning_edit_permission(mission_type), _planning_run_permission(mission_type),
+        "neomotherbrain.manage_sort.view", "motherbrain.parking_plan.view",
+        "motherbrain.parking_rules.view", "neomotherbrain.master_schedule.view",
+        "neomotherbrain.system_settings.view", "neomotherbrain.flight_api_review.view",
+        "neoapps.access_requests.view",
+    ))
     denied = _permission_guard(_planning_view_permission(mission_type))
     if denied:
         return denied
@@ -2871,6 +2881,7 @@ def planning_live_state(operation_id, mission_type):
         "mission_rows": collections["mission_rows"],
         "tail_swap_options": collections["tail_swap_options"],
         "can_edit": _planning_can_edit(mission_type),
+        "compact_tail_options": mission_type == "departure" and request.args.get("compact_tail_options") == "1",
         "wave_options": WAVE_OPTIONS,
     }
     fragments = _render_planning_live_fragments(operation, fragment_context)
@@ -2887,6 +2898,8 @@ def planning_live_state(operation_id, mission_type):
                 "missions": _planning_mission_state_rows(collections["mission_rows"]),
             },
             "fragments": fragments,
+            **({"tail_options": collections["tail_swap_options"]}
+               if fragment_context["compact_tail_options"] and fragment_context["can_edit"] else {}),
         }
     )
     response.headers["Cache-Control"] = "no-store"

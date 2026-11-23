@@ -45,9 +45,9 @@
                     <input type="hidden" name="expected_version" value="{{ mission.updated_at.isoformat(timespec='microseconds') if mission.updated_at else '' }}">
                     <select name="replacement_tail" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required {% if not tail_swap_options %}disabled{% endif %}>
                         <option value="">TAIL</option>
-                        {% for tail in tail_swap_options %}
+                        {% if not compact_tail_options %}{% for tail in tail_swap_options %}
                         <option value="{{ tail }}">{{ tail }}</option>
-                        {% endfor %}
+                        {% endfor %}{% endif %}
                     </select>
                     <input type="hidden" name="confirm_tail_swap" value="1">
                     <button class="table-row-button" type="submit" {% if not tail_swap_options %}disabled{% endif %}>Apply</button>

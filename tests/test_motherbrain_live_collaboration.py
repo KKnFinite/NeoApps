@@ -609,6 +609,20 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
                 if mission_type == "departure":
                     self.assertIn(b"NSPAREUP", response.data)
 
+    def test_compact_picker_transports_each_choice_once_and_preserves_legacy_responses(self):
+        for i in range(3):
+            db.session.add(self._mission("departure", f"UPS{1700+i}", assigned_tail_number=f"NA{i}UP"))
+        db.session.commit()
+        url = self._state_url("departure", revision="changed")
+        legacy = self.client.get(url).get_json()
+        compact = self.client.get(url + "&compact_tail_options=1").get_json()
+        self.assertNotIn("tail_options", legacy)
+        self.assertIn('value="NA2UP"', legacy["fragments"]["mobile_missions"])
+        self.assertNotIn('value="NA2UP"', compact["fragments"]["mobile_missions"])
+        self.assertEqual(compact["tail_options"].count("NA2UP"), 1)
+        self.assertEqual(legacy["rows"], compact["rows"])
+        self.assertEqual(legacy["revision"], compact["revision"])
+
     def test_changed_departure_preview_bulk_suppresses_hot_rows(self):
         mission = self._mission(
             "departure",

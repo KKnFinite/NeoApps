@@ -22,9 +22,16 @@
             root.querySelector("[data-live-rows='missions']"),
             fragments.missions || ""
         );
+        let prepareMobileRow;
+        if (Array.isArray(payload.tail_options)) {
+            const choices = document.createDocumentFragment();
+            for (const tail of payload.tail_options) choices.append(new Option(tail, tail));
+            root.querySelector("#tail-swap-options")?.replaceChildren(choices.cloneNode(true));
+            prepareMobileRow = row => row.querySelector("select[name='replacement_tail']")?.append(choices.cloneNode(true));
+        }
         window.NeoLiveUpdates.reconcileRows(
             root.querySelector("[data-live-rows='mobile-missions']"),
-            fragments.mobile_missions || ""
+            fragments.mobile_missions || "", prepareMobileRow
         );
         window.NeoLiveUpdates.reconcileAlertTrays(fragments.alert_tray);
     };
@@ -32,6 +39,7 @@
     const loadState = async () => {
         const pollUrl = new URL(stateUrl, window.location.href);
         pollUrl.searchParams.set("revision", currentRevision);
+        pollUrl.searchParams.set("compact_tail_options", "1");
         const response = await fetch(pollUrl, {
             cache: "no-store",
             credentials: "same-origin",
