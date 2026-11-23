@@ -426,7 +426,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
                           include_fueling_performance=True, include_spear=True, capture_manual=None):
     """Build core Dispatch first, then add optional planning intelligence."""
     context = _manual_fuel_dispatch_context(
-        gateway, include_asset_choices=include_asset_choices
+        gateway, include_asset_choices=include_asset_choices, compact_arrivals=not include_spear,
     )
     if context["operation"] is None:
         context["fueling_performance"] = {"fuelers": (), "trucks": ()}
@@ -690,7 +690,7 @@ def _apply_operational_fueler_names(context, nicknames):
     _attach_spear_plan(context["rows"], context["truck_visuals"], displayed_plan)
 
 
-def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
+def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False, compact_arrivals=False):
     """Return a fully renderable canonical manual Dispatch context only."""
     operation = current_sort_operation(gateway)
     refresh_setting = live_screen_refresh_value(
@@ -769,6 +769,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         operation,
         missions,
         departure_ranks=departure_occurrences(missions, operation),
+        compact_arrivals=compact_arrivals,
         parking_by_tail=parking,
         start_evidence=start_evidence,
         fuel_trucks=trucks,
@@ -826,6 +827,12 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         rows,
         timezone_name=gateway_timezone(gateway),
     )
+    # Use the same current-Sort event ledger as the physical fuel totals.
+    last_posting = {}
+    for event in fueling_events:
+        last_posting[event.fuel_truck_id] = max(last_posting.get(event.fuel_truck_id, 0), event.id)
+    for visual in truck_visuals:
+        visual["inventory_posting_id"] = last_posting.get(visual["truck_id"], 0)
     _attach_dispatch_truck_activity(
         truck_visuals, assignments_by_mission.values(),
         start_evidence, nightly_truck_states_by_truck_id, settings,
@@ -6490,6 +6497,7 @@ def _fuel_rows(
     now_utc=None,
     projection_sources=(),
     departure_ranks=None,
+    compact_arrivals=False,
 ):
     if departure_ranks is None:
         departure_ranks = operation_departure_occurrences(operation)
@@ -6509,9 +6517,18 @@ def _fuel_rows(
     if start_selections is None:
         start_selections = {selection.fuel_truck_id: selection for selection in
             NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()}
-    arrival_missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id,
-        mission_type='arrival').order_by(SortDateMission.eta_datetime_utc.is_(None),
-            SortDateMission.eta_datetime_utc,SortDateMission.planned_datetime_utc,SortDateMission.flight_number).all()
+    mission = SortDateMission
+    arrival_query = mission.query.filter_by(sort_date_operation_id=operation.id, mission_type="arrival")
+    if compact_arrivals:
+        # Manual Dispatch needs arrival status, time and same-tail presence. SPEAR
+        # fingerprints the full mission model and keeps its ordinary projection.
+        arrival_query = arrival_query.filter(mission.assigned_tail_number.isnot(None)).with_entities(
+            mission.id, mission.assigned_tail_number, mission.arrival_status, mission.api_status,
+            mission.api_status_raw, mission.actual_block_in_datetime_utc, mission.api_assumed_arrived_time_utc,
+            mission.eta_datetime_utc, mission.planned_datetime_utc, mission.timezone,
+        )
+    arrival_missions = arrival_query.order_by(mission.eta_datetime_utc.is_(None),
+        mission.eta_datetime_utc, mission.planned_datetime_utc, mission.flight_number).all()
     arrivals = _arrivals_by_tail(operation, missions=arrival_missions)
     arrival_presence = arrival_presence_by_tail(operation, arrivals=arrival_missions)
     if fuel_trucks is None:

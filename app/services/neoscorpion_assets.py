@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
+from flask import has_request_context, request
 from sqlalchemy import and_
 
 from app.extensions import db
@@ -32,6 +33,7 @@ from app.models import (
 )
 from app.models.user import ROLE_LEVELS
 from app.services.permission_rules import default_minimum_role, get_permission_rule
+from app.services.request_cache import request_cached
 
 
 NIGHTLY_TRUCK_STATUSES = frozenset(
@@ -189,7 +191,7 @@ def eligible_nightly_fueler_users(gateway, *, active_users=None, permission_key=
         minimum_role=scoped_minimum(scope,permission_key,minimum_role)
     minimum_level = ROLE_LEVELS.get(minimum_role, 0)
 
-    facts = (
+    membership_query = (
         db.session.query(
             GatewayMembership.user_id,
             GatewayNodeRole.role.label("node_role"),
@@ -230,8 +232,14 @@ def eligible_nightly_fueler_users(gateway, *, active_users=None, permission_key=
                 NeoScorpionVendorAccount.user_id == GatewayMembership.user_id,
             ).exists(),
         )
-        .all()
     )
+    # The two Dispatch selectors share membership facts, but each enforces its
+    # own permission threshold. Mutation paths always read current membership.
+    if has_request_context() and request.method in {"GET", "HEAD"}:
+        facts = request_cached("scorpion.asset_memberships", (gateway.id, frozenset(users_by_id)),
+                               membership_query.all)
+    else:
+        facts = membership_query.all()
 
     eligible_ids = set()
     for fact in facts:

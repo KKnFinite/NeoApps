@@ -1,4 +1,4 @@
-"""Essential Chromium proof: small SPEAR refresh and draft-safe handoff."""
+"""Browser coverage for small SPEAR refreshes and draft-safe handoffs."""
 from dataclasses import replace
 from datetime import timedelta
 from zoneinfo import ZoneInfo
@@ -21,6 +21,12 @@ from tests.test_neorain_sort_refresh import configure_sort_window
 
 class NeoScorpionBandwidthBrowserTest(unittest.TestCase):
     def test_chromium_spear_refresh_and_dirty_dispatch_completion(self):
+        self.verify_dispatch_handoff("chromium")
+
+    def test_webkit_spear_refresh_and_dirty_dispatch_completion(self):
+        self.verify_dispatch_handoff("webkit")
+
+    def verify_dispatch_handoff(self, engine):
         case=fixtures.DispatchFragmentsTest();case.setUp();self.addCleanup(case.doCleanups)
         case.prepare();case.save(case.start+timedelta(minutes=10),**case.final_data())
         case.settings.spear_recommendations_enabled=True;db.session.commit()
@@ -31,7 +37,8 @@ class NeoScorpionBandwidthBrowserTest(unittest.TestCase):
         server=make_server('127.0.0.1',0,app,threaded=True)
         thread=Thread(target=server.serve_forever,daemon=True);thread.start()
         origin=f'http://127.0.0.1:{server.server_port}'
-        evidence=Path('instance/scorpion-performance-20261104/browser');evidence.mkdir(parents=True,exist_ok=True)
+        evidence=Path('instance/scorpion-performance-20261104/browser') / engine
+        evidence.mkdir(parents=True,exist_ok=True)
         errors=[];requests=[]
         # Capture the actual controller's poll for deterministic scheduling; no
         # replacement refresh implementation, timing change or application hook.
@@ -44,7 +51,7 @@ window.__scorpionPoll=options.poll;window.__scorpionController=result;return res
         try:
             with patch('app.services.neoscorpion.live_screen_refresh_value',side_effect=lambda gateway,key,**kw:
                        replace(live_screen_refresh_value(gateway,key,**kw),effective_interval_ms=5000)),sync_playwright() as pw:
-                browser=pw.chromium.launch()
+                browser=getattr(pw, engine).launch()
                 context=browser.new_context(viewport={'width':1440,'height':950},service_workers='block')
                 page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
                 page.clock.set_fixed_time(inside)

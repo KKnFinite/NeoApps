@@ -464,12 +464,12 @@ def manage():
         **driver_management_context(gateway,operation))
 
 
-def driver_management_context(gateway,operation):
+def driver_management_context(gateway, operation, *, active_users=None):
     """Existing gateway-scoped administration data, shared by Dispatch and fallback."""
     profiles=NeoScorpionVendorAccount.query.filter_by(gateway_id=gateway.id).all()
     nights={r.user_id:r for r in NeoScorpionVendorNight.query.filter_by(sort_date_operation_id=operation.id).all()} if operation else {}
     from app.services.neoscorpion_drivers import driver_roster
-    roster=driver_roster(gateway,operation,include_choices=True)
+    roster=driver_roster(gateway, operation, include_choices=True, active_users=active_users)
     connections=list(roster['drivers_by_truck_id'].values())
     employee_choices=roster['eligible_drivers']
     approved_vendors=[p.user for p in profiles if p.enabled and p.user.is_active and p.user.email_verified_at and nights.get(p.user_id) and nights[p.user_id].status=='approved']
