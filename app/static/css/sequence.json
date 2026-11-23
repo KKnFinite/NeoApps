@@ -1,5 +1,5 @@
 {
-  "description": "Original cascade order. Do not regroup by scope or append all node rules after foundation. Each source byte is retained once.",
+  "description": "Original cascade order and historical split fingerprint. Per-file digests describe current LF-normalized assets. Keep fragment positions when selecting node styles.",
   "original_sha256_lf": "d1c8f8e86b01b78e582445781cfa7322f9f92627e0067caec8358c38a24045cb",
   "original_bytes_lf": 983978,
   "stylesheets": [
@@ -18,8 +18,8 @@
     {
       "file": "02-shared.css",
       "scope": "shared",
-      "bytes": 47214,
-      "sha256": "0362f65718cd3a334f828c02c79faa661eb941efe84a2ecdd6cea2754985abfd"
+      "bytes": 47147,
+      "sha256": "d39450662548f46f3832d783290ef7db8389e25cc2c5c2882d209a705fc50281"
     },
     {
       "file": "03-neoermac.css",
@@ -29,7 +29,7 @@
     },
     {
       "file": "04-shared.css",
-      "scope": "shared",
+      "scope": "neoermac",
       "bytes": 2962,
       "sha256": "3111814a11ce6c7c504c95ef382c797a3f2da84530e2ba23b35ce418eccb008f"
     },
@@ -53,7 +53,7 @@
     },
     {
       "file": "08-shared.css",
-      "scope": "shared",
+      "scope": "neostaffing",
       "bytes": 88,
       "sha256": "0a50df241f9094feedb9ebb0ded8585fab6999b567f30cb29704f2fcdf0dd565"
     },
@@ -66,8 +66,8 @@
     {
       "file": "10-shared.css",
       "scope": "shared",
-      "bytes": 140624,
-      "sha256": "8f527a5266a45bb764da302220b390f89ea92dac9d1b5294ceb02c7d2eae8dd0"
+      "bytes": 142683,
+      "sha256": "03768b60139f040454f912bf93ac6ae58bbc3368c669402b03ea939b322b4abe"
     },
     {
       "file": "11-neoermac.css",
@@ -114,20 +114,20 @@
     {
       "file": "18-neostaffing.css",
       "scope": "neostaffing",
-      "bytes": 36142,
-      "sha256": "7a47f54ed28b25959feafc4019de0a9a4a88bf4d9b287245b4934520fc502f88"
+      "bytes": 35938,
+      "sha256": "979dd63293b80311de4386dc6d512e90c64109b9b22e52b7eb2c18c6f8260bae"
     },
     {
       "file": "19-shared.css",
-      "scope": "shared",
+      "scope": "neostaffing",
       "bytes": 96,
       "sha256": "fc08df36d11c770e1e351dd03089e6437de2a47749723f5a9922e20d6225976c"
     },
     {
       "file": "20-neostaffing.css",
       "scope": "neostaffing",
-      "bytes": 95869,
-      "sha256": "07bf9e67843e66ad09532d7da462e4e58ec3ec8fbd6ad7b1e65e1642f3ea94a2"
+      "bytes": 98591,
+      "sha256": "d102dca335c7f8fd78c8e6c400d60c2b4814bfe9a85c71781d2bc1fe03b3f909"
     },
     {
       "file": "21-shared.css",
@@ -144,12 +144,12 @@
     {
       "file": "23-neosubzero.css",
       "scope": "neosubzero",
-      "bytes": 14777,
-      "sha256": "a350a062ef6e9c5527d94fd516d99496ce53d5960aac06fe0a71957f5e7fee48"
+      "bytes": 13498,
+      "sha256": "bb665e789db1c5a9abc45a476b6202a1e50e372ced183865d77b577bd0959b52"
     },
     {
       "file": "24-shared.css",
-      "scope": "shared",
+      "scope": "neosubzero",
       "bytes": 2646,
       "sha256": "5706f69406534de0ecfc58ceb53552ad945eb6bddf436843cc6cca63b3573f8a"
     },
@@ -162,8 +162,8 @@
     {
       "file": "26-neoscorpion.css",
       "scope": "neoscorpion",
-      "bytes": 98245,
-      "sha256": "d25a09af7e4dde206f09f2d0878965df14dd89f0185c4093ea960915d8737f82"
+      "bytes": 98499,
+      "sha256": "75838543fca1e558bb0f364ed6e5e21b436c3baa2b9e28461975698018050018"
     },
     {
       "file": "27-neosubzero.css",

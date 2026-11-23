@@ -3981,13 +3981,7 @@ select::-ms-expand {
         white-space: nowrap;
     }
 
-    body.mobile-app-chrome .planning-mobile-arrival-list {
-        display: grid;
-        gap: 5px;
-        min-width: 0;
-        overflow-x: hidden;
-    }
-
+    body.mobile-app-chrome .planning-mobile-arrival-list,
     body.mobile-app-chrome .planning-mobile-departure-list {
         display: grid;
         gap: 5px;
