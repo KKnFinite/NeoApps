@@ -60,13 +60,34 @@ class IntelligenceBrowserTest(TestCase):
                         expect(page.locator('.neosubzero-weather-current-sort article')).to_have_count(8)
                         with case.app.app_context():
                             self.assertEqual(SortDateOperation.query.count(),0)
-                            store_capture(gateway_id)
+                            from app.services.frost_schedule import hourly_targets
+                            end = AT.replace(minute=0) + timedelta(hours=8)
+                            outlook = dict(method=frost_atmosphere.VERSION, horizons={}, hourly=dict(
+                                sort_start_utc=AT.replace(minute=0).isoformat(), sort_end_utc=end.isoformat(),
+                                hours=[dict(target_at_utc=target.isoformat(), state='possible', reason='Clear and calm.')
+                                       for target in hourly_targets(AT, end)]))
+                            store_capture(gateway_id, atmosphere=outlook)
                         expect(page.locator('[data-frost-predictions]')).to_have_count(4,timeout=20000)
                         expect(page.locator('[data-frost-predictions]').first).to_have_text('Treatment reason (FROST) 12% / 34%')
                         with case.app.app_context():self.assertEqual(SortDateOperation.query.count(),0)
                         evidence=Path('instance/browser-evidence/frost-intelligence')
                         evidence.mkdir(parents=True,exist_ok=True)
+                        expect(page.locator('[data-frost-outlook]')).to_have_count(8)
                         page.screenshot(path=str(evidence/f'{engine}-no-operation.png'))
+                        page.evaluate('document.documentElement.requestFullscreen = undefined')
+                        page.locator('[data-ucc-tv-enter]').click()
+                        tv = page.locator('.ucc-tv-hours')
+                        expect(tv.get_by_text('Patchy frost possible', exact=False)).to_have_count(8)
+                        expect(tv.get_by_text('Treatment reason (FROST)', exact=False)).to_have_count(4)
+                        page.screenshot(path=str(evidence/f'{engine}-hourly-tv.png'))
+                        page.get_by_role('button', name='Exit TV Mode').click()
+                        page.set_viewport_size(dict(width=390, height=844))
+                        expect(page.locator('[data-frost-outlook]')).to_have_count(8)
+                        note = page.locator('.neosubzero-weather-hour-priority em').first
+                        expect(note).to_be_visible()
+                        self.assertTrue(note.evaluate('el => el.scrollWidth <= el.clientWidth + 1'))
+                        self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'), 1)
+                        page.screenshot(path=str(evidence/f'{engine}-hourly-mobile.png'))
                 finally:
                     if browser:browser.close()
                     case.tearDownClass()

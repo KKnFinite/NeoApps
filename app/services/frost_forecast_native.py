@@ -41,11 +41,7 @@ def contract(hours):
         time_basis='cycle != issuance; retain exact issue when known and independently verified available-by bound')
 
 
-def build(observations, snapshots, *, cutoff, target, lead_hours, aircraft=None):
-    contract(lead_hours)
-    cutoff, target = time.instant(cutoff), time.instant(target)
-    if target-cutoff != timedelta(hours=lead_hours):
-        raise ValueError('Prediction cutoff violates the horizon contract.')
+def observation_history(observations, cutoff):
     # Only report-time evidence is available for historical METARs. Retain that
     # limitation; a future receipt/correction is never treated as prior knowledge.
     allowed=[]
@@ -53,8 +49,11 @@ def build(observations, snapshots, *, cutoff, target, lead_hours, aircraft=None)
         observed=time.instant(row['utc'])
         receipt=time.instant(row['received_at_utc']) if row.get('received_at_utc') else None
         if observed<=cutoff and (receipt is None or receipt<=cutoff):allowed.append(row)
-    history=analysis.features(cutoff.isoformat(),allowed)
-    current=history['observation'] or {}
+    return analysis.features(cutoff.isoformat(),allowed)
+
+
+def forecast_pair(snapshots, cutoff, target):
+    """Select verified target-hour weather and its same-cycle trend reference."""
     accepted=[]
     for item in snapshots:
         time.station(item['station'])
@@ -73,11 +72,23 @@ def build(observations, snapshots, *, cutoff, target, lead_hours, aircraft=None)
     eligible=[r for r in accepted if timedelta(0)<=target-time.instant(r['valid_at_utc'])<timedelta(hours=1)]
     if not eligible:raise ValueError('No pre-cutoff forecast for this target hour.')
     latest=max(eligible,key=lambda r:(time.instant(r['valid_at_utc']),time.instant(r['cycle_at_utc'])))
-    valid=time.instant(latest['valid_at_utc']);cycle=time.instant(latest['cycle_at_utc'])
+    valid=time.instant(latest['valid_at_utc'])
     # Trends use only the SAME cycle and actual archived availability proofs.
     earlier=[r for r in accepted if r['cycle_at_utc']==latest['cycle_at_utc'] and
         timedelta(0)<valid-time.instant(r['valid_at_utc'])<=timedelta(hours=6)]
     old=min(earlier,key=lambda r:r['valid_at_utc']) if earlier else None
+    return latest, old
+
+
+def build(observations, snapshots, *, cutoff, target, lead_hours, aircraft=None):
+    contract(lead_hours)
+    cutoff, target = time.instant(cutoff), time.instant(target)
+    if target-cutoff != timedelta(hours=lead_hours):
+        raise ValueError('Prediction cutoff violates the horizon contract.')
+    history=observation_history(observations,cutoff)
+    current=history['observation'] or {}
+    latest,old=forecast_pair(snapshots,cutoff,target)
+    valid=time.instant(latest['valid_at_utc']);cycle=time.instant(latest['cycle_at_utc'])
     fc=latest['values'];previous=old['values'] if old else {}
     values={**{'obs_'+k:current.get(k) for k in OBS},**{'fcst_'+k:fc.get(k) for k in FCST}}
     for prefix in ('obs','fcst'):
