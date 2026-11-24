@@ -121,8 +121,6 @@ def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='dep
             after=evidence_values(parent)
             changed=any((previous or {}).get(f'pass{number}_{field}')!=after.get(f'pass{number}_{field}')
                         for field in ('surface_area','started_at_utc','ended_at_utc'))
-            if changed and not str(correction_reason or '').strip():
-                raise NeoSubZeroEvidenceError('Enter a correction reason before changing an ended pass. Original spray evidence must remain auditable.')
             if kind == 'pretreat' and not changed:
                 continue
         start=getattr(parent,f'pass{number}_started_at_utc')
@@ -265,8 +263,8 @@ def save_pretreat_participant(operation, mission, parent, values, settings, *, a
     reason = str(values.get('correction_reason') or '').strip()
     edits = {key: value for key, value in changes.items() if getattr(record, key, None) != value}
     correction = actual and any(getattr(record, key) is not None for key in edits)
-    if correction and not reason:
-        raise PretreatCorrectionRequired('Enter a reason for changing recorded actual participation.')
+    if correction and not reason and values.get('confirm_correction') != '1':
+        raise PretreatCorrectionRequired('Confirm the change to recorded actual participation.')
     if record is None:
         occupied = {item.position_number for item in existing}
         slot = next((index for index in range(1, 5) if index not in occupied), None)
@@ -343,7 +341,6 @@ def change_participation(operation, mission, parent, kind, action, values, setti
     if number not in range(1,len(pass_types(parent,kind))+1): raise NeoSubZeroEvidenceError('Choose an applicable pass.')
     complete=bool(getattr(parent,f'pass{number}_ended_at_utc'))
     reason=str(values.get('correction_reason') or '').strip()
-    if complete and not reason: raise NeoSubZeroEvidenceError('Enter a reason for this historical participation correction.')
     records=participation_query(parent,kind).filter_by(pass_number=number).with_for_update().all()
     materialized=False
     if not complete and not records and action in {'add_truck','remove_truck'}:

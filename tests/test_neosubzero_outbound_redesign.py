@@ -131,11 +131,10 @@ class OutboundRedesignTest(unittest.TestCase):
         fields=dict(treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:10',pass1_end='22:15')
         self.assertEqual(self.post('save_treatment',event,**fields).status_code,200)
         original=copy.deepcopy(event.pass_evidence)
-        self.assertEqual(self.f.post(target='spray-reason',expected_version=entity_version(event),reason_for_application='Frost').status_code,409)
-        result=self.f.post(target='spray-reason',expected_version=entity_version(event),reason_for_application='Frost',correction_reason='Verified reason correction')
+        result=self.f.post(target='spray-reason',expected_version=entity_version(event),reason_for_application='Frost')
         self.assertEqual(result.status_code,200,result.json)
         self.assertEqual(event.pass_evidence,original)
-        self.assertEqual(Audit.query.filter_by(action='application_reason').order_by(Audit.id.desc()).first().reason,'Verified reason correction')
+        self.assertIsNone(Audit.query.filter_by(action='application_reason').order_by(Audit.id.desc()).first().reason)
 
     def test_inline_radio_has_no_direct_confirmation_on_summary_or_without_script(self):
         from unittest.mock import patch

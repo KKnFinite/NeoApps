@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -61,14 +61,6 @@ def set_departure_deice_reason(event, reason, *, correction_reason=None):
         normalized = lookup[normalized.casefold()]
     if (event.reason_for_application or '') == normalized:
         return event
-    recorded = NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id).filter(or_(
-        NeoSubZeroSprayRecord.gallons.is_not(None), NeoSubZeroSprayRecord.official_at_utc.is_not(None),
-        NeoSubZeroSprayRecord.started_at_utc.is_not(None), NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).first()
-    if (recorded or event.status in {'finished','cleared'} or event.pass_evidence or any(
-            getattr(event, f'pass{number}_{milestone}_at_utc')
-            for number in (1,2) for milestone in ('started','ended'))):
-        if not str(correction_reason or '').strip():
-            raise NeoSubZeroSprayError('Enter a correction reason for recorded treatment evidence.')
     event.reason_for_application = normalized or None
     return event
 
@@ -179,8 +171,6 @@ def set_neosubzero_spray_gallons(operation, mission, event, pass_number, positio
     amount = spray_gallons_amount(gallons, recorded=record.gallons)
     if amount is None or (record.pretreat_state_id and amount == record.gallons):
         return record
-    if record.pretreat_state_id and record.gallons is not None and not str(correction_reason or '').strip():
-        raise NeoSubZeroSprayError('Enter a correction reason to change recorded gallons.')
     before=evidence_values(record)
     record.gallons=amount;record.recorded_by_user_id=user_id
     if record.departure_deice_event_id:

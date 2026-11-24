@@ -126,8 +126,6 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
             raise NeoSubZeroPretreatError("Notes must be 2,000 characters or fewer.")
         state.notes = notes or None
     elif action == "save_treatment":
-        if (before or {}).get('pass2_ended_at_utc') and not str(values.get('correction_reason') or '').strip():
-            raise NeoSubZeroPretreatError('Enter a reason for correcting completed Pretreat evidence.')
         if not (before or {}).get('pass1_started_at_utc') or not state.reason_for_application:
             state.reason_for_application = DEFAULT_PRETREAT_REASON
         for number, plan in enumerate(PRETREAT_PLANS, 1):

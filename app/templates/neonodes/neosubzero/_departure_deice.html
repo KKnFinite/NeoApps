@@ -50,7 +50,6 @@
                 {% for value,label in reason_options %}<option value="{{ value }}"{% if row.reason_for_application == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
         </label>
-        {% if reason_correction %}<label>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
         <button type="submit"{% if mode|default('') == 'outbound' and not reason_correction %} hidden{% endif %}>{{ 'CORRECT REASON' if reason_correction else 'SAVE REASON' }}</button>
     </form>
     {% else %}
@@ -118,7 +117,7 @@
             <button name="action" value="radio_complete" {% if not row.script %}disabled{% endif %}>RADIO COMPLETE</button>
             <small>Confirm only after actually reading the script to the pilot.</small>
         </form>
-        <details class="subzero-undo-clear"><summary>UNDO CLEAR</summary><form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-operational-form data-subzero-confirm="Undo this CLEAR? Spray evidence and pad occupancy will be preserved.">{{ mutation_identity(row, board, selected_ramp) }}<label>Correction reason<input name="correction_reason" maxlength="500" required></label><button name="action" value="undo_clear">UNDO CLEAR</button></form></details>
+        <details class="subzero-undo-clear"><summary>UNDO CLEAR</summary><form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-operational-form data-subzero-confirm="Undo this CLEAR? Spray evidence and pad occupancy will be preserved.">{{ mutation_identity(row, board, selected_ramp) }}<button name="action" value="undo_clear">UNDO CLEAR</button></form></details>
         {% endif %}
     </section>
     {% elif row.radio_complete %}<p>RADIO COMPLETE · {{ row.event.radio_completed_at_utc.isoformat() }} UTC · Coordinator #{{ row.event.radio_completed_by_user_id }}</p>{% endif %}
@@ -228,7 +227,7 @@
 {% endmacro %}
 
 {% macro correction_inputs(pass_row) %}
-{% if pass_row.end %}<label>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
+{% if pass_row.end %}<label>Correction note (optional)<input name="correction_reason" maxlength="500"></label>{% endif %}
 {% endmacro %}
 
 {% macro crew_inputs(position=none, confirmed=false) %}
@@ -318,7 +317,7 @@
 {% macro treatment_form(row, can_edit, board, selected_ramp='', compact=false, correction=false, dispatch_row=false) %}
 {% set locked = not can_edit or row.event.status == 'cleared' or correction %}
 {% set default_surface = 'wings_tail' if dispatch_row and not locked else '' %}
-<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" class="neosubzero-deice-form{{ ' ops-outbound-pass-form' if dispatch_row else '' }}" data-subzero-deice-form data-locked="{{ 'true' if locked else 'false' }}"{% if dispatch_row and can_edit and not locked %} data-ops-outbound-autosave{% endif %}>
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" class="neosubzero-deice-form{{ ' ops-outbound-pass-form' if dispatch_row else '' }}" data-subzero-deice-form{% if correction %} data-ops-treatment-correction{% endif %} data-locked="{{ 'true' if locked else 'false' }}"{% if dispatch_row and can_edit and not locked %} data-ops-outbound-autosave{% endif %}>
     {{ mutation_identity(row, board, selected_ramp) }}
     <input type="hidden" name="action" value="save_treatment">
     <label class="{{ 'ops-outbound-plan' if dispatch_row else '' }}">Treatment Plan
@@ -335,7 +334,6 @@
         <legend data-subzero-pass2-type>PASS 2 · {{ row.pass_types[1] if row.pass_types|length > 1 else 'TYPE I' }}</legend>
         {{ pass_controls(row, 2, locked, default_surface) }}
     </fieldset>
-    {% if can_edit and row.event.status in ('finished','cleared') %}<label{% if correction %} data-ops-correction-field hidden{% endif %}>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
     {% if can_edit %}
         <button type="button" data-subzero-edit {% if not locked %}hidden{% endif %}>{{ 'CORRECT RECORDED TREATMENT' if correction else 'EDIT' }}</button>
         <button type="submit" {% if locked or dispatch_row %}hidden{% endif %}>{{ 'SAVE' if compact else 'SAVE TREATMENT' }}</button>

@@ -49,8 +49,7 @@
         </div>
         {% if editable %}
         <div class="ops-pretreat-participant-correction" data-ops-participant-correction hidden>
-            <input name="correction_reason" aria-label="Correction reason" placeholder="Correction reason" maxlength="500" disabled>
-            <button type="submit" data-ops-save-participant-correction>Apply</button>
+            <button type="submit" name="confirm_correction" value="1" data-ops-save-participant-correction>Apply</button>
         </div>
         {% endif %}
     </form>
@@ -99,7 +98,6 @@
             <details class="ops-pretreat-correction" data-ops-disclosure="correction">
                 <summary>Correct recorded treatment</summary>
                 {% if row.completed %}<button type="button" data-subzero-edit>UNLOCK CORRECTION</button>{% endif %}
-                <label>Correction reason<input name="correction_reason" maxlength="500"></label>
                 <button type="submit" data-ops-apply-correction {% if row.completed %}hidden{% endif %}>APPLY CORRECTION</button>
             </details>
             {% endif %}

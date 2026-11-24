@@ -644,11 +644,11 @@ class OperationsBrowserTest(unittest.TestCase):
                 save(lambda: iv_second.get_by_label('Flyer').select_option(str(self.people[2])))
 
                 save(edit(first.get_by_label('Gallons'), '9.50'), status=409)
-                expect(first.get_by_label('Correction reason')).to_be_visible()
-                first.get_by_label('Correction reason').fill('Read calibrated meter')
+                expect(first.get_by_role('button', name='Apply')).to_be_visible()
+                expect(first.get_by_label('Correction reason')).to_have_count(0)
                 save(first.get_by_role('button', name='Apply').click)
                 expect(first.get_by_label('Gallons')).to_have_value('9.5')
-                expect(first.get_by_label('Correction reason')).to_be_hidden()
+                expect(first.get_by_role('button', name='Apply')).to_be_hidden()
 
                 notes_summary = inline.get_by_label('Notes for N777UP')
                 notes_summary.click()
@@ -674,7 +674,7 @@ class OperationsBrowserTest(unittest.TestCase):
                         spray_record_id=record.id, action='pretreat_participation_correction'
                     ).filter(NeoSubZeroAuditEntry.id > audit_id_before).one()
                     self.assertEqual((audit.reason, audit.before_values['gallons'], audit.after_values['gallons']),
-                                     ('Read calibrated meter', '8.25', '9.50'))
+                                     (None, '8.25', '9.50'))
                     from app.services.neosubzero_reporting import actual_passes
                     report = actual_passes(state.operation, activity='pretreat', tail='N777UP')
                     self.assertEqual([[truck.truck_number_snapshot for truck in item['records']] for item in report], [['12'], ['UCC-831']])

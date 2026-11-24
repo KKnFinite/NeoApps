@@ -349,11 +349,10 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
     ).filter(or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),
                  NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).first())
     if action == 'reset':
-        reason = str(values.get('correction_reason') or '').strip()
         if not event or event.sort_date_mission_id != mission.id:
             raise NeoSubZeroDepartureDeiceError('This aircraft has no matching departure event to reset.')
-        if not actor_id or values.get('confirm_reset') != '1' or not reason or len(reason) > 500:
-            raise NeoSubZeroDepartureDeiceError('Confirm RESET and enter a correction reason of 1–500 characters.')
+        if not actor_id or values.get('confirm_reset') != '1':
+            raise NeoSubZeroDepartureDeiceError('Confirm RESET before superseding this event.')
         # Keep original times, participation, queue position and readback for audit.
         event.reset_at_utc = datetime.utcnow()
     elif action in {"initial_contact", "move_to_planned"}:
@@ -377,8 +376,8 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
         event.configured_at_utc = None
         event.status = "not_sprayed"
     elif action == 'undo_clear':
-        if not actor_id or not str(values.get('correction_reason') or '').strip():
-            raise NeoSubZeroDepartureDeiceError('Enter a correction reason for UNDO CLEAR.')
+        if not actor_id:
+            raise NeoSubZeroDepartureDeiceError('An identified operator is required for UNDO CLEAR.')
         if not radio_pending(event) or event.radio_completed_at_utc or event.radio_completed_by_user_id:
             raise NeoSubZeroDepartureDeiceError('UNDO CLEAR is available only before RADIO COMPLETE. A completed readback requires a separate controlled correction.')
         final_pass = len(PLAN_PASS_TYPES.get(event.treatment_plan, ()))
@@ -450,13 +449,14 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
             for number in (1,2):
                 if getattr(event,f'pass{number}_started_at_utc') and (len(proposed_types)<number or len(previous_types)<number or proposed_types[number-1]!=previous_types[number-1]):
                     raise NeoSubZeroDepartureDeiceError('An actual pass fluid type cannot be changed by editing the treatment plan. Preserve its reporting evidence.')
-            if previous_status in {'finished','cleared'} and not str(values.get('correction_reason') or '').strip():
-                raise NeoSubZeroDepartureDeiceError('Enter a correction reason for completed treatment changes.')
             if event.pass2_started_at_utc and values.get('treatment_plan') == 'one_type_i':
                 raise NeoSubZeroDepartureDeiceError('Recorded Pass 2 evidence cannot be removed.')
             if values.get('pass1_start') and not event.pass1_started_at_utc:
                 _validate_throat_start(operation, mission)
             _save_treatment(operation, mission, event, values)
+            for milestone in ('pass1_started_at_utc', 'pass1_ended_at_utc', 'pass2_started_at_utc', 'pass2_ended_at_utc'):
+                if before.get(milestone) and getattr(event, milestone) is None:
+                    raise NeoSubZeroDepartureDeiceError('Correct the recorded time or use RESET to supersede the treatment.')
             if previous_status in {'finished','cleared'}:
                 if event.status != 'finished': raise NeoSubZeroDepartureDeiceError('Completed pass evidence cannot be erased.')
                 event.status=previous_status

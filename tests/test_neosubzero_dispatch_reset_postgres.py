@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from app.extensions import db
-from app.models import Gateway, SortDateOperation, SortDateMission, NeoSubZeroAuditEntry as Audit, NeoSubZeroDepartureDeiceEvent as Event, NeoSubZeroSprayRecord as Spray
+from app.models import Gateway, SortDateOperation, SortDateMission, SortDateParkingAssignment, NeoSubZeroAuditEntry as Audit, NeoSubZeroDepartureDeiceEvent as Event, NeoSubZeroSprayRecord as Spray
 from app.services.neosubzero_evidence import evidence_values
 from app.services.neosubzero_operations import operations_context
 from app.services.neosubzero_reporting import actual_passes
@@ -43,7 +43,7 @@ class DispatchResetTest(unittest.TestCase):
             self.case.mutate(self.flight, 'radio_complete')
         before = evidence_values(event)
         children = [evidence_values(r) for r in Spray.query.filter_by(departure_deice_event_id=event.id).order_by(Spray.id)]
-        response = self.case.post(event, 'reset', confirm_reset='1', correction_reason='Training entry')
+        response = self.case.post(event, 'reset', confirm_reset='1')
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True)[:400])
         db.session.expire_all()
         self.assertIsNotNone(event.reset_at_utc)
@@ -52,7 +52,7 @@ class DispatchResetTest(unittest.TestCase):
                 self.assertEqual(evidence_values(event)[key], value, key)
         self.assertEqual(children, [evidence_values(r) for r in Spray.query.filter_by(departure_deice_event_id=event.id).order_by(Spray.id)])
         audit = Audit.query.filter_by(event_id=event.id, action='departure_reset').one()
-        self.assertEqual((audit.reason, audit.actor_user_id), ('Training entry', self.case.actor.id))
+        self.assertEqual((audit.reason, audit.actor_user_id), (None, self.case.actor.id))
         self.assertFalse(any(row['parent'].id == event.id for row in actual_passes(self.operation, activity='departure')))
         self.assertIsNone(self.row()['event'])
         self.assertFalse(self.row()['terminal'])
@@ -61,6 +61,35 @@ class DispatchResetTest(unittest.TestCase):
 
     def test_planned(self):
         self.check_stage('planned')
+
+    def test_two_ramps_pending_then_radio_confirmed(self):
+        case = self.case
+        other = case.f._departure('UPS-R3', 'N-R3', 'SDF', 1)
+        db.session.add(SortDateParkingAssignment(sort_date_operation_id=self.operation.id,
+            tail_number=other.assigned_tail_number, ramp_code='B', position_code='B02'))
+        case.mutate(other, 'initial_contact')
+        values = dict(treatment_plan='one_type_i', pass1_surface_area='wings_only', pass1_start='22:10', pass1_end='22:15')
+        case.mutate(other, 'save_treatment', **values)
+        case.mutate(other, 'clear')
+        event = case.finish()
+        case.mutate(self.flight, 'clear')
+
+        def order():
+            return [(r['mission_id'], r['visual_state']) for r in operations_context(case.f.gateway, self.operation, 'outbound')['rows']]
+
+        pending = order()[:2]
+        self.assertCountEqual(pending, [(other.id, 'radio-pending'), (self.flight.id, 'radio-pending')])
+        case.mutate(self.flight, 'save_treatment', **{**values, 'pass1_end': '22:16'})
+        self.assertEqual(order()[:2], pending)
+        audit = Audit.query.filter_by(event_id=event.id, action='departure_save_treatment').order_by(Audit.id.desc()).first()
+        self.assertIsNone(audit.reason)
+        self.assertNotEqual(audit.before_values['pass1_ended_at_utc'], audit.after_values['pass1_ended_at_utc'])
+        self.assertEqual((audit.actor_user_id, audit.mission_id, audit.tail_number), (case.actor.id, self.flight.id, self.flight.assigned_tail_number))
+        self.assertIsNotNone(audit.recorded_at_utc)
+        case.mutate(self.flight, 'radio_complete')
+        self.assertEqual(order()[0], (other.id, 'radio-pending'))
+        states = [state for _, state in order()]
+        self.assertTrue(all(state == 'gone' for state in states[states.index('gone'):]))
 
     def test_configured(self):
         self.check_stage('configured')
@@ -144,7 +173,7 @@ class DispatchResetTest(unittest.TestCase):
 
     def test_confirmation_reason_identity_and_competing_corrections(self):
         event = Event.query.filter_by(sort_date_mission_id=self.flight.id).one()
-        for values in ({}, {'confirm_reset':'1'}, {'correction_reason':'test'}, {'confirm_reset':'1','correction_reason':'test','event_id':''}):
+        for values in ({}, {'correction_reason':'test'}, {'confirm_reset':'1','correction_reason':'test','event_id':''}):
             self.assertEqual(self.case.post(event, 'reset', **values).status_code, 409)
         request = self.case.data(event, self.flight, 'reset', confirm_reset='1', correction_reason='Test correction')
         block = self.flight.actual_block_out_datetime_utc
