@@ -57,7 +57,7 @@ def resume_same_visit(gateway,user,operation,asset,assignment,mission,work,expec
     if now < work.off_at_utc:
         raise ValueError("Resume time cannot precede recorded physical OFF.")
     fuel._validate_nightly_truck_assignment(gateway,operation,assignment.assigned_truck_id)
-    fuel._lock_physical_truck_start(assignment.assigned_truck_id,work.id)
+    fuel._lock_physical_truck_start(operation.id, assignment.assigned_truck_id, work.id)
     assignments=fuel._assignments_by_mission(operation)
     works=fuel._fuel_work_states_by_assignment_tail(assignments.values())
     selections={s.fuel_truck_id:s for s in NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()}

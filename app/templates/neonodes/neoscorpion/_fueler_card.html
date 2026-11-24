@@ -89,9 +89,10 @@
                 <div class="neoscorpion-truck-on-row">
                     {% if row.manual_on_confirmed and not row.is_off %}
                     <strong>TRUCK ON · CONFIRMED{% if dispatcher_panel|default(false) %} {{ row.on_time }}{% endif %}</strong>
-                    {% elif row.assigned_truck and not row.is_source_segment and not dispatcher_panel|default(false) and can_edit and not row.is_off and not row.fueler_work_blocked %}
-                    <form method="post" action="{{ url_for('neoscorpion.fueler_assignment_on', assignment_id=row.assignment.id) }}" data-truck-on-form>
+                    {% elif row.assigned_truck and not row.is_source_segment and not direct_entry and can_edit and not row.is_off and not row.fueler_work_blocked %}
+                    <form method="post" action="{{ url_for('neoscorpion.dispatch_fueler_on' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_on', assignment_id=row.assignment.id) }}" data-truck-on-form>
                         {{ csrf_field() }}
+                        {% if dispatcher_panel|default(false) %}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'>{% endif %}
                         <input type="hidden" name="expected_cycle" value="{{ row.assignment.current_cycle_number }}">
                         <input type="hidden" name="expected_tail" value="{{ row.tail_number }}">
                         <input type="hidden" name="expected_truck_id" value="{{ row.assigned_truck.id }}">

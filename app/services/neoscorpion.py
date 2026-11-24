@@ -2964,8 +2964,8 @@ def mark_ready_for_fuel(gateway, user, assignment_id, *, now_utc=None):
 
 def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
                             expected_tail, expected_truck_id, now_utc=None, expected_work_ref=None,
-                            require_work_ref=False, resume_off_at=None):
-    """Record a Fueler's physical arrival once for this cycle and truck segment."""
+                            require_work_ref=False, resume_off_at=None, dispatcher=False, expected=None):
+    """Record physical arrival once, attributed to the operator who confirmed it."""
     operation = current_sort_operation(gateway)
     if operation is None:
         raise ValueError("No current sort operation is available for TRUCK ON.")
@@ -2974,7 +2974,15 @@ def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
     assignment, mission = _locked_current_fuel_assignment(
         operation, assignment_id, action_label="TRUCK ON",
     )
-    if assignment.assigned_fueler_user_id != user.id:
+    if dispatcher:
+        if expected is None or resume_off_at is not None:
+            raise ValueError("Reload Dispatcher Fueler Data before confirming TRUCK ON.")
+        _check_fueler_expected(expected, {
+            "operation_id": operation.id, "mission_id": mission.id,
+            "cycle": int(assignment.current_cycle_number or 1), "tail": _normalize_tail(mission.assigned_tail_number),
+            "assigned_fueler_user_id": assignment.assigned_fueler_user_id, "assigned_truck_id": assignment.assigned_truck_id,
+        }, {})
+    elif assignment.assigned_fueler_user_id != user.id:
         raise ValueError("This fuel assignment belongs to another Fueler.")
     if expected_cycle is None or expected_tail is None or expected_truck_id is None:
         raise ValueError("Refresh before confirming TRUCK ON.")
@@ -3021,7 +3029,9 @@ def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
     gate = truck_start_gate(record, records, releases, settings, at=now_utc)
     # A deliberate physical arrival can override an estimate, not a confirmed
     # resource conflict or an unavailable truck.
-    if gate["reason"] in {"TRUCK STILL FUELING", "TRUCK UNAVAILABLE", "DEFUEL RECOVERY REVIEW", "Needs Fueler", "Needs Truck"}:
+    if gate["reason"] == "TRUCK STILL FUELING":
+        raise ValueError("TRUCK STILL FUELING in this Sort; record TRUCK OFF on the other aircraft first.")
+    if gate["reason"] in {"TRUCK UNAVAILABLE", "DEFUEL RECOVERY REVIEW", "Needs Fueler", "Needs Truck"}:
         raise ValueError(gate["reason"])
     if work is None:
         work = new_work(assignment, _normalize_tail(mission.assigned_tail_number), user, now_utc)
@@ -3035,7 +3045,7 @@ def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
     db.session.flush()
     _new_fuel_audit(operation, assignment, user, "truck_on", "manual_on_at_utc",
                     None, now_utc.isoformat(),
-                    f"Fueler confirmed truck {assignment.assigned_truck_id} physically ON for cycle {cycle}.",
+                    f"{'Dispatcher' if dispatcher else 'Fueler'} confirmed truck {assignment.assigned_truck_id} physically ON for cycle {cycle}.",
                     fuel_work_state=work, now_utc=now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
@@ -3376,7 +3386,7 @@ def _snapshot_physical_start(gateway, assignment, mission, work, now, *, source,
     _bind_physical_segment(assignment, mission, work)
     db.session.flush()
     if assignment.assigned_truck_id is not None:
-        _lock_physical_truck_start(assignment.assigned_truck_id,work.id)
+        _lock_physical_truck_start(assignment.sort_date_operation_id, assignment.assigned_truck_id, work.id)
     from app.services.neoscorpion_inventory import on_physical_start
     on_physical_start(db.session.get(SortDateOperation, assignment.sort_date_operation_id), work)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
@@ -3413,13 +3423,14 @@ def _snapshot_physical_start(gateway, assignment, mission, work, now, *, source,
     record(work, assignment.assigned_fueler_user_id, truck_id=assignment.assigned_truck_id)
 
 
-def _lock_physical_truck_start(truck_id,work_id):
-    # Sort locks serialize the usual current-sort path. The persistent truck
-    # row also serializes starts across overlapping sort operations. Read
-    # other occupations under that lock; do not lock unrelated work rows.
+def _lock_physical_truck_start(operation_id, truck_id, work_id):
+    # Serialize starts on the fleet truck. Occupancy belongs to its Sort.
     NeoScorpionFuelTruck.query.filter_by(id=truck_id).with_for_update().populate_existing().one()
     db.session.flush()
-    conflict=NeoScorpionFuelWorkState.query.filter(
+    conflict=NeoScorpionFuelWorkState.query.join(
+        NeoScorpionFuelAssignment, NeoScorpionFuelAssignment.id == NeoScorpionFuelWorkState.fuel_assignment_id,
+    ).filter(
+        NeoScorpionFuelAssignment.sort_date_operation_id == operation_id,
         NeoScorpionFuelWorkState.id != work_id,
         NeoScorpionFuelWorkState.physical_truck_id==truck_id,
         NeoScorpionFuelWorkState.off_at_utc.is_(None),
@@ -3430,7 +3441,7 @@ def _lock_physical_truck_start(truck_id,work_id):
             NeoScorpionFuelWorkState.confirmed_on_at_utc.is_not(None),
         )).first()
     if conflict:
-        raise ValueError("TRUCK STILL FUELING on another physical segment; record its TRUCK OFF first.")
+        raise ValueError("TRUCK STILL FUELING on another physical segment in this Sort; record its TRUCK OFF first.")
 
 
 def _capture_physical_forecast(gateway, assignment, mission, work, now):
