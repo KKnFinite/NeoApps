@@ -237,7 +237,7 @@ def read_google_motherbrain_envelope(config=None, client_factory=None, now=None)
     }
 
 
-def read_google_motherbrain_live_rows(config=None, client_factory=None):
+def read_google_motherbrain_live_rows(config=None, client_factory=None, *, expected_sort_date=None):
     """Read only the live mission ranges required by the server poll executor."""
     config = config or current_app.config
     credentials, spreadsheet_id = _configured_reader_inputs(config)
@@ -278,6 +278,10 @@ def read_google_motherbrain_live_rows(config=None, client_factory=None):
         )
     date_cells, identities, statuses = range_values[-3:]
     sort_date = _live_source_date(_padded_rows(date_cells, 1, 1)[0][0])
+    if expected_sort_date is not None and sort_date != expected_sort_date:
+        raise GoogleMotherBrainReaderError(
+            "invalid_date", "The Google workbook date does not match the selected operational Sort.",
+        )
     live_rows["inbound_source_sort_date"] = sort_date
     live_rows["inbound_source_cancellations"] = _live_inbound_source_cancellations(
         sort_date, identities, statuses, live_rows["inbound_rows"],

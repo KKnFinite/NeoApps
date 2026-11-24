@@ -190,6 +190,7 @@ class GoogleParkingPostgresTest(idempotency.GoogleParkingIdempotencyTest):
 
 @unittest.skipUnless(URI, 'Requires disposable loopback PostgreSQL')
 class GoogleParkingPollPostgresTest(unittest.TestCase):
+    test_official_ranges_from_wrong_workbook_date_do_not_update_either_direction = polls.GoogleMotherBrainLivePollExecutionTest.test_official_ranges_from_wrong_workbook_date_do_not_update_either_direction
     NOW = polls.GoogleMotherBrainLivePollExecutionTest.NOW
     _enable = polls.GoogleMotherBrainLivePollExecutionTest._enable
     _ensure_operation = polls.GoogleMotherBrainLivePollExecutionTest._ensure_operation

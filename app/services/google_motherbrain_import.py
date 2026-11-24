@@ -34,6 +34,7 @@ GOOGLE_MOTHERBRAIN_SCHEMA_VERSION = 1
 GOOGLE_MOTHERBRAIN_GATEWAY_CODE = "RFD"
 GOOGLE_MOTHERBRAIN_SORT_NAME = "night"
 GOOGLE_MOTHERBRAIN_TIMEZONE = "America/Chicago"
+GOOGLE_CANCELLATION_MARKERS = frozenset({"CANX", "CNL", "CANCELLED", "CANCELED"})
 
 ARRIVAL_STATUS_ALIASES = {
     "SCH": "scheduled",
@@ -703,6 +704,10 @@ def _preview_tail_swaps(rows, departure_missions):
             "proposed_new_tail": new_tail,
             "scorpion_unlock": raw_acknowledgment,
         }
+        if new_tail in GOOGLE_CANCELLATION_MARKERS:
+            invalid.append({**base, "proposed_new_tail": None, "source_marker": new_tail,
+                            "error": "A cancellation marker is not a proposed aircraft tail."})
+            continue
         if sheet_row is None or not flight_key or not new_tail:
             invalid.append(
                 {

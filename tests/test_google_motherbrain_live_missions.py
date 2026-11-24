@@ -1248,6 +1248,25 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertEqual(db.session.get(SortDateMission, mission_id).assigned_tail_number, "N967UP")
         self.assertIsNone(link.pending_tail_number)
 
+    def test_cancellation_marker_in_swap_column_is_not_an_aircraft(self):
+        self._apply_departures(self._outbound(4, "755", "N457UP", proposed_tail="N967UP"))
+        db.session.commit()
+        link = SortDateGoogleMissionLink.query.one()
+        mission_id = link.sort_date_mission_id
+        for marker in ("CANX", "CNL", "CANCELLED", "CANCELED"):
+            with self.subTest(marker=marker):
+                result = self._apply_departures(self._outbound(
+                    4, "755", "N457UP", proposed_tail=marker, acknowledgment="ACK"))
+                db.session.commit()
+                self.assertEqual(result["applied_count"], 1)
+                self.assertIsNone(link.pending_tail_number)
+                self.assertIsNone(link.pending_swap_acknowledgment)
+                mission = db.session.get(SortDateMission, mission_id)
+                self.assertEqual((mission.assigned_tail_number, mission.departure_status), ("N457UP", "scheduled"))
+                invalid = self._apply_departures(self._outbound(4, "755", marker, proposed_tail=marker))
+                self.assertEqual(invalid["skipped_count"], 1)
+                self.assertEqual(mission.assigned_tail_number, "N457UP")
+
     def test_outbound_canx_is_explicitly_unsupported(self):
         result = self._apply_departures(
             self._outbound(4, "755", "N457UP", destination="CANX")
@@ -1279,22 +1298,25 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
             SortDateParkingAssignment(
                 sort_date_operation_id=self.operation.id,
                 tail_number="N457UP",
-                ramp_code="E",
-                position_code="E03",
+                ramp_code="A",
+                position_code="A02",
                 lane_number=1,
             )
         )
         db.session.commit()
 
         result = self._apply_departures(
-            self._outbound(4, "755", "N967UP", parking="E4")
+            self._outbound(4, "755", "N967UP", parking="A1")
         )
         db.session.commit()
 
         self.assertEqual(result["results"][0]["status"], "applied")
         self.assertEqual(result["results"][0]["parking"]["status"], "applied")
         self.assertEqual(SortDateMission.query.filter_by(flight_number="UPS0755").count(), 1)
-        self.assertEqual(MotherBrainAlert.query.filter_by(active=True).count(), 1)
+        self.assertEqual(MotherBrainAlert.query.filter_by(
+            sort_date_operation_id=self.operation.id, active=True,
+            message="A02 is blocked by 767 parked at A01.",
+        ).count(), 1)
 
     def test_secondary_parking_reuses_native_b_slot_behavior(self):
         self._mission("departure", "UPS0700", tail="N457UP", destination="SDF")

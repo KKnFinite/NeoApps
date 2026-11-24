@@ -397,6 +397,17 @@ class GoogleMotherBrainImportTest(unittest.TestCase):
         self.assertFalse(swaps[0]["would_finalize"])
         self.assertFalse(swaps[1]["would_finalize"])
 
+    def test_acknowledged_cancellation_marker_is_not_a_proposed_tail(self):
+        self._mission("departure", "UPS7831", "N303UP")
+        db.session.commit()
+        self.payload["snapshot"]["outbound"]["tail_swaps"] = [
+            self._tail_swap(4, "UPS7831", "CANX", "ACK"),
+        ]
+        swaps = self._post().get_json()["sections"]["tail_swaps"]
+        self.assertEqual(swaps["items"], [])
+        self.assertEqual(swaps["summary"]["invalid"], 1)
+        self.assertIn("cancellation marker", swaps["invalid_rows"][0]["error"].lower())
+
     def test_successful_preview_leaves_operational_database_unchanged(self):
         mission = self._mission("arrival", "UPS1487", "N152UP")
         tail_state = SortDateTailState(
