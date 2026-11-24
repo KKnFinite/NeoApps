@@ -29,6 +29,10 @@ def set_default_planned_fph(gateway, raw):
 
 
 def dashboard_context(operation, *, current=False):
+    return report_projections(operation, current=current)[0]
+
+
+def report_projections(operation, *, current=False):
     missions = _mission_rows(operation)
     report = report_context(operation, current=current, missions=missions)
     briefing = briefing_context(operation, current=current, missions=missions)
@@ -64,7 +68,7 @@ def dashboard_context(operation, *, current=False):
     ) if shared[key]['value'] is not None]
     report['notes'] = [inputs['note_1']['value']] if inputs['note_1']['value'] else []
     report['notes'] += [report['fields'][f'note_{n}']['value'] for n in range(2, 6) if report['fields'][f'note_{n}']['value']]
-    return report
+    return report, briefing
 
 
 def save_dashboard_inputs(operation, values, versions, user_id):

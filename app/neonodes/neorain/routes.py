@@ -91,7 +91,7 @@ from app.services.neorain_fuel_authority import (
     rain_fuel_data_source,
 )
 from app.services.neorain_reports import (
-    REPORT_FIELDS, report_context, save_report_entry,
+    save_report_entry,
 )
 
 
@@ -104,8 +104,7 @@ class _LoadPlannerStaleError(ValueError):
 NEORAIN_PAGES = (
     ("Inbound", "neorain.inbound", "neorain.inbound.view", "neorain.inbound.edit"),
     ("Outbound", "neorain.outbound", "neorain.outbound.view", "neorain.outbound.edit"),
-    ("Rainrock", "neorain.rainrock", "neorain.rainrock.view", "neorain.rainrock.edit"),
-    ("Daily Briefing", "neorain.daily_briefing", "neorain.daily_briefing.view", None),
+    ("Reports", "neorain.reports", None, None),
     (
         "Load Planner Lineup",
         "neorain.load_planner_lineup",
@@ -198,25 +197,151 @@ def _report_choices(gateway):
             .limit(60).all())
 
 
+REPORT_VIEWS = {
+    "rainrock": ("Rainrock", "neorain.rainrock.view"),
+    "daily-briefing": ("Daily Briefing", "neorain.daily_briefing.view"),
+}
+
+
+def report_tabs(user=None):
+    return {tab: label for tab, (label, permission) in REPORT_VIEWS.items()
+            if user_can(permission, user=user)}
+
+
+def _workspace_report_specs(tabs):
+    from app.services.neorain_daily_briefing import INPUTS as briefing_inputs
+    from app.services.neorain_rainrock import INPUTS as rainrock_inputs
+
+    specs = {}
+    if "daily-briefing" in tabs:
+        specs.update(briefing_inputs)
+    if "rainrock" in tabs:
+        specs.update(rainrock_inputs)
+        specs["note_1"] = ("Rainrock Additional Notes", "note")
+    return specs
+
+
+def _workspace_report_content(operation, current, tabs):
+    from app.services.neorain_daily_briefing import briefing_context, briefing_payload
+    from app.services.neorain_rainrock import report_projections
+
+    is_current = current is not None and current.id == operation.id
+    rainrock_report = None
+    if "rainrock" in tabs:
+        rainrock_report, briefing = report_projections(operation, current=is_current)
+    else:
+        briefing = briefing_context(operation, current=is_current)
+
+    fields = {}
+    if "rainrock" in tabs:
+        fields.update(rainrock_report["inputs"])
+    if "daily-briefing" in tabs:
+        fields.update({
+            key: {**field, "input_value": field["manual_value"]}
+            for key, field in briefing["fields"].items()
+        })
+    return rainrock_report, briefing_payload(briefing) if "daily-briefing" in tabs else None, fields
+
+
+def _render_reports(legacy_tab=None):
+    from app.services.neorain_daily_briefing import VOLUME_INPUTS, STAFFING_GROUPS
+
+    tabs = report_tabs()
+    if not tabs or (legacy_tab and legacy_tab not in tabs):
+        abort(403)
+    explicit_tab = legacy_tab or request.args.get("tab")
+    gateway = get_current_gateway()
+    operation, current = _selected_report_operation(gateway)
+    session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.reports"
+    rainrock_report, briefing, fields = (
+        _workspace_report_content(operation, current, tabs) if operation else (None, None, {})
+    )
+    groups = (
+        ("Volume", tuple(key for key, *_ in VOLUME_INPUTS)),
+        *((label, tuple(key for key, *_ in group)) for label, group in STAFFING_GROUPS),
+        ("Operations", ("briefing_safety", "briefing_incident", "briefing_inbound_missorts", "briefing_libs")),
+        ("Notes", ("briefing_service", "briefing_operational_notes", "note_1")),
+    )
+    refresh_intervals = [current_app.config.get(setting, 60000) for tab, setting in (
+        ("rainrock", "RAINROCK_REFRESH_INTERVAL_MS"), ("daily-briefing", "NEORAIN_BRIEFING_REFRESH_MS"),
+    ) if tab in tabs]
+    return render_template(
+        "neonodes/neorain/reports.html", gateway=gateway, operation=operation,
+        operations=_report_choices(gateway), tabs=tabs,
+        selected_tab=explicit_tab if explicit_tab in tabs else next(iter(tabs)),
+        explicit_tab=explicit_tab in tabs, rainrock_report=rainrock_report, briefing=briefing, fields=fields,
+        input_specs=_workspace_report_specs(tabs), groups=groups, can_edit=user_can("neorain.rainrock.edit"),
+        is_current=bool(operation and current and current.id == operation.id),
+        refresh_status=_report_refresh_status(gateway, operation, current),
+        refresh_interval_ms=min((interval for interval in refresh_intervals if interval > 0), default=0),
+    )
+
+
+@bp.route("/reports")
+@gateway_node_required("rain")
+def reports():
+    return _render_reports()
+
+
 @bp.route("/rainrock")
 @gateway_node_required("rain")
 def rainrock():
-    from app.services.neorain_rainrock import dashboard_context, INPUT_GROUPS
-    access = permission_access("neorain.rainrock.view", "neorain.rainrock.edit")
-    if not access["can_view"]:
+    return _render_reports("rainrock")
+
+
+def _reports_payload(operation, current, tabs):
+    report, briefing, fields = _workspace_report_content(operation, current, tabs)
+    return dict(operation_id=operation.id, can_edit=user_can("neorain.rainrock.edit"), fields=fields,
+                rainrock_html=render_template("neonodes/neorain/_rainrock_report.html",
+                                              report=report, operation=operation) if report else None,
+                briefing=briefing["briefing"] if briefing else None,
+                briefing_detailed=briefing["briefing_detailed"] if briefing else None)
+
+
+@bp.route("/reports/state")
+@gateway_node_required("rain")
+def reports_state():
+    tabs = report_tabs()
+    if not tabs:
         abort(403)
     gateway = get_current_gateway()
     operation, current = _selected_report_operation(gateway)
-    session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.rainrock"
-    is_current = bool(current and operation and current.id == operation.id)
-    return render_template(
-        "neonodes/neorain/rainrock.html", gateway=gateway, operation=operation,
-        operations=_report_choices(gateway), can_edit=access["can_edit"],
-        report=dashboard_context(operation, current=is_current) if operation else None,
-        is_current=is_current,
-        refresh_status=_report_refresh_status(gateway, operation, current),
-        report_fields=REPORT_FIELDS, input_groups=INPUT_GROUPS,
-    )
+    if not operation:
+        abort(404)
+    refresh = _report_refresh_status(gateway, operation, current)
+    if _automatic_refresh_denied(refresh, operation):
+        return _refresh_stopped(refresh)
+    response = jsonify(ok=True, refresh=refresh, **_reports_payload(operation, current, tabs))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.route("/reports/inputs", methods=["POST"])
+@gateway_node_required("rain")
+def reports_inputs():
+    from app.services.neorain_daily_briefing import BriefingConflict, save_inputs
+
+    tabs = report_tabs()
+    if not tabs or not user_can("neorain.rainrock.edit"):
+        abort(403)
+    operation, current = _selected_report_operation(get_current_gateway())
+    if not operation:
+        abort(404)
+    try:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or set(payload) != {"values", "versions"}:
+            raise ValueError("Provide report inputs and their saved versions.")
+        specs = _workspace_report_specs(tabs)
+        save_inputs(operation, payload["values"], payload["versions"], current_user.id, specs=specs)
+        db.session.commit()
+    except (ValueError, IntegrityError) as exc:
+        db.session.rollback()
+        conflict = isinstance(exc, (BriefingConflict, IntegrityError))
+        message = str(exc) if isinstance(exc, ValueError) else "Inputs changed. Review the saved values before retrying."
+        return jsonify(ok=False, error=message), 409 if conflict else 400
+    response = jsonify(ok=True, **_reports_payload(operation, current, tabs))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _rainrock_payload(operation, current):
@@ -291,24 +416,7 @@ def rainrock_entry():
 @bp.route("/daily-briefing")
 @gateway_node_required("rain")
 def daily_briefing():
-    from app.services.neorain_daily_briefing import INPUT_GROUPS, briefing_context, format_briefing
-    if not user_can("neorain.daily_briefing.view"):
-        abort(403)
-    gateway = get_current_gateway()
-    operation, current = _selected_report_operation(gateway)
-    is_current = bool(current and operation and current.id == operation.id)
-    report = briefing_context(operation, current=is_current) if operation else None
-    session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.daily_briefing"
-    return render_template(
-        "neonodes/neorain/daily_briefing.html", gateway=gateway, operation=operation,
-        operations=_report_choices(gateway), report=report,
-        is_current=is_current, input_groups=INPUT_GROUPS,
-        refresh_status=_report_refresh_status(gateway, operation, current),
-        input_versions={key: field['version'] for key, field in report['fields'].items()} if report else {},
-        can_edit=user_can('neorain.rainrock.edit'),
-        briefing=format_briefing(report) if report else "No selected sort.",
-        briefing_detailed=format_briefing(report, include_delay_details=True) if report else "No selected sort.",
-    )
+    return _render_reports("daily-briefing")
 
 
 @bp.route('/daily-briefing/state')
@@ -1197,15 +1305,17 @@ def _visible_neorain_menu_items():
         {
             "label": label,
             "endpoint": endpoint,
-            "active": endpoint == _request_endpoint(),
+            "active": endpoint == _request_endpoint() or (endpoint == "neorain.reports"
+                and _request_endpoint() in {"neorain.rainrock", "neorain.daily_briefing"}),
         }
         for label, endpoint, view_permission, _edit_permission in NEORAIN_PAGES
-        if user_can(view_permission)
+        if (report_tabs() if endpoint == "neorain.reports" else user_can(view_permission))
     ]
 
 
 def _preload_neorain_permissions():
-    preload_permission_rules(page[2] for page in NEORAIN_PAGES)
+    preload_permission_rules([page[2] for page in NEORAIN_PAGES if page[2]] +
+                             [permission for _, permission in REPORT_VIEWS.values()])
 
 
 def _neorain_page(endpoint):

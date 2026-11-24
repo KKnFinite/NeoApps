@@ -41,6 +41,7 @@ SCREENS = {
     "neoscorpion.truck_manager": "neoscorpion.truck_manager.view",
     "neoscorpion.fueling_board": "neoscorpion.fueling_board.view",
     "neorain.rainrock": "neorain.rainrock.view",
+    "neorain.reports": None,
     "neorain.inbound": "neorain.inbound.view",
     "neorain.outbound": "neorain.outbound.view",
     "neorain.load_planner_lineup": "neorain.load_planner_lineup.view",
@@ -49,7 +50,7 @@ SCREENS = {
     "neosubzero.operations": None,
     "neoraiden.index": None,
 }
-HISTORY_SCREENS = {"neoraiden.index", "neorain.rainrock", "neorain.daily_briefing"}
+HISTORY_SCREENS = {"neoraiden.index", "neorain.reports", "neorain.rainrock", "neorain.daily_briefing"}
 
 
 def _signer():
@@ -94,6 +95,10 @@ def _authorized_url(user, endpoint, code, operation_id, mode):
                 return None
             if mode:
                 args["mode"] = mode
+        elif endpoint == "neorain.reports":
+            from app.neonodes.neorain.routes import report_tabs
+            if not report_tabs(user):
+                return None
         elif not user_can(SCREENS[endpoint], user=user):
             return None
     if operation_id is not None:

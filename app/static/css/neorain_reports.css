@@ -1,0 +1,50 @@
+.neorain-reports [hidden] { display: none !important; }
+.neorain-reports .rainrock-head h1 { font-size: clamp(17px, 1.6vw, 24px); }
+.neorain-reports .rainrock-head { gap: 6px 12px; }
+.neorain-reports .rainrock-head select { width: 100%; }
+.neorain-report-period { color: #b7becf; font-size: .75rem; }
+.neorain-report-inputs {
+    margin-bottom: 9px;
+    padding: 6px 9px;
+    border: 1px solid var(--rr-line);
+    border-radius: 6px;
+    background: #090c1b;
+}
+.neorain-report-inputs > summary {
+    padding-block: 4px;
+    color: #e8eaf5;
+    font-weight: 700;
+    cursor: pointer;
+}
+.neorain-report-input-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding-top: 4px;
+}
+.neorain-report-input-grid fieldset { margin: 0; }
+.neorain-report-input-grid legend { color: var(--rr-purple); font-weight: 700; }
+.neorain-report-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 8px;
+}
+.neorain-report-fields label { display: grid; align-content: start; min-width: 0; gap: 3px; font-size: 12px; }
+.neorain-report-fields small { color: #ff9ea7; overflow-wrap: anywhere; }
+.neorain-report-fields small:empty { display: none; }
+.neorain-report-input-grid [data-input-group="Notes"] { grid-column: span 2; }
+.neorain-report-input-grid [data-input-group="Notes"] .neorain-report-fields {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr));
+}
+.neorain-report-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.neorain-report-tabs button[aria-selected="true"] { border-color: var(--rr-purple); color: #fff; }
+.neorain-reports .rain-report { padding: 0; }
+@media (max-width: 950px) {
+    .neorain-report-input-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    .neorain-report-input-grid { grid-template-columns: minmax(0, 1fr); }
+    .neorain-report-input-grid [data-input-group="Notes"] { grid-column: auto; }
+    .neorain-reports .rainrock-head form { flex: 1 0 100%; }
+    .neorain-report-inputs > summary, .neorain-report-tabs button { min-height: 34px; }
+}

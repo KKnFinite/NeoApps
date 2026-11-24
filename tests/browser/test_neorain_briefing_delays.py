@@ -25,6 +25,7 @@ class BriefingDelayBrowserTest(TestCase):
     def exercise(self, engine):
         case = unit.DailyBriefingTest(); case.setUp(); self.addCleanup(case.doCleanups)
         app, op, actor = case.app, case.operation, case.f.actor
+        app.config['SESSION_COOKIE_SECURE'] = False  # Loopback HTTP browser fixture.
         app.config['NEORAIN_BRIEFING_REFRESH_MS'] = 1000
         _, start = configure_sort_window(case.f.gateway, op.sort_date)
         app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = start + timedelta(hours=2)

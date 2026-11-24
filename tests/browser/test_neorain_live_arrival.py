@@ -78,7 +78,8 @@ class LiveArrivalTest(TestCase):
 
                 env.ready(page, f"/neorain/rainrock?operation_id={rain.operation_id}")
                 page.evaluate("window.originalReport=document.querySelector('[data-rainrock-report]')")
-                volume = page.locator('[data-rainrock-field][name="actual_volume"]')
+                page.locator("[data-sort-inputs] > summary").click()
+                volume = page.locator('[data-report-field][name="actual_volume"]')
                 volume.fill("12450")
                 expect(page.locator('[data-rainrock-value="actual_volume"]')).to_have_text("12,450")
                 expect(volume).to_be_focused()
