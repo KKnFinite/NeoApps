@@ -52,6 +52,35 @@ class GoogleParkingPostgresTest(idempotency.GoogleParkingIdempotencyTest):
     def setUp(self):
         postgres_setup(self, contracts, idempotency.GoogleParkingIdempotencyTest.setUp)
 
+    def test_concurrent_manual_and_imported_echo_767s_keep_both_assignments(self):
+        for tail in ("N316UP", "N367UP"):
+            self._add_tail(tail)
+        db.session.commit()
+        operation_id = self.operation.id
+        ready = Barrier(2)
+
+        def assign(tail, position):
+            with self.app.app_context():
+                operation = db.session.get(SortDateOperation, operation_id)
+                ready.wait(timeout=5)
+                if tail == "N367UP":
+                    parking_plan.assign_tail_to_lane(operation, tail, "E", position, 1)
+                else:
+                    result = apply_google_motherbrain_parking(operation, tail, position)
+                    self.assertEqual(result["status"], "applied")
+                db.session.commit()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            manual = pool.submit(assign, "N367UP", "E08")
+            imported = pool.submit(assign, "N316UP", "E07")
+            manual.result(timeout=15)
+            imported.result(timeout=15)
+        db.session.expire_all()
+        self.assertEqual(self._assignment("N367UP").position_code, "E08")
+        self.assertEqual(self._assignment("N316UP").position_code, "E07")
+        check = parking_plan.parking_plan_context(self.gateway, operation=self.operation)
+        self.assertEqual(check["parking_status"]["physical_conflicts"], [])
+
     def test_two_unchanged_poll_workers_create_no_duplicates_or_updates(self):
         self._add_tail('N401UP')
         self._park('N401UP', 'A01')

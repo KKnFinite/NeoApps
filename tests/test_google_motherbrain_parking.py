@@ -172,19 +172,19 @@ class GoogleMotherBrainParkingTest(unittest.TestCase):
     def test_physical_violation_applies_and_creates_native_alert(self):
         self._add_tail("N967UP")
         self._add_tail("N457UP")
-        self._park("N457UP", "E03")
+        self._park("N457UP", "A02")
         db.session.commit()
 
-        result = self._apply("N967UP", "E04")
+        result = self._apply("N967UP", "A01")
         db.session.commit()
 
         self.assertEqual(result["status"], "applied")
-        self.assertEqual(self._assignment("N967UP").position_code, "E04")
+        self.assertEqual(self._assignment("N967UP").position_code, "A01")
         self.assertEqual(
             MotherBrainAlert.query.filter_by(
                 sort_date_operation_id=self.operation.id,
                 active=True,
-                title="Echo 767 clearance conflict",
+                message="A02 is blocked by 767 parked at A01.",
             ).count(),
             1,
         )
@@ -192,13 +192,13 @@ class GoogleMotherBrainParkingTest(unittest.TestCase):
     def test_later_google_correction_clears_native_conflict_alert(self):
         self._add_tail("N967UP")
         self._add_tail("N457UP")
-        self._park("N457UP", "E03")
+        self._park("N457UP", "A02")
         db.session.commit()
-        self._apply("N967UP", "E04")
+        self._apply("N967UP", "A01")
         db.session.commit()
         alert = MotherBrainAlert.query.filter_by(active=True).one()
 
-        self._apply("N457UP", "E02")
+        self._apply("N457UP", "B01")
         db.session.commit()
 
         self.assertFalse(db.session.get(MotherBrainAlert, alert.id).active)

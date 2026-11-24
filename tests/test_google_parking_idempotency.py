@@ -141,18 +141,18 @@ class GoogleParkingIdempotencyTest(contracts.GoogleMotherBrainParkingTest):
     def test_existing_physical_alerts_are_stable_but_corrections_resolve_them(self):
         self._add_tail('N967UP')
         self._add_tail('N457UP')
-        self._park('N457UP', 'E03')
-        self._apply('N967UP', 'E04')
+        self._park('N457UP', 'A02')
+        self._apply('N967UP', 'A01')
         db.session.commit()
         alert = MotherBrainAlert.query.filter_by(active=True).one()
         before = alert.updated_at
         with sql_counts() as counts:
             for _ in range(10):
-                self._apply('N967UP', 'E4')
+                self._apply('N967UP', 'A1')
                 db.session.commit()
         self.assertEqual(counts['UPDATE'], 0)
         self.assertEqual(alert.updated_at, before)
-        self._apply('N457UP', 'E02')
+        self._apply('N457UP', 'B01')
         db.session.commit()
         self.assertFalse(alert.active)
 

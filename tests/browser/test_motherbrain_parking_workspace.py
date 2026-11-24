@@ -27,6 +27,10 @@ class ParkingWorkspaceBrowserTest(unittest.TestCase):
                 data._add_tail(tail)
                 if position:
                     data._park(tail, position)
+            for tail, position in (("N457UP", "E03"), ("N967UP", "E04"),
+                                   ("N316UP", "E07"), ("N367UP", "E08")):
+                data._add_tail(tail)
+                data._park(tail, position)
             data._park("N991UP", "E01")  # Parked tail without a linked mission.
             for inbound in (True, False):
                 db.session.add(MasterFlightSchedule(gateway_id=data.gateway.id, gateway_code="RFD",
@@ -72,6 +76,12 @@ class ParkingWorkspaceBrowserTest(unittest.TestCase):
     def check_plan(self, page, width, env, op_id):
         ramps = page.locator("#parking-ramps")
         expect(ramps).to_be_visible()
+        for tail, position in (("N457UP", "E03"), ("N967UP", "E04"),
+                               ("N316UP", "E07"), ("N367UP", "E08")):
+            slot = ramps.locator(f'[data-parking-slot-id="slot:E:{position}:1"]')
+            expect(slot).to_be_visible()
+            expect(slot).to_have_attribute("data-occupied-tail", tail)
+        expect(page.get_by_text("must remain clear while 767", exact=False)).to_have_count(0)
         self.assertLess(ramps.bounding_box()["y"], page.viewport_size["height"])
         self.assertLess(ramps.bounding_box()["y"], page.locator("#parking-optimizer").bounding_box()["y"])
         jump = page.locator(".parking-status-jump").first

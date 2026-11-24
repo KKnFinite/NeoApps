@@ -9700,87 +9700,50 @@ class MotherBrainRoutesTest(unittest.TestCase):
             any(conflict.reason == "echo_767_clearance" for conflict in conflicts)
         )
 
-    def test_parking_validator_echo_requires_03_and_07_clear_for_767(self):
+    def test_echo_767_and_neighbor_can_be_assigned_in_either_order(self):
         operation = self._parking_operation()
-        for tail, position in (
-            ("N457UP", "E03"),
-            ("N967UP", "E04"),
-            ("N458UP", "E07"),
-            ("N968UP", "E08"),
-        ):
+        pairs = (("N457UP", "E03"), ("N967UP", "E04"),
+                 ("N367UP", "E08"), ("N316UP", "E07"))
+        for tail, position in pairs:
             self._parking_pair(operation, tail, destination=position)
-            db.session.flush()
-            self._parking_assignment(operation, tail, position, ramp_code="E")
         db.session.commit()
-        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
 
-        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
-        echo_conflicts = [
-            conflict for conflict in conflicts if conflict.reason == "echo_767_clearance"
-        ]
+        for tail, position in pairs:
+            response = self.client.post(
+                f"/motherbrain/parking-plan/{operation.id}/assign",
+                data={"tail_number": tail, "ramp_code": "E", "position_code": position,
+                      "lane_number": "1"}, headers={"Accept": "application/json"},
+            )
+            self.assertEqual(response.status_code, 200)
+        context = parking_plan_context(self.rfd_gateway, operation=operation)
+        self.assertEqual(context["parking_status"]["physical_conflicts"], [])
+        for tail, position in pairs:
+            self.assertEqual(self._parking_assignment_for_tail(operation, tail).position_code, position)
 
-        self.assertEqual({conflict.position for conflict in echo_conflicts}, {"E04", "E08"})
-        self.assertIn(
-            "E03 must remain clear while 767 N967UP is parked at E04.",
-            [conflict.message for conflict in echo_conflicts],
-        )
-        self.assertIn(
-            "E07 must remain clear while 767 N968UP is parked at E08.",
-            [conflict.message for conflict in echo_conflicts],
-        )
-
-    def test_parking_validator_echo_clearance_is_assignment_order_independent(self):
+    def test_echo_obsolete_alert_retires_while_independent_block_stays_active(self):
         operation = self._parking_operation()
-        self._parking_pair(operation, "N967UP", destination="E04")
-        self._parking_pair(operation, "N457UP", destination="E03")
-        db.session.flush()
-        self._parking_assignment(operation, "N967UP", "E04", ramp_code="E")
-        db.session.commit()
-        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
-
-        before = validate_parking_physical_rules(operation, tail_rows=tail_rows)
-        self.assertFalse(any(item.reason == "echo_767_clearance" for item in before))
-
-        self._parking_assignment(operation, "N457UP", "E03", ramp_code="E")
-        db.session.commit()
-        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
-        after = validate_parking_physical_rules(operation, tail_rows=tail_rows)
-
-        self.assertTrue(any(item.reason == "echo_767_clearance" for item in after))
-
-    def test_parking_validator_echo_clearance_alert_clears_after_occupant_moves(self):
-        operation = self._parking_operation()
-        self._parking_pair(operation, "N967UP", destination="E04")
-        self._parking_pair(operation, "N457UP", destination="E03")
-        db.session.flush()
-        self._parking_assignment(operation, "N967UP", "E04", ramp_code="E")
-        blocker = self._parking_assignment(operation, "N457UP", "E03", ramp_code="E")
+        for tail, position in (("N316UP", "E07"), ("N367UP", "E08")):
+            self._parking_pair(operation, tail, destination=position)
+            self._parking_assignment(operation, tail, position)
+        self._parking_rule(BLOCKED_PARKING_POSITION, "position", "E08", "E", behavior="forbidden")
+        historical = MotherBrainAlert(
+            gateway_id=self.rfd_gateway.id, gateway_code="RFD", sort_date_operation_id=operation.id,
+            scope="motherbrain", alert_key=f"parking-physical:{operation.id}:echo-767-clearance-e08-n367up-e07-must-remain-clear-while-767-n367up-is-parked-at-e08",
+            title="Echo 767 clearance conflict", active=True,
+            message="E07 must remain clear while 767 N367UP is parked at E08.",
+        )
+        db.session.add(historical)
         db.session.commit()
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
-        active_alert = MotherBrainAlert.query.filter_by(
-            title="Echo 767 clearance conflict",
-            active=True,
-        ).one()
-
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"E03 must remain clear", response.data)
-        self.assertEqual(active_alert.sort_date_operation_id, operation.id)
-
-        blocker.position_code = "E02"
-        db.session.commit()
-        cleared_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
-
-        self.assertEqual(cleared_response.status_code, 200)
-        self.assertEqual(
-            MotherBrainAlert.query.filter_by(
-                title="Echo 767 clearance conflict",
-                active=True,
-            ).count(),
-            0,
-        )
-        self.assertFalse(db.session.get(MotherBrainAlert, active_alert.id).active)
-        self.assertNotIn(b"E03 must remain clear", cleared_response.data)
+        self.assertNotIn(b"E07 must remain clear", response.data)
+        self.assertIn(b"E08 is blocked by Parking Rules.", response.data)
+        self.assertFalse(db.session.get(MotherBrainAlert, historical.id).active)
+        self.assertEqual(MotherBrainAlert.query.filter_by(sort_date_operation_id=operation.id,
+                         title="Blocked parking position", active=True).count(), 1)
+        self.assertEqual(self._parking_assignment_for_tail(operation, "N316UP").position_code, "E07")
+        self.assertEqual(self._parking_assignment_for_tail(operation, "N367UP").position_code, "E08")
 
     def test_parking_validator_allows_767_anchors_except_04_and_08(self):
         operation = self._parking_operation()
@@ -11772,6 +11735,35 @@ class MotherBrainRoutesTest(unittest.TestCase):
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
         self.assertEqual(suggestions["N967UP"]["position"], "E02")
+
+    def _echo_optimizer_case(self, locked_neighbors):
+        operation = self._parking_operation()
+        for number in (1, 2, 5, 6):
+            self._parking_assignment(operation, f"N40{number}UP", f"E{number:02d}")
+        for tail, position in (("N313UP", "E03"), ("N314UP", "E04"),
+                               ("N317UP", "E07"), ("N318UP", "E08")):
+            self._parking_pair(operation, tail)
+            if locked_neighbors and position in {"E03", "E07"}:
+                self._parking_assignment(operation, tail, position)
+        for ramp in ("A", "B", "C", "D", "R"):
+            self._parking_rule(AIRCRAFT_TYPE_RAMP_RESTRICTION, "aircraft_type", "767", ramp,
+                               behavior="forbidden")
+        db.session.commit()
+        preview = self._parking_optimizer_preview(operation)
+        expected = {"E04", "E08"} if locked_neighbors else {"E03", "E04", "E07", "E08"}
+        self.assertEqual({row["position"] for row in preview["suggested_assignments"]}, expected)
+        response = self.client.post(f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+                                    data=self._parking_optimizer_apply_data(operation))
+        self.assertIn(response.status_code, (200, 302))
+        for row in preview["suggested_assignments"]:
+            self.assertEqual(self._parking_assignment_for_tail(operation, row["tail"]).position_code,
+                             row["position"])
+
+    def test_optimizer_assigns_echo_neighbors_together(self):
+        self._echo_optimizer_case(locked_neighbors=False)
+
+    def test_optimizer_fills_echo_04_and_08_beside_locked_767s(self):
+        self._echo_optimizer_case(locked_neighbors=True)
 
     def test_parking_optimizer_767_at_normal_01_blocks_02(self):
         operation = self._parking_operation()
@@ -14506,7 +14498,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual((primary.position_code, primary.lane_number), ("A03", 1))
         self.assertEqual((secondary.position_code, secondary.lane_number), ("A03", 2))
 
-    def test_promotion_keeps_echo_position_and_conflict_alert_lifecycle(self):
+    def test_promotion_keeps_echo_position_and_adjacent_occupant(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N111UP", aircraft_type="757", destination="ONT")
         self._parking_pair(operation, "N967UP", aircraft_type="767", destination="LAX")
@@ -14525,29 +14517,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
         promoted = self._parking_assignment_for_tail(operation, "N967UP")
         self.assertEqual((promoted.position_code, promoted.lane_number), ("E04", 1))
 
-        conflict_page = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
-        active_alert = MotherBrainAlert.query.filter_by(
-            sort_date_operation_id=operation.id,
-            title="Echo 767 clearance conflict",
-            active=True,
-        ).one()
-        self.assertIn(b"E03 must remain clear", conflict_page.data)
-
-        move_blocker = self.client.post(
-            f"/motherbrain/parking-plan/{operation.id}/assign",
-            data={
-                "tail_number": "N333UP",
-                "ramp_code": "E",
-                "position_code": "E02",
-                "lane_number": "1",
-            },
-            headers={"Accept": "application/json"},
-        )
-        self.assertEqual(move_blocker.status_code, 200)
-        cleared_page = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
-
-        self.assertNotIn(b"E03 must remain clear", cleared_page.data)
-        self.assertFalse(db.session.get(MotherBrainAlert, active_alert.id).active)
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"E03 must remain clear", response.data)
+        self.assertEqual(self._parking_assignment_for_tail(operation, "N333UP").position_code, "E03")
+        self.assertFalse(MotherBrainAlert.query.filter_by(
+            sort_date_operation_id=operation.id, title="Echo 767 clearance conflict", active=True
+        ).count())
 
     def test_occupied_slot_requires_confirmation_and_replaces_previous_tail(self):
         operation = self._parking_operation()

@@ -13,7 +13,6 @@ from app.services.parking_physical_validator import (
     NORMAL_RAMP_CODES,
     REMOTE_ORDER,
     VALID_767_NORMAL_ANCHORS,
-    echo_767_clearance_position,
     parking_767_footprint_positions,
     parking_configurable_rule_flags,
     validate_parking_physical_rules,
@@ -1498,22 +1497,6 @@ def _add_767_block_constraints(model, variables, fill_exprs):
         variables_by_position.setdefault(placement.position, []).append((placement, variable))
 
     for placement, variable in variables.items():
-        clearance_position = (
-            echo_767_clearance_position(placement.position)
-            if placement.aircraft_type == "767"
-            else ""
-        )
-        if clearance_position:
-            if _is_constant_one(_fill_expr(fill_exprs, clearance_position)):
-                model.Add(variable == 0)
-            else:
-                for clearance_placement, clearance_variable in variables_by_position.get(
-                    clearance_position,
-                    [],
-                ):
-                    if clearance_placement.tail != placement.tail:
-                        model.Add(variable + clearance_variable <= 1)
-
         blocked = _blocked_position_for_placement(placement)
         if not blocked:
             continue
@@ -2713,9 +2696,6 @@ def _placement_allows_aircraft(
     ramp = _ramp_from_position(position)
     if aircraft_type != "767":
         return True
-    clearance_position = echo_767_clearance_position(position)
-    if clearance_position:
-        return clearance_position not in (locked_filled_positions or set())
     if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or number in (9, 10):
         return True
     footprint = _candidate_footprint_positions(
