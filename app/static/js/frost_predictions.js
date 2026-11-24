@@ -30,6 +30,15 @@
             for (const h of [0,1,3,6]) {
                 const card = text('article', '', grid);
                 text('h3', `H${h}${h === 0 ? ' · CURRENT RECOGNITION' : ' · RESEARCH'}`, card);
+                const outlook = value.atmosphere?.horizons?.[h];
+                text('strong', outlook?.label || 'Frost assessment unavailable', card);
+                if (outlook) {
+                    text('p', [outlook.reason, outlook.comparison].filter(Boolean).join(' · '), card);
+                    const fields = outlook.inputs;
+                    const degrees = c => Number.isFinite(c) ? `${(32 + 1.8 * c).toFixed(1)} °F` : 'unavailable';
+                    text('p', `NWS period low ${degrees(fields.nws_minimum_c)} · Ice deposition threshold ${degrees(fields.ice_threshold_c)}`, card);
+                    text('p', `Observed ${degrees(fields.observed_c)} · Forecast ${degrees(fields.air_c)} · Dew point ${degrees(fields.dewpoint_c)}`, card);
+                }
                 for (const prediction of value.predictions.filter(p => p.hours === h)) {
                     const kind = /logistic/i.test(prediction.model_version) ? 'Logistic' : 'Forest';
                     const score = prediction.state === 'SCORED' && Number.isFinite(prediction.score) ? prediction.score.toFixed(4) : 'UNAVAILABLE';
@@ -44,7 +53,7 @@
                     }
                 }
             }
-            content.replaceChildren(fragment); feedback.textContent = 'Private evidence verified. Outcomes remain unknown unless separately linked.';
+            content.replaceChildren(fragment); feedback.textContent = 'Private evidence verified. Treatment links identify the recorded application reason.';
         } catch (error) { feedback.textContent = error.name === 'AbortError' ? 'Evidence request timed out. Try again; previous view retained.' : error.message; }
         finally { clearTimeout(timer); busy = false; button.disabled = false; }
     });

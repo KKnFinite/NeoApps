@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import current_app
 from app.models import FrostHistoryTask as Task
-from app.services import frost_intelligence, frost_research, frost_forecast as clock
+from app.services import frost_atmosphere, frost_intelligence, frost_research, frost_forecast as clock
 from app.services.frost_schedule import cycle_identity
 
 UTC=timezone.utc
@@ -17,7 +17,12 @@ UTC=timezone.utc
 
 def display_summary(payload):
     """Compact derivative committed with the existing immutable capture receipt."""
-    return dict(gateway_id=payload['gateway_id'],baseline=payload['baseline'],
+    atmospheric=payload.get('atmosphere') or {}
+    outlook={}
+    if atmospheric.get('method')==frost_atmosphere.VERSION:
+        outlook={h:{k:item[k] for k in ('state','reason','target_at_utc')}
+                 for h,item in atmospheric['horizons'].items()}
+    return dict(gateway_id=payload['gateway_id'],baseline=payload['baseline'],outlook=outlook,
         cutoff_at_utc=payload['source']['cutoff_at_utc'],committed_at_utc=payload['committed_at_utc'],
         predictions=[{key:p.get(key) for key in ('model_version','model_sha256','hours','target_at_utc','state','score')}
             for p in payload['predictions']])
@@ -88,12 +93,18 @@ def _verified(value,gateway_id,at,baseline):
             seen.add(model['model_version'])
             target=clock.instant(prediction['target_at_utc'])
             if target!=cutoff+timedelta(hours=model['hours']):return None
+            assessment=(value.get('outlook') or {}).get(str(model['hours'])) or {}
+            state=assessment.get('state','unknown')
+            if state not in frost_atmosphere.LABELS or (assessment and clock.instant(assessment['target_at_utc'])!=target):
+                return None
+            if prediction['state']=='UNAVAILABLE' and not assessment:continue
+            hour=target.replace(minute=0,second=0,microsecond=0)
+            pair=pairs.setdefault(hour,dict(hours=model['hours'],scores={},state=state,
+                reason=assessment.get('reason','This capture has no verified atmospheric assessment.')))
             if prediction['state']=='UNAVAILABLE':continue
             score=prediction['score']
             if prediction['state']!='SCORED' or type(score) not in (int,float) or not math.isfinite(score) or not 0<=score<=1:
                 return None
-            hour=target.replace(minute=0,second=0,microsecond=0)
-            pair=pairs.setdefault(hour,dict(hours=model['hours'],scores={}))
             pair['scores'][model['kind']]=score
         return cutoff,pairs
     except (AttributeError,KeyError,TypeError,ValueError,OverflowError):return None
@@ -113,7 +124,10 @@ def project(gateway,*,now=None):
         for hour,pair in pairs.items():
             if hour in hours:continue
             values=[f"{pair['scores'][kind]*100:.0f}%" if kind in pair['scores'] else '—' for kind in ('logistic','forest')]
-            hours[hour]=dict(text='Treatment reason (FROST) '+' / '.join(values),
+            state=pair['state']
+            hours[hour]=dict(outlook=frost_atmosphere.LABELS[state],reason=pair['reason'],
+                comparison=frost_atmosphere.comparison(state,pair['scores']),
+                text='Treatment reason (FROST) '+' / '.join(values),
                 accessible=f"Recorded FROST treatment reason, H{pair['hours']} logistic {values[0]}, forest {values[1]}. Atmospheric frost probability is unvalidated.")
     return version,hours
 

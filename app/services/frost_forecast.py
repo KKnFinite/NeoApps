@@ -268,7 +268,15 @@ def nws_grid(payload, *, cutoff, target):
     t,d=value('temperature','wmoUnit:degC'),value('dewpoint','wmoUnit:degC')
     speed,gust=value('windSpeed','wmoUnit:km_h-1'),value('windGust','wmoUnit:km_h-1')
     visibility,ceiling=value('visibility','wmoUnit:m'),value('ceilingHeight','wmoUnit:m')
+    minimum=properties.get('minTemperature') or {}
+    night_min=None
+    if isinstance(minimum,dict) and minimum.get('uom')=='wmoUnit:degC':
+        matching=[(start,end,v) for start,end,v in _grid_intervals(minimum) if start<=target<end]
+        if len(matching)==1:
+            start,end,v=matching[0]
+            night_min=dict(temperature_c=v,start_utc=start.isoformat(),end_utc=end.isoformat())
     return dict(issued_at_utc=issued.isoformat(),target_at_utc=target.isoformat(),
+        period_minimum=night_min,
         issue_basis='NWS forecast grid updateTime; actual retrieval time retained separately',
         source='api.weather.gov / KRFD containing grid',operationally_validated=False,
         thermodynamic_coverage=t is not None and d is not None,

@@ -1,23 +1,27 @@
 """Authenticated private capture drill-down on phone/tablet/desktop engines."""
 from unittest.mock import patch
+from datetime import timedelta
 from playwright.sync_api import expect
 from tests.browser.test_frost_vault import FrostVaultBrowserTest
 from app.extensions import db
 from app.models import Gateway
 from app.services import frost_auto as auto
 from app.services.frost_weather import STATION
+from tests.frost_schedule_fixture import configure
 
 
 class PredictionBrowserTest(FrostVaultBrowserTest):
     def test_verified_history_scores_unavailable_failed_read_and_responsive(self):
-        at=auto.stamp(auto.now())
+        opening=auto.now().replace(minute=0, second=0, microsecond=0)+timedelta(hours=1, seconds=10)
+        at=auto.stamp(opening)
         scores=[dict(hours=h,model_version=f'fixture-{kind}-h{h}',model_sha256='a'*64,
             target_at_utc=at,threshold=.5,classification=True,score=.7,state='SCORED',
             vector=dict(missing=['aircraft_exposure_hours'])) for h in (0,1,3,6) for kind in ('logistic','forest')]
         scores[-1].update(state='UNAVAILABLE',score=None,reason='Provider missing field')
         with self.f.app.app_context():
             gateway=Gateway.query.first()
-            with patch.object(auto,'acquire',return_value=dict(station=STATION,cutoff_at_utc=at,
+            configure(gateway,at=opening)
+            with patch.object(auto,'now',return_value=opening),patch.object(auto,'acquire',return_value=dict(station=STATION,cutoff_at_utc=at,
                     observations=[dict(utc=at,temperature_c=-2,dewpoint_c=-3,wind_kt=4,raw_metar='KRFD fixture')],
                     sources=[],native_forecasts=[],native_point=dict(cycle_at_utc=at))),patch.object(auto,'predictions',return_value=scores):
                 self.assertEqual(auto.tick(gateway.id),1)
@@ -31,6 +35,7 @@ class PredictionBrowserTest(FrostVaultBrowserTest):
                 section.locator('[data-prediction-url]').first.click()
                 expect(section.locator('[data-prediction-feedback]')).to_contain_text('Private evidence verified')
                 expect(section.locator('.frost-prediction-grid article')).to_have_count(4)
+                expect(section.get_by_text('Frost assessment unavailable',exact=True)).to_have_count(4)
                 expect(section).to_contain_text('Logistic: 0.7000')
                 expect(section).to_contain_text('Forest: UNAVAILABLE')
                 expect(section).to_contain_text('H0 · CURRENT RECOGNITION')
