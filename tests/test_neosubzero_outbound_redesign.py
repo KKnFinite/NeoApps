@@ -36,7 +36,7 @@ class OutboundRedesignTest(unittest.TestCase):
         identity=(self.mission.id,self.mission.assigned_tail_number,self.mission.flight_number)
         parking=[(p.id,p.tail_number,p.position_code) for p in SortDateParkingAssignment.query.all()]
         event=self.initiate()
-        self.assertEqual(self.post('reset',event).status_code,200)
+        self.assertEqual(self.post('reset',event,confirm_reset='1',correction_reason='Mistaken entry').status_code,200)
         self.assertIsNotNone(event.reset_at_utc)
         self.assertIsNone(departure_event_for_tail(self.op,self.mission))
         self.assertIsNone(self.row()['event'])
@@ -60,8 +60,8 @@ class OutboundRedesignTest(unittest.TestCase):
         self.assertEqual(self.post('toggle_configured',event).status_code,200)
         self.assertEqual(event.status,'deice_planned')
         self.assertEqual(self.post('toggle_configured',event).status_code,200)
-        self.assertEqual(self.post('reset',event).status_code,200)
-        self.assertIsNone(event.configured_at_utc)
+        self.assertEqual(self.post('reset',event,confirm_reset='1',correction_reason='Mistaken entry').status_code,200)
+        self.assertIsNotNone(event.configured_at_utc)
         self.assertIsNone(self.row()['event'])
         self.assertEqual(Spray.query.count(),0)
         replacement=self.initiate()
@@ -74,11 +74,11 @@ class OutboundRedesignTest(unittest.TestCase):
         for values in ({'operation_id':-1},{'physical_tail':'FOREIGN'}):
             self.assertEqual(self.post('reset',event,**values).status_code,409)
         self.assertEqual(self.f.post(action='reset',event_id=event.id,expected_version='stale').status_code,409)
-        self.assertEqual(self.post('reset',event).status_code,200)
+        self.assertEqual(self.post('reset',event,confirm_reset='1',correction_reason='Mistaken entry').status_code,200)
         self.assertEqual(self.f.post(action='reset',event_id=event.id,expected_version=old).status_code,409)
         self.assertEqual(Audit.query.filter_by(action='departure_reset').count(),1)
 
-    def test_actual_spray_fin_and_radio_evidence_cannot_be_reset(self):
+    def test_actual_spray_fin_and_radio_reject_unconfirmed_reset(self):
         event=self.initiate()
         self.assertEqual(self.post('save_treatment',event,treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:10').status_code,200)
         before=copy.deepcopy(event.pass_evidence)

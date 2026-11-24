@@ -78,6 +78,7 @@ def operations_context(gateway, operation, mode):
             )
         else:
             row['mission_departure_status'] = mission.departure_status
+            row['block_out_source'] = mission.actual_block_out_source
             row['mobile_evidence'] = evidence.get(getattr(event, 'id', None), {})
             row['mobile_open'] = (not row['identity_conflict'] and row['tail'] != '-' and
                                   mission.departure_status != 'cancelled' and
@@ -142,7 +143,7 @@ def outbound_quick_actions(row):
         return (('initial_contact', 'INITIAL CONTACT'), ('set_negative', 'NEGATIVE DEICE')), None
     if not row.get('has_actual_spray'):
         actions = [('toggle_configured', 'CLEAR CONFIGURED' if row.get('configured') else 'CONFIGURED'),
-                   ('reset', 'RESET'), ('set_negative', 'NEGATIVE DEICE')]
+                   ('set_negative', 'NEGATIVE DEICE')]
         if row.get('configured'):
             actions.append(('clear', 'CLEAR'))
     else:

@@ -38,7 +38,7 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             errors=[]
             context.on('page',lambda p:p.on('pageerror',lambda e:errors.append(str(e))))
             dialogs=[]
-            page=context.new_page();page.on('dialog',lambda dialog:(dialogs.append(dialog.type),dialog.accept()))
+            page=context.new_page();page.on('dialog',lambda dialog:(dialogs.append(dialog.type),dialog.accept('Test correction') if dialog.type == 'prompt' else dialog.accept()))
             page.clock.install(time=datetime(2026,10,23,3,10,tzinfo=timezone.utc))
             case.login(page);case.ready(page,'/neosubzero/operations?mode=outbound')
             row=page.locator(f'[data-ops-row][data-mission-id="{case.flow_id}"]')
@@ -47,6 +47,8 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             def toggle_details():
                 if page.viewport_size['width'] > 900 and page.locator('[data-ops-workspace]').get_attribute('data-layout') == 'list':
                     row.locator('[data-ops-expand-details]').click()
+                elif page.viewport_size['width'] > 900:
+                    row.locator('[data-ops-ramp-chevron]').click()
                 else:row.locator('[data-ops-accordion] > summary').click()
             def change(name,value):
                 field=row.locator('.ops-outbound-pass-form').locator(f'[name="{name}"]')
@@ -209,7 +211,8 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             expect(row.locator('.ops-outbound-extra')).to_be_hidden()
             expect(row).to_have_attribute('data-status','gone')
             expect(row).to_have_css('background-color','rgb(104, 116, 128)')
-            expect(actions.locator('button')).to_have_count(0)
+            expect(actions.locator('button')).to_have_count(1)
+            expect(actions.get_by_role('button',name='RESET',exact=True)).to_be_visible()
             self.assertEqual(page.request.post(case.origin+'/neosubzero/operations/mutate',form=stale).status,409)
             self.assertEqual(len(dialogs),before_radio_dialogs,'RADIO uses the inline section, not a popup confirmation')
             with case.app.app_context():
@@ -238,6 +241,7 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             try:
                 browser=getattr(case.pw,engine).launch()
                 page=browser.new_page(viewport={'width':1366,'height':768})
+                page.clock.install(time=case.sort_now)
                 page.on('dialog',lambda dialog:dialog.accept())
                 case.login(page);case.ready(page,f'/neosubzero/operations?mode=outbound&mission={case.missions[0]}')
                 row=page.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')

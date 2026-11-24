@@ -18,6 +18,16 @@
     </summary>
     <div class="ops-pretreat-inline ops-mobile-workspace ops-mission-workspace" data-ops-inline data-mission-id="{{ row.mission_id }}" data-tail="{{ row.tail }}">
         {{ inline_feedback() }}
+        {% if can_edit and user_can('neosubzero.coordinator.edit') %}
+        <button type="button" hidden data-ops-discard-draft>Discard unsaved edits</button>
+        {% endif %}
+        {% if row.visual_state == 'gone' and (row.block_out_at_utc or row.mission_departure_status == 'departed') %}
+        <p>{% if row.block_out_at_utc %}Recorded Block-Out {{ row.block_out }}{% if row.block_out_source and row.block_out_source != 'unknown' %} · {{ row.block_out_source|replace('_',' ')|upper }}{% endif %}.{% else %}MotherBrain marks this mission departed.{% endif %}
+        Deice RESET preserves the flight departure. Review the original source with a flight administrator.
+        {% if user_can('neomotherbrain.manage_sort.view') %}<a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=row.mission_id) }}">MotherBrain mission detail</a>{% endif %}</p>
+        {% elif row.visual_state == 'gone' and not row.event %}
+        <p>No matching departure deice event is available to reset. Review the recorded tail status.</p>
+        {% endif %}
         <div class="ops-outbound-primary">
             <span class="ops-outbound-identity ops-identity"><strong>{{ row.tail }}</strong><span>{{ row.flight }}</span></span>
             <div class="ops-outbound-location ops-location"><strong>{{ row.parking }}</strong><span>ETD {{ row.etd }} · {{ row.destination }}</span>{% if row.final_start %}<strong class="ops-pilot-start">PILOT START {{ row.final_start }}</strong>{% endif %}</div>

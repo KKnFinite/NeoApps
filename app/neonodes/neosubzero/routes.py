@@ -1064,12 +1064,9 @@ def _save_deice_qualification(access):
 @gateway_node_required("subzero")
 def departure_deice_mutate():
     acknowledged_version = None
-    if request.form.get('action') == 'reset' and not user_can('neosubzero.coordinator.edit'):
+    action = str(request.form.get('action') or '').strip().lower()
+    if action in {'reset', 'undo_clear', 'radio_complete'} and not user_can('neosubzero.coordinator.edit'):
         return 'Access denied.', 403
-    if request.form.get('action') == 'undo_clear' and not user_can('neosubzero.coordinator.edit'):
-        return 'Access denied.', 403
-    if request.form.get('action') == 'radio_complete' and not user_can('neosubzero.coordinator.edit'):
-        return 'Access denied.',403
     board = str(request.form.get("board") or "").strip().lower()
     permission = {
         "outbound": "neosubzero.outbound.edit",
@@ -1094,7 +1091,8 @@ def departure_deice_mutate():
         operation = locked_operation(gateway)
         mission = locked_mission(operation)
         event = departure_event_for_tail(operation, mission, lock=True)
-        if request.form.get('event_id', type=int) not in (None, getattr(event, 'id', None)):
+        submitted_id = request.form.get('event_id', type=int)
+        if (action == 'reset' and submitted_id is None) or submitted_id not in (None, getattr(event, 'id', None)):
             raise NeoSubZeroEvidenceError('The treatment event changed. Reload this physical tail.')
         require_version(event, request.form.get('expected_version'), 'Departure deice')
         changed_event = mutate_departure_deice(

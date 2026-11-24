@@ -214,7 +214,8 @@ def export_subzero_record(record, *, learning=False, _config=None):
     if (not isinstance(source, dict) or source.get('record_type') not in {'actual_fluid_application','spray_evidence_correction'}
             or not re.fullmatch(r'(departure|pretreat):[1-9][0-9]*:pass:[12]', str(source.get('id', '')))
             or not source.get('tail') or (source.get('record_type')=='actual_fluid_application' and not source.get('start_utc'))
-            or (source.get('record_type')=='spray_evidence_correction' and (source.get('state')!='start_retracted' or not source.get('audit_provenance')))):
+            or (source.get('record_type')=='spray_evidence_correction' and
+                (not source.get('audit_provenance') or not _valid_subzero_retraction(source)))):
         raise ValueError('Only actual, tail-owned spray applications may be archived.')
     if learning and (record.get('frost_observed') is not None or record.get('training_eligible') is not False):
         raise ValueError('Treatment context must remain unlabeled.')
@@ -231,6 +232,16 @@ def export_subzero_record(record, *, learning=False, _config=None):
         'schema-version': expected, 'record-type': record['record_type'],
         'checksum': checksum, 'training-eligible': 'false',
     })
+
+
+def _valid_subzero_retraction(source):
+    if source.get('state') == 'start_retracted':
+        return True
+    event = source.get('current_source') or {}
+    return (source.get('state') == 'event_superseded' and source.get('activity') == 'departure'
+            and bool(event.get('reset_at_utc')) and any(
+                audit.get('action') == 'departure_reset' and audit.get('event_id') == event.get('id')
+                and audit.get('actor_user_id') and audit.get('reason') for audit in source['audit_provenance']))
 
 
 @_vault_operation

@@ -7,23 +7,31 @@
 {%- endmacro %}
 
 {% macro quick_actions(row) %}
-<span class="ops-quick-actions ops-card-actions{{ ' ops-desktop' if row.desktop_clear else '' }}" data-ops-quick-actions>
+<span class="ops-quick-actions ops-card-actions" data-ops-quick-actions>
 {% if row.radio_pending and not row.identity_conflict %}<button type="button" data-ops-radio>RADIO</button>{% endif %}
 {% if can_edit and not row.identity_conflict and (row.mobile_open or row.desktop_clear) %}
     {% for key,label in row.quick_actions %}
-    {% if key != 'radio' and (key != 'reset' or user_can('neosubzero.coordinator.edit')) %}
-        <button type="submit" form="ops-{{ row.mission_id }}-{{ key }}" name="action" value="{{ key }}">{{ label }}</button>
+    {% if key != 'radio' %}
+        <button type="submit"{% if row.desktop_clear %} class="ops-desktop"{% endif %} form="ops-{{ row.mission_id }}-{{ key }}" name="action" value="{{ key }}">{{ label }}</button>
     {% endif %}
     {% endfor %}
     {% if row.quick_clock %}<button type="button" form="ops-{{ row.mission_id }}-clock" data-ops-pass-stamp="{{ row.quick_clock[0] }}">{{ row.quick_clock[1] }}</button>{% endif %}
+{% endif %}
+{% if can_edit and user_can('neosubzero.coordinator.edit') and row.event and row.event.sort_date_mission_id == row.mission_id and not row.identity_conflict %}
+<button type="submit" form="ops-{{ row.mission_id }}-reset" name="action" value="reset" data-ops-reset-event="{{ row.event.id }}" data-ops-reset-version="{{ row.event_version }}">RESET</button>
 {% endif %}
 </span>
 {% endmacro %}
 
 {% macro quick_forms(row) %}
+{% if can_edit and user_can('neosubzero.coordinator.edit') and row.event and row.event.sort_date_mission_id == row.mission_id and not row.identity_conflict %}
+<form hidden id="ops-{{ row.mission_id }}-reset" method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-ops-reset="{{ row.flight }} · {{ row.tail }}" data-departed="{{ '1' if row.block_out_at_utc or row.mission_departure_status == 'departed' else '0' }}">
+    {{ mutation_identity(row, board, row.ramp) }}<input type="hidden" name="action" value="reset">
+</form>
+{% endif %}
 {% if can_edit and not row.identity_conflict and (row.mobile_open or row.desktop_clear) %}
     {% for key,label in row.quick_actions %}
-    {% if key != 'radio' and (key != 'reset' or user_can('neosubzero.coordinator.edit')) %}
+    {% if key != 'radio' %}
     <form hidden id="ops-{{ row.mission_id }}-{{ key }}" method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
         {{ mutation_identity(row, board, row.ramp) }}<input type="hidden" name="action" value="{{ key }}">
     </form>

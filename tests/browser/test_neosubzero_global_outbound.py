@@ -29,8 +29,8 @@ class GlobalOutboundBrowserTest(TestCase):
                     page.set_default_timeout(15000)
                     dialogs=[]
                     def accept(dialog):
-                        dialogs.append(dialog.message)
-                        dialog.accept()
+                        dialogs.append(dialog.type)
+                        dialog.accept('Test correction') if dialog.type == 'prompt' else dialog.accept()
                     page.on('dialog',accept)
                     errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
                     page.clock.install(time=datetime(2026,10,23,3,10,tzinfo=timezone.utc))
@@ -52,7 +52,7 @@ class GlobalOutboundBrowserTest(TestCase):
                         page.clock.run_for(5000)
                         mission = row(mid)
                         expect(mission).to_have_attribute('data-status','fin')
-                        expect(mission.locator('.ops-desktop button[value="clear"]:visible')).to_be_visible()
+                        expect(mission.locator('button.ops-desktop[value="clear"]:visible')).to_be_visible()
 
                     def complete_radio(mid):
                         mission = row(mid)
@@ -167,7 +167,7 @@ class GlobalOutboundBrowserTest(TestCase):
                     quick(mids[-1],'set_negative')
                     expect(row(mids[-1])).to_have_attribute('data-status','negative')
                     quick(mids[-1],'move_to_planned')
-                    self.assertEqual(dialogs,[])
+                    self.assertEqual(dialogs,['prompt','confirm'])
                     change(mids[-1],'treatment_plan','type_i_type_iv')
                     expect(row(mids[0])).to_have_attribute('data-status','configured')
                     active = row(mids[0])
@@ -275,7 +275,7 @@ class GlobalOutboundBrowserTest(TestCase):
                     complete_radio(mids[-1])
                     expect(chevron).to_have_attribute('aria-expanded','false')
                     self.assertEqual(page.get_by_role('dialog').count(),0)
-                    self.assertEqual(dialogs,[])
+                    self.assertEqual(dialogs,['prompt','confirm'] * 2)
                     self.assertEqual(errors,[])
                 except Exception:
                     if browser:

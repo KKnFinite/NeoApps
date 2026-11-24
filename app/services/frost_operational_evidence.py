@@ -29,11 +29,11 @@ def capture(operation,mission,event,*,actor_id,action,previous):
     from datetime import datetime
     now=datetime.utcnow()
     if block>now or (mission.tail_updated_at and mission.tail_updated_at>block):return None
-    events=NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id).filter(
+    events=NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id, reset_at_utc=None).filter(
         func.upper(NeoSubZeroDepartureDeiceEvent.tail_number)==tail).all()
     if any(e.pass1_started_at_utc or e.pass2_started_at_utc for e in events):return None
     if NeoSubZeroSprayRecord.query.filter_by(sort_date_operation_id=operation.id,tail_number_snapshot=tail).filter(
-        NeoSubZeroSprayRecord.departure_deice_event_id.is_not(None),NeoSubZeroSprayRecord.started_at_utc.is_not(None)).first():return None
+        NeoSubZeroSprayRecord.departure_deice_event_id.in_([e.id for e in events]),NeoSubZeroSprayRecord.started_at_utc.is_not(None)).first():return None
     state=SortDateTailState.query.filter_by(sort_date=operation.sort_date,gateway_code=operation.gateway_code,
         sort_name=operation.sort_name,tail_number=tail).one_or_none()
     pretreat=NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id,tail_number=tail).first()
@@ -80,9 +80,9 @@ def payloads(operation):
     result={}
     for event_id,(audit,evidence) in latest.items():
         event=NeoSubZeroDepartureDeiceEvent.query.filter_by(id=event_id,sort_date_operation_id=operation.id).one_or_none()
-        active=bool(event and event.status in ('not_sprayed','cleared') and not event.pass1_started_at_utc and not event.pass2_started_at_utc)
+        active=bool(event and not event.reset_at_utc and event.status in ('not_sprayed','cleared') and not event.pass1_started_at_utc and not event.pass2_started_at_utc)
         # Keep prior immutable revisions but supersede them if later work began.
-        other=NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id,tail_number=evidence['tail']).all()
+        other=NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id,tail_number=evidence['tail'], reset_at_utc=None).all()
         active=active and not any(e.pass1_started_at_utc or e.pass2_started_at_utc for e in other)
         mission=SortDateMission.query.filter_by(id=evidence['mission_id'],sort_date_operation_id=operation.id).one_or_none()
         active=active and bool(mission and mission.departure_status!='cancelled')

@@ -30,7 +30,7 @@ class OutboundResetPostgresTest(fixtures.RadioPostgresTest):
     def test_reset_and_start_have_one_winner_and_never_retire_actual_spray(self):
         event=Event.query.filter_by(sort_date_mission_id=self.f.alpha.id).one()
         eid=event.id
-        reset=self.data(event,self.f.alpha,'reset')
+        reset=self.data(event,self.f.alpha,'reset',confirm_reset='1',correction_reason='Mistaken entry')
         start=self.data(event,self.f.alpha,'save_treatment',treatment_plan='one_type_i',pass1_surface_area='wings_only',pass1_start='22:10')
         self.assertCountEqual(self.race(reset,start),[200,409])
         db.session.expire_all();event=db.session.get(Event,eid)

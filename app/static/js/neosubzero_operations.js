@@ -129,6 +129,8 @@
                 key: formKey(form), unlocked: form.dataset.unlocked,
                 fields: [...form.elements].filter(e => e.name && e.name !== 'csrf_token' && !['submit', 'button'].includes(e.type)).map(e => ({name:e.name, value:e.value, checked:e.checked}))
             }));
+            const discard = content.querySelector('[data-ops-discard-draft]');
+            if (discard) discard.hidden = !forms.length;
             try {
                 if (forms.length) sessionStorage.setItem(draftKey(content), JSON.stringify(forms));
                 else sessionStorage.removeItem(draftKey(content));
@@ -218,6 +220,8 @@
                     if (notes) notes.open = true;
                 }
             }
+            const discard = content.querySelector('[data-ops-discard-draft]');
+            if (discard) discard.hidden = !content.querySelector('form[data-dirty="true"]');
             if (restored) {
                 const message = 'RESTORED UNSAVED DRAFT · Original version retained. Resolve any server conflict before saving.';
                 content.closest('[data-ops-accordion]').open = true;
@@ -486,7 +490,12 @@
         event.preventDefault();
         event.target.blur();
     });
+    const correctionControl = '[data-ops-discard-draft],[data-ops-reset-event]';
+    root.addEventListener('pointerdown', event => {
+        if (event.target.closest(correctionControl)) event.preventDefault();
+    });
     root.addEventListener('focusout', event => {
+        if (event.relatedTarget?.closest(correctionControl)) return;
         const form = event.target.closest(autosaveSelector);
         if (!reconcilingPretreat && form?.dataset.dirty === 'true' &&
             (event.target.name === 'notes' || event.target.matches('[data-clock-time]'))) queuePretreat(form);
@@ -649,9 +658,12 @@
             }
             return;
         }
-        const reloadInline = event.target.closest('[data-ops-reload-inline]');
+        const reloadInline = event.target.closest('[data-ops-reload-inline],[data-ops-discard-draft]');
         if (reloadInline) {
-            if (busy || preferenceBusy) return;
+            if (busy || preferenceBusy) {
+                notify('A save is in progress. Wait for it to finish before discarding edits.', true);
+                return;
+            }
             const content = inlineFor(reloadInline);
             if (content.querySelector('form[data-dirty="true"]') && !window.confirm('Discard unsaved entries for this aircraft?')) return;
             const controls = [...content.querySelectorAll('button,input:not([type="hidden"]),select,textarea')].filter(control => !control.disabled);
@@ -661,7 +673,10 @@
             try {
                 content.querySelectorAll('form[data-dirty="true"]').forEach(form => {
                     pendingPretreat.delete(form);
+                    form.reset();
                     delete form.dataset.dirty;
+                    delete form.dataset.autosaveRetry;
+                    delete form.dataset.autosaveConflict;
                 });
                 inlineMessage(content, '');
                 saveDraft();
@@ -736,7 +751,11 @@
     });
     root.addEventListener('submit', async event => {
         const form = event.target.closest('form'); if (!form) return;
-        event.preventDefault(); if (busy || preferenceBusy) return;
+        event.preventDefault();
+        if (busy || preferenceBusy) {
+            if (form.hasAttribute('data-ops-reset')) notify('A save is in progress. Wait for it to finish before resetting.', true);
+            return;
+        }
         const confirmation = form.dataset.subzeroConfirm || (media.matches && form.dataset.subzeroConfirmMobile);
         if (confirmation && !window.confirm(confirmation)) return;
         const inline = inlineFor(form);
@@ -748,6 +767,26 @@
         const sentValues = autosave ? autosaveValues(form) : null;
         const body = new FormData(form), content = inline;
         if (event.submitter?.name) body.set(event.submitter.name,event.submitter.value);
+        if (form.hasAttribute('data-ops-reset')) {
+            if (event.submitter?.dataset.opsResetEvent !== body.get('event_id') ||
+                event.submitter.dataset.opsResetVersion !== body.get('expected_version')) {
+                notify('Treatment changed. Reload this aircraft before resetting.', true);
+                return;
+            }
+            const reason = window.prompt('Reason for resetting ' + form.dataset.opsReset + ' (required, up to 500 characters):');
+            if (reason === null) return;
+            if (!reason.trim() || reason.trim().length > 500) {
+                notify('Enter a correction reason of 1–500 characters.', true);
+                return;
+            }
+            const departure = form.dataset.departed === '1' ? ' The recorded flight departure remains in effect.' : '';
+            if (!window.confirm('Reset departure deice for ' + form.dataset.opsReset +
+                '? This supersedes the recorded event, retains its history and discards unsaved edits for this aircraft.' + departure)) return;
+            body.set('confirm_reset','1');
+            body.set('correction_reason',reason.trim());
+            // Keep any unsent edits local if this correction is rejected.
+            for (const draft of inline.querySelectorAll('form[data-dirty="true"]')) pendingPretreat.delete(draft);
+        }
         body.set('target',formAction(form)); body.set('mode',root.dataset.mode);
         body.set('operation_id',root.dataset.operationId); if (content) body.set('physical_tail',content.dataset.tail);
         const toggle = form.querySelector('[data-ops-quick-toggle]');
@@ -779,6 +818,14 @@
                 throw new Error(payload.error || 'Save rejected. Your entries are kept.');
             }
             saved = true;
+            if (form.hasAttribute('data-ops-reset') && inline) {
+                for (const draft of inline.querySelectorAll('form[data-dirty="true"]')) {
+                    pendingPretreat.delete(draft);
+                    draft.reset();
+                    delete draft.dataset.dirty;
+                }
+                if (inline.contains(document.activeElement)) document.activeElement.blur();
+            }
             delete form.dataset.autosaveRetry;
             if (form.matches('[data-ops-outbound-autosave]') && typeof payload.version === 'string' &&
                 payload.event_id === body.get('event_id') && form.elements.expected_version.value === body.get('expected_version')) {

@@ -382,6 +382,8 @@ def _physical_aircraft_rows(operation, departure_context):
             item["deice_status"] = "TAIL IDENTITY REVIEW"
         if radio_complete(item.get('event')):
             continue  # Confirmed departure must not reappear at its recorded stand.
+        if item.get('gone_without_deice'):
+            continue  # Includes an authoritative departure with no surviving deice event.
         if (item.get("block_out_at_utc") and not _is_waiting_for_deice(item)
                 and not _is_active_throat(item) and not item.get("pad_evidence_review")
                 and not _is_unverified_finish(item)):
