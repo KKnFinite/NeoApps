@@ -211,7 +211,8 @@ class OutboundRedesignBrowserTest(unittest.TestCase):
             expect(row.locator('.ops-outbound-extra')).to_be_hidden()
             expect(row).to_have_attribute('data-status','gone')
             expect(row).to_have_css('background-color','rgb(104, 116, 128)')
-            expect(actions.locator('button')).to_have_count(0)
+            expect(actions.locator('button')).to_have_count(1)
+            expect(actions.get_by_role('button',name='RESET',exact=True)).to_be_visible()
             self.assertEqual(page.request.post(case.origin+'/neosubzero/operations/mutate',form=stale).status,409)
             self.assertEqual(len(dialogs),before_radio_dialogs,'RADIO uses the inline section, not a popup confirmation')
             with case.app.app_context():
