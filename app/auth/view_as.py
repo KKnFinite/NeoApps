@@ -117,14 +117,14 @@ def driver_preview(gateway, user, part):
             operation = None
         account = SimpleNamespace(user_id=None, gateway=gateway, gateway_id=gateway.id)
         status = 'AWAITING DISPATCHER APPROVAL' if operation else 'NO ACTIVE SORT'
-        return waiting_context(account, operation, status)
+        return waiting_context(account, operation, status, revision_only=part == 'revision')
     if not _eligible_vendor(gateway, user, False):
         raise PermissionError('The selected account cannot open Fuel Truck Driver at this gateway.')
     account = user.scorpion_vendor
     if part == 'revision':
         operation, status = driver_access(account)
         if status:
-            return waiting_context(account, operation, status)
+            return waiting_context(account, operation, status, revision_only=True)
         require_approved(account, operation)
         return {'fingerprint': vendor_fingerprint(account, operation, include_sort_missions=True)}
     return driver_screen_context(account, user)
@@ -135,7 +135,7 @@ def supervisor_preview(gateway, user, part):
         if not _eligible_vendor(gateway, user, True):
             raise PermissionError('The selected account cannot open Vendor Supervisor at this gateway.')
         require_supervisor(user.scorpion_vendor)
-    return supervisor_gateway_context(gateway)
+    return supervisor_gateway_context(gateway, revision_only=part == 'revision')
 
 
 def fueler_preview(gateway, user, part):

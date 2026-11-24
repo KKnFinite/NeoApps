@@ -68,11 +68,6 @@
         if (!response.ok) return;
         const state = await response.json();
         const next = JSON.stringify(state);
-        if (state.sort_missions_revision === null && access.querySelector(missionsSelector)) {
-            showDenied('Your truck connection ended.');
-            window.location.replace(root.dataset.workspaceUrl);
-            return;
-        }
         if (revision === next) {
             updateTruckRegions();
             return;
@@ -80,10 +75,15 @@
         pendingPage = null;
         if (!state.sort_missions_revision && document.activeElement?.closest('form')) return;
 
-        if (root.dataset.waiting === 'true') {
-            if (!withinSort()) return;
-            window.location.reload();
-            return;
+        const waiting = root.dataset.waiting === 'true';
+        if (waiting) {
+            const previous = JSON.parse(revision);
+            const controlsChanged = ['operation_id', 'status', 'supervisor', 'claim', 'trucks'].some(
+                key => JSON.stringify(previous[key]) !== JSON.stringify(state[key]));
+            if (controlsChanged) {
+                if (withinSort()) window.location.reload();
+                return;
+            }
         }
         if (!withinSort()) return;
         const page = await fetch(location.href, options);
@@ -95,7 +95,7 @@
         }
         if (!page.ok) return;
         const doc = new DOMParser().parseFromString(await page.text(), 'text/html');
-        if (!doc.querySelector('[data-vendor-live]')) {
+        if (!doc.querySelector(waiting ? '[data-waiting="true"]' : '[data-vendor-live]')) {
             if (root.dataset.workspaceUrl) {
                 showDenied('Operational access changed. Return to Fuel Truck Driver for your status.');
                 window.location.replace(root.dataset.workspaceUrl);
@@ -104,15 +104,13 @@
         }
         const missions = access.querySelector(missionsSelector);
         const nextMissions = doc.querySelector(missionsSelector);
-        if (missions && !nextMissions) {
-            showDenied('Operational access changed. Return to Fuel Truck Driver for your status.');
-            window.location.replace(root.dataset.workspaceUrl);
-            return;
-        }
-        if (missions) missions.replaceWith(nextMissions);
+        if (missions && nextMissions) missions.replaceWith(nextMissions);
+        else if (missions) missions.remove();
+        else if (nextMissions && 'supervisor_revision' in state) access.prepend(nextMissions);
         else if (nextMissions) access.append(nextMissions);
 
         revision = next;
+        if (waiting) return;
         pendingPage = doc;
         updateTruckRegions();
     } catch (_) {

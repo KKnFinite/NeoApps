@@ -79,6 +79,9 @@ class AccountsViewAsBrowserTest(TestCase):
             expect(page.get_by_text(evidence, exact=True).first).to_be_visible()
             expect(page.locator('form')).to_have_count(0)
             self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'))
+            if key in ('vendor-supervisor', 'fuel-truck-driver'):
+                expect(page.locator('[data-vendor-sort-missions] tr[data-mission-id]')).to_have_count(1)
+                expect(page.locator('[data-vendor-sort-missions]')).to_contain_text('UPS501')
             if key == 'fueler':
                 remaining = page.locator('[data-fueler-remaining]')
                 expect(remaining).to_have_text('1 fueling assignments remaining')

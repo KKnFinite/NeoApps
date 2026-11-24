@@ -10,11 +10,13 @@
     const status = root.querySelector("[data-fueling-board-refresh-status]");
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
+    let roster = root.dataset.sortMissionsRevision || '';
     let panelDigest = '';
 
     const fingerprint = (payload) => ({
         operationId: payload.operation_id == null ? "none" : String(payload.operation_id),
         revision: Number(payload.revision || 0),
+        roster: payload.sort_missions_revision || '',
     });
 
     const reconcile = (nextPanel) => {
@@ -72,7 +74,7 @@
         if (!revisionResponse.ok || latest.ok !== true) throw new Error("Fueling Board status unavailable.");
         const observed = fingerprint(latest);
         if (force !== true && !window.NeoLiveUpdates.insidePhysicalSort()) return;
-        if (force !== true && observed.operationId === operationId && observed.revision === revision) return;
+        if (force !== true && observed.operationId === operationId && observed.revision === revision && observed.roster === roster) return;
 
         const panelResponse = await (window.NeoLiveRevision?.fetch || fetch)(panelUrl, {
             cache: "no-store", credentials: "same-origin", headers: {Accept: "application/json",
@@ -95,6 +97,7 @@
             ? '' : (payload.panel_digest || '');
         operationId = incoming.operationId;
         revision = incoming.revision;
+        roster = incoming.roster;
         root.dataset.operationId = operationId === "none" ? "" : operationId;
         root.dataset.revision = String(revision);
     };

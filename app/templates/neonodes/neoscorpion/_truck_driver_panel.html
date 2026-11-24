@@ -43,5 +43,6 @@
             {% else %}<p class="neoscorpion-empty">{{ 'No physically ON mission.' if key=='current' else 'No work in this section.' }}</p>{% endfor %}
         </section>
         {% endfor %}
+        {% if sort_missions %}<div data-board-work-key="outbound-roster">{% include "neonodes/neoscorpion/_vendor_sort_missions.html" %}</div>{% endif %}
     </div>
 </section>

@@ -24,6 +24,49 @@ class FuelDriverSortAccessTest(TestCase):
     vendor=workflow.VendorWorkflowTest.vendor
     connect=workflow.VendorWorkflowTest.connect
 
+    def test_supervisor_and_preview_share_unassigned_outbound_without_drivers(self):
+        import re
+        from flask import g
+        from tests.test_account_security_phase1 import fixture_user
+        from tests.test_accounts_view_as import VIEW_AS, supervisor_fixture
+        from app.models import Gateway, SortDateMission
+
+        owner = fixture_user('roster-owner', platform='grandmaster')
+        supervisor = supervisor_fixture(self.gateway, owner)
+        first = self.fixture._mission('UPS701', 'N701UP', None, 10, destination='EWR')
+        second = self.fixture._mission('UPS702', 'N702UP', None, 20, destination='EWR')
+        second.assigned_tail_number = None
+        first.wave = second.wave = '1'
+        foreign = Gateway(code='ALT', name='Other gateway', is_active=True)
+        db.session.add(foreign)
+        db.session.flush()
+        other = SortDateOperation(gateway_id=foreign.id, gateway_code='ALT',
+                                  sort_date=self.operation.sort_date, sort_name='night')
+        db.session.add(other)
+        db.session.flush()
+        db.session.add(SortDateMission(sort_date_operation_id=other.id, gateway_code='ALT',
+            sort_date=other.sort_date, sort_name='night', mission_type='departure', flight_number='UPS703',
+            origin='ALT', destination='EWR'))
+        db.session.commit()
+        expected = {self.mission.id, first.id, second.id}
+        self.assertEqual(NeoScorpionTruckDriver.query.count(), 0)
+        self.assertEqual(NeoScorpionVendorAccount.query.count(), 1)
+
+        for user, path in [(supervisor, DRIVER + '/supervisor'), (owner, VIEW_AS + '/vendor-supervisor')]:
+            g.pop('_login_user', None)
+            self.client.post('/logout')
+            g.pop('_login_user', None)
+            self.client.post('/login', data={'email':user.email, 'password':PASSWORD})
+            page = self.client.get(path)
+            self.assertEqual(page.status_code, 200)
+            roster = page.get_data(as_text=True).split('data-vendor-sort-missions', 1)[1].split('</section>', 1)[0]
+            self.assertCountEqual(map(int, re.findall(r'data-mission-id="(\d+)"', roster)), expected)
+            for label in ('UPS701', 'UPS702', '1st EWR', '2nd EWR'):
+                self.assertIn(label, roster)
+            self.assertNotIn('UPS703', roster)
+            self.assertNotRegex(roster, r'<(?:button|input|form|select)\b')
+            self.assertIn(b'No active vendor assignments.', page.data)
+
     def pending(self):
         user,token=vendors.invite(self.gateway,self.dispatcher,'pending@example.test','Pending Driver')
         db.session.commit()
@@ -57,16 +100,23 @@ class FuelDriverSortAccessTest(TestCase):
         self.assertEqual(claim.status,'pending')
         self.assertFalse(NeoScorpionTruckDriver.query.filter_by(driver_user_id=user.id).count())
 
-    def test_preapproval_http_projection_no_missions_and_rollover_rejects_claim(self):
+    def test_preapproval_http_read_only_roster_and_rollover_rejects_claim(self):
         self.prepare();user,account=self.pending()
         self.client.post('/login',data={'email':user.email,'password':'VendorPassword123!'})
         page=self.client.get(DRIVER+'/my-truck')
         self.assertIn(b'AWAITING DISPATCHER APPROVAL',page.data)
-        self.assertNotIn(self.mission.assigned_tail_number.encode(),page.data)
-        self.assertNotIn(b'ALL SORT MISSIONS',page.data)
+        self.assertIn(self.mission.assigned_tail_number.encode(),page.data)
+        self.assertIn(b'CURRENT SORT OUTBOUND',page.data)
         self.assertEqual(self.client.get(DRIVER+'/live').status_code,403)
         self.assertEqual(self.client.get(DRIVER+'/supervisor').status_code,403)
         self.assertEqual(self.client.get(DRIVER+'/supervisor/revision').status_code,403)
+        vendors.set_participation(self.gateway, self.operation, self.dispatcher, user.id, 'denied', 0)
+        db.session.commit()
+        denied = self.client.get(DRIVER+'/my-truck')
+        self.assertIn(b'DISPATCHER APPROVAL DENIED', denied.data)
+        self.assertIn(self.mission.flight_number.encode(), denied.data)
+        self.assertNotIn(b'name="truck_id"', denied.data)
+        self.assertEqual(self.client.get(DRIVER+'/live').status_code,403)
         with patch.object(operations,'current_sort_operation',return_value=None):
             self.client.post(DRIVER+'/my-truck',data={'operation_id':self.operation.id,'truck_id':self.truck.id})
         self.assertFalse(NeoScorpionTruckDriver.query.filter_by(driver_user_id=user.id).count())

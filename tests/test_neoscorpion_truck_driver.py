@@ -86,6 +86,13 @@ class TruckDriverTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
         self.assertTrue(all(t.actual_lbs is None for t in self.work.tank_states))
         watcher=self.fixture._login_user('driver-viewer','watcher'); self.login(watcher)
+        unassigned = self.fixture._mission('UPS989', 'N989UP', None, 20)
+        db.session.commit()
+        page = self.client.get('/neoscorpion/truck-driver').get_data(as_text=True)
+        roster = page.split('data-vendor-sort-missions', 1)[1].split('</section>', 1)[0]
+        self.assertIn(f'data-mission-id="{unassigned.id}"', roster)
+        self.assertIn('UPS989', roster)
+        self.assertNotRegex(roster, r'<(?:button|input|form|select)\b')
         for path in ('/neoscorpion/truck-driver','/neoscorpion/truck-driver/revision','/neoscorpion/truck-driver/live-panel'):
             self.assertEqual(self.client.get(path).status_code,200)
         self.assertEqual(self.client.post('/neoscorpion/truck-driver/assignment',data=data,headers=headers).status_code,403)

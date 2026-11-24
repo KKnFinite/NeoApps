@@ -13,12 +13,13 @@
 .vendor-header button { min-height: 44px; }
 
 .vendor-sort-missions { margin-top: 22px; }
-.vendor-sort-missions table { border-collapse: collapse; font-size: clamp(12px, 3.5vw, 15px); }
+.vendor-sort-missions table { width: 100%; border-collapse: collapse; font-size: clamp(12px, 3.5vw, 15px); }
+.vendor-sort-missions :is(th, td) { overflow-wrap: anywhere; }
 .vendor-sort-missions :is(th, td) { padding: 6px clamp(4px, 1.5vw, 12px); text-align: left; }
 .vendor-sort-missions thead th { color: #ffe05b; border-bottom: 1px solid #6d5f25; }
-.vendor-sort-missions thead th:nth-child(1) { width: 27%; }
-.vendor-sort-missions thead th:nth-child(2) { width: 20%; }
-.vendor-sort-missions thead th:nth-child(3) { width: 32%; }
-.vendor-sort-missions thead th:nth-child(4) { width: 21%; }
+.vendor-driver .vendor-sort-missions table { table-layout: auto; }
+@media (max-width: 480px) {
+    .vendor-sort-missions :is(th, td) { padding: 6px 2px; }
+}
 .vendor-sort-missions th[scope=rowgroup] { background: #292923; }
 .vendor-sort-missions td { border-bottom: 1px solid #444; }

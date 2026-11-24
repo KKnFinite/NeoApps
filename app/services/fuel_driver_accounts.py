@@ -219,16 +219,17 @@ def set_company_active(company_id, active, expected_version, reference, password
         active=company.is_active, reason=_reference(reference))
 
 
-def supervisor_context(account):
+def supervisor_context(account, *, revision_only=False):
     """Gateway-scoped read-only operations; never a Dispatch/Fueler context."""
-    return supervisor_gateway_context(require_supervisor(account).gateway)
+    return supervisor_gateway_context(require_supervisor(account).gateway, revision_only=revision_only)
 
 
-def supervisor_gateway_context(gateway):
+def supervisor_gateway_context(gateway, *, revision_only=False):
     """Same Supervisor projection after the caller has authorized the gateway."""
     from sqlalchemy import or_
     from app.models import NeoScorpionFuelTruck, NeoScorpionFuelAssignment, NeoScorpionFuelWorkState, SortDateMission, SortDateParkingAssignment
-    from app.services.neoscorpion import current_sort_operation
+    from app.services.neoscorpion import current_sort_operation, _fuel_assignments_revision_for_operation
+    from app.services.neoscorpion_driver_missions import outbound_missions, sort_missions_revision
     from app.services.departure_labels import destination_label, operation_departure_occurrences
     operation = current_sort_operation(gateway)
     rows = []
@@ -273,4 +274,10 @@ def supervisor_gateway_context(gateway):
     payload = dict(gateway=gateway.code, operation_id=operation.id if operation and not operation.archived_at_utc else None,
         sort_label=f"{operation.sort_name} {operation.sort_date}" if operation and not operation.archived_at_utc else "NO ACTIVE SORT", rows=rows)
     revision = sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-    return dict(supervisor=payload, fingerprint={"supervisor_revision": revision, "operation_id": payload["operation_id"]})
+    current = operation if payload["operation_id"] is not None else None
+    fingerprint = dict(supervisor_revision=revision, operation_id=payload["operation_id"],
+                       revision=_fuel_assignments_revision_for_operation(current),
+                       sort_missions_revision=sort_missions_revision(current) if current else None)
+    if revision_only:
+        return dict(fingerprint=fingerprint)
+    return dict(supervisor=payload, fingerprint=fingerprint, sort_missions=outbound_missions(gateway, current))

@@ -1402,8 +1402,13 @@ def fueling_board():
 
 
 def _driver_page_context(gateway):
+    from app.services.neoscorpion_driver_missions import outbound_missions, sort_missions_revision
     manage = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)["can_edit"]
-    return dict(driver_context(gateway,current_user,manage=manage),gateway=gateway,can_manage_drivers=False,
+    context = driver_context(gateway, current_user, manage=manage)
+    operation = context["operation"]
+    return dict(context, sort_missions=outbound_missions(gateway, operation),
+        sort_missions_revision=sort_missions_revision(operation) if operation else None,
+        gateway=gateway,can_manage_drivers=False,
         can_select_driver_truck=permission_access(DRIVER_VIEW,DRIVER_EDIT)["can_edit"])
 
 
@@ -1457,7 +1462,7 @@ def truck_driver_live_panel():
     context=_driver_page_context(get_current_gateway())
     operation=context["operation"]
     return _json_no_store({"ok":True,"operation_id":operation.id if operation else None,
-        "revision":context["fuel_assignments_revision"],
+        "revision":context["fuel_assignments_revision"], "sort_missions_revision":context["sort_missions_revision"],
         **panel_content(render_template("neonodes/neoscorpion/_truck_driver_panel.html",**context))})
 
 
@@ -1466,7 +1471,7 @@ def truck_driver_live_panel():
 def truck_driver_revision():
     if not permission_access(DRIVER_VIEW)["can_view"]:
         return _json_no_store({"ok":False,"error":"Access denied."},403)
-    return _json_no_store({"ok":True,**fuel_assignments_live_revision(get_current_gateway())})
+    return _json_no_store({"ok":True, **fuel_assignments_live_revision(get_current_gateway(), include_outbound=True)})
 
 
 @bp.get("/fueling-board/live-panel")
