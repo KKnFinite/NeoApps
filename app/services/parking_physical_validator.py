@@ -214,16 +214,6 @@ def _active_rule_blocked_positions(operation):
     }
 
 
-def retire_obsolete_echo_clearance_alerts():
-    """Close generated alerts even for closed Sorts that will never be revalidated."""
-    return MotherBrainAlert.query.filter(
-        MotherBrainAlert.active.is_(True),
-        MotherBrainAlert.scope == MOTHERBRAIN_ALERT_SCOPE,
-        MotherBrainAlert.title == "Echo 767 clearance conflict",
-        MotherBrainAlert.alert_key.like(f"{PARKING_ALERT_KEY_PREFIX}:%:echo-767-clearance-%"),
-    ).update({MotherBrainAlert.active: False}, synchronize_session=False)
-
-
 def sync_parking_physical_alerts(gateway, operation, validation_context):
     if not gateway or not operation:
         return {"changed": False, "active_keys": []}
