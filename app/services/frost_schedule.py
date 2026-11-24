@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import select
 from app.extensions import db
 from app.models import GatewaySortMatrix, SortTimelineSortSetting, SortTimelineSettings
-from app.services.gateway_matrix import gateway_timezone
+from app.services.gateway_matrix import configured_sort_times_utc, gateway_timezone
 
 UTC = timezone.utc
 
@@ -23,6 +23,27 @@ class Cycle:
     deadline: datetime
     sort_start: datetime
     sort_end: datetime
+    windows: tuple = ()
+
+
+def _coincident(cycles):
+    by_start = {}
+    for cycle in cycles:
+        prior = by_start.get(cycle.start)
+        if prior:
+            windows = tuple(sorted(set(prior.windows + cycle.windows)))
+            cycle = Cycle(cycle.start, max(prior.deadline, cycle.deadline),
+                          min(prior.sort_start, cycle.sort_start), max(prior.sort_end, cycle.sort_end), windows)
+        by_start[cycle.start] = cycle
+    return tuple(by_start[key] for key in sorted(by_start))
+
+
+def hourly_targets(cutoff, sort_end):
+    """One prospective instant per intersecting UTC weather hour; close is exclusive."""
+    hour = cutoff.replace(minute=0, second=0, microsecond=0)
+    while hour < sort_end and cutoff < sort_end:
+        yield max(cutoff, hour)
+        hour += timedelta(hours=1)
 
 
 class Schedule:
@@ -47,7 +68,8 @@ class Schedule:
         ).join(SortTimelineSettings,
             SortTimelineSettings.id == SortTimelineSortSetting.settings_id
         ).where(GatewaySortMatrix.gateway_id == gateway.id,
-            SortTimelineSettings.gateway_id == gateway.id, GatewaySortMatrix.is_active.is_(True),
+            SortTimelineSettings.gateway_id == gateway.id, SortTimelineSortSetting.gateway_code == gateway.code,
+            GatewaySortMatrix.gateway_code == gateway.code, GatewaySortMatrix.is_active.is_(True),
             SortTimelineSortSetting.sort_window_start_local.is_not(None),
             SortTimelineSortSetting.sort_window_end_local.is_not(None))).all()
         return cls(zone, tuple(rows))
@@ -56,11 +78,9 @@ class Schedule:
         for weekday, start, end in self.rows:
             if day.strftime('%A').lower() != weekday:
                 continue
-            first = datetime.combine(day, start, self.zone)
-            last = datetime.combine(day, end, self.zone)
-            if end <= start:
-                last += timedelta(days=1)
-            yield first.astimezone(UTC), last.astimezone(UTC)
+            first, last = configured_sort_times_utc(day, start, end, self.zone)
+            if first is not None:
+                yield first, last
 
     def eligible(self, at):
         if not self.zone or not self.rows:
@@ -81,21 +101,18 @@ class Schedule:
     def cycles(self, day):
         # Coincident cycles share the same weather/model computation. No
         # duplicate scoring simply because two configured windows overlap.
-        values={}
+        cycles=[]
         for start,end in self.windows(day):
             if end<=start:continue
             middle=start+(end-start)/2
             for due,following in ((start,middle),(middle,end)):
-                cycle=Cycle(due,min(due+timedelta(hours=1),following),start,end)
-                previous=values.get(due)
-                values[due]=Cycle(due,max(previous.deadline,cycle.deadline),
-                    min(previous.sort_start,start),max(previous.sort_end,end)) if previous else cycle
-        return tuple(values[key] for key in sorted(values))
+                cycles.append(Cycle(due,min(due+timedelta(hours=1),following),start,end,((start,end),)))
+        return _coincident(cycles)
 
     def sort_cycles(self, at):
         if not self.zone or not self.rows:return ()
         day=at.astimezone(self.zone).date()
-        return tuple(cycle for date in (day-timedelta(days=1),day)
+        return _coincident(cycle for date in (day-timedelta(days=1),day)
             for cycle in self.cycles(date)
             if cycle.sort_start<=at<cycle.sort_end)
 

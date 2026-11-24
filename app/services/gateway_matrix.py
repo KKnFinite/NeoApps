@@ -343,6 +343,10 @@ def configured_sort_window_utc(gateway, sort_date, sort_name, zone, *, sort_sett
     setting = sort_setting or _sort_timeline_sort_setting(gateway, sort_name)
     start_time = getattr(setting, "sort_window_start_local", None)
     end_time = getattr(setting, "sort_window_end_local", None)
+    return configured_sort_times_utc(sort_date, start_time, end_time, zone)
+
+
+def configured_sort_times_utc(sort_date, start_time, end_time, zone):
     if not start_time or not end_time or start_time == end_time:
         return None, None
     start, end = _sort_window_for_date(sort_date, start_time, end_time)

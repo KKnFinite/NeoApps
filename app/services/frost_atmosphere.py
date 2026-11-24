@@ -6,7 +6,8 @@ All temperatures are Celsius internally. No surface temperature is estimated.
 import math
 from datetime import timedelta
 
-from app.services import frost_forecast as clock, frost_forecast_native as native
+from app.services import frost_analysis, frost_forecast as clock, frost_forecast_native as native
+from app.services.frost_schedule import hourly_targets
 
 VERSION = 'krfd-atmospheric-feasibility-v1'
 LABELS = {
@@ -41,7 +42,7 @@ def ice_threshold(dewpoint):
     return 272.62 * log_ratio / (22.46 - log_ratio)
 
 
-def assess(fields, *, minimum, nws_air):
+def assess(fields, *, minimum, nws_air, grid_only=False):
     """Classify the target hour; overnight guidance is context, not its temperature."""
     air = fields.get('fcst_temperature_c')
     dew = fields.get('fcst_dewpoint_c')
@@ -71,7 +72,9 @@ def assess(fields, *, minimum, nws_air):
         return result('unknown', 'Incomplete or inconsistent temperature, moisture, wind, sky or overnight guidance.')
     depression = max(0, air - boundary)
     facts['required_surface_cooling_c'] = depression
-    if not all(finite(v) for v in (observed_trend, change, nws_air)):
+    if grid_only and not (finite(observed_trend) or finite(change)):
+        return result('unknown', 'No measured or forecast cooling trend is available.')
+    if not grid_only and not all(finite(v) for v in (observed_trend, change, nws_air)):
         return result('mixed', 'A cooling trend or independent hourly forecast is missing.')
 
     # Qualitative regimes can disagree even when each numerical input is valid.
@@ -79,7 +82,7 @@ def assess(fields, *, minimum, nws_air):
     # attention. Do not use an above-freezing minimum to dismiss that signal.
     if (min(air,nws_air) <= 0 < max(air,nws_air)
             or min(air,nws_air) <= TYPICAL_C and max(air,nws_air) > PATCHY_C
-            or observed <= PATCHY_C < minimum and observed_trend < 0):
+            or observed <= PATCHY_C < minimum and finite(observed_trend) and observed_trend < 0):
         return result('mixed', 'Observed cooling or independent guidance disagrees with the forecast thermal regime.')
     if air <= 0 and air <= boundary:
         # Independent RH representation of the same moisture, not a second vote.
@@ -90,7 +93,8 @@ def assess(fields, *, minimum, nws_air):
     radiative = bool(night) and cloud <= 30 and wind < MIXING_KT
     if radiative and air <= TYPICAL_C and depression <= REFERENCE_DEPRESSION_C:
         return result('possible', 'Clear, light-wind nighttime conditions could cool a surface to ice saturation.')
-    if radiative and air <= PATCHY_C and (observed_trend < 0 or change < 0) and depression <= PATCHY_DEPRESSION_C:
+    cooling = any(finite(trend) and trend < 0 for trend in (observed_trend, change))
+    if radiative and air <= PATCHY_C and cooling and depression <= PATCHY_DEPRESSION_C:
         return result('possible', 'Cooling in clear, light-wind conditions supports localized frost potential.')
     if min(air,nws_air,minimum,observed) > PATCHY_C:
         return result('weak', 'Target temperatures, observations and the overnight low are above the regional patchy-frost guidance range.')
@@ -138,6 +142,70 @@ def for_capture(source, predictions):
         output[str(h)] = dict(target_at_utc=target.isoformat(), label=LABELS[state],
                               comparison=comparison(state, pair), **assessment)
     return dict(method=VERSION, horizons=output)
+
+
+def hourly_for_sort(source, cycle):
+    """Assess actual in-window forecast periods using only this capture's source evidence."""
+    from app.services.neosubzero_weather import FORECAST_STALE_TTL
+
+    cutoff = clock.instant(source['cutoff_at_utc'])
+    history = native.observation_history(source.get('observations', ()), cutoff)
+    observation = history['observation'] or {}
+    grids = {}
+    for grid in (*source.get('nws_forecasts', ()), *source.get('nws_hourly', ())):
+        issued = clock.instant(grid['issued_at_utc'])
+        if cutoff - FORECAST_STALE_TTL <= issued <= cutoff:
+            grids[clock.instant(grid['target_at_utc'])] = grid
+    snapshots = source.get('native_forecasts') or []
+    hours = []
+    prior_grid = None
+    for target in hourly_targets(cutoff, cycle.sort_end):
+        grid = grids.get(target) or {}
+        forecast = grid.get('observation') or {}
+        period = grid.get('period_minimum') or {}
+        minimum = None
+        if period and clock.instant(period['start_utc']) <= target < clock.instant(period['end_utc']):
+            minimum = period['temperature_c']
+        fields = dict(target_night=int(frost_analysis.solar(target)['night']),
+                      obs_temperature_c=observation.get('temperature_c'),
+                      obs_dewpoint_c=observation.get('dewpoint_c'),
+                      obs_cooling_3h_c_per_hour=history['cooling_rate_3h_c_per_hour'])
+        latest = previous = None
+        if snapshots:
+            try:
+                latest, previous = native.forecast_pair(
+                    [r for r in snapshots if clock.instant(r['valid_at_utc']) <= target], cutoff, target)
+                if cutoff - clock.instant(latest['cycle_at_utc']) > FORECAST_STALE_TTL:
+                    latest = previous = None
+            except (KeyError, TypeError, ValueError):
+                pass
+        required = ('temperature_c', 'dewpoint_c', 'relative_humidity', 'cloud_cover_percent', 'wind_kt')
+        use_native = latest is not None and all(finite(latest['values'].get(k)) for k in required)
+        if use_native:
+            values = latest['values']
+            earlier = previous['values'].get('temperature_c') if previous else None
+            interval = ((clock.instant(latest['valid_at_utc']) - clock.instant(previous['valid_at_utc']))
+                        .total_seconds() / 3600) if previous else None
+        else:
+            values = dict(forecast, cloud_cover_percent=grid.get('sky_cover_percent'))
+            earlier = prior_grid['observation'].get('temperature_c') if prior_grid else None
+            interval = (target - clock.instant(prior_grid['target_at_utc'])).total_seconds() / 3600 if prior_grid else None
+        fields.update({'fcst_' + field: values.get(field) for field in required})
+        air = values.get('temperature_c')
+        if finite(air) and finite(earlier):
+            fields.update(fcst_temperature_change_c=air-earlier, fcst_trend_interval_hours=interval)
+        nws_air = forecast.get('temperature_c')
+        assessment = assess(fields, minimum=minimum, nws_air=nws_air, grid_only=not use_native)
+        if not finite(nws_air):
+            assessment.update(state='unknown', reason='Current NWS temperature guidance is unavailable for this hour.')
+        hours.append(dict(target_at_utc=target.isoformat(), nws_issued_at_utc=grid.get('issued_at_utc'),
+                          observed_at_utc=observation.get('utc'), guidance='HRRR and NWS' if use_native else 'NWS',
+                          native_source_sha256=latest['source_sha256'] if use_native else None, **assessment))
+        prior_grid = grid or None
+    coverage = dict(sort_start_utc=cycle.sort_start.isoformat(), sort_end_utc=cycle.sort_end.isoformat(), hours=hours)
+    if len(cycle.windows) > 1:
+        coverage['sort_windows'] = [(a.isoformat(), b.isoformat()) for a,b in cycle.windows]
+    return coverage
 
 
 def comparison(state, scores):

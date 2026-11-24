@@ -22,7 +22,7 @@ from app.services import frost_forecast as clock, frost_forecast_native as nativ
 from app.services import frost_research, frost_model as model, frost_analysis as analysis, frost_atmosphere
 from app.services.memory_diagnostics import memory_diagnostics, observe_process_memory
 from app.services import frost_resources as priority
-from app.services.frost_schedule import Schedule, cycle_identity
+from app.services.frost_schedule import Schedule, cycle_identity, hourly_targets
 
 VERSION='frost-auto-v1'
 MAX_SNAPSHOT=1024*1024
@@ -91,21 +91,30 @@ def acquire():
                 details=dict(resource='memory',usage_bytes=budget['usage'],limit_bytes=budget['limit']))
     sources=[]
     def get(url,maximum):
+        priority.checkpoint()
         raw,receipt=fetch(url,maximum)
         sources.append(dict(receipt,raw_base64=base64.b64encode(raw).decode()))
         return json.loads(raw),receipt
-    metars,receipt=get('https://aviationweather.gov/api/data/metar?ids=KRFD&format=json&hours=14',128*1024)
-    observations=normalize_metars(metars)
-    for row in observations:row['received_at_utc']=receipt['retrieved_at_utc']
-    projected=[];errors=[];cutoff=None
+    cycle = getattr(g, 'frost_capture_cycle', None) if has_app_context() else None
+    observations=[];errors=[]
+    try:
+        metars,receipt=get('https://aviationweather.gov/api/data/metar?ids=KRFD&format=json&hours=14',128*1024)
+        observations=normalize_metars(metars)
+        for row in observations:row['received_at_utc']=receipt['retrieved_at_utc']
+    except priority.Deferred:
+        raise
+    except (ValueError, TypeError, AttributeError, KeyError, OSError) as error:
+        if cycle is None:
+            raise
+        errors.append('KRFD observations unavailable: '+type(error).__name__)
+    projected=[];additional=[];grid=None;cutoff=None
     try:
         points,_=get('https://api.weather.gov/points/42.1915,-89.0876',64*1024)
         x,y=points['geometry']['coordinates']
         if abs(x-STATION['longitude'])>.0001 or abs(y-STATION['latitude'])>.0001:raise ValueError('NWS location is not KRFD.')
         grid,_=get(points['properties']['forecastGridData'],512*1024)
         cutoff=now()
-        for h in native.HORIZONS:
-            projected.append(dict(hours=h,**clock.nws_grid(grid,cutoff=cutoff,target=cutoff+timedelta(hours=h))))
+        # Score against the final capture cutoff once HRRR has returned.
     except priority.Deferred:
         raise
     except Exception as error:
@@ -157,9 +166,22 @@ def acquire():
             errors.append(native_error)
         cutoff=now()
     recent=analysis.features(stamp(cutoff),observations)
-    if not recent['matched']:raise ValueError('KRFD observations are missing/stale; capture will retry, never backdate.')
+    if not recent['matched']:
+        if cycle is None:
+            raise ValueError('KRFD observations are missing/stale.')
+        errors.append('KRFD observations are missing/stale at capture.')
+    if grid is not None:
+        try:
+            project=clock.nws_grid_projector(grid,cutoff=cutoff)
+            model_targets={cutoff+timedelta(hours=h):h for h in native.HORIZONS}
+            projected=[dict(hours=h,**project(target)) for target,h in model_targets.items()]
+            if cycle:
+                additional=[project(target) for target in hourly_targets(cutoff,cycle.sort_end)
+                            if target not in model_targets]
+        except (ValueError, KeyError, TypeError, OverflowError) as error:
+            errors.append('NWS forecast unavailable: '+type(error).__name__)
     return dict(station=STATION,cutoff_at_utc=stamp(cutoff),observations=observations,
-        sources=sources,nws_forecasts=projected,native_forecasts=native_forecasts,native_point=native_point,errors=errors,
+        sources=sources,nws_forecasts=projected,nws_hourly=additional,native_forecasts=native_forecasts,native_point=native_point,errors=errors,
         native_unavailable=native_error,native_resources=resources)
 
 
@@ -329,6 +351,7 @@ def tick(gateway_id):
                 if row.identity!=identity(current):raise ValueError('Old slot has no committed evidence; never manufacture a historical capture.')
                 # Request-local gateway context, not mutable application config.
                 g.frost_capture_gateway=gateway_id
+                g.frost_capture_cycle=cycle
                 db.session.rollback()  # No read transaction spanning weather acquisition.
                 try:
                     # Reclaim closed SDK cycles before HRRR's stricter reserve
@@ -340,10 +363,12 @@ def tick(gateway_id):
                             raise ValueError('Capture window expired; no historical prediction is permitted.')
                         scores=predictions(gateway_id,source)
                         atmosphere=frost_atmosphere.for_capture(source,scores)
+                        atmosphere['hourly']=frost_atmosphere.hourly_for_sort(source,cycle)
                         if not cycle.start<=now()<cycle.deadline:
                             raise ValueError('Scoring window expired; no historical prediction is permitted.')
                         source.setdefault('native_resources',{}).update(priority.wait_metrics())
                 finally:
+                    g.pop('frost_capture_cycle',None)
                     # Preserve one owned client through staging/delivery; the
                     # outer capture scope closes and reclaims it on every exit.
                     gc.collect()

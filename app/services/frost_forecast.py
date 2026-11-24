@@ -230,6 +230,10 @@ def research_vector(observations, selected, *, cutoff, target):
 
 
 def nws_grid(payload, *, cutoff, target):
+    return nws_grid_projector(payload, cutoff=cutoff)(target)
+
+
+def nws_grid_projector(payload, *, cutoff):
     """Existing NWS point forecast grid for PROSPECTIVE research, never history.
 
     Keep updateTime as the documented grid revision timestamp and retain the
@@ -254,39 +258,49 @@ def nws_grid(payload, *, cutoff, target):
         raise ValueError('Forecast grid does not contain KRFD.')
     properties=payload['properties']
     issued=instant(properties['updateTime'])
-    if issued>cutoff or target<cutoff:
+    if issued>cutoff:
         raise ValueError('Future NWS forecast revision or invalid target.')
     from app.services.neosubzero_weather import _grid_intervals, _grid_value_at, FORECAST_STALE_TTL
     if cutoff-issued>FORECAST_STALE_TTL:
         raise ValueError('NWS forecast exceeds the existing stale-forecast limit.')
-    def value(key, unit):
-        quantity=properties.get(key) or {}
-        if not quantity.get('values'):return None
-        if quantity.get('uom')!=unit:
-            raise ValueError('Unexpected NWS forecast units for '+key)
-        return _number(_grid_value_at(_grid_intervals(quantity),target))
-    t,d=value('temperature','wmoUnit:degC'),value('dewpoint','wmoUnit:degC')
-    speed,gust=value('windSpeed','wmoUnit:km_h-1'),value('windGust','wmoUnit:km_h-1')
-    visibility,ceiling=value('visibility','wmoUnit:m'),value('ceilingHeight','wmoUnit:m')
-    minimum=properties.get('minTemperature') or {}
-    night_min=None
-    if isinstance(minimum,dict) and minimum.get('uom')=='wmoUnit:degC':
-        matching=[(start,end,v) for start,end,v in _grid_intervals(minimum) if start<=target<end]
+    series = {}
+    def intervals(key, unit):
+        if key not in series:
+            quantity = properties.get(key) or {}
+            if not quantity.get('values') or (key == 'minTemperature' and quantity.get('uom') != unit):
+                series[key] = ()
+            elif quantity.get('uom') != unit:
+                raise ValueError('Unexpected NWS forecast units for '+key)
+            else:
+                series[key] = _grid_intervals(quantity)
+        return series[key]
+
+    def project(target):
+        if target < cutoff:
+            raise ValueError('Target precedes forecast cutoff.')
+        def value(key, unit):
+            return _number(_grid_value_at(intervals(key, unit), target))
+        t,d=value('temperature','wmoUnit:degC'),value('dewpoint','wmoUnit:degC')
+        speed,gust=value('windSpeed','wmoUnit:km_h-1'),value('windGust','wmoUnit:km_h-1')
+        visibility,ceiling=value('visibility','wmoUnit:m'),value('ceilingHeight','wmoUnit:m')
+        matching=[(start,end,v) for start,end,v in intervals('minTemperature','wmoUnit:degC') if start<=target<end]
+        night_min=None
         if len(matching)==1:
             start,end,v=matching[0]
             night_min=dict(temperature_c=v,start_utc=start.isoformat(),end_utc=end.isoformat())
-    return dict(issued_at_utc=issued.isoformat(),target_at_utc=target.isoformat(),
-        period_minimum=night_min,
-        issue_basis='NWS forecast grid updateTime; actual retrieval time retained separately',
-        source='api.weather.gov / KRFD containing grid',operationally_validated=False,
-        thermodynamic_coverage=t is not None and d is not None,
-        observation=dict(utc=target.isoformat(),temperature_c=t,dewpoint_c=d,
-            spread_c=t-d if t is not None and d is not None else None,
-            relative_humidity=value('relativeHumidity','wmoUnit:percent'),
-            wind_kt=speed/1.852 if speed is not None else None,gust_kt=gust/1.852 if gust is not None else None,
-            wind_direction_degrees=value('windDirection','wmoUnit:degree_(angle)'),
-            cloud_layers=[],clear_sky=None,ceiling_ft=ceiling/0.3048 if ceiling is not None else None,
-            visibility_sm=visibility/1609.344 if visibility is not None else None,
-            weather_codes=None,precipitation_since_hourly_reset_in=None),
-        sky_cover_percent=value('skyCover','wmoUnit:percent'),
-        limitations='Forecast sky percentage/QPF/weather categories are not substituted for measured METAR codes or reset precipitation.')
+        return dict(issued_at_utc=issued.isoformat(),target_at_utc=target.isoformat(),
+            period_minimum=night_min,
+            issue_basis='NWS forecast grid updateTime; actual retrieval time retained separately',
+            source='api.weather.gov / KRFD containing grid',operationally_validated=False,
+            thermodynamic_coverage=t is not None and d is not None,
+            observation=dict(utc=target.isoformat(),temperature_c=t,dewpoint_c=d,
+                spread_c=t-d if t is not None and d is not None else None,
+                relative_humidity=value('relativeHumidity','wmoUnit:percent'),
+                wind_kt=speed/1.852 if speed is not None else None,gust_kt=gust/1.852 if gust is not None else None,
+                wind_direction_degrees=value('windDirection','wmoUnit:degree_(angle)'),
+                cloud_layers=[],clear_sky=None,ceiling_ft=ceiling/0.3048 if ceiling is not None else None,
+                visibility_sm=visibility/1609.344 if visibility is not None else None,
+                weather_codes=None,precipitation_since_hourly_reset_in=None),
+            sky_cover_percent=value('skyCover','wmoUnit:percent'),
+            limitations='Forecast sky percentage/QPF/weather categories are not substituted for measured METAR codes or reset precipitation.')
+    return project

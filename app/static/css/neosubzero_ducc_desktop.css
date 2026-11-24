@@ -23,6 +23,15 @@
     .neosubzero-ucc .ucc-ramp.ucc-whos-left { grid-area:13 / 1 / 14 / -1; }
 }
 @media (max-width:900px) {
+    .neosubzero-ucc .neosubzero-weather-hour-priority:has([data-frost-outlook]) {
+        grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+    }
+    .neosubzero-ucc .neosubzero-weather-hour-priority em:has([data-frost-outlook]) {
+        white-space:normal;
+        overflow-wrap:anywhere;
+        font-size:.7rem;
+        line-height:1.3;
+    }
     .neosubzero-ucc .ucc-early-out .ucc-staffing-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .neosubzero-ucc[data-ucc-mobile-view="ramp"] :is(.ucc-early-out,.ucc-whos-left) { display:none; }
 }

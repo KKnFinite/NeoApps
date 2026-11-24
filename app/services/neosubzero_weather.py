@@ -81,8 +81,6 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
         upcoming_limit=TV_UPCOMING_SORT_COUNT,
     )
     from app.services import frost_ducc
-    frost_revision,predictions=frost_ducc.project(gateway,now=now)
-    frost_ducc.decorate(forecast_cards,predictions)
     # The management view retains its original date horizon and provider-error state.
     management_cards = (
         tuple(card for card in forecast_cards if card["sort_date"] < forecast_end)
@@ -103,7 +101,7 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
         next(
             (
                 card
-                for card in management_cards
+                for card in forecast_cards
                 if card["sort_date"] == forecast_scope.sort_date
             ),
             None,
@@ -111,6 +109,16 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
         if forecast_scope is not None
         else None
     )
+    window = current_sort.get('physical_window') if current_sort else None
+    frost_revision,predictions=frost_ducc.project(gateway,now=now,window=window)
+    if current_sort and window:
+        covered = {hour for hour, assessment in predictions.items() if assessment.get('hourly')
+                   and hour < window[1] and hour + timedelta(hours=1) > window[0]}
+        if covered:
+            _include_committed_hours(current_sort, covered, ZoneInfo(gateway_timezone(gateway)))
+        elif not isinstance(forecast, dict):
+            current_sort = None
+    frost_ducc.decorate(forecast_cards,predictions)
     future_forecast = tuple(
         card
         for card in management_cards
@@ -437,20 +445,38 @@ def _forecast_cards(gateway, operation, payload, *, now=None, upcoming_limit=0):
         start_local, end_local = sort_lookup_window_for_operation(candidate, gateway)
         future_window = sort_date > operation.sort_date if operation is not None else end_local > local_now
         upcoming_on_tv = bool(upcoming_limit and future_window)
-        if not management_window and not upcoming_on_tv:
+        current_window = operation is not None and sort_date == operation.sort_date
+        if not management_window and not upcoming_on_tv and not current_window:
             continue
         start = start_local.replace(tzinfo=zone)
         end = end_local.replace(tzinfo=zone)
         hours = tuple(
             row for row in hourly_rows
-            if row["start"] < end and row["end"] > start
+            if row["start"].astimezone(timezone.utc) < end.astimezone(timezone.utc)
+            and row["end"].astimezone(timezone.utc) > start.astimezone(timezone.utc)
         )
         card = _forecast_card(sort_date, start, end, hours)
+        card["physical_window"] = (start.astimezone(timezone.utc), end.astimezone(timezone.utc))
         card["upcoming_on_tv"] = upcoming_on_tv
         cards.append(card)
         if upcoming_on_tv:
             upcoming_limit -= 1
     return tuple(cards)
+
+
+def _include_committed_hours(card, covered, zone):
+    # The live NWS hourly feed rolls past hours off. Preserve their recorded
+    # outlook while explicitly leaving missing display-weather values empty.
+    rows = {row['start'].astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0): row
+            for row in card['hours']}
+    for hour in covered - rows.keys():
+        rows[hour] = _forecast_hour(dict(startTime=hour, endTime=hour+timedelta(hours=1),
+                                        shortForecast='Hourly weather unavailable'), (), zone)
+    card['hours'] = tuple(rows[hour] for hour in sorted(rows))
+    labels = [row['time'] for row in card['hours']]
+    for row in card['hours']:
+        if labels.count(row['time']) > 1:
+            row['time'] = row['start'].strftime('%H%M %Z')
 
 
 def _forecast_hour(period, gust_intervals, zone):
