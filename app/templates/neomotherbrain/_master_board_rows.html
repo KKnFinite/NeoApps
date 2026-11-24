@@ -1,0 +1,116 @@
+{% from "neomotherbrain/_time_inputs.html" import military_time_select %}
+
+{% macro schedule_controls(prefix, schedule) %}
+<td class="master-board-cell master-days-cell" data-label="Sort days">
+    <div class="master-weekdays" role="group" aria-label="Operational Sort weekdays">
+    {% for day, label in active_day_options %}
+        <label title="{{ label }}"><input type="checkbox" name="{{ prefix }}active_days" value="{{ day }}" aria-label="{{ label }}"
+            {% if not schedule or day in parse_active_days(schedule.active_days) %}checked{% endif %}><span>{{ label[:2] }}</span></label>
+    {% endfor %}
+    </div>
+</td>
+<td class="master-board-cell master-status-cell" data-label="Status">
+    {% if schedule %}
+    <button type="submit" class="table-row-button master-active-control" formaction="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=schedule.id) }}"
+        name="desired_active" value="{{ '0' if schedule.active else '1' }}" aria-pressed="{{ 'true' if schedule.active else 'false' }}">{{ 'Active' if schedule.active else 'Inactive' }}</button>
+    {% else %}Active{% endif %}
+</td>
+{% endmacro %}
+
+{% macro row_hidden_fields(prefix, schedule, mission_type) %}
+<input type="hidden" name="row_indexes" value="{{ prefix[4:-1] }}">
+<input type="hidden" name="{{ prefix }}id" value="{{ schedule.id if schedule else '' }}">
+<input type="hidden" name="{{ prefix }}mission_type" value="{{ mission_type }}">
+<input type="hidden" name="{{ prefix }}sort_name" value="{{ schedule.sort_name if schedule else 'night' }}">
+{% if schedule %}<input type="hidden" name="version_{{ schedule.id }}" value="{{ schedule.updated_at.isoformat() }}">{% endif %}
+{% endmacro %}
+
+{% macro aircraft_type_select(name, selected_value="") %}
+<select name="{{ name }}" aria-label="AC Type">
+    <option value="" {% if not selected_value %}selected{% endif %}></option>
+    {% for aircraft_type in aircraft_type_options %}
+        {% if aircraft_type %}
+        <option value="{{ aircraft_type }}" {% if selected_value == aircraft_type %}selected{% endif %}>{{ aircraft_type }}</option>
+        {% endif %}
+    {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro wave_select(name, selected_value="") %}
+{% set selected_wave = selected_value|wave_label %}
+<select name="{{ name }}" aria-label="Wave">
+    {% for wave_value, wave_label in wave_options %}
+    <option value="{{ wave_value }}" {% if selected_wave == wave_value %}selected{% endif %}>{{ wave_label }}</option>
+    {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro arrival_row(schedule, index, is_new=False) %}
+{% set row_index = "arrival_" ~ index %}
+{% set prefix = "row_" ~ row_index ~ "_" %}
+<tr class="master-board-row master-arrival-row{% if is_new %} master-board-add-row{% endif %}">
+    <td class="master-board-cell master-cell-flight" data-label="Flight">
+        {{ row_hidden_fields(prefix, schedule, "arrival") }}
+        <input type="hidden" name="{{ prefix }}destination" value="{{ gateway.code }}">
+        <input aria-label="Flight number" class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
+    </td>
+    <td class="master-board-cell master-cell-origin" data-label="Origin">
+        <input aria-label="Origin" class="airport-code-input" type="text" name="{{ prefix }}origin" value="{{ schedule.origin if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </td>
+    <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
+        {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
+    </td>
+    <td class="master-board-cell master-cell-sta" data-label="STA">
+        {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
+    </td>
+    <td class="master-board-cell master-cell-wave" data-label="Wave">
+        {{ wave_select(prefix ~ "wave", schedule.wave if schedule else "") }}
+    </td>
+    {{ schedule_controls(prefix, schedule) }}
+    <td data-label="Action" class="table-actions master-cell-actions">
+        {% if schedule %}
+        <button class="table-row-button table-row-delete-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate aria-label="Delete {{ schedule.flight_number|upper }}">&times;</button>
+        {% else %}
+        <button class="table-row-button master-row-save-button" type="submit" name="master_save_row" value="{{ row_index }}" aria-label="Save new arrival row">SAVE</button>
+        {% endif %}
+    </td>
+</tr>
+{% endmacro %}
+
+{% macro departure_row(schedule, index, is_new=False) %}
+{% set row_index = "departure_" ~ index %}
+{% set prefix = "row_" ~ row_index ~ "_" %}
+<tr class="master-board-row master-departure-row{% if is_new %} master-board-add-row{% endif %}">
+    <td class="master-board-cell master-cell-flight" data-label="Flight">
+        {{ row_hidden_fields(prefix, schedule, "departure") }}
+        <input type="hidden" name="{{ prefix }}origin" value="{{ gateway.code }}">
+        <input aria-label="Flight number" class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
+    </td>
+    <td class="master-board-cell master-cell-destination" data-label="Destination">
+        <input aria-label="Destination" class="airport-code-input" type="text" name="{{ prefix }}destination" value="{{ schedule.destination if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </td>
+    <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
+        {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
+    </td>
+    <td class="master-board-cell master-cell-etd" data-label="STD">
+        {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
+    </td>
+    <td class="master-board-cell master-cell-wave" data-label="Wave">
+        {{ wave_select(prefix ~ "wave", schedule.wave if schedule else "") }}
+    </td>
+    <td class="master-board-cell master-cell-pure-pull" data-label="Pure Pull">
+        {{ military_time_select(prefix ~ "pure_pull_time_local", schedule.pure_pull_time_local.strftime("%H:%M") if schedule and schedule.pure_pull_time_local else "") }}
+    </td>
+    <td class="master-board-cell master-cell-mix" data-label="Mix Pull">
+        {{ military_time_select(prefix ~ "mix_pull_time_local", schedule.mix_pull_time_local.strftime("%H:%M") if schedule and schedule.mix_pull_time_local else "") }}
+    </td>
+    {{ schedule_controls(prefix, schedule) }}
+    <td data-label="Action" class="table-actions master-cell-actions">
+        {% if schedule %}
+        <button class="table-row-button table-row-delete-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate aria-label="Delete {{ schedule.flight_number|upper }}">&times;</button>
+        {% else %}
+        <button class="table-row-button master-row-save-button" type="submit" name="master_save_row" value="{{ row_index }}" aria-label="Save new departure row">SAVE</button>
+        {% endif %}
+    </td>
+</tr>
+{% endmacro %}

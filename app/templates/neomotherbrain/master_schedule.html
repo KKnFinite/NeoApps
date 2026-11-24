@@ -1,122 +1,9 @@
 {% extends "base.html" %}
-{% from "neomotherbrain/_time_inputs.html" import military_time_script, military_time_select %}
+{% from "neomotherbrain/_time_inputs.html" import military_time_script %}
+{% from "neomotherbrain/_master_board_rows.html" import arrival_row, departure_row with context %}
 
 {% block title %}Master Schedule | NeoApps{% endblock %}
 
-{% macro schedule_controls(prefix, schedule) %}
-<td class="master-board-cell master-days-cell" data-label="Sort days">
-    <div class="master-weekdays" role="group" aria-label="Operational Sort weekdays">
-    {% for day, label in active_day_options %}
-        <label title="{{ label }}"><input type="checkbox" name="{{ prefix }}active_days" value="{{ day }}" aria-label="{{ label }}"
-            {% if not schedule or day in parse_active_days(schedule.active_days) %}checked{% endif %}><span>{{ label[:2] }}</span></label>
-    {% endfor %}
-    </div>
-</td>
-<td class="master-board-cell master-status-cell" data-label="Status">
-    {% if schedule %}
-    <button type="submit" class="table-row-button master-active-control" formaction="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=schedule.id) }}"
-        name="desired_active" value="{{ '0' if schedule.active else '1' }}" aria-pressed="{{ 'true' if schedule.active else 'false' }}">{{ 'Active' if schedule.active else 'Inactive' }}</button>
-    {% else %}Active{% endif %}
-</td>
-{% endmacro %}
-
-{% macro row_hidden_fields(prefix, schedule, mission_type) %}
-<input type="hidden" name="row_indexes" value="{{ prefix[4:-1] }}">
-<input type="hidden" name="{{ prefix }}id" value="{{ schedule.id if schedule else '' }}">
-<input type="hidden" name="{{ prefix }}mission_type" value="{{ mission_type }}">
-<input type="hidden" name="{{ prefix }}sort_name" value="{{ schedule.sort_name if schedule else 'night' }}">
-{% if schedule %}<input type="hidden" name="version_{{ schedule.id }}" value="{{ schedule.updated_at.isoformat() }}">{% endif %}
-{% endmacro %}
-
-{% macro aircraft_type_select(name, selected_value="") %}
-<select name="{{ name }}" aria-label="AC Type">
-    <option value="" {% if not selected_value %}selected{% endif %}></option>
-    {% for aircraft_type in aircraft_type_options %}
-        {% if aircraft_type %}
-        <option value="{{ aircraft_type }}" {% if selected_value == aircraft_type %}selected{% endif %}>{{ aircraft_type }}</option>
-        {% endif %}
-    {% endfor %}
-</select>
-{% endmacro %}
-
-{% macro wave_select(name, selected_value="") %}
-{% set selected_wave = selected_value|wave_label %}
-<select name="{{ name }}" aria-label="Wave">
-    {% for wave_value, wave_label in wave_options %}
-    <option value="{{ wave_value }}" {% if selected_wave == wave_value %}selected{% endif %}>{{ wave_label }}</option>
-    {% endfor %}
-</select>
-{% endmacro %}
-
-{% macro arrival_row(schedule, index, is_new=False) %}
-{% set row_index = "arrival_" ~ index %}
-{% set prefix = "row_" ~ row_index ~ "_" %}
-<tr class="master-board-row master-arrival-row{% if is_new %} master-board-add-row{% endif %}">
-    <td class="master-board-cell master-cell-flight" data-label="Flight">
-        {{ row_hidden_fields(prefix, schedule, "arrival") }}
-        <input type="hidden" name="{{ prefix }}destination" value="{{ gateway.code }}">
-        <input aria-label="Flight number" class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
-    </td>
-    <td class="master-board-cell master-cell-origin" data-label="Origin">
-        <input aria-label="Origin" class="airport-code-input" type="text" name="{{ prefix }}origin" value="{{ schedule.origin if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
-    </td>
-    <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
-        {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
-    </td>
-    <td class="master-board-cell master-cell-sta" data-label="STA">
-        {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
-    </td>
-    <td class="master-board-cell master-cell-wave" data-label="Wave">
-        {{ wave_select(prefix ~ "wave", schedule.wave if schedule else "") }}
-    </td>
-    {{ schedule_controls(prefix, schedule) }}
-    <td data-label="Action" class="table-actions master-cell-actions">
-        {% if schedule %}
-        <button class="table-row-button table-row-delete-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate aria-label="Delete {{ schedule.flight_number|upper }}">&times;</button>
-        {% else %}
-        <button class="table-row-button master-row-save-button" type="submit" name="master_save_row" value="{{ row_index }}" aria-label="Save new arrival row">SAVE</button>
-        {% endif %}
-    </td>
-</tr>
-{% endmacro %}
-
-{% macro departure_row(schedule, index, is_new=False) %}
-{% set row_index = "departure_" ~ index %}
-{% set prefix = "row_" ~ row_index ~ "_" %}
-<tr class="master-board-row master-departure-row{% if is_new %} master-board-add-row{% endif %}">
-    <td class="master-board-cell master-cell-flight" data-label="Flight">
-        {{ row_hidden_fields(prefix, schedule, "departure") }}
-        <input type="hidden" name="{{ prefix }}origin" value="{{ gateway.code }}">
-        <input aria-label="Flight number" class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
-    </td>
-    <td class="master-board-cell master-cell-destination" data-label="Destination">
-        <input aria-label="Destination" class="airport-code-input" type="text" name="{{ prefix }}destination" value="{{ schedule.destination if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
-    </td>
-    <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
-        {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
-    </td>
-    <td class="master-board-cell master-cell-etd" data-label="STD">
-        {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
-    </td>
-    <td class="master-board-cell master-cell-wave" data-label="Wave">
-        {{ wave_select(prefix ~ "wave", schedule.wave if schedule else "") }}
-    </td>
-    <td class="master-board-cell master-cell-pure-pull" data-label="Pure Pull">
-        {{ military_time_select(prefix ~ "pure_pull_time_local", schedule.pure_pull_time_local.strftime("%H:%M") if schedule and schedule.pure_pull_time_local else "") }}
-    </td>
-    <td class="master-board-cell master-cell-mix" data-label="Mix Pull">
-        {{ military_time_select(prefix ~ "mix_pull_time_local", schedule.mix_pull_time_local.strftime("%H:%M") if schedule and schedule.mix_pull_time_local else "") }}
-    </td>
-    {{ schedule_controls(prefix, schedule) }}
-    <td data-label="Action" class="table-actions master-cell-actions">
-        {% if schedule %}
-        <button class="table-row-button table-row-delete-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate aria-label="Delete {{ schedule.flight_number|upper }}">&times;</button>
-        {% else %}
-        <button class="table-row-button master-row-save-button" type="submit" name="master_save_row" value="{{ row_index }}" aria-label="Save new departure row">SAVE</button>
-        {% endif %}
-    </td>
-</tr>
-{% endmacro %}
 
 {% macro board(title, schedules, mission_type) %}
 <section class="master-schedule-section" id="master-{{ mission_type }}s">
@@ -124,7 +11,7 @@
         <h2>{{ title }}</h2>
     </div>
 
-    <form class="master-board-form" method="post" data-master-board-form data-master-board-type="{{ mission_type }}">
+    <form class="master-board-form" method="post" novalidate data-master-board-form data-master-board-type="{{ mission_type }}">
         <input type="hidden" name="board_mission_type" value="{{ mission_type }}">
         <fieldset class="mb-fields" aria-label="{{ title }}" {% if not user_can('neomotherbrain.master_schedule.edit') %}disabled{% endif %}>
         <div class="table-wrap">
@@ -162,7 +49,6 @@
                 </tbody>
             </table>
         </div>
-        <p data-master-error role="alert"></p>
         <div class="master-board-add-controls">
             <button class="action-button action-button-secondary" type="button" data-master-add-row>
                 {{ "ADD ARRIVAL ROW" if mission_type == "arrival" else "ADD DEPARTURE ROW" }}
@@ -197,6 +83,13 @@
                     <a href="#master-departures">Departures <b>{{ departure_schedules|length }}</b></a>
                 </nav>
             </header>
+            {% if user_can('neomotherbrain.master_schedule.edit') %}
+            <div class="master-save-controls">
+                <button class="action-button" type="button" data-master-save disabled>SAVE CHANGES</button>
+                <output data-master-status role="status">Saved</output>
+                <div data-master-error role="alert"></div>
+            </div>
+            {% endif %}
 
             <div class="master-schedule-sections">
                 {{ board("MASTER ARRIVALS", arrival_schedules, "arrival") }}
@@ -209,164 +102,5 @@
 </section>
 
 {{ military_time_script()|safe }}
-<script nonce="{{ csp_nonce() }}">
-(() => {
-    const uppercaseInput = (input) => {
-        input.addEventListener("input", () => {
-            input.value = input.value.toUpperCase();
-        });
-    };
-
-    const initializeUppercaseInputs = (scope) => {
-        scope.querySelectorAll(".airport-code-input, .flight-number-input").forEach(uppercaseInput);
-    };
-
-    initializeUppercaseInputs(document);
-    window.NeoAppsTimeInputs.initialize(document);
-
-    const fieldValue = (row, suffix) => {
-        const field = row.querySelector(`[name$='_${suffix}']`);
-        return field ? field.value.trim() : "";
-    };
-
-    const timeComplete = (row, suffix) => {
-        const hour = row.querySelector(`[name$='_${suffix}_hour']`);
-        const minute = row.querySelector(`[name$='_${suffix}_minute']`);
-        return Boolean(hour && minute && hour.value && minute.value);
-    };
-
-    const rowIsComplete = (row) => {
-        const missionType = fieldValue(row, "mission_type");
-        const flightNumber = fieldValue(row, "flight_number");
-        if (!flightNumber || !timeComplete(row, "planned_time_local")) {
-            return false;
-        }
-        if (missionType === "arrival") {
-            return fieldValue(row, "origin").length === 3;
-        }
-        return fieldValue(row, "destination").length === 3;
-    };
-
-    const shouldSaveRow = (row) => {
-        if (!row) {
-            return false;
-        }
-        if (row.classList.contains("master-board-add-row")) {
-            return false;
-        }
-        return Boolean(fieldValue(row, "id")) && rowIsComplete(row);
-    };
-
-    async function saveRow(row, submitter) {
-        const form = row.closest("form");
-        const status = form.querySelector("[data-master-error]");
-        const index = row.querySelector("[name=row_indexes]").value;
-        const version = row.querySelector("[name^=version_]");
-        const data = new FormData(form);
-        const body = new FormData();
-        for (const [key, value] of data) {
-            if ((key === "row_indexes" && value === index) || key.startsWith("row_" + index + "_")
-                || key === version?.name || key === "board_mission_type" || key === "csrf_token") {
-                body.append(key, value);
-            }
-        }
-        if (submitter?.name) body.set(submitter.name, submitter.value);
-        const toggle = submitter?.matches(".master-active-control");
-        const response = await fetch(toggle ? submitter.formAction : form.action, {
-            method: "POST", body,
-            headers: {"Accept": "application/json", "X-Requested-With": "fetch"},
-        });
-        const result = await response.json();
-        if (!response.ok || !result.ok) throw new Error(result.message || "Master flight could not be saved.");
-        const id = fieldValue(row, "id");
-        if (version && result.versions?.[id]) version.value = result.versions[id];
-        if (toggle) {
-            submitter.value = result.active ? "0" : "1";
-            submitter.textContent = result.active ? "Active" : "Inactive";
-            submitter.setAttribute("aria-pressed", String(result.active));
-        }
-        status.textContent = "";
-        if (result.created) window.location.reload();
-    }
-
-    const queueSave = (row, submitter = null) => {
-        row.saveChain = (row.saveChain || Promise.resolve()).then(() => saveRow(row, submitter)).catch(error => {
-            row.closest("form").querySelector("[data-master-error]").textContent =
-                error.message || "Unable to save this flight. Your edits remain on screen.";
-        });
-    };
-
-    const handleFieldUpdate = (event, delay) => {
-        const row = event.target.closest(".master-board-row");
-        if (!shouldSaveRow(row)) return;
-        clearTimeout(row.saveTimer);
-        row.saveTimer = setTimeout(() => {row.saveTimer = null; queueSave(row);}, delay);
-    };
-
-    document.querySelectorAll("[data-master-board-form]").forEach((form) => {
-        const addButton = form.querySelector("[data-master-add-row]");
-        const rowTemplate = form.querySelector("[data-master-row-template]");
-        const tableBody = form.querySelector("tbody");
-
-        if (addButton && rowTemplate && tableBody) {
-            form.dataset.masterNextNewRow = "0";
-            addButton.addEventListener("click", () => {
-                const nextIndex = form.dataset.masterNextNewRow || "0";
-                form.dataset.masterNextNewRow = String(Number(nextIndex) + 1);
-
-                const rowHtml = rowTemplate.innerHTML.split("__INDEX__").join(nextIndex).trim();
-                const templateBody = document.createElement("tbody");
-                templateBody.innerHTML = rowHtml;
-                const row = templateBody.firstElementChild;
-                if (!row) {
-                    return;
-                }
-
-                tableBody.appendChild(row);
-                initializeUppercaseInputs(row);
-                window.NeoAppsTimeInputs.initialize(row);
-                const firstField = row.querySelector("input[type='text'], select");
-                if (firstField) {
-                    firstField.focus();
-                }
-            });
-        }
-
-        form.addEventListener("input", (event) => {
-            if (event.target.matches("input[type='text']")) {
-                handleFieldUpdate(event, 650);
-            }
-        });
-        form.addEventListener("change", (event) => {
-            if (event.target.matches("select, input")) {
-                handleFieldUpdate(event, 100);
-            }
-        });
-        form.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" && event.target.matches("input[type='text']")) {
-                event.preventDefault();
-                handleFieldUpdate(event, 0);
-                event.target.blur();
-            }
-        });
-        form.addEventListener("submit", (event) => {
-            if (
-                event.submitter
-                && event.submitter.matches(".table-row-delete-button")
-            ) {
-                return;
-            }
-            event.preventDefault();
-            const row = event.submitter?.closest(".master-board-row");
-            if (!row) return;
-            if (row.saveTimer) {
-                clearTimeout(row.saveTimer);
-                row.saveTimer = null;
-                queueSave(row);
-            }
-            queueSave(row, event.submitter);
-        });
-    });
-})();
-</script>
+<script defer src="{{ url_for('static', filename='js/master_schedule.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 {% endblock %}
