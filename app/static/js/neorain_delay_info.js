@@ -78,7 +78,7 @@
                 }
                 form.removeAttribute('data-neorain-delay-dirty');
                 for (const toggle of root.querySelectorAll(`[aria-controls="delay-info-${missionId}"]`)) {
-                    toggle.textContent = `DELAY (${result.count}) / NOTES`;
+                    toggle.textContent = `Delay ${result.count} / Notes`;
                 }
                 const mobile = root.querySelector(`#mobile-flight-${missionId} [data-neorain-mobile-delay] > summary`);
                 if (mobile) mobile.textContent = `DELAY INFO (${result.count})`;

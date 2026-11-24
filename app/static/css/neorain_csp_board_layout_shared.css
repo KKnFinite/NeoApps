@@ -408,16 +408,6 @@ tr.neorain-row--late > td:nth-child(-n+18) .neorain-service-input {
         text-align: center;
     }
     body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
-    .neorain-outbound-table--flight-board .neorain-delay-toggle {
-        display: inline-block;
-        max-width: 100%;
-        font-size: .7rem;
-        line-height: 1.2;
-        white-space: normal;
-        overflow-wrap: normal;
-        text-align: left;
-    }
-    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
     .neorain-outbound-table--flight-board .neorain-service-input {
         width: 88%;
         min-height: 26px;
@@ -532,14 +522,16 @@ body.blueprint-neorain [data-neorain-scorpion-fuel] {font:inherit; font-variant-
 @media (min-width:901px) {
     body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board {display:block;}
     body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-mobile-board {display:none;}
-    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board tbody > tr:not(.neorain-delay-panel-row) {height:42px;}
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board tbody > tr:not(.neorain-delay-panel-row) {height:36px;}
     body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board tbody > tr:not(.neorain-delay-panel-row) > td {
-        font:12px/1.2 NeoFontPlain,Arial,sans-serif; padding:5px 3px; vertical-align:middle;
+        font:12px/1.2 NeoFontPlain,Arial,sans-serif; padding:2px 3px; vertical-align:middle;
         overflow-wrap:normal; word-break:normal;
     }
     body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board td[data-label="Connecting Outbound"] {
         overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
+    .neorain-desktop-board .neorain-delay-toggle {font-size:.68rem; text-transform:none}
+    .neorain-desktop-board .neorain-delay-toggle::before {content:none}
 }
 @media (max-width:900px) {
     body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-mobile-board {

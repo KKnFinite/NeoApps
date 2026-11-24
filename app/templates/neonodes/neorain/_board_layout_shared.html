@@ -1,5 +1,5 @@
 {# Shared Rain board geometry and UI state; Scorpion/other nodes unaffected. #}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_csp_board_layout_shared.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_csp_board_layout_shared.css', v=config.STATIC_ASSET_VERSION, rev='compact-rows-1') }}">
 <script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-neorain-board-page]");
