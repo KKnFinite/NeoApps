@@ -357,11 +357,14 @@ def current_sort_operation(gateway, now=None):
     return operations[0] if operations else None
 
 
-def neoscorpion_live_revision(gateway, *, include_remaining=False):
+def neoscorpion_live_revision(gateway, *, include_remaining=False, include_outbound=False):
     """Return the current sort/revision fingerprint without building screen state."""
     operation = current_sort_operation(gateway)
     status = (_fueler_sort_snapshot(operation) if include_remaining
               else {"revision": _fuel_assignments_revision_for_operation(operation)})
+    if include_outbound:
+        from app.services.neoscorpion_driver_missions import sort_missions_revision
+        status["sort_missions_revision"] = sort_missions_revision(operation) if operation else None
     return {
         "current_operation": operation is not None,
         "operation_id": operation.id if operation else None,
@@ -369,9 +372,9 @@ def neoscorpion_live_revision(gateway, *, include_remaining=False):
     }
 
 
-def fuel_assignments_live_revision(gateway, *, include_remaining=False):
+def fuel_assignments_live_revision(gateway, *, include_remaining=False, include_outbound=False):
     """Backward-compatible name for the shared NeoScorpion fingerprint."""
-    result = neoscorpion_live_revision(gateway, include_remaining=include_remaining)
+    result = neoscorpion_live_revision(gateway, include_remaining=include_remaining, include_outbound=include_outbound)
     from app.services.neoscorpion_assets import fueler_on_break
     result["fueler_on_break"] = fueler_on_break(
         result["operation_id"], getattr(current_user, "id", None))

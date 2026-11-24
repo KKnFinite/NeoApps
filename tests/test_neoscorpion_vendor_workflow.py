@@ -61,7 +61,7 @@ class VendorWorkflowTest(TestCase):
         self.assertEqual(response.status_code, 200)
         section = response.get_data(as_text=True).split('data-vendor-sort-missions', 1)[1].split('</section>', 1)[0]
         return {
-            group: re.findall(r'<tr>((?:<td>.*?</td>){4})</tr>', content)
+            group: re.findall(r'<tr data-mission-id="\d+">((?:<td>.*?</td>){6})</tr>', content)
             for group, content in re.findall(r'data-sort-mission-group="(\w+)">(.*?)</tbody>', section, re.S)
         }
 
@@ -74,9 +74,9 @@ class VendorWorkflowTest(TestCase):
 
         groups = self.sort_mission_groups()
         self.assertEqual(list(groups), ['working', 'left', 'complete'])
-        self.assertEqual(groups['left'], [
-            '<td>N875UP</td><td>ONT</td><td>-</td><td>22:09</td>',
-            '<td>N876UP</td><td>PHX</td><td>-</td><td>22:13</td>',
+        self.assertEqual([row.rsplit('<td>', 1)[0] for row in groups['left']], [
+            '<td>N875UP</td><td>UPS986</td><td>ONT</td><td>-</td><td>22:09</td>',
+            '<td>N876UP</td><td>UPS987</td><td>PHX</td><td>-</td><td>22:13</td>',
         ])
         self.assertIn('<td>B06</td>', groups['working'][0])
         self.assertFalse(groups['complete'])
@@ -123,7 +123,7 @@ class VendorWorkflowTest(TestCase):
         db.session.commit()
         self.assertIn('N491UP', self.sort_mission_groups()['complete'][0])
 
-    def test_sort_missions_hide_on_sort_change_and_revocation(self):
+    def test_roster_follows_sort_change_and_survives_nightly_revocation(self):
         self.prepare()
         user, _ = self.connect()
         old_operation = self.operation.id
@@ -135,20 +135,20 @@ class VendorWorkflowTest(TestCase):
 
         self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
         page = self.client.get(f'{DRIVER}/my-truck').data
-        self.assertIn(b'ALL SORT MISSIONS', page)
+        self.assertIn(b'CURRENT SORT OUTBOUND', page)
         self.assertNotIn(b'N999UP', page)
         revision_url = f'{DRIVER}/revision?operation_id={old_operation}'
         self.assertIsNotNone(self.client.get(revision_url).json['sort_missions_revision'])
         with patch.object(service, 'current_sort_operation', return_value=other_sort):
             self.assertEqual(self.client.get(revision_url).status_code, 403)
             page = self.client.get(f'{DRIVER}/my-truck').data
-            self.assertNotIn(b'ALL SORT MISSIONS', page)
+            self.assertIn(b'CURRENT SORT OUTBOUND', page)
             self.assertNotIn(b'N491UP', page)
-            self.assertNotIn(b'N999UP', page)
+            self.assertIn(b'N999UP', page)
         vendors.set_participation(self.gateway, self.operation, self.dispatcher, user.id, 'revoked', 1)
         db.session.commit()
         self.assertEqual(self.client.get(revision_url).status_code, 403)
-        self.assertNotIn(b'ALL SORT MISSIONS', self.client.get(f'{DRIVER}/my-truck').data)
+        self.assertIn(b'CURRENT SORT OUTBOUND', self.client.get(f'{DRIVER}/my-truck').data)
 
     def test_conversion_rejects_a_selected_nightly_fueler(self):
         self.prepare()
@@ -274,14 +274,14 @@ class VendorWorkflowTest(TestCase):
         self.assertNotIn(b'REQUEST DISPATCH APPROVAL', response.data)
         self.assertEqual(self.client.get('/neoscorpion/driver/live').status_code,403)
 
-    def test_approved_truck_unlocks_missions_and_inactive_truck_can_be_disconnected(self):
+    def test_truck_approval_unlocks_live_operation_and_disconnect_preserves_roster(self):
         self.prepare()
         user, account, _ = self.vendor()
         self.client.post('/login', data={'email': user.email, 'password': 'VendorPassword123!'})
         driver_url = '/neoscorpion/driver'
         tail = self.mission.assigned_tail_number.encode()
-        self.assertNotIn(tail, self.client.get(f'{driver_url}/my-truck').data)
-        self.assertIsNone(self.client.get(f'{driver_url}/revision').json['sort_missions_revision'])
+        self.assertIn(tail, self.client.get(f'{driver_url}/my-truck').data)
+        self.assertIsNotNone(self.client.get(f'{driver_url}/revision').json['sort_missions_revision'])
         self.assertEqual(self.client.get(f'{driver_url}/live').status_code, 403)
         claim = vendors.request_claim(account, self.operation, self.truck.id)
         vendors.decide_claim(self.gateway, self.operation, self.dispatcher, claim.id, True, 0)
@@ -296,9 +296,9 @@ class VendorWorkflowTest(TestCase):
         }, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'NO APPROVED TRUCK', response.data)
-        self.assertNotIn(tail, response.data)
-        self.assertNotIn(b'ALL SORT MISSIONS', response.data)
-        self.assertIsNone(self.client.get(f'{driver_url}/revision').json['sort_missions_revision'])
+        self.assertIn(tail, response.data)
+        self.assertIn(b'CURRENT SORT OUTBOUND', response.data)
+        self.assertIsNotNone(self.client.get(f'{driver_url}/revision').json['sort_missions_revision'])
         self.assertEqual(self.client.get(f'{driver_url}/live').status_code, 403)
 
     def test_legacy_invitation_uses_shared_verification_and_password_recovery(self):
@@ -345,7 +345,10 @@ class VendorWorkflowTest(TestCase):
         self.assertEqual(waiting.status_code, 200)
         self.assertIn(b'AWAITING DISPATCHER APPROVAL', waiting.data)
         self.assertNotIn(b'name="truck_id"', waiting.data)
-        self.assertEqual(self.client.get(f'{DRIVER}/revision?waiting=1').json,
+        fingerprint = self.client.get(f'{DRIVER}/revision?waiting=1').json
+        self.assertEqual(len(fingerprint.pop('sort_missions_revision')), 64)
+        self.assertIsInstance(fingerprint.pop('revision'), int)
+        self.assertEqual(fingerprint,
                          {'status': 'AWAITING DISPATCHER APPROVAL', 'operation_id': self.operation.id,
                           'claim': None, 'trucks': [], 'supervisor': False})
         self.assertEqual(self.client.get(f'{DRIVER}/revision').status_code, 403)

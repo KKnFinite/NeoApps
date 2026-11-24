@@ -84,7 +84,7 @@ class FuelDriverPhase4BrowserTest(TestCase):
                                 with page.expect_navigation(wait_until='domcontentloaded'):form.get_by_role('button',name='Approve account type').click()
                                 workspace.AccountsWorkspaceBrowserTest.login(page,origin,email)
                                 expect(page.get_by_text('AWAITING DISPATCHER APPROVAL',exact=True)).to_be_visible()
-                                self.assertEqual(page.get_by_text('N444UP',exact=True).count(),0)
+                                expect(page.locator('[data-vendor-sort-missions]')).to_contain_text('N444UP')
                                 page.locator('[name=truck_id]').select_option(str(truck_id))
                                 with page.expect_navigation(wait_until='domcontentloaded'):page.get_by_role('button',name='REQUEST TRUCK',exact=True).click()
                                 expect(page.get_by_text('CLAIM · TRUCK TEST-44 · PENDING',exact=True)).to_be_visible()
@@ -110,10 +110,10 @@ class FuelDriverPhase4BrowserTest(TestCase):
                                     db.session.commit();supervisor_id=supervisor.id
                                 workspace.AccountsWorkspaceBrowserTest.login(page,origin,'super-'+prefix+'@example.test')
                                 expect(page.get_by_role('heading',name='SUPERVISOR VIEW',exact=True)).to_be_visible()
-                                expect(page.get_by_text('N444UP',exact=False)).to_be_visible()
+                                expect(page.locator('[data-vendor-sort-missions]')).to_contain_text('N444UP')
                                 self.assertEqual(page.locator('[name=truck_id]').count(),0)
                                 self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
-                                if engine=='chromium':page.screenshot(path=str(evidence/f'supervisor-{prefix}.png'),full_page=True)
+                                page.screenshot(path=str(evidence/f'supervisor-{prefix}.png'),full_page=True)
                                 # A canonical subtype decision invalidates the already-open Supervisor session.
                                 review.goto(origin+f'/accounts/people/{supervisor_id}?tab=access')
                                 review.get_by_text('Edit account type or identity', exact=True).click()

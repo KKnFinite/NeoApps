@@ -1,16 +1,17 @@
 <section class="vendor-sort-missions" data-vendor-sort-missions aria-labelledby="vendor-sort-missions-title">
-    <h2 id="vendor-sort-missions-title">ALL SORT MISSIONS</h2>
+    <h2 id="vendor-sort-missions-title">CURRENT SORT OUTBOUND</h2>
+    {% if supervisor is defined %}<p>{{ supervisor.gateway }} · {{ supervisor.sort_label }} · READ ONLY</p>{% endif %}
     <table aria-labelledby="vendor-sort-missions-title">
         <thead>
-            <tr><th scope="col">TAIL</th><th scope="col">DEST</th><th scope="col">PARKING</th><th scope="col">ETD</th></tr>
+            <tr>{% for label in ('Tail', 'Flight', 'Dest', 'Parking', 'ETD', 'Fuel status') %}<th scope="col">{{ label }}</th>{% endfor %}</tr>
         </thead>
         {% for group, heading in [('working', 'CURRENTLY WORKING'), ('left', 'LEFT TO WORK'), ('complete', 'COMPLETE')] %}
         <tbody data-sort-mission-group="{{ group }}">
-            <tr><th scope="rowgroup" colspan="4">{{ heading }}</th></tr>
-            {% for tail, dest, parking, etd in sort_missions[group] %}
-            <tr><td>{{ tail }}</td><td>{{ dest }}</td><td>{{ parking }}</td><td>{{ etd }}</td></tr>
+            <tr><th scope="rowgroup" colspan="6">{{ heading }}</th></tr>
+            {% for mission in sort_missions[group] %}
+            <tr data-mission-id="{{ mission.id }}"><td>{{ mission.tail }}</td><td>{{ mission.flight }}</td><td>{{ mission.destination }}</td><td>{{ mission.parking }}</td><td>{{ mission.etd }}</td><td>{{ mission.status }}</td></tr>
             {% else %}
-            <tr><td colspan="4">None.</td></tr>
+            <tr><td colspan="6">None.</td></tr>
             {% endfor %}
         </tbody>
         {% endfor %}

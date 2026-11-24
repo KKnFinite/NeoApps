@@ -178,9 +178,9 @@ class AccountsViewAsPostgresTest(TestCase):
         client = self.app.test_client()
         self.assertEqual(client.post('/login', data={'email': email, 'password': PASSWORD}).status_code, 302)
 
-        def checked_context(gateway):
+        def checked_context(gateway, **options):
             self.assertEqual(db.session.execute(text('SHOW transaction_read_only')).scalar(), 'on')
-            return supervisor_gateway_context(gateway)
+            return supervisor_gateway_context(gateway, **options)
 
         with patch('app.auth.view_as.supervisor_gateway_context', side_effect=checked_context) as projection:
             self.assertEqual(client.get(VIEW_AS + '/vendor-supervisor').status_code, 200)

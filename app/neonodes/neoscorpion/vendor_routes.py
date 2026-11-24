@@ -11,7 +11,7 @@ from app.services import neoscorpion_vendors as vendors
 from app.services import neoscorpion_inventory as inventory
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion_assets import lock_nightly_asset_scope_for_mutation, record_nightly_operational_change
-from app.services.neoscorpion_driver_missions import group_missions, sort_missions_revision
+from app.services.neoscorpion_driver_missions import outbound_missions, sort_missions_revision
 
 bp = Blueprint('scorpion_vendor', __name__)
 
@@ -172,7 +172,8 @@ def my_truck_context(account, operation, user):
     return context
 
 
-def waiting_context(account, operation, status):
+def waiting_context(account, operation, status, *, revision_only=False):
+    from app.services.neoscorpion import _fuel_assignments_revision_for_operation
     from app.services.fuel_driver_accounts import supervisor_membership
     is_supervisor = account.user_id is not None and bool(supervisor_membership(account))
     claim = NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,
@@ -183,8 +184,13 @@ def waiting_context(account, operation, status):
     trucks = [t for t in trucks if t.id not in selections or selections[t.id].status == 'available']
     fingerprint = dict(status=status, operation_id=operation.id if operation else None,
         claim=(claim.id,claim.status,claim.version) if claim else None, trucks=[t.id for t in trucks], supervisor=is_supervisor)
+    fingerprint.update(sort_missions_revision=sort_missions_revision(operation) if operation else None,
+                       revision=_fuel_assignments_revision_for_operation(operation))
+    if revision_only:
+        return dict(waiting_fingerprint=fingerprint)
     return dict(waiting_operation=operation, waiting_status=status, available_trucks=trucks,
-        latest_claim=claim, is_supervisor=is_supervisor, waiting_fingerprint=fingerprint)
+        latest_claim=claim, is_supervisor=is_supervisor, waiting_fingerprint=fingerprint,
+        sort_missions=outbound_missions(account.gateway, operation))
 
 
 def driver_screen_context(account, user):
@@ -198,11 +204,7 @@ def driver_screen_context(account, user):
     vendors.require_approved(account, operation)
     fingerprint = vendor_fingerprint(account, operation, include_sort_missions=True)
     context = my_truck_context(account, operation, user)
-    if fingerprint['sort_missions_revision'] is not None and context['selection'] is not None:
-        from app.services.neoscorpion import fuel_dispatch_context
-        dispatch = fuel_dispatch_context(account.gateway, include_spear=False, display_nicknames=False)
-        require_same_operation(dispatch['operation'], operation)
-        context['sort_missions'] = group_missions(dispatch['rows'])
+    context['sort_missions'] = outbound_missions(account.gateway, operation)
     return dict(context, fingerprint=fingerprint)
 
 
@@ -263,9 +265,7 @@ def vendor_fingerprint(account, operation, *, include_sort_missions=False):
     if fingerprint['operation_id'] != operation.id:
         raise PermissionError('The active sort changed or ended. Return to Fuel Truck Driver for your status.')
     if include_sort_missions:
-        fingerprint['sort_missions_revision'] = (
-            sort_missions_revision(operation) if connected_truck(account, operation) else None
-        )
+        fingerprint['sort_missions_revision'] = sort_missions_revision(operation)
     return fingerprint
 
 
@@ -292,7 +292,7 @@ def revision(account):
         from app.services.fuel_driver_accounts import supervisor_membership
         if supervisor_membership(account):
             status = 'VENDOR SUPERVISOR · READ ONLY'
-        return jsonify(waiting_context(account, operation, status)['waiting_fingerprint'])
+        return jsonify(waiting_context(account, operation, status, revision_only=True)['waiting_fingerprint'])
     operation = operational(account)
     if request.args.get('view') == 'live':
         require_connected_truck(account, operation)
@@ -314,7 +314,7 @@ def supervisor_revision(account):
     if not vendor_revision_in_sort(account.gateway):
         return '', 204
     from app.services.fuel_driver_accounts import supervisor_context
-    return jsonify(supervisor_context(account)['fingerprint'])
+    return jsonify(supervisor_context(account, revision_only=True)['fingerprint'])
 
 
 @bp.post('/fuel-reading')

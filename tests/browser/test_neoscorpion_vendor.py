@@ -82,25 +82,25 @@ class VendorBrowserTest(unittest.TestCase):
                 left = section.locator('[data-sort-mission-group=left]')
                 complete = section.locator('[data-sort-mission-group=complete]')
                 expect(driver.get_by_text('AWAITING DISPATCHER APPROVAL')).to_be_visible()
-                expect(section).to_have_count(0)
+                expect(section.locator("tr[data-mission-id]")).to_have_count(3)
                 with F.app.app_context():
                     vendors.set_participation(db.session.get(Gateway, gateway_id), db.session.get(SortDateOperation, op_id),
                         db.session.get(User, actor_id), vendor_id, 'approved', 0)
                     db.session.commit()
                 expect(driver.get_by_text('NO APPROVED TRUCK')).to_be_visible(timeout=22000)
-                expect(section).to_have_count(0)
+                expect(section.locator('tr[data-mission-id]')).to_have_count(3)
                 driver.get_by_text('REQUEST / CHANGE TRUCK', exact=True).click()
                 driver.locator('select[name=truck_id]').select_option(str(vendor_truck_id))
                 with driver.expect_navigation(wait_until='domcontentloaded'):
                     driver.get_by_role('button', name='REQUEST DISPATCH APPROVAL').click()
-                expect(section).to_have_count(0)
+                expect(section.locator('tr[data-mission-id]')).to_have_count(3)
                 with F.app.app_context():
                     claim = NeoScorpionVendorRequest.query.filter_by(user_id=vendor_id, kind='claim').one()
                     vendors.decide_claim(db.session.get(Gateway, gateway_id), db.session.get(SortDateOperation, op_id),
                         db.session.get(User, actor_id), claim.id, True, 0)
                     db.session.commit()
-                expect(section).to_be_visible(timeout=22000)
-                self.assertEqual(section.locator('thead th').all_text_contents(), ['TAIL', 'DEST', 'PARKING', 'ETD'])
+                expect(driver.get_by_role('heading', name='TRUCK 422808', exact=True)).to_be_visible(timeout=22000)
+                self.assertEqual(section.locator('thead th').all_text_contents(), ['Tail', 'Flight', 'Dest', 'Parking', 'ETD', 'Fuel status'])
                 self.assertEqual(section.locator('tbody th').all_text_contents(), ['CURRENTLY WORKING', 'LEFT TO WORK', 'COMPLETE'])
                 self.assertEqual(section.locator('button, a, form, input').count(), 0)
                 self.assertEqual(section.locator('xpath=preceding-sibling::*[1]').get_attribute('data-vendor-truck-controls'),
@@ -131,7 +131,7 @@ class VendorBrowserTest(unittest.TestCase):
                     db.session.add(departure(operation, 'N560UP', 'DEN', at + timedelta(hours=5)))
                     db.session.commit()
                 expect(left.locator('tr td:first-child')).to_have_text(['N350UP', 'N491UP', 'N560UP'], timeout=22000)
-                expect(left.locator('tr').nth(1).locator('td')).to_have_text(['N350UP', 'ONT', 'B08', new_departure.strftime('%H:%M')])
+                expect(left.locator('tr').nth(1).locator('td')).to_have_text(['N350UP', 'FIX350', 'ONT', 'B08', new_departure.strftime('%H:%M'), 'PENDING'])
                 expect(draft).to_be_focused()
                 expect(draft).to_have_value('4321')
 
@@ -158,8 +158,8 @@ class VendorBrowserTest(unittest.TestCase):
                     vendors.set_participation(db.session.get(Gateway, gateway_id), db.session.get(SortDateOperation, op_id),
                         db.session.get(User, actor_id), vendor_id, 'revoked', 1)
                     db.session.commit()
-                expect(section).to_have_count(0, timeout=22000)
-                expect(driver.get_by_text('DISPATCHER APPROVAL REVOKED')).to_be_visible()
+                expect(section).to_be_visible()
+                expect(driver.get_by_text('DISPATCHER APPROVAL REVOKED')).to_be_visible(timeout=22000)
                 self.assertFalse(errors, errors)
         finally:
             if browser:
