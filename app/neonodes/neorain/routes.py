@@ -380,17 +380,22 @@ def inbound():
     session[NEORAIN_LAST_PAGE_SESSION_KEY] = page[1]
     gateway = get_current_gateway()
     operation = current_neorain_outbound_operation(gateway)
+    revision = neorain_inbound_revision(gateway, operation=operation)
+    return render_template("neonodes/neorain/inbound.html", inbound_revision=revision,
+                           refresh_status=neorain_inbound_refresh_status(gateway, operation=operation),
+                           **_inbound_board_context(gateway, operation, access))
+
+
+def _inbound_board_context(gateway, operation, access):
     context = neorain_inbound_context(gateway, operation=operation)
-    return render_template(
-        "neonodes/neorain/inbound.html",
+    return dict(
+        board="inbound",
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         can_edit_crew_admin=user_can("neorain.crew_admin.edit"),
         crew_admin_assignments=neorain_crew_admin_assignments(operation),
         eligible_crew_admins=eligible_neorain_crew_admins(),
-        inbound_revision=neorain_inbound_revision(gateway, operation=operation),
-        refresh_status=neorain_inbound_refresh_status(gateway, operation=operation),
         rain_integration_mode=rain_integration_mode(gateway, getattr(operation, "sort_name", None)),
         **context,
     )
@@ -513,12 +518,12 @@ def inbound_revision():
     if _automatic_refresh_denied(refresh, operation):
         return _refresh_stopped(refresh)
     revision = neorain_inbound_revision(gateway, operation=operation)
-    response = jsonify({
-        "ok": True,
-        "changed": str(request.args.get("revision") or "") != revision,
-        "revision": revision,
-        "refresh": refresh,
-    })
+    changed = request.args.get("revision", "") != revision
+    payload = dict(ok=True, changed=changed, revision=revision, refresh=refresh)
+    if changed and request.args.get("content") == "1":
+        payload["html"] = render_template("neonodes/neorain/_inbound_live.html",
+                                          **_inbound_board_context(gateway, operation, access))
+    response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -597,10 +602,16 @@ def outbound():
     session[NEORAIN_LAST_PAGE_SESSION_KEY] = page[1]
     gateway = get_current_gateway()
     operation = current_neorain_outbound_operation(gateway)
+    revision = neorain_outbound_revision(gateway, operation=operation)
+    return render_template("neonodes/neorain/outbound.html", outbound_revision=revision,
+                           **_outbound_board_context(gateway, operation, access))
+
+
+def _outbound_board_context(gateway, operation, access):
     context = neorain_outbound_context(gateway, operation=operation)
     integration_mode = rain_integration_mode(gateway, getattr(operation, "sort_name", None))
-    return render_template(
-        "neonodes/neorain/outbound.html",
+    return dict(
+        board="outbound",
         can_edit=access["can_edit"],
         can_view=access["can_view"],
         can_edit_service_fields=(
@@ -613,7 +624,6 @@ def outbound():
         ),
         gateway=gateway,
         rain_integration_mode=integration_mode,
-        outbound_revision=neorain_outbound_revision(gateway, operation=operation),
         **context,
     )
 
@@ -635,14 +645,12 @@ def outbound_revision():
     if _automatic_refresh_denied(refresh, operation):
         return _refresh_stopped(refresh)
     revision = neorain_outbound_revision(gateway, operation=operation)
-    response = jsonify(
-        {
-            "ok": True,
-            "changed": str(request.args.get("revision") or "") != revision,
-            "revision": revision,
-            "refresh": refresh,
-        }
-    )
+    changed = request.args.get("revision", "") != revision
+    payload = dict(ok=True, changed=changed, revision=revision, refresh=refresh)
+    if changed and request.args.get("content") == "1":
+        payload["html"] = render_template("neonodes/neorain/_outbound_live.html",
+                                          **_outbound_board_context(gateway, operation, access))
+    response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
     return response
 

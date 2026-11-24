@@ -12,8 +12,8 @@ class NeoRainBoardLayoutTest(unittest.TestCase):
         return boards(self)[1]
 
     def test_aircraft_only_summaries_and_independent_collapsed_crew_admin(self):
-        inbound = (TEMPLATES / "inbound.html").read_text()
-        outbound = (TEMPLATES / "outbound.html").read_text()
+        inbound = (TEMPLATES / "inbound.html").read_text() + (TEMPLATES / "_inbound_live.html").read_text()
+        outbound = (TEMPLATES / "_outbound_live.html").read_text()
         for template in (inbound, outbound):
             self.assertNotIn("staffing_summary.hub", template)
             self.assertNotIn("staffing_summary.ramp", template)
@@ -90,7 +90,7 @@ class NeoRainBoardLayoutTest(unittest.TestCase):
         from tests.presentation_contracts import asset_source
         response=self.rendered()['inbound'];root=document(response)
         mobile=root.one(**{'data-neorain-mobile-board':'inbound'})
-        self.assertEqual([n.text for n in mobile.findall(role='columnheader')],['FLIGHT','TAIL','ORIGIN','PARKING','ETA','BLOCK-IN','+/-'])
+        self.assertEqual([n.text for n in mobile.findall(role='columnheader')],['FLIGHT','TAIL','ORIGIN','PARKING','STA/ETA','BLOCK-IN','+/-'])
         self.assertIn('UPS0911',mobile.text)
         css=asset_source(self,response,'css/neorain_csp_delay_panel_shared.css',tag='link')
         for declaration in ('--neorain-inbound-columns:','grid-template-columns: var(--neorain-inbound-columns)',

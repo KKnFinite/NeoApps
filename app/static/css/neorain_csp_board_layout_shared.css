@@ -520,11 +520,11 @@ body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound
 /* Identical aircraft-row geometry on both live boards; reports are untouched. */
 body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] th.neorain-arrival-clocks-heading {text-align:center;}
 body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-arrival-clocks {
-    display:grid; grid-template-columns:54px 8px 54px; align-items:center;
+    display:flex; align-items:center;
     justify-content:center; gap:4px; white-space:nowrap;
 }
 body.blueprint-neorain .neorain-arrival-clocks > .neorain-eta {
-    min-width:0; text-align:center; font:inherit; font-variant-numeric:tabular-nums;
+    width:54px; min-width:0; text-align:center; font:inherit; font-variant-numeric:tabular-nums;
 }
 body.blueprint-neorain .neorain-arrival-clocks > .neorain-clock-divider {text-align:center; opacity:.65;}
 body.blueprint-neorain .neorain-arrival-clocks .rain-override {width:54px;}
@@ -571,4 +571,18 @@ body.blueprint-neorain [data-neorain-scorpion-fuel] {font:inherit; font-variant-
         position:sticky; left:0; box-sizing:border-box; width:calc(100vw - 32px); max-width:100%; padding:8px;
     }
     body.blueprint-neorain .neorain-mobile-board .neorain-mobile-inline-detail .rain-override {justify-content:flex-start;}
+}
+
+[data-neorain-live-content] {display:contents;}
+[data-neorain-board-page] [data-arrival-eta][hidden] {display:none;}
+@media (min-width:901px) {
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board tbody > tr > td:is([data-label="Flight #"], [data-label="Tail"], [data-label="Origin"], [data-label="Destination"], [data-label="Parking"]) {
+        font-size:13px;
+    }
+}
+@media (max-width:900px) {
+    body.blueprint-neorain [data-neorain-board-page] .neorain-mobile-mission-grid > :nth-child(-n+4),
+    body.blueprint-neorain [data-neorain-board-page] .neorain-mobile-mission-open {
+        font-size:13px;
+    }
 }

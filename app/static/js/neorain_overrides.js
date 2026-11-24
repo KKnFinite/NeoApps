@@ -44,6 +44,18 @@
         document.querySelectorAll('[data-neorain-mission-id]').forEach(row => {
           if (row.dataset.neorainMissionId !== id) return;
           row.dataset.missionVersion = payload.version;
+          if (row.matches('[data-neorain-inbound-row]')) {
+            const {sta, eta, block_in: actual} = payload.row;
+            row.classList.toggle('neorain-inbound-row--blocked-in', Boolean(actual));
+            row.querySelectorAll('[data-arrival-eta]').forEach(el => { el.hidden = Boolean(actual); });
+            const clock = row.querySelector('[data-arrival-mobile-clock]');
+            if (clock) {
+              clock.textContent = (actual ? sta : eta) || '\u2014';
+              clock.setAttribute('aria-label', actual ? 'STA' : 'ETA');
+            }
+            const block = row.querySelector('[data-neorain-display="block_in"]');
+            if (block) block.textContent = actual || '\u2014';
+          }
           const variance = row.querySelector('[data-neorain-display="arrival_variance"], [data-neorain-display="departure_variance"]');
           if (variance) variance.textContent = payload.row.arrival_variance || payload.row.departure_variance || '-';
         });
@@ -69,8 +81,9 @@
   // One reset action for the selected field; no controls repeated in each row.
   let selected = null;
   let resetting = null;
-  const tools = document.querySelector('[data-rain-reset-tools]');
+
   const choose = root => {
+    const tools = document.querySelector('[data-rain-reset-tools]');
     selected = root;
     if (!tools) return;
     const button = tools.querySelector('[data-rain-reset-selected]');

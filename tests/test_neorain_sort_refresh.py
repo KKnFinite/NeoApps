@@ -59,6 +59,22 @@ class NeoRainSortRefreshTest(TestCase):
         status = neorain_refresh_status(self.case.gateway, self.operation, is_current=True)
         self.assertIsNone(status["sort_end_ms"])
 
+    def test_live_board_content_only_on_changed_in_sort_revision(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.start
+        for board in ("inbound", "outbound"):
+            url = f"/neorain/{board}/revision?automatic=1&content=1&operation_id={self.operation.id}"
+            changed = self.client.get(url).json
+            self.assertIn("data-neorain-board-support", changed["html"])
+            self.assertNotIn("<script", changed["html"])
+            with patch(f"app.neonodes.neorain.routes._{board}_board_context") as projection:
+                same = self.client.get(url + "&revision=" + changed["revision"]).json
+                self.assertFalse(same["changed"])
+                self.assertNotIn("html", same)
+                self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.start + timedelta(hours=8)
+                self.assertNotIn("html", self.client.get(url).json)
+                projection.assert_not_called()
+                self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.start
+
     def test_historical_state_is_manual_only_and_rollover_never_reuses_a_board(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.start
         old = SortDateOperation(gateway_id=self.case.gateway.id, gateway_code="RFD",

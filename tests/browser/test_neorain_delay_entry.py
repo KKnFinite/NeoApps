@@ -1,5 +1,6 @@
 """Real, CSRF-protected Delay Info forms under a gateway Rain MASTER role."""
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import unittest
 
@@ -57,6 +58,7 @@ class RainDelayEntryBrowserTest(unittest.TestCase):
         try:
             page = browser.new_page(viewport={'width':1920, 'height':1000})
             self.fixture().login(page, 'rain-master')
+            page.clock.install(time=self.rain.sort_time.replace(tzinfo=ZoneInfo('America/Chicago')))
             self.fixture().ready(page, '/neorain/inbound')
             panel = self.open_panel(page, 'inbound', 1920)
             form = self.add_form(panel)

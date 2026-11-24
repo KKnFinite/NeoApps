@@ -83,7 +83,7 @@ class RainUICorrectionsBrowserTest(unittest.TestCase):
         expect(field).to_have_value('01:00')
         if width>1440:
             sizes=row.locator('[data-label="Flight #"], [data-label="Tail"], [data-label="Destination"], [data-label="Status"], [data-label="Load Planner"]').evaluate_all('els=>els.map(el=>getComputedStyle(el).fontSize)')
-            self.assertEqual(len(set(sizes)),1,sizes)
+            self.assertEqual(sizes, ["13px"] * 3 + ["12px"] * 2)
             cells=row.locator('td').evaluate_all('els=>els.map(el=>el.getBoundingClientRect().x)')
             heads=page.locator('.neorain-desktop-board thead th').evaluate_all('els=>els.map(el=>el.getBoundingClientRect().x)')
             self.assertTrue(all(abs(a-b)<1 for a,b in zip(cells,heads)))
@@ -121,7 +121,7 @@ class RainUICorrectionsBrowserTest(unittest.TestCase):
             context=browser.new_context(viewport={'width':width,'height':900},service_workers='block',has_touch=width<900,is_mobile=width<900)
             page=context.new_page()
             try:
-                self.f.fixture().login(page);self.f.fixture().ready(page,'/neorain/outbound')
+                self.f().login_for_sort(page);self.f.fixture().ready(page,'/neorain/outbound')
                 def clock():
                     article=page.locator(f'.neorain-mobile-mission[data-neorain-mission-id="{self.f.ids["departure"]}"]')
                     if width<900 and article.locator('[data-neorain-mobile-inline-detail]').is_hidden():

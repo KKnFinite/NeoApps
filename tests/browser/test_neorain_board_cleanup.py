@@ -43,8 +43,8 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
                     SortDateParkingAssignment(sort_date_operation_id=op.id,tail_number='N491UP',ramp_code='C',position_code='C07',lane_number=1)])
                 db.session.commit();aid,tid,uid=assignment.id,truck.id,actor.id
             browser=getattr(fixture.pw,engine).launch();page=browser.new_page(viewport={'width':1920,'height':1080})
-            page.on('pageerror',lambda error:errors.append(str(error)));fixture().login(page)
-            for width in (1920,1440,390,375):
+            page.on('pageerror',lambda error:errors.append(str(error)));host().login_for_sort(page)
+            for width in (3840,1920,1440,390,375):
                 page.set_viewport_size({'width':width,'height':900 if width>900 else 844});geometry[str(width)]={}
                 for board,kind,count in (('inbound','arrival',7),('outbound','departure',8)):
                     fixture().ready(page,'/neorain/'+board)
@@ -57,9 +57,12 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
                         geometry[str(width)][board]=row.evaluate('el=>({height:el.getBoundingClientRect().height,font:getComputedStyle(el.cells[1]).fontFamily,size:getComputedStyle(el.cells[1]).fontSize})')
                         self.assertEqual(table.locator('thead th').count(),13 if board=='inbound' else 21)
                         if board=='inbound':
+                            self.assertEqual(table.locator('thead th').all_text_contents(), [
+                                'Wave','Flight #','Tail','Origin','Parking','STA / ETA','Block-In','+/-',
+                                'Status','Include/Exclude','Connecting Outbound','Ground Time','Delay Info'])
                             clocks=row.locator('.neorain-arrival-clocks');expect(clocks).to_be_visible()
                             self.assertNotRegex(clocks.inner_text(),r'\b(?:STA|ETA)\b')
-                            boxes=clocks.locator('.rain-override,.neorain-eta').evaluate_all('els=>els.map(el=>{const r=el.getBoundingClientRect();return r.y+r.height/2;})')
+                            boxes=clocks.locator('.rain-override:visible,.neorain-eta:visible').evaluate_all('els=>els.map(el=>{const r=el.getBoundingClientRect();return r.y+r.height/2;})')
                             self.assertLess(max(boxes)-min(boxes),1)
                             self.assertEqual(table.locator('th.neorain-arrival-clocks-heading').evaluate('e=>getComputedStyle(e).textAlign'),'center')
                             sta=clocks.locator('[data-rain-override-time]')
@@ -67,7 +70,7 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
                             self.assertEqual(response.value.status,200);expect(sta).to_have_value('02:35')
                     else:
                         mobile=root.locator('.neorain-mobile-board');expect(mobile).to_be_visible()
-                        expected=['FLIGHT','TAIL','ORIGIN','PARKING','ETA','BLOCK-IN','+/-'] if board=='inbound' else ['FLIGHT','TAIL','DEST','PARKING','NEO FUEL','CENTER','BLOCK-OUT','+/-']
+                        expected=['FLIGHT','TAIL','ORIGIN','PARKING','STA/ETA','BLOCK-IN','+/-'] if board=='inbound' else ['FLIGHT','TAIL','DEST','PARKING','NEO FUEL','CENTER','BLOCK-OUT','+/-']
                         self.assertEqual(mobile.locator('[role=columnheader]').all_text_contents(),expected)
                         row=mobile.locator('.neorain-mobile-mission-grid');self.assertEqual(row.locator(':scope > *').count(),count)
                         centers=mobile.locator('[role=columnheader]').evaluate_all('els=>els.map(e=>{const b=e.getBoundingClientRect();return b.x+b.width/2})')
@@ -111,11 +114,15 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
                         fuel.submit_fueler_assignment(op.gateway,actor,aid,expected=row['edit_baseline'])
                         fuel.complete_fueled_assignment(op.gateway,actor,aid)
                     db.session.commit()
+            page.evaluate("window.originalBoard=document.querySelector('[data-neorain-board-page]')")
+            page.locator('[data-neorain-mobile-row-open]:visible').click()
             mutate('on');expect(cell).to_have_text('FUELING',timeout=15000)
             mutate('data');expect(cell).to_have_text('FUELING')
             mutate('off');expect(cell).to_have_text('OFF',timeout=15000)
             mutate('complete');expect(cell).to_have_text('30.0',timeout=15000)
             expect(cell).to_have_attribute('data-scorpion-final','true')
+            self.assertTrue(page.evaluate("window.originalBoard===document.querySelector('[data-neorain-board-page]')"))
+            expect(page.locator('[data-neorain-mobile-inline-detail]')).to_be_visible()
             self.assertEqual(errors,[])
         finally:
             (evidence/f'{engine}-geometry.json').write_text(json.dumps(geometry,indent=2))

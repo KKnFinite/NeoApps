@@ -25,9 +25,13 @@
       root.querySelector(`[data-rainrock-use-saved="${input.name}"]`).hidden=!errors.has(input);
     });
   };
+  let lastReportHtml;
   const apply=(payload,sent=null)=>{
     if(String(payload.operation_id)!==root.dataset.operation)return;
-    if(live.innerHTML!==payload.html)live.innerHTML=payload.html;
+    if(lastReportHtml!==payload.html){
+      window.NeoRainBoard.updateReport(live,payload.html);
+      lastReportHtml=payload.html;
+    }
     updateNotes();
     inputs.forEach(input=>{
       const field=payload.fields[input.name];if(!field)return;
@@ -101,6 +105,7 @@
     try{
       const response=await fetch(root.dataset.autoStateUrl,{credentials:'same-origin',cache:'no-store'});
       const payload=await response.json();
+      if (Date.now() < Number(root.dataset.sortStartMs) || Date.now() >= sortEndMs || !window.NeoLiveUpdates?.insidePhysicalSort()) return;
       if (payload.refresh) sortEndMs = Number(payload.refresh.sort_end_ms);
       if (!(Date.now() < sortEndMs)) { clearInterval(refreshTimer); return; }
       if(response.ok&&payload.ok&&before===generation&&!activeSave){apply(payload);showStatus();}

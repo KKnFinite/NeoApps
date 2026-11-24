@@ -10,105 +10,9 @@
         {% if operation and can_edit %}<a class="neorain-add-flight" href="{{ url_for('neorain.mission_new', board='inbound') }}">ADD ARRIVAL</a>{% endif %}
         <button type="button" class="neorain-board-collapse" data-neorain-board-collapse aria-expanded="true" aria-controls="neorain-board-support">HIDE TOP</button>
     </header>
-    <div id="neorain-board-support" class="neorain-board-support" data-neorain-board-support>
-    {% include 'neonodes/neorain/_mission_tools.html' %}
-    <section class="neorain-outbound-late-summary" aria-label="Inbound aircraft statistics" data-neorain-late-summary>
-        <div><strong>1ST WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="first_wave.aircraft_late">{{ late_summary.first_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="first_wave.late_minutes">{{ late_summary.first_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="first_wave.average">{{ late_summary.first_wave.average }}</output></span></div>
-        <div><strong>2ND WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="second_wave.aircraft_late">{{ late_summary.second_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="second_wave.late_minutes">{{ late_summary.second_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="second_wave.average">{{ late_summary.second_wave.average }}</output></span></div>
-        <div data-neorain-summary-total><strong>TOTAL</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="total.aircraft_late">{{ late_summary.total.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="total.late_minutes">{{ late_summary.total.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="total.average">{{ late_summary.total.average }}</output></span></div>
-    </section>
-    <details class="neorain-settings-panel neorain-crew-admin" data-neorain-crew-collapse data-crew-preference="{{ gateway.id }}:{{ current_user.id }}" aria-labelledby="crew-admin-title">
-        <summary id="crew-admin-title">CREW ADMIN · {{ crew_admin_assignments|length }} assigned · Show / Hide</summary>
-        {% if operation %}
-        <div class="neorain-crew-admin-list">
-            {% for item in crew_admin_assignments %}
-            <article class="neorain-crew-admin-card">
-                {% if can_edit_crew_admin %}
-                <form class="neorain-crew-admin-form" method="post" action="{{ url_for('neorain.inbound_crew_admin') }}">
-                    <input type="hidden" name="action" value="update">
-                    <input type="hidden" name="assignment_id" value="{{ item.assignment.id }}">
-                    <input type="hidden" name="expected_version" value="{{ item.assignment.updated_at.isoformat() if item.assignment.updated_at else '' }}">
-                    <label class="neorain-crew-admin-field">
-                        <span>Name</span>
-                        <select name="person_id">
-                            {% for person in eligible_crew_admins %}
-                            <option value="{{ person.id }}" {% if person.id == item.assignment.person_id %}selected{% endif %}>{{ person.full_name }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <fieldset class="neorain-crew-admin-field neorain-crew-admin-fieldset neorain-crew-admin-ramps">
-                        <legend>Ramp(s)</legend>
-                        <div class="neorain-crew-admin-ramp-options">
-                            {% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}
-                            <label class="neorain-crew-admin-ramp-option"><input type="checkbox" name="ramps" value="{{ ramp }}" {% if ramp in item.ramps %}checked{% endif %}>{{ ramp }}</label>
-                            {% endfor %}
-                        </div>
-                    </fieldset>
-                    <label class="neorain-crew-admin-field">
-                        <span>Printer #</span>
-                        <input name="printer_number" value="{{ item.assignment.printer_number or '' }}">
-                    </label>
-                    <label class="neorain-crew-admin-field">
-                        <span>Van #</span>
-                        <input name="van_number" value="{{ item.assignment.van_number or '' }}">
-                    </label>
-                    <div class="neorain-crew-admin-actions"><button type="submit">SAVE</button></div>
-                </form>
-                <form class="neorain-crew-admin-remove-form" method="post" action="{{ url_for('neorain.inbound_crew_admin') }}">
-                    <input type="hidden" name="action" value="remove">
-                    <input type="hidden" name="assignment_id" value="{{ item.assignment.id }}">
-                    <input type="hidden" name="expected_version" value="{{ item.assignment.updated_at.isoformat() if item.assignment.updated_at else '' }}">
-                    <button type="submit">REMOVE</button>
-                </form>
-                {% else %}
-                <div class="neorain-crew-admin-readonly">
-                    <div><span>Name</span><strong>{{ item.person.full_name if item.person else 'UNASSIGNED' }}</strong></div>
-                    <div><span>Ramp(s)</span><strong>{{ item.ramps|join(', ') or '-' }}</strong></div>
-                    <div><span>Printer #</span><strong>{{ item.assignment.printer_number or '-' }}</strong></div>
-                    <div><span>Van #</span><strong>{{ item.assignment.van_number or '-' }}</strong></div>
-                </div>
-                {% endif %}
-            </article>
-            {% else %}
-            <p class="neorain-crew-admin-empty">No Crew Admin assignments yet.</p>
-            {% endfor %}
-            {% if can_edit_crew_admin %}
-            <article class="neorain-crew-admin-card neorain-crew-admin-card--add">
-                <form class="neorain-crew-admin-form" method="post" action="{{ url_for('neorain.inbound_crew_admin') }}">
-                    <input type="hidden" name="action" value="add">
-                    <label class="neorain-crew-admin-field">
-                        <span>Name</span>
-                        <select name="person_id">
-                            {% for person in eligible_crew_admins %}
-                            <option value="{{ person.id }}">{{ person.full_name }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <fieldset class="neorain-crew-admin-field neorain-crew-admin-fieldset neorain-crew-admin-ramps">
-                        <legend>Ramp(s)</legend>
-                        <div class="neorain-crew-admin-ramp-options">
-                            {% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}
-                            <label class="neorain-crew-admin-ramp-option"><input type="checkbox" name="ramps" value="{{ ramp }}">{{ ramp }}</label>
-                            {% endfor %}
-                        </div>
-                    </fieldset>
-                    <label class="neorain-crew-admin-field">
-                        <span>Printer #</span>
-                        <input name="printer_number" placeholder="Printer #">
-                    </label>
-                    <label class="neorain-crew-admin-field">
-                        <span>Van #</span>
-                        <input name="van_number" placeholder="Van #">
-                    </label>
-                    <div class="neorain-crew-admin-actions"><button type="submit">ADD CREW ADMIN</button></div>
-                </form>
-            </article>
-            {% endif %}
-        </div>
-        {% else %}
-        <p class="muted">No current sort.</p>
-        {% endif %}
-    </details>
+    <output data-neorain-refresh-status role="status" hidden></output>
+    <div data-neorain-live-content>
+    {% include "neonodes/neorain/_inbound_live.html" %}
     </div>
     <script nonce="{{ csp_nonce() }}">
     (() => {
@@ -125,62 +29,8 @@
       }
     })();
     </script>
-    {% include "neonodes/neorain/_override_reset_tools.html" %}
-    {% if not operation %}
-    <p class="neorain-outbound-empty">No current sort.</p>
-    {% elif not rows %}
-    <p class="neorain-outbound-empty">No inbound arrival missions for the current sort.</p>
-    {% else %}
-    <div class="neorain-outbound-table-wrap neorain-desktop-board"><table class="neorain-outbound-table">
-        <caption class="visually-hidden">Current-sort inbound arrivals</caption>
-        <colgroup><col class="neo-column-width-40"><col class="neo-column-width-70"><col class="neo-column-width-70"><col class="neo-column-width-50"><col class="neo-column-width-50"><col class="neo-column-width-160"><col class="neo-column-width-90"><col class="neo-column-width-70"><col class="neo-column-width-40"><col class="neo-column-width-80"><col class="neo-column-width-120"><col class="neo-column-width-60"><col class="neo-column-width-100"></colgroup>
-        <thead><tr><th>Wave</th><th>Flight #</th><th>Tail</th><th>Origin</th><th>Parking</th><th class="neorain-arrival-clocks-heading">STA / ETA</th><th>Status</th><th>Block-In</th><th>+/-</th><th>Include/Exclude</th><th>Connecting Outbound</th><th>Ground Time</th><th>Delay Info</th></tr></thead>
-        <tbody>{% for row in rows %}{% set row_state = 'neorain-inbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-inbound-row--blocked-in' if row.block_in else '') %}{% set late_class = 'neorain-row--late' if (row.arrival_variance|int) >= 1 else '' %}<tr class="{{ row_state }} {{ late_class }}" data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
-            <td data-label="Wave">{{ row.wave }}</td><td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td><td data-label="Tail">{{ row.tail or '-' }}</td><td data-label="Origin">{{ row.origin or '-' }}</td><td data-label="Parking">{{ row.parking or '-' }}</td><td data-label="STA / ETA"><div class="neorain-arrival-clocks">{{ rain_time(row, 'sta', 'STA', row.sta) }}<span class="neorain-clock-divider" aria-hidden="true">/</span><time class="neorain-eta" aria-label="ETA for {{ row.flight_number }}">{{ row.eta or '—' }}</time></div></td><td data-label="Status">{{ row.status }}</td><td data-label="Block-In">{{ rain_time(row, 'block_in', 'BLOCK-IN', row.block_in) }}</td><td data-label="+/-" data-neorain-display="arrival_variance">{{ row.arrival_variance }}</td>
-            <td data-label="Include/Exclude" data-neorain-late-inclusion-cell>{% if can_edit %}<button type="button" class="neorain-late-inclusion-control" data-neorain-late-inclusion-toggle data-neorain-included="{{ 'true' if row.late_metrics_included else 'false' }}" aria-label="Toggle late metrics inclusion ({{ row.late_metrics_inclusion_source }})" {% if row.status == 'CANCELLED' %}disabled{% endif %}>{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</button><button type="button" class="neorain-no-return-control" data-neorain-inbound-edit {% if row.status != 'CANCELLED' %}hidden{% endif %}>EDIT</button><output class="neorain-late-inclusion-message" data-neorain-late-inclusion-message aria-live="polite" hidden></output>{% else %}<span data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</span>{% endif %}</td><td data-label="Connecting Outbound">{{ row.connecting_outbound or '-' }}</td><td data-label="Ground Time" class="{% if row.ground_time_warning %}neorain-ground-time-warning{% endif %}">{{ row.ground_time or '-' }}</td><td data-label="Delay Info"><button type="button" class="neorain-delay-toggle" data-neorain-delay-toggle aria-expanded="false" aria-controls="delay-info-{{ row.mission_id }}">DELAY ({{ row.delay_info|length }}) / NOTES</button></td>
-        </tr>
-        <tr id="delay-info-{{ row.mission_id }}" class="neorain-delay-panel-row" data-neorain-delay-panel data-neorain-delay-mission-id="{{ row.mission_id }}" hidden>
-            <td colspan="13" class="neorain-delay-panel-cell">
-                <div class="neorain-delay-panel">
-                    {% if can_edit %}
-                    <div data-neorain-inbound-edit-protected {% if row.status == 'CANCELLED' %}hidden{% endif %}>
-                        <div class="neorain-delay-existing-list">
-{% for delay in row.delay_info %}
-{% with mission_id=row.mission_id, board='inbound', mobile=false %}{% include "neonodes/neorain/_delay_entry.html" %}{% endwith %}
-{% endfor %}
-                        </div>
-                        <form class="neorain-delay-line-form" method="post" action="{{ url_for('neorain.delay_info') }}">
-                            <input type="hidden" name="board" value="inbound">
-                            <input type="hidden" name="action" value="add">
-                            <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
-                            <input required name="minutes" inputmode="numeric" placeholder="Minutes">
-                            <input required name="code" maxlength="2" placeholder="Code">
-                            <input name="notes" placeholder="Notes">
-                            <button type="submit">ADD</button>
-                        </form>
-                    </div>
-                    <div data-neorain-inbound-edit-readonly {% if row.status != 'CANCELLED' %}hidden{% endif %}>
-                        <div class="neorain-delay-existing-list">
-                            {% for delay in row.delay_info %}
-                            <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
-                            {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
-                        </div>
-                    </div>
-                    {% else %}
-                    <div class="neorain-delay-existing-list">
-                        {% for delay in row.delay_info %}
-                        <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
-                        {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
-                    </div>
-                    {% endif %}
-                    {% with board='inbound' %}{% include "neonodes/neorain/_mission_notes.html" %}{% endwith %}
-                </div>
-            </td>
-        </tr>{% endfor %}</tbody>
-    </table></div>
-    {% include "neonodes/neorain/_inbound_mobile_content.html" %}
-    {% endif %}
 </section>
+<script src="{{ url_for('static', filename='js/neorain_board_live.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 {% include "neonodes/neorain/_delay_panel_shared.html" %}
 {% include "neonodes/neorain/_board_layout_shared.html" %}
 {% include "neonodes/neorain/_override_assets.html" %}
@@ -188,50 +38,12 @@
 (() => {
     const root = document.querySelector("[data-neorain-inbound-live]");
     if (!root || !window.NeoLiveUpdates) return;
-    let revision = root.dataset.inboundRevision || "";
-    const hasPendingEdit = () => Boolean(root.querySelector(
-        "[data-neorain-inbound-hhmm][data-neorain-dirty='true'], [data-neorain-inbound-hhmm][data-neorain-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-crew-dirty='true'], [data-rain-override-dirty='true'], [data-neorain-delay-dirty='true'], [data-neorain-delay-saving='true'], [data-mission-note-dirty='true'], [data-mission-note-saving='true']"
-    ));
-    root.addEventListener("neorain:inbound-revision", (event) => {
-        const nextRevision = event.detail?.revision;
-        if (nextRevision) {
-            revision = nextRevision;
-            root.dataset.inboundRevision = nextRevision;
-        }
-    });
     root.addEventListener("neorain:late-summary", (event) => {
         Object.entries(event.detail?.lateSummary || {}).forEach(([group, values]) => {
             Object.entries(values || {}).forEach(([metric, value]) => root.querySelectorAll(`[data-neorain-late-summary-value="${group}.${metric}"]`).forEach((element) => { element.textContent = String(value ?? 0); }));
         });
     });
-    let refresh = {{ refresh_status|tojson }};
-    const withinSort = () => refresh.sort_start_ms <= Date.now() && Date.now() < refresh.sort_end_ms;
-    const controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
-        poll: async () => {
-            if (!withinSort()) {
-                controller.setEnabled(false);
-                return;
-            }
-            const url = new URL(root.dataset.revisionUrl, window.location.origin);
-            url.searchParams.set("revision", revision);
-            const response = await (window.NeoLiveRevision?.fetch || fetch)(url, {cache: "no-store", credentials: "same-origin"});
-            if (!response.ok) throw new Error("NeoRain Inbound refresh failed.");
-            const payload = await response.json();
-            refresh = payload.refresh || {};
-            controller.setServerStatus({ ...refresh, auto_refresh_enabled: withinSort() });
-            if (!withinSort()) return;
-            if (payload.changed && hasPendingEdit()) {
-                root.dataset.neorainRefreshDeferred = "true";
-                return;
-            }
-            revision = payload.revision || revision;
-            root.dataset.inboundRevision = revision;
-            root.removeAttribute("data-neorain-refresh-deferred");
-            if (payload.changed) window.location.reload();
-        }, continuousWhileVisible: true,
-    });
-    controller.setServerStatus({ ...refresh, auto_refresh_enabled: Date.now() < refresh.sort_end_ms });
+    window.NeoRainBoard.start(root, {{ refresh_status|tojson }});
 })();
 </script>
 {% if can_edit %}
@@ -264,7 +76,7 @@
         row.classList.toggle("neorain-row--late", Number.parseInt(data.arrival_variance, 10) >= 1);
         row.querySelectorAll("[data-neorain-display='arrival_variance']").forEach((el) => el.textContent = data.arrival_variance || "-");
         row.querySelectorAll("[data-neorain-display='status']").forEach((el) => el.textContent = data.status || "-");
-        row.querySelectorAll("[data-neorain-display='block_in']").forEach((el) => el.textContent = data.block_in || data.eta_sta || "-");
+        row.querySelectorAll("[data-neorain-display='block_in']").forEach((el) => el.textContent = data.block_in || "-");
         row.querySelectorAll("[data-neorain-display='late_metrics_included']").forEach((el) => el.textContent = data.late_metrics_included ? "INCLUDED" : "EXCLUDED");
         row.querySelectorAll("[data-neorain-late-inclusion-toggle]").forEach((button) => { button.dataset.neorainIncluded = data.late_metrics_included ? "true" : "false"; button.textContent = data.late_metrics_included ? "INCLUDED" : "EXCLUDED"; }); });
     };
@@ -339,9 +151,8 @@
 {% endif %}
 <script nonce="{{ csp_nonce() }}">
 (() => {
-    const root = document.querySelector("[data-neorain-inbound-live]");
-    const board = root?.querySelector('[data-neorain-mobile-board="inbound"]');
-    if (!root || !board) return;
+    const board = document.querySelector("[data-neorain-inbound-live]");
+    if (!board) return;
 
     const storageKey = "neorain:inbound:mobile-ui:" + window.location.pathname;
     const items = () => Array.from(board.querySelectorAll(".neorain-mobile-mission[data-neorain-mission-id]"));
