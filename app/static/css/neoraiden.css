@@ -33,7 +33,7 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .raiden :focus-visible {outline:2px solid var(--accent); outline-offset:-2px}
 .raiden button:hover,.raiden summary:hover {background-color:var(--accent-bg)!important}
 .raiden button:disabled {opacity:.65; cursor:default}
-.rd-header,.rd-controls,.rd-context,.rd-uld-title,.rd-uld-foot,.rd-tools,.rd-pager {display:flex; align-items:center; gap:8px}
+.rd-header,.rd-controls,.rd-context,.rd-uld-title,.rd-uld-foot,.rd-tools {display:flex; align-items:center; gap:8px}
 .rd-header,.rd-uld-title {justify-content:space-between}
 .raiden [data-board] {display:contents}
 .rd-header {order:0; margin-bottom:6px}
@@ -43,7 +43,7 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-stale:not([hidden]) {margin-block:3px}
 .rd-tools {order:4}
 .rd-workspace {order:5}
-.rd-pager {order:6}
+.rd-tv-notice {order:3; color:var(--hold); font-size:.85em}
 .rd-controls button[data-tv] {color:var(--accent)!important}
 .rd-settings {position:relative}
 .rd-settings>summary {display:grid; place-items:center; min-width:32px}
@@ -125,27 +125,41 @@ body.rd-projecting {overflow:hidden!important}
 body.rd-projecting > :not(.rd-tv) {display:none!important}
 .raiden.rd-tv {
     position:fixed; z-index:20000; inset:0; width:100%; height:100dvh; margin:0; border-radius:0;
-    display:flex; flex-direction:column; gap:.35em; padding:1vh 1vw; overflow:hidden;
-    font-size:clamp(16px,2.35vh,52px);
+    gap:.25em; padding:.55em .65em; font-size:clamp(14px, 1.95vh, 44px);
 }
-.rd-tv .rd-header h1 {font-size:1.6em}
-.rd-tv :is(.rd-context form,.rd-context select,.rd-settings,.rd-tools,.rd-staff,.rd-detail) {display:none}
-.rd-tv .rd-context {position:static; margin:0}
-.rd-tv .rd-refresh {margin:0; font-size:.85em}
-.rd-tv .rd-overview {grid-template-columns:3fr 1fr}
-.rd-tv .rd-totals {display:flex; height:100%; align-items:center; justify-content:space-evenly}
-.rd-tv .rd-sort,.rd-tv .rd-uld {padding:.35em .7em}
-.rd-tv .rd-header {margin-bottom:0}
-.rd-tv .rd-workspace {display:grid; flex:1; min-height:0}
-.rd-tv .rd-scroll {flex:1; max-height:none; overflow:hidden}
-.rd-tv .rd-mission>summary {padding:.28em .55em; min-height:2.65em; cursor:default}
+.rd-tv .rd-header h1 {font-size:1.3em}
+.rd-tv :is(.rd-context form,.rd-context select,.rd-settings,.rd-tools,.rd-staff,.rd-detail,.rd-columns) {display:none}
+.rd-tv .rd-context {margin:0}
+.rd-tv .rd-refresh {margin:0; font-size:.82em}
+.rd-tv .rd-overview {grid-template-columns:minmax(0,2.5fr) minmax(0,1fr); gap:.45em}
+.rd-tv .rd-totals {display:flex; height:100%; align-items:center; justify-content:space-between; gap:.55em}
+.rd-tv .rd-totals b {font-size:1.4em}
+.rd-tv .rd-sort,.rd-tv .rd-uld {padding:.25em .55em}
+.rd-tv .rd-uld-title {margin-bottom:0}
+.rd-tv .rd-uld :is(th,td) {padding:0 .25em}
+.rd-tv .rd-uld-foot {margin-top:.2em; padding-top:.15em}
+.rd-tv .rd-header {margin:0}
+.rd-tv .rd-workspace {display:grid; gap:.45em; align-items:start}
+.rd-tv .rd-panel,.rd-tv .rd-scroll {max-height:none; overflow:visible}
+.rd-tv .rd-panel h2 {padding:.18em .45em}
+@media(min-width:1100px) {
+    .rd-tv .rd-rows:has(.rd-mission:nth-child(15)) {
+        column-count:2; column-gap:1px; column-rule:1px solid var(--line);
+    }
+}
+.rd-tv .rd-mission {break-inside:avoid}
+.rd-tv .rd-mission>summary {
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.72fr) minmax(0,1.37fr);
+    padding:.11em .35em; gap:.24em; min-height:0; line-height:1.05; cursor:default;
+}
+.rd-tv .rd-mission small {margin-top:0; font-size:.92em}
 .rd-tv .rd-mission>summary::after {display:none}
-.rd-tv .rd-panel h2 {padding:.28em .6em}
-.rd-tv .rd-columns {padding:.2em .6em}
-.rd-tv .rd-pager {justify-content:center; gap:.6em; flex:none}
-.rd-tv .rd-pager output {min-width:7em; text-align:center}
-.rd-tv .rd-controls button,.rd-tv .rd-pager button {font-size:.85em; min-width:2.4em}
+.rd-tv .rd-controls button {font-size:.85em}
 @media(min-width:901px) {
+    body.blueprint-neoraiden.operational-shell-page:not(.operational-board-view) .content {
+        padding-inline:8px;
+        padding-left:calc(var(--operational-sidebar-width) + 8px);
+    }
     .raiden:not(.rd-tv) {display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-content:start}
     .raiden:not(.rd-tv) > *, .raiden:not(.rd-tv) [data-board] > * {grid-column:1/-1}
     .raiden:not(.rd-tv) .rd-header {margin:0}
