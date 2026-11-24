@@ -17,13 +17,19 @@ def lock_schedule_gateway(gateway_code):
     db.session.query(Gateway.id).filter_by(code=gateway_code).with_for_update().first()
 
 
-def lock_master_editor(gateway):
+def lock_master_editor(gateway, *, for_board=False):
     # Other editors (including Rain Load Planner) lock the operation before its master.
     lock_schedule_gateway(gateway.code)
     ids = [op.id for op in current_operations_for_gateway(gateway)]
     if ids:
-        db.session.query(SortDateOperation.id).filter(SortDateOperation.id.in_(ids)).order_by(
-            SortDateOperation.id).with_for_update().all()
+        locked = SortDateOperation.query.filter(SortDateOperation.id.in_(ids)).order_by(SortDateOperation.id)
+        if for_board:
+            operations = locked.populate_existing().with_for_update().all()
+            now = current_gateway_local_datetime(gateway)
+            return [op for op in operations if op.archived_at_utc is None
+                    and now < sort_lookup_window_for_operation(op, gateway)[1]]
+        locked.with_entities(SortDateOperation.id).with_for_update().all()
+    return []
 
 
 def master_template(master):
@@ -105,14 +111,15 @@ def _protect_work_in_progress(mission):
         raise MasterScheduleConflict(f"{mission.flight_number} has open treatment or radio work. Resolve it before retirement.")
 
 
-def _reconcile_operation(master, previous, operation):
+def _reconcile_operation(master, previous, operation, *, linked=None):
     from app.services.sort_date_operations import (
         _build_mission_from_master, create_default_crew_assignments_for_mission,
         ensure_tail_state_for_mission, master_schedule_runs_on_date,
     )
     eligible = master.active and master.sort_name == operation.sort_name and master_schedule_runs_on_date(master, operation.sort_date)
-    linked = (SortDateMission.query.filter_by(sort_date_operation_id=operation.id, master_flight_schedule_id=master.id)
-              .populate_existing().with_for_update().all())
+    if linked is None:
+        linked = (SortDateMission.query.filter_by(sort_date_operation_id=operation.id, master_flight_schedule_id=master.id)
+                  .populate_existing().with_for_update().all())
     if len(linked) > 1:
         raise MasterScheduleConflict(f"{master.flight_number} has multiple linked missions. Review this Sort before editing.")
     mission = next(iter(linked), None)
@@ -153,6 +160,30 @@ def _reconcile_operation(master, previous, operation):
     tail = ensure_tail_state_for_mission(mission)
     create_default_crew_assignments_for_mission(mission, tail.aircraft_type if tail else "unknown")
     return True
+
+
+def reconcile_board_changes(changes, locked_operations):
+    """The board holds the gateway and operation locks until its single commit."""
+    from app.services.neoscorpion_assets import lock_nightly_asset_scope_for_mutation, record_nightly_operational_change
+    for operation in locked_operations:
+        rows = [(m, old) for m, old in changes
+                if m.sort_name == operation.sort_name or (old and old["sort_name"] == operation.sort_name)]
+        if not rows:
+            continue
+        linked = {}
+        missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id).filter(
+            SortDateMission.master_flight_schedule_id.in_([m.id for m, _ in rows])
+        ).order_by(SortDateMission.id).populate_existing().with_for_update()
+        for mission in missions:
+            linked.setdefault(mission.master_flight_schedule_id, []).append(mission)
+        changed = 0
+        for master, previous in rows:
+            if _reconcile_operation(master, previous, operation, linked=linked.get(master.id, [])):
+                changed += 1
+        if changed:
+            _, state = lock_nightly_asset_scope_for_mutation(operation)
+            for _ in range(changed):
+                state = record_nightly_operational_change(state, operation.id)
 
 
 def reconcile_current_sort(master, gateway, previous):

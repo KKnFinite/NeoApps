@@ -37,7 +37,7 @@ from app.models import (
 from app.neomotherbrain import bp
 from app.services.mission_identity import flight_identity
 from app.services.master_schedule_sync import (
-    MasterScheduleConflict, lock_master_editor, master_template, reconcile_current_sort,
+    MasterScheduleConflict, lock_master_editor, master_template, reconcile_board_changes, reconcile_current_sort,
 )
 from app.services.flight_rules import (
     crew_sections_for_tail_swap,
@@ -2092,13 +2092,29 @@ def operations():
 def master_conflict(error):
     db.session.rollback()
     if _wants_json_response():
-        return {"ok": False, "message": str(error)}, 409
+        return {"ok": False, "message": str(error), **getattr(error, "board_conflict", {})}, 409
     return str(error), 409, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 def _check_master_version(schedule, expected):
+    if request.form.get("queue_save") and not expected:
+        raise MasterScheduleConflict("Missing flight version. Review the saved flight before retrying.")
     if expected and expected != schedule.updated_at.isoformat():
-        raise MasterScheduleConflict("This master flight changed. Reload its current values before saving.")
+        error = MasterScheduleConflict(f"{schedule.flight_number} changed. Review its saved values before retrying.")
+        if request.form.get("queue_save"):
+            index = next((i for i in request.form.getlist("row_indexes")
+                          if request.form.get(f"row_{i}_id") == str(schedule.id)), None)
+            if index:
+                error.board_conflict = dict(conflict_id=schedule.id,
+                    current_row=_master_board_row_html(schedule, index, get_current_gateway()))
+        raise error
+
+
+def _master_board_row_html(schedule, index, gateway):
+    return render_template("neomotherbrain/_master_board_row.html", schedule=schedule,
+        index=index.removeprefix(schedule.mission_type + "_"), gateway=gateway,
+        active_day_options=ACTIVE_DAY_OPTIONS, aircraft_type_options=MASTER_AIRCRAFT_TYPE_OPTIONS,
+        parse_active_days=parse_active_days, wave_options=MASTER_WAVE_OPTIONS)
 
 
 @bp.route("/motherbrain/master-schedule", methods=["GET", "POST"])
@@ -2113,13 +2129,18 @@ def master_schedule():
         if denied:
             return denied
     selected_operation = _selected_manage_sort_operation(gateway)
-    schedules = _master_schedules_for_gateway(gateway)
     if request.method == "POST":
         mission_type = request.form.get("board_mission_type", "").strip().lower()
         rows = _master_schedule_bulk_rows_from_request(gateway)
         strict_row_index = request.form.get("master_save_row", "").strip()
         create_complete_new_rows = bool(strict_row_index) or not _wants_json_response()
         try:
+            ids = [int(row["id"]) for row in rows if row["id"]]
+            if len(set(ids)) != len(ids) or len({r["index"] for r in rows}) != len(rows):
+                raise ValueError("A flight may only appear once in a save.")
+            operations = lock_master_editor(gateway, for_board=True)
+            schedules = MasterFlightSchedule.query.filter_by(gateway_code=gateway.code, deleted_at=None).filter(
+                MasterFlightSchedule.id.in_(ids)).populate_existing().all() if ids else []
             updated_count, created_count = _apply_master_schedule_board_edit(
                 rows,
                 schedules,
@@ -2127,6 +2148,7 @@ def master_schedule():
                 mission_type,
                 strict_row_index=strict_row_index or None,
                 create_complete_new_rows=create_complete_new_rows,
+                locked_operations=operations,
             )
         except ValueError as error:
             db.session.rollback()
@@ -2138,9 +2160,16 @@ def master_schedule():
                 redirect_args["operation_id"] = selected_operation.id
             return redirect(url_for("neomotherbrain.master_schedule", **redirect_args))
 
-        saved_ids = {row["id"] for row in rows}
         db.session.flush()
-        versions = {str(s.id): s.updated_at.isoformat() for s in schedules if str(s.id) in saved_ids}
+        # Executemany onupdate defaults can differ by microseconds per row.
+        # Read the actual stored tokens before releasing the gateway lock.
+        versions = {str(key): version.isoformat() for key, version in
+                    db.session.query(MasterFlightSchedule.id, MasterFlightSchedule.updated_at)
+                    .filter_by(gateway_code=gateway.code, deleted_at=None)
+                    .filter(MasterFlightSchedule.id.in_(ids))} if ids else {}
+        new_row = next((r for r in rows if r.get("created_master") is not None), None)
+        created_row = (_master_board_row_html(new_row["created_master"], new_row["index"], gateway)
+                       if new_row and request.form.get("queue_save") else None)
         db.session.commit()
         if _wants_json_response():
             return {
@@ -2149,6 +2178,7 @@ def master_schedule():
                 "updated": updated_count,
                 "created": created_count,
                 "versions": versions,
+                "created_row": created_row,
             }
         flash(
             f"Master {mission_type} board saved: "
@@ -2160,6 +2190,7 @@ def master_schedule():
             redirect_args["operation_id"] = selected_operation.id
         return redirect(url_for("neomotherbrain.master_schedule", **redirect_args))
 
+    schedules = _master_schedules_for_gateway(gateway)
     return render_template(
         "neomotherbrain/master_schedule.html",
         parse_active_days=parse_active_days,
@@ -2407,6 +2438,8 @@ def delete_master_schedule(master_id):
     master_schedule.active = False
     reconcile_current_sort(master_schedule, get_current_gateway(), previous)
     db.session.commit()
+    if _wants_json_response():
+        return {"ok": True, "deleted": master_id}
     flash("Master flight schedule row deleted.", "info")
     return redirect(url_for("neomotherbrain.master_schedule"))
 
@@ -4985,7 +5018,19 @@ def _master_schedule_or_404(master_id):
     gateway = get_current_gateway()
     if request.method == "POST":
         lock_master_editor(gateway)
-    return MasterFlightSchedule.query.filter_by(id=master_id, gateway_code=gateway.code, deleted_at=None).first_or_404()
+    query = MasterFlightSchedule.query.filter_by(id=master_id, gateway_code=gateway.code, deleted_at=None)
+    if request.method == "POST" and request.form.get("queue_save"):
+        schedule = query.populate_existing().first()
+        if schedule is None:
+            _unavailable_master_draft(master_id)
+        return schedule
+    return query.first_or_404()
+
+
+def _unavailable_master_draft(master_id):
+    error = MasterScheduleConflict("This flight is no longer available on this board. Its draft remains on screen.")
+    error.board_conflict = dict(conflict_id=master_id, unavailable=True)
+    raise error
 
 
 def _master_schedules_for_gateway(gateway):
@@ -5245,21 +5290,26 @@ def _apply_master_schedule_board_edit(
     mission_type,
     strict_row_index=None,
     create_complete_new_rows=True,
+    locked_operations=None,
 ):
-    if mission_type not in MISSION_TYPES:
+    mixed = mission_type == "mixed" and request.form.get("queue_save") == "1"
+    if mission_type not in MISSION_TYPES and not mixed:
         raise ValueError("Mission type must be arrival or departure.")
 
     schedules_by_id = {
         str(schedule.id): schedule
         for schedule in schedules
-        if schedule.mission_type == mission_type
     }
     processed_schedules = []
+    changes = []
     created_schedules = []
     strict_row_found = not strict_row_index
 
     for row in rows:
-        row["mission_type"] = mission_type
+        row_type = row["mission_type"] if mixed else mission_type
+        if row_type not in MISSION_TYPES:
+            raise ValueError("Invalid flight board.")
+        row["mission_type"] = row_type
         is_strict_row = bool(strict_row_index and row.get("index") == strict_row_index)
         strict_row_found = strict_row_found or is_strict_row
         schedule_id = row.get("id", "").strip()
@@ -5281,28 +5331,38 @@ def _apply_master_schedule_board_edit(
 
         if schedule_id:
             schedule = schedules_by_id.get(schedule_id)
-            if not schedule:
+            if not schedule or schedule.mission_type != row_type:
+                if request.form.get("queue_save"):
+                    _unavailable_master_draft(schedule_id)
                 raise ValueError("Master schedule row was not found.")
         else:
             schedule = MasterFlightSchedule()
             created_schedules.append(schedule)
+            row["created_master"] = schedule
 
         if schedule_id:
-            _check_master_version(schedule, request.form.get("version_" + schedule_id))
+            expected = request.form.get("version_" + schedule_id)
+            if request.form.get("queue_save") and not expected:
+                raise ValueError("Flight version missing. Review the current schedule before saving.")
+            _check_master_version(schedule, expected)
             row["active"] = schedule.active
         else:
             row["active"] = True
-        _apply_master_schedule_form(schedule, row, gateway)
+        previous = master_template(schedule) if schedule_id else None
+        was_active = schedule.active
+        _apply_master_schedule_form(schedule, row, gateway, defer_reconciliation=True)
+        if was_active or schedule.active:
+            changes.append((schedule, previous))
         processed_schedules.append(schedule)
 
     if not strict_row_found:
         raise ValueError("New master schedule row was not found.")
 
     _raise_for_duplicate_active_master_schedule_rows(processed_schedules)
-    for schedule in processed_schedules:
-        _raise_for_duplicate_active_master_schedule(schedule)
-
     db.session.add_all(created_schedules)
+    db.session.flush()
+    _check_board_active_identities(processed_schedules, gateway)
+    reconcile_board_changes(changes, locked_operations)
     updated_count = len(processed_schedules) - len(created_schedules)
     return updated_count, len(created_schedules)
 
@@ -5351,8 +5411,8 @@ def _master_schedule_board_row_is_complete(row):
     )
 
 
-def _apply_master_schedule_form(master_schedule, form, gateway=None):
-    if master_schedule.id:
+def _apply_master_schedule_form(master_schedule, form, gateway=None, *, defer_reconciliation=False):
+    if master_schedule.id and not defer_reconciliation:
         _check_master_version(master_schedule, form.get("version"))
     previous = master_template(master_schedule) if master_schedule.id else None
     was_active = master_schedule.active
@@ -5397,9 +5457,33 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     else:
         master_schedule.pure_pull_time_local = _parse_optional_time(form["pure_pull_time_local"], "Pure pull time")
         master_schedule.mix_pull_time_local = _parse_optional_time(form["mix_pull_time_local"], "Mix pull time")
-    if gateway and (was_active or master_schedule.active):
+    if gateway and not defer_reconciliation and (was_active or master_schedule.active):
         _raise_for_duplicate_active_master_schedule(master_schedule)
         reconcile_current_sort(master_schedule, gateway, previous)
+
+
+def _check_board_active_identities(schedules, gateway):
+    # Compare the final, flushed state in this locked transaction. Project only
+    # identity columns; untouched flights cannot trigger unrelated conflicts.
+    changed = {}
+    for row in schedules:
+        if row.active:
+            changed.setdefault((row.sort_name, flight_identity(row.flight_number)), []).append(row)
+    if not changed:
+        return
+    candidates = db.session.query(MasterFlightSchedule.id, MasterFlightSchedule.sort_name,
+        MasterFlightSchedule.flight_number, MasterFlightSchedule.mission_type, MasterFlightSchedule.active_days
+    ).filter_by(gateway_code=gateway.code, active=True).filter(MasterFlightSchedule.sort_name.in_(
+        {key[0] for key in changed}))
+    for candidate in candidates:
+        for row in changed.get((candidate.sort_name, flight_identity(candidate.flight_number)), ()):
+            if row.id != candidate.id and _master_days_overlap(row, candidate):
+                raise ValueError(f"An active master schedule row already exists for this gateway, Sort and flight number ({row.flight_number}).")
+
+
+def _master_days_overlap(row, other):
+    return row.mission_type == other.mission_type or bool(
+        parse_active_days(row.active_days).intersection(parse_active_days(other.active_days)))
 
 
 def _raise_for_duplicate_active_master_schedule(master_schedule):
@@ -5416,11 +5500,10 @@ def _raise_for_duplicate_active_master_schedule(master_schedule):
         duplicate_query = duplicate_query.filter(MasterFlightSchedule.id != master_schedule.id)
 
     key = flight_identity(master_schedule.flight_number)
-    days = parse_active_days(master_schedule.active_days)
     candidates = duplicate_query.with_entities(MasterFlightSchedule.flight_number, MasterFlightSchedule.mission_type,
                                               MasterFlightSchedule.active_days)
     if any(flight_identity(row.flight_number) == key and
-           (row.mission_type == master_schedule.mission_type or days.intersection(parse_active_days(row.active_days)))
+           _master_days_overlap(master_schedule, row)
            for row in candidates):
         raise ValueError(
             "An active master schedule row already exists for this "

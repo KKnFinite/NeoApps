@@ -82,6 +82,19 @@
 .mb-planning .master-schedule-subheading { text-align: left; margin: 0 0 8px; }
 .mb-planning .mb-fields { display: block; min-width: 0; margin: 0; padding: 0; border: 0; }
 .mb-planning .master-board-add-controls { margin: 8px 0 0; justify-content: flex-start; }
+.master-schedule-panel .master-save-controls {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem .8rem;
+    padding: .5rem 0;
+    background: var(--mb-surface, #111e28);
+}
+.master-save-controls [role="alert"]:not(:empty) { flex-basis: 100%; }
+.master-save-controls [role="alert"] button { margin-inline-end: .6rem; }
 .mb-planning .master-board-table :is(input[type=text], select), .mb-planning .manage-sort-window-form input {
     min-height: 32px;
     border: 1px solid #536571;

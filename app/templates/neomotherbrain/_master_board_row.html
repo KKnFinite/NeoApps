@@ -1,0 +1,2 @@
+{% from "neomotherbrain/_master_board_rows.html" import arrival_row, departure_row with context %}
+{{ arrival_row(schedule, index) if schedule.mission_type == "arrival" else departure_row(schedule, index) }}
