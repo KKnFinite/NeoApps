@@ -46,7 +46,7 @@
             {% else %}<span class="ops-outbound-no-treatment">—</span>{% endif %}
         </div>
         <button type="button" class="ops-disclosure-chevron ops-list-chevron" data-ops-expand-details aria-label="Details for {{ row.flight }} {{ row.tail }}" aria-expanded="{{ 'true' if selected and row.mission_id == selected.mission_id else 'false' }}"></button>
-        <details class="ops-outbound-extra" data-ops-disclosure="mission-details"{% if selected and row.mission_id == selected.mission_id %} open{% endif %}>
+        <details class="ops-outbound-extra" data-ops-disclosure="mission-details">
         <summary>DETAILS</summary>
         {% if row.mission_id in mobile_missions %}{{ workspace(row, inline=true, show_treatment=false) }}
         {% else %}<p class="ops-inline-loading" role="status">Loading current aircraft…</p>{% endif %}

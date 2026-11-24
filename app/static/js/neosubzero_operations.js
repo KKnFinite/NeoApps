@@ -165,8 +165,6 @@
     };
     const initialize = (restore = false, onlyFresh = false) => {
         for (const content of draftContents()) {
-            const extra = content.querySelector('.ops-outbound-extra');
-            if (extra && !desktopInline()) extra.open = true;
             content.querySelectorAll('form').forEach(form => { sync(form); rememberAutosave(form); });
             if (!restore) continue;
             let drafts = [];
@@ -207,6 +205,8 @@
                 }
                 const disclosure = form.closest('[data-ops-disclosure]');
                 if (disclosure) disclosure.open = true;
+                const extra = form.closest('.ops-outbound-extra');
+                if (extra) extra.open = true;
                 if (draft.fields.some(field => field.name === 'notes' || field.name === 'correction_reason')) {
                     const notes = form.querySelector('[data-ops-disclosure="notes"]');
                     if (notes) notes.open = true;
@@ -239,7 +239,9 @@
         if (!isPretreat) rows.forEach(row => {
             const extra = row.querySelector('.ops-outbound-extra');
             if (extra) {
-                extra.open = !desktopInline() || row.dataset.missionId === selected || !!extra.querySelector(dirtyForm);
+                if (!media.matches) {
+                    extra.open = !desktopInline() || row.dataset.missionId === selected || !!extra.querySelector(dirtyForm);
+                }
                 row.querySelector('[data-ops-expand-details]')?.setAttribute('aria-expanded',String(extra.open));
                 const home = row.querySelector('[data-ops-reason-home]');
                 const reason = row.querySelector('[data-ops-row-reason]');
@@ -542,7 +544,7 @@
         } else {
             card.open = desktopInline();
             const extra = card.querySelector('.ops-outbound-extra');
-            if (extra) extra.open = false;
+            if (extra && !media.matches) extra.open = false;
             if (selected === mission) selected = null;
             const focus = desktopInline() ? '[data-ops-expand-details]' :
                 !media.matches && root.dataset.layout === 'visual' ? '[data-ops-ramp-chevron]' : 'summary';

@@ -68,15 +68,12 @@
             {% if weather.current_sort %}<span>{{ weather.current_sort.date_label }} · {{ weather.current_sort.window_label }}</span>{% endif %}
         </div>
         {% if weather.current_sort %}
-        {% if weather.current_sort.hours|selectattr('frost_predictions', 'defined')|first %}
-        <p class="neosubzero-weather-note">FROST scores describe the recorded reason among treated departures (logistic / forest). Atmospheric frost probability is unvalidated.</p>
-        {% endif %}
         <div class="neosubzero-weather-current-sort" aria-label="Current sort hourly weather">
             {% for hour in weather.current_sort.hours %}
             <article>
                 <time>{{ hour.time }}</time>
                 <div class="neosubzero-weather-hour-priority">
-                    <span><small>PRECIPITATION</small><b>{{ hour.probability }}</b><em>{{ hour.condition }}{% if hour.get('frost_predictions') %} · <strong data-frost-outlook title="{{ hour.frost_predictions.reason }}">{{ hour.frost_predictions.outlook }}</strong>{% if hour.frost_predictions.comparison %} · {{ hour.frost_predictions.comparison }}{% endif %}{% if hour.frost_predictions.text %} · <span data-frost-predictions aria-label="{{ hour.frost_predictions.accessible }}">{{ hour.frost_predictions.text }}</span>{% endif %}{% endif %}</em></span>
+                    <span><small>PRECIPITATION</small><b>{{ hour.probability }}</b><em>{{ hour.condition }}{% if hour.get('frost_predictions') %} · <strong data-frost-outlook title="{{ hour.frost_predictions.reason }}">{{ hour.frost_predictions.outlook }}</strong>{% endif %}</em></span>
                     <span><small>TEMPERATURE</small><b>{{ hour.temperature }}</b></span>
                 </div>
                 <div class="neosubzero-weather-hour-secondary">
@@ -119,6 +116,6 @@
 </section></div>
 {% if not live_fragment %}
 <script src="{{ url_for('static', live='20261122-staffing-grids', filename='js/neosubzero_ucc.js', hours='20261121', v=STATIC_ASSET_VERSION, ucc='20261112-mobile-ramp-v1') }}" defer></script>
-<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='ducc-tv-crew-v1') }}" defer></script>
+<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='ducc-tv-hour-label-v1') }}" defer></script>
 {% endif %}
 {% endblock %}

@@ -184,7 +184,8 @@ class DuccDisplayTest(TestCase):
                 with patch.object(routes,'neosubzero_weather_context',return_value=value):
                     response=self.client.get('/neosubzero/ucc?fragment=1')
                     self.assertEqual(response.status_code,200)
-                    self.assertIn('data-frost-predictions',response.text)
+                    self.assertIn('data-frost-outlook',response.text)
+                    self.assertNotIn('Treatment reason (FROST)',response.text)
                 revision=self.client.get('/neosubzero/ucc/revision')
                 self.assertEqual(revision.status_code,200)
                 self.assertTrue(revision.json['refresh']['auto_refresh_enabled'])

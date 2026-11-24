@@ -188,7 +188,7 @@
             const secondary = hour.querySelectorAll(".neosubzero-weather-hour-secondary > span");
             return element("article", "", element("strong", "ucc-tv-hour-head",
                 content(hour, "time"), element("span", "", content(priority[1], "b"))),
-                element("span", "", [content(priority[0], "b"), content(priority[0], "em") || secondary[4]?.textContent].filter(Boolean).join(" · ")),
+                element("span", "", ["Precip " + content(priority[0], "b"), content(priority[0], "em") || secondary[4]?.textContent].filter(Boolean).join(" · ")),
                 element("span", "ucc-tv-muted", Array.from(secondary).slice(0, 3).map(part => part.textContent).join(" · ")),
                 element("span", "ucc-tv-muted", secondary[3]?.textContent || ""));
         });
