@@ -11,8 +11,10 @@
         try { localStorage.setItem("neoapps.raiden." + key, value); } catch (_) { /* Device storage is optional. */ }
     };
     const marker = document.createComment("NeoRaiden workspace");
-    const board = one("[data-board]");
-    let tv = false, page = 0, pages = [], pageCount = 1, paused = false, rotation = 0;
+    const tvButton = one("[data-tv]");
+    const fullscreenTarget = document.documentElement;
+    let tv = false, nativeFullscreen = false, entering = false;
+    let normalTheme = pref("theme") || "dark";
     let selected = pref("list") === "departures" ? "departures" : "arrivals";
     let search = "", remembered = null, priorScroll = 0, resizeFrame = 0;
     function applyTheme(theme) {
@@ -60,71 +62,74 @@
             one('[data-mission="' + state.focus + '"] summary')?.focus({preventScroll:true});
         }
     }
-    function showPage(index) {
-        page = (index + pageCount) % pageCount;
-        for (const group of pages) {
-            const visible = group.slices[Math.min(page, group.slices.length - 1)] || [];
-            group.rows.forEach(row => { row.hidden = !visible.includes(row); });
-        }
-        one("[data-page]").textContent = "Page " + (page + 1) + " / " + pageCount;
-        for (const key of ["prev","next","pause"]) one("[data-" + key + "]").disabled = pageCount < 2;
+    function notice(message) {
+        const status = one("[data-tv-notice]");
+        status.textContent = message;
+        status.hidden = !message;
     }
-    function paginate() {
-        if (!tv) return;
-        pages = all("[data-panel]").map(panel => {
-            const rows = Array.from(panel.querySelectorAll("[data-mission]"));
-            rows.forEach(row => { row.hidden = false; row.open = false; row.querySelector("summary").tabIndex = -1; });
-            panel.querySelector("[data-empty]").hidden = rows.length > 0;
-            const height = panel.querySelector(".rd-scroll").clientHeight - panel.querySelector(".rd-columns").getBoundingClientRect().height - 1;
-            const slices = [];
-            let used = 0, slice = [];
+    function exitTV(message = "") {
+        tv = false;
+        if (nativeFullscreen && document.fullscreenElement === fullscreenTarget) {
+            document.exitFullscreen().catch(() => {});
+        }
+        nativeFullscreen = false;
+        document.body.classList.remove("rd-projecting");
+        root.classList.remove("rd-tv");
+        marker.replaceWith(root);
+        tvButton.textContent = "TV Mode";
+        tvButton.setAttribute("aria-pressed", "false");
+        all(".rd-mission summary").forEach(el => el.removeAttribute("tabindex"));
+        applyTheme(normalTheme);
+        restore(remembered);
+        window.scrollTo(0, priorScroll);
+        tvButton.focus({preventScroll:true});
+        notice(message);
+    }
+    function fitTV() {
+        if (!tv || entering) return;
+        for (const panel of all("[data-panel]")) {
+            const rows = panel.querySelectorAll("[data-mission]");
             for (const row of rows) {
-                const h = row.getBoundingClientRect().height;
-                if (slice.length && used + h > height) {
-                    slices.push(slice);
-                    slice = []; used = 0;
-                }
-                slice.push(row);
-                used += h;
+                row.hidden = false;
+                row.open = false;
+                row.querySelector("summary").tabIndex = -1;
             }
-            if (slice.length) slices.push(slice);
-            return {rows,slices};
-        });
-        pageCount = Math.max(1, ...pages.map(group => group.slices.length));
-        showPage(Math.min(page,pageCount - 1));
-    }
-    function changeMode() {
-        const enter = one("[data-tv]");
-        if (!tv) {
-            remembered = capture();
-            priorScroll = window.scrollY;
-            root.before(marker);
-            document.body.append(root);
-            tv = true;
-            page = 0;
-            root.classList.add("rd-tv");
-            document.body.classList.add("rd-projecting");
-            enter.textContent = "Exit TV Mode";
-            one(".rd-pager").hidden = false;
-            applyTheme(pref("tv.theme") || root.dataset.theme);
-            paginate();
-            rotation = window.setInterval(() => {
-                if (!paused && !document.hidden && pageCount > 1) showPage(page + 1);
-            }, 10000);
-        } else {
-            tv = false;
-            clearInterval(rotation);
-            document.body.classList.remove("rd-projecting");
-            root.classList.remove("rd-tv");
-            marker.replaceWith(root);
-            one(".rd-pager").hidden = true;
-            enter.textContent = "TV Mode";
-            all(".rd-mission summary").forEach(el => el.removeAttribute("tabindex"));
-            applyTheme(pref("theme") || "dark");
-            restore(remembered);
-            window.scrollTo(0,priorScroll);
+            panel.querySelector("[data-empty]").hidden = rows.length > 0;
         }
-        enter.focus({preventScroll:true});
+        // With no scrolling or pagination, use the normal workspace if this
+        // display cannot fit all flights at the wallboard's minimum type size.
+        if (root.scrollHeight > root.clientHeight + 1 || root.scrollWidth > root.clientWidth + 1) {
+            exitTV("TV Mode cannot fit every flight legibly at this display size. All flights are available in God Mode.");
+        }
+    }
+    function scheduleFit() {
+        cancelAnimationFrame(resizeFrame);
+        if (tv) resizeFrame = requestAnimationFrame(fitTV);
+    }
+    async function changeMode() {
+        if (entering) return;
+        if (tv) { exitTV(); return; }
+        entering = true;
+        try {
+            await fullscreenTarget.requestFullscreen();
+            nativeFullscreen = document.fullscreenElement === fullscreenTarget;
+        } catch (_) {
+            nativeFullscreen = false;
+        }
+        remembered = capture();
+        priorScroll = window.scrollY;
+        root.before(marker);
+        document.body.append(root);
+        tv = true;
+        root.classList.add("rd-tv");
+        document.body.classList.add("rd-projecting");
+        tvButton.textContent = "Exit TV Mode";
+        tvButton.setAttribute("aria-pressed", "true");
+        applyTheme(pref("tv.theme") || root.dataset.theme);
+        notice(nativeFullscreen ? "" : "Browser fullscreen is unavailable. TV Mode is using this window.");
+        entering = false;
+        fitTV();
+        tvButton.focus({preventScroll:true});
     }
     root.addEventListener("click", event => {
         const button = event.target.closest("button");
@@ -133,6 +138,7 @@
         if (button.hasAttribute("data-tv")) changeMode();
         if (button.hasAttribute("data-theme-toggle")) {
             applyTheme(root.dataset.theme === "dark" ? "light" : "dark");
+            if (!tv) normalTheme = root.dataset.theme;
             remember(tv ? "tv.theme" : "theme",root.dataset.theme);
         }
         if (button.dataset.listChoice) {
@@ -140,29 +146,21 @@
             remember("list",selected);
             normalView();
         }
-        if (button.hasAttribute("data-prev")) showPage(page - 1);
-        if (button.hasAttribute("data-next")) showPage(page + 1);
-        if (button.hasAttribute("data-pause")) {
-            paused = !paused;
-            button.textContent = paused ? "Resume" : "Pause";
-            button.setAttribute("aria-pressed",String(paused));
-        }
     });
     root.addEventListener("input", event => {
         if (event.target.matches("[data-search]")) { search = event.target.value; normalView(); }
     });
-    document.addEventListener("keydown", event => { if (tv && event.key === "Escape") changeMode(); });
-    const observer = new ResizeObserver(() => {
-        cancelAnimationFrame(resizeFrame);
-        if (tv) resizeFrame = requestAnimationFrame(paginate);
+    document.addEventListener("keydown", event => { if (tv && event.key === "Escape") exitTV(); });
+    document.addEventListener("fullscreenchange", () => {
+        if (tv && nativeFullscreen && document.fullscreenElement !== fullscreenTarget) exitTV();
     });
+    const observer = new ResizeObserver(scheduleFit);
     observer.observe(root);
-    new ResizeObserver(() => { if (tv) paginate(); }).observe(one("[data-stale]"));
+    observer.observe(one("[data-stale]"));
     root.addEventListener("raiden:before-update", () => { if (!tv) remembered = capture(); });
     root.addEventListener("raiden:updated", () => {
-        if (tv) paginate(); else restore(remembered);
-        if (!board.childElementCount) { remembered = null; pages = []; }
+        if (tv) fitTV(); else restore(remembered);
     });
-    applyTheme(pref("theme") || "dark");
+    applyTheme(normalTheme);
     normalView();
 })();

@@ -119,7 +119,7 @@ def snapshot(user, gateway, operation, *, sources=None):
         gateway_code=gateway.code, sort_date=operation.sort_date, sort_name=operation.sort_name
     ).filter(m.master_retirement.is_(None)).order_by(SortDateMission.planned_datetime_utc.asc().nullslast(), SortDateMission.id).all()
     positions = {normalized_tail(tail): (position if str(position).startswith(str(ramp)) else f"{ramp or ''}{position}")
-                 + (f" · Lane {lane}" if lane else "")
+                 + (f" · Lane {lane}" if lane and lane != 1 else "")
         for tail, ramp, position, lane in db.session.query(SortDateParkingAssignment.tail_number,
             SortDateParkingAssignment.ramp_code, SortDateParkingAssignment.position_code,
             SortDateParkingAssignment.lane_number).filter_by(sort_date_operation_id=op_id)

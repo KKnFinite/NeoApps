@@ -40,12 +40,12 @@ def record_counts(gateway, operation):
     return state
 
 
-def busy_sort(gateway):
+def busy_sort(gateway, *, extra_arrivals=26, extra_departures=24):
     op = seed_sort(gateway)
     record_counts(gateway, op)
     base = datetime(2026,4,13,2)
     stations = ("SDF","PHL","ONT","DFW","OAK","PDX","DEN","MSP")
-    for kind, size in (("arrival",26), ("departure",24)):
+    for kind, size in (("arrival", extra_arrivals), ("departure", extra_departures)):
         for index in range(size):
             station = stations[index % len(stations)]
             time = base + timedelta(minutes=index * 9)

@@ -68,6 +68,9 @@ class CommandCenterBrowser(unittest.TestCase):
                             page.screenshot(path=evidence / f"raiden-{engine}-{w}-board.png")
                             page.locator(".operational-board-exit").click()
                         page.screenshot(path=evidence / f"raiden-{engine}-{w}.png")
+                    page.set_viewport_size(dict(width=1280,height=720))
+                    page.get_by_role("button",name="TV Mode",exact=True).click()
+                    expect(page.locator(".rd-tv")).to_be_visible()
                     page.route("**/neoraiden/state*",lambda route:route.fulfill(status=503,body=""))
                     automatic_requests = []
                     page.on("request", lambda req: automatic_requests.append(req.url)
@@ -77,6 +80,7 @@ class CommandCenterBrowser(unittest.TestCase):
                     page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true}))")
                     expect(page.locator("[data-refresh-status]")).to_have_text("Outside Sort hours")
                     self.assertEqual(automatic_requests, [])
+                    expect(page.locator(".rd-tv")).to_be_visible()
                     with page.expect_response(lambda r:"/neoraiden/state" in r.url and r.status == 503):
                         page.locator("[data-refresh]").click()
                     expect(page.locator("[data-stale]")).to_contain_text("last successful update")
