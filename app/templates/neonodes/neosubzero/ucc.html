@@ -68,6 +68,9 @@
             {% if weather.current_sort %}<span>{{ weather.current_sort.date_label }} · {{ weather.current_sort.window_label }}</span>{% endif %}
         </div>
         {% if weather.current_sort %}
+        {% if weather.current_sort.hours|selectattr('frost_predictions', 'defined')|first %}
+        <p class="neosubzero-weather-note">FROST scores describe the recorded reason among treated departures (logistic / forest). Atmospheric frost probability is unvalidated.</p>
+        {% endif %}
         <div class="neosubzero-weather-current-sort" aria-label="Current sort hourly weather">
             {% for hour in weather.current_sort.hours %}
             <article>

@@ -142,6 +142,22 @@ class ModelTest(unittest.TestCase):
         with self.assertRaises(ValueError):inference.forecast_features([],[],issued_at=at+timedelta(hours=1),as_of=at,target=at+timedelta(hours=2))
         self.assertFalse(candidate()['forecast_validated'])
 
+    def test_aviationweather_summary_cover_and_actual_observation_time(self):
+        # KRFD 200254Z: the nominal hourly report is filed under 03:00 UTC.
+        actual = datetime(2026, 11, 20, 2, 54, tzinfo=UTC)
+        report = dict(icaoId='KRFD', reportTime='2026-11-20T03:00:00Z',
+                      obsTime=int(actual.timestamp()), clouds=[], visib='10+')
+        for cover, clear in [('CLR', True), ('SKC', True), ('OVC', False),
+                             (None, None), ('///', None)]:
+            row, = inference.normalize_metars([dict(report, cover=cover)])
+            self.assertEqual(row['utc'], actual.isoformat())
+            self.assertIs(row['clear_sky'], clear)
+            self.assertIsNone(row['ceiling_ft'])
+            self.assertIsNone(row['visibility_sm'])
+        detailed, = inference.normalize_metars([dict(report, cover='CLR', clouds=[dict(cover='BKN', base=2000)])])
+        self.assertIs(detailed['clear_sky'], False)
+        self.assertEqual(detailed['ceiling_ft'], 2000)
+
     def test_current_observation_station_units_stale_cache_and_bounded_reuse(self):
         from flask import Flask
         from app.services import neosubzero_weather as weather

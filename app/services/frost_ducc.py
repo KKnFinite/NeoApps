@@ -113,8 +113,8 @@ def project(gateway,*,now=None):
         for hour,pair in pairs.items():
             if hour in hours:continue
             values=[f"{pair['scores'][kind]*100:.0f}%" if kind in pair['scores'] else '—' for kind in ('logistic','forest')]
-            hours[hour]=dict(text='FROST '+' / '.join(values),
-                accessible=f"FROST H{pair['hours']} logistic {values[0]}, forest {values[1]}")
+            hours[hour]=dict(text='Treatment reason (FROST) '+' / '.join(values),
+                accessible=f"Recorded FROST treatment reason, H{pair['hours']} logistic {values[0]}, forest {values[1]}. Atmospheric frost probability is unvalidated.")
     return version,hours
 
 
