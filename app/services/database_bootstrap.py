@@ -8,6 +8,7 @@ from app.services.access_control import (
     ensure_default_gateway_and_nodes,
 )
 from app.services.permission_rules import ensure_default_permission_rules, neosubzero_management_minimums
+from app.services.parking_physical_validator import retire_obsolete_echo_clearance_alerts
 from app.services.password_policy import set_user_password
 from app.services.schema_sync import sync_database_schema
 from app.services.database_startup_retry import run_startup_database_action
@@ -72,6 +73,7 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     _ensure_staffing_sort_roots()
     from app.services.neostaffing import repair_shift_door_finals
     shift_door_finals_corrected = repair_shift_door_finals()
+    retired_echo_alerts = retire_obsolete_echo_clearance_alerts()
     from app.services.gateway_matrix import current_gateway_local_datetime
     from app.services.neostaffing_discipline import backfill_legacy_workdays
     backfill_legacy_workdays(current_gateway_local_datetime(gateway).date())
@@ -109,6 +111,8 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
 
     db.session.commit()
     app.logger.info("NeoStaffing Door Final repair: corrected=%s", shift_door_finals_corrected)
+    if retired_echo_alerts:
+        app.logger.info("Retired %d obsolete Echo parking alerts", retired_echo_alerts)
 
     return {
         "username": user.username,

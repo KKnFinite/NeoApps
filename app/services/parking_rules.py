@@ -86,8 +86,8 @@ PHYSICAL_PARKING_RULES = (
     "Normal ramp banks use hard fill order within each bank.",
     "Remote R01-R04 uses hard fill order.",
     "09/10 throat parking is optional, with 10 filled before 9.",
-    "767 aircraft use a two-slot footprint only inside normal banks.",
-    "767 aircraft do not block adjacent positions in Remote, 09, or 10.",
+    "767 aircraft use two positions in the Alpha through Delta banks.",
+    "On Echo, Remote, and throat positions 09/10, a 767 occupies one position.",
 )
 
 DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES = 15

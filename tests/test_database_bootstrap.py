@@ -16,6 +16,7 @@ from app.models import (
     GatewayMembership,
     GatewayNodeRole,
     MasterFlightSchedule,
+    MotherBrainAlert,
     MotherBrainGoogleIntegrationSetting,
     NeoNode,
     NeoSektorOperationalSetting,
@@ -67,6 +68,33 @@ class DatabaseBootstrapTest(unittest.TestCase):
 
         with patch.dict(os.environ, {"DATABASE_URL": neon_url}, clear=False):
             self.assertEqual(resolve_database_uri(), neon_url)
+
+    def test_bootstrap_retires_only_generated_echo_clearance_alerts(self):
+        bootstrap_database(self.app)
+        gateway = Gateway.query.filter_by(code="RFD").one()
+        keys = ("parking-physical:97:echo-767-clearance-e08-n367up",
+                "parking-physical:97:parking-rules-blocked-position-e08",
+                "manual:97:echo-767-clearance-e08-n367up")
+        for key in keys:
+            db.session.add(MotherBrainAlert(
+                gateway_id=gateway.id, gateway_code="RFD", scope="motherbrain",
+                alert_key=key, active=True, acknowledged=True, message="Original alert evidence",
+                title="Blocked parking position" if "blocked-position" in key else "Echo 767 clearance conflict",
+            ))
+        db.session.commit()
+
+        def alerts():
+            db.session.expire_all()
+            return {a.alert_key: a for a in MotherBrainAlert.query.filter(
+                MotherBrainAlert.alert_key.in_(keys)).all()}
+
+        bootstrap_database(self.app)
+        saved = alerts()
+        self.assertEqual({k: a.active for k, a in saved.items()}, dict(zip(keys, (False, True, True))))
+        self.assertTrue(all(a.acknowledged and a.message == "Original alert evidence" for a in saved.values()))
+        versions = {k: a.updated_at for k, a in saved.items()}
+        bootstrap_database(self.app)
+        self.assertEqual({k: a.updated_at for k, a in alerts().items()}, versions)
 
     def test_staffing_sort_roots_created_without_children_and_idempotent(self):
         bootstrap_database(self.app)
