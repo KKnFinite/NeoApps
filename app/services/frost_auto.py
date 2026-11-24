@@ -19,7 +19,7 @@ from app.extensions import db
 from app.models import FrostHistoryTask as Task, Gateway
 from app.services import frost_history as jobs, frost_vault as vault
 from app.services import frost_forecast as clock, frost_forecast_native as native
-from app.services import frost_research, frost_model as model, frost_analysis as analysis
+from app.services import frost_research, frost_model as model, frost_analysis as analysis, frost_atmosphere
 from app.services.memory_diagnostics import memory_diagnostics, observe_process_memory
 from app.services import frost_resources as priority
 from app.services.frost_schedule import Schedule, cycle_identity
@@ -339,6 +339,7 @@ def tick(gateway_id):
                         if not cycle.start<=now()<cycle.deadline:
                             raise ValueError('Capture window expired; no historical prediction is permitted.')
                         scores=predictions(gateway_id,source)
+                        atmosphere=frost_atmosphere.for_capture(source,scores)
                         if not cycle.start<=now()<cycle.deadline:
                             raise ValueError('Scoring window expired; no historical prediction is permitted.')
                         source.setdefault('native_resources',{}).update(priority.wait_metrics())
@@ -348,7 +349,7 @@ def tick(gateway_id):
                     gc.collect()
                 payload=dict(schema_version=VERSION,gateway_id=gateway_id,slot_utc=stamp(current),
                     station=source['station'],captured_at_utc=stamp(now()),committed_at_utc=None,
-                    source=source,predictions=scores,baseline=frost_research.prospective_summary()['baseline'],
+                    source=source,predictions=scores,atmosphere=atmosphere,baseline=frost_research.prospective_summary()['baseline'],
                     approved=False,operationally_validated=False,physical_frost_probability=False)
                 locked=Task.query.filter_by(id=identifier).with_for_update().one()
                 if locked.lease_token!=lease:db.session.rollback();return 0

@@ -138,6 +138,12 @@ class ForecastTest(unittest.TestCase):
         result=f.nws_grid(grid,cutoff=AT,target=AT+timedelta(hours=1))
         self.assertAlmostEqual(result['observation']['wind_kt'],10)
         self.assertTrue(result['thermodynamic_coverage'])
+        self.assertIsNone(result['period_minimum'])
+        properties['minTemperature']=quantity('wmoUnit:degC',-3)
+        self.assertEqual(f.nws_grid(grid,cutoff=AT,target=AT)['period_minimum']['temperature_c'],-3)
+        self.assertIsNone(f.nws_grid(grid,cutoff=AT,target=AT+timedelta(hours=12))['period_minimum'])
+        properties['minTemperature']['uom']='wmoUnit:degF'
+        self.assertIsNone(f.nws_grid(grid,cutoff=AT,target=AT)['period_minimum'])
         self.assertIsNone(result['observation']['precipitation_since_hourly_reset_in'])
         for mutation in (lambda x:x['properties'].update(updateTime=(AT+timedelta(hours=1)).isoformat()),
                 lambda x:x['properties']['windSpeed'].update(uom='wmoUnit:m_s-1'),

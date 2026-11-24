@@ -8,9 +8,9 @@ from unittest.mock import patch
 from playwright.sync_api import expect
 from app.extensions import db
 from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, User, SortDateOperation
-from app.services import frost_ducc
+from app.services import frost_atmosphere, frost_ducc
 from tests.browser import test_neosubzero_ucc as fixtures
-from tests.test_frost_ducc import store_capture
+from tests.test_frost_ducc import capture_payload, store_capture
 
 
 class IntelligenceBrowserTest(TestCase):
@@ -85,7 +85,14 @@ class IntelligenceBrowserTest(TestCase):
                         GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id,node_id=node.id).one().role='master'
                         db.session.commit()
                         gateway=Gateway.query.filter_by(code='RFD').one()
-                        store_capture(gateway.id,at)
+                        capture=capture_payload(gateway.id,at)
+                        for p in capture['predictions']:
+                            if p['model_version'].endswith('logistic'):
+                                p['score']=.93
+                        outlook={str(p['hours']):dict(state='weak',reason='Warm overnight guidance.',
+                                 target_at_utc=p['target_at_utc']) for p in capture['predictions']}
+                        store_capture(gateway.id,at,predictions=capture['predictions'],
+                                      atmosphere=dict(method=frost_atmosphere.VERSION,horizons=outlook))
                     def weather(gateway,operation):
                         value=deepcopy(case.weather_data)
                         version,scores=frost_ducc.project(gateway,now=at+timedelta(minutes=1))
@@ -124,20 +131,25 @@ class IntelligenceBrowserTest(TestCase):
                     expect(form.locator('[name="automatic_retraining"]')).not_to_be_checked()
                     expect(form.locator('[name="learn_from_live_operations"]')).not_to_be_checked()
                     expect(ducc.locator('[data-frost-predictions]')).to_have_count(4,timeout=15000)
-                    expect(ducc.locator('[data-frost-predictions]').first).to_have_text('Treatment reason (FROST) 12% / 34%')
+                    expect(ducc.locator('[data-frost-predictions]').first).to_have_text('Treatment reason (FROST) 93% / 34%')
+                    first_hour=ducc.locator('.neosubzero-weather-current-sort article').first
+                    expect(first_hour).to_contain_text('Weak frost support')
+                    expect(first_hour).to_contain_text('Score unreliable for frost')
+                    expect(first_hour).to_contain_text('Models disagree')
                     expect(ducc.get_by_text('Atmospheric frost probability is unvalidated.',exact=False)).to_have_count(1)
                     ducc.screenshot(path=str(evidence/f'{engine}-ducc-on.png'))
                     ducc.evaluate('document.documentElement.requestFullscreen = undefined')
                     ducc.locator('[data-ucc-tv-enter]').click()
                     tv=ducc.locator('.ucc-tv-wallboard')
-                    expect(tv).to_contain_text('Treatment reason (FROST) 12% / 34%')
+                    expect(tv).to_contain_text('Treatment reason (FROST) 93% / 34%')
+                    expect(tv).to_contain_text('Score unreliable for frost')
                     self.assertLessEqual(ducc.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
                     self.assertLessEqual(ducc.evaluate('document.documentElement.scrollHeight-innerHeight'),1)
                     ducc.screenshot(path=str(evidence/f'{engine}-tv-on.png'))
                     form.locator('[name="operational_predictions"]').uncheck()
                     with page.expect_navigation():form.get_by_role('button',name='SAVE FROST INTELLIGENCE').click()
                     expect(ducc.locator('[data-frost-predictions]')).to_have_count(0,timeout=15000)
-                    expect(tv).not_to_contain_text('Treatment reason (FROST) 12% / 34%')
+                    expect(tv).not_to_contain_text('Treatment reason (FROST) 93% / 34%')
                     tv.get_by_role('button',name='Exit TV Mode').click()
                     ducc.set_viewport_size({'width':390,'height':844})
                     ducc.locator('[data-ucc-view="ramp"]').click()

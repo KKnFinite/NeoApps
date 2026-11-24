@@ -80,14 +80,6 @@ def catalog(gateway):
     return FrostDocument.query.filter_by(gateway_id=gateway.id).order_by(FrostDocument.id.desc())
 
 
-def research_status(gateway):
-    study=frost_research.status()
-    if study is not None:
-        from app.services.frost_inspections import population
-        study['physical_observations']=population(gateway)
-    return study
-
-
 @bp.route('/frost-vault',methods=['GET','POST'])
 @gateway_node_required('subzero')
 def frost_vault():
@@ -117,7 +109,7 @@ def frost_vault():
         documents=items[:50],next_before=items[49].id if len(items)>50 else None,error=error,import_message=import_message,
         vault_status=learning_vault_status(),categories=vault.CATEGORIES,history=history.health(gateway.id),
         model_status=models.status(gateway.id,before=request.args.get('models_before',type=int)),
-        research=research_status(gateway),auto_collection=frost_auto.status(gateway.id),
+        research=frost_research.status(),auto_collection=frost_auto.status(gateway.id),
         departure_correlation=frost_departures.status(gateway.id),
         local_backfill=backfill.pending(gateway.id),
         receipts=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(100).all()),status
@@ -126,8 +118,8 @@ def frost_vault():
 @bp.route('/frost-vault/forecast-validation')
 @gateway_node_required('subzero')
 def frost_forecast_validation():
-    gateway=authorized()
-    study=research_status(gateway)
+    authorized()
+    study=frost_research.status()
     if study is None:
         return jsonify(error='Research summary unavailable; no successful validation claimed.'),503
     response=jsonify(study)
