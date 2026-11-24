@@ -26,6 +26,7 @@ from app.services.alp_import import normalize_alp_flight_number
 from app.services.mission_identity import flight_identity
 from app.services.flight_rules import derive_aircraft_type_from_tail_number
 from app.services.gateway_matrix import gateway_timezone
+from app.services.google_motherbrain_import import GOOGLE_CANCELLATION_MARKERS
 from app.services.google_motherbrain_parking import apply_google_motherbrain_parking
 from app.services.night_sorting import sort_datetime_for_local_time
 from app.services.parking_plan import (
@@ -760,7 +761,7 @@ def _clear_google_block_out(mission):
 def _apply_pending_tail_swap(link, row):
     proposed = row["proposed_tail"]
     effective = row["effective_tail"]
-    if proposed and proposed != effective:
+    if proposed and proposed != effective and proposed not in GOOGLE_CANCELLATION_MARKERS:
         link.pending_tail_number = proposed
         link.pending_swap_flight_number = row["swap_flight_number"] or row["flight_number"]
         link.pending_swap_destination = row["swap_destination"] or row["destination"]
@@ -885,7 +886,7 @@ def _normalize_live_row(supplied_row, mission_type, batch_index):
     raw_flight = row.get("flight_number", row.get("P", ""))
     raw_tail = row.get("effective_tail", row.get("tail_number", row.get("Q", "")))
     raw_tail_text = str(raw_tail or "").strip()
-    if mission_type == "departure" and raw_tail_text.upper() in {"CANX", "CNL", "CANCELLED"}:
+    if mission_type == "departure" and raw_tail_text.upper() in GOOGLE_CANCELLATION_MARKERS:
         raise GoogleMotherBrainMissionError(
             "Cancellation marker is not an aircraft tail; existing outbound mission preserved."
         )
@@ -907,7 +908,7 @@ def _normalize_live_row(supplied_row, mission_type, batch_index):
             destination_mode = "hot"
         elif airport_text == "SPARE":
             destination_mode = "spare"
-        elif airport_text in {"CANX", "CANCELLED", "CNL"}:
+        elif airport_text in GOOGLE_CANCELLATION_MARKERS:
             raise GoogleMotherBrainMissionError(
                 "Outbound cancellation is unsupported until its Google column is verified."
             )

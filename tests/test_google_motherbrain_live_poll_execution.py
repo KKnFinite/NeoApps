@@ -558,6 +558,62 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(state.lease_token, "")
         self.assertIsNone(state.last_error)
 
+    def test_official_ranges_from_wrong_workbook_date_do_not_update_either_direction(self):
+        from functools import partial
+        from tests.test_google_motherbrain_sheets import (
+            FakeClient, _LiveRangeSpreadsheet, reader_config, read_google_motherbrain_live_rows,
+        )
+
+        self._enable()
+        operation = self._ensure_operation()
+        existing = SortDateMission(
+            sort_date_operation_id=operation.id, sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code, sort_name=operation.sort_name,
+            mission_type="arrival", mission_source="master", flight_number="UPS0947",
+            origin="SDF", destination="RFD", assigned_tail_number="N157UP", arrival_status="scheduled",
+        )
+        db.session.add(existing)
+        db.session.commit()
+        initial = SortDateMission.query.count()
+        for index, header in enumerate(("06-17-2026", "", "invalid")):
+            with self.subTest(header=header):
+                sheet = _LiveRangeSpreadsheet({
+                    "Inbound!H2": [[header]],
+                    "Inbound!P4:W100": [["UPS0947", "N947UP", "SDF", "", "", "22:00", "", "DEP"]],
+                    "Outbound!P4:Z100": [["UPS1000", "N100UP", "SDF", "", "01:00"]],
+                })
+                reader = partial(read_google_motherbrain_live_rows, reader_config(),
+                                 client_factory=lambda creds: FakeClient(sheet))
+                with patch("app.services.google_motherbrain_live_poll_execution.read_google_motherbrain_live_rows", reader):
+                    result = execute_google_motherbrain_live_poll(
+                        self.gateway, now=self.NOW + timedelta(minutes=3 * index), rain_reader=Mock(),
+                    )
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(SortDateMission.query.count(), initial)
+                self.assertEqual((existing.assigned_tail_number, existing.arrival_status), ("N157UP", "scheduled"))
+                state = MotherBrainGoogleLivePollState.query.filter_by(
+                    gateway_id=self.gateway.id, sort_date=operation.sort_date, sort_name="night",
+                ).one()
+                self.assertIsNone(state.last_success_at_utc)
+                self.assertIn("invalid_date", state.last_error)
+                self.assertEqual(len(sheet.batch_calls), 1)
+
+        sheet = _LiveRangeSpreadsheet({
+            "Inbound!H2": [[operation.sort_date.strftime("%m-%d-%Y")]],
+            "Inbound!P4:W100": [["UPS0947", "N947UP", "SDF", "", "", "22:00", "", "DEP"]],
+            "Outbound!P4:Z100": [["UPS1000", "N100UP", "SDF", "", "01:00"]],
+        })
+        reader = partial(read_google_motherbrain_live_rows, reader_config(),
+                         client_factory=lambda creds: FakeClient(sheet))
+        with patch("app.services.google_motherbrain_live_poll_execution.read_google_motherbrain_live_rows", reader):
+            result = execute_google_motherbrain_live_poll(
+                self.gateway, now=self.NOW + timedelta(minutes=9), rain_reader=lambda: [],
+            )
+        self.assertEqual((result["status"], result["applied_count"]), ("success", 2))
+        self.assertEqual((existing.assigned_tail_number, existing.arrival_status), ("N947UP", "en_route"))
+        self.assertIsNone(state.last_error)
+        self.assertIsNotNone(state.last_success_at_utc)
+
     def test_poll_imports_only_source_cancellations_in_the_matching_physical_sort(self):
         self._enable()
         operation = self._ensure_operation()

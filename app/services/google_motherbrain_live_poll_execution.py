@@ -101,10 +101,11 @@ def execute_google_motherbrain_live_poll(
     if not acquired.acquired:
         return {"status": acquired.status, "operation_id": operation_id}
 
-    reader = reader or read_google_motherbrain_live_rows
     applier = applier or apply_google_motherbrain_live_rows
     try:
-        live_rows = reader()
+        live_rows = reader() if reader is not None else read_google_motherbrain_live_rows(
+            expected_sort_date=operation.sort_date,
+        )
         inbound_rows = live_rows.get("inbound_rows", ())
         if live_rows.get("inbound_source_cancellations"):
             source_cancellations = _same_sort_source_cancellations(

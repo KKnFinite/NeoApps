@@ -39,7 +39,7 @@ class DuccPretreatBrowserTest(unittest.TestCase):
         navigations = []
         for page in (work, tv, mobile):
             case.login(page)
-            page.clock.install()
+            page.clock.install(time=case.sort_now)
             if page == tv:
                 page.add_init_script("localStorage.setItem('neoapps.neosubzero.ucc.tv-mode','1')")
             with page.expect_response(lambda response: "/ucc/revision" in response.url):
@@ -51,7 +51,7 @@ class DuccPretreatBrowserTest(unittest.TestCase):
             if page == work:
                 return page.locator(f'[data-ucc-parking="{stands[ramp]}"] [data-ucc-aircraft="{key}"]')
             root = ".ucc-tv-wallboard" if page == tv else ".ucc-mobile-projection"
-            return page.locator(f'{root} .ucc-tv-stand:has(.ucc-tv-position:text-is("{stands[ramp]}")) [data-ucc-projected-aircraft="{key}"]')
+            return page.locator(f'{root} .ucc-tv-stand:has(.ucc-tv-position:text-is("{stands[ramp]}")) .ucc-tv-plane[data-ucc-projected-aircraft="{key}"]')
 
         def apply(action, values, ramps=("Alpha",)):
             with case.app.app_context():

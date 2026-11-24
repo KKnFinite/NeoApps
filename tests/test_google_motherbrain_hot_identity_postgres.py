@@ -15,6 +15,8 @@ URI=os.environ.get('NEOSTAFFING_TEST_POSTGRES_URL')
 
 @unittest.skipUnless(URI,'Requires disposable loopback PostgreSQL')
 class GoogleHotIdentityPostgresTest(unittest.TestCase):
+    test_cancellation_marker_in_swap_column_is_not_an_aircraft = contracts.GoogleMotherBrainLiveMissionTest.test_cancellation_marker_in_swap_column_is_not_an_aircraft
+    test_pending_tail_swap_is_recorded_but_not_effective_then_clears = contracts.GoogleMotherBrainLiveMissionTest.test_pending_tail_swap_is_recorded_but_not_effective_then_clears
     tearDown=contracts.GoogleMotherBrainLiveMissionTest.tearDown
     _operation=contracts.GoogleMotherBrainLiveMissionTest._operation
     _mission=contracts.GoogleMotherBrainLiveMissionTest._mission
