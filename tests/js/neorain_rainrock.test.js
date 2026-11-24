@@ -3,25 +3,25 @@ const code=fs.readFileSync('app/static/js/neorain_rainrock.js','utf8');
 const tick=()=>new Promise(r=>setImmediate(r));
 function page(editable=true,{sortEndMs=Date.now()+60000,physicalWindow=true}={}){
  const requests=[],handlers={},intervals=[],timeouts=new Map(),notes={},buttons={};let timer=0;
- const inputs=['actual_volume','note_1'].map(name=>({name,value:'',readOnly:!editable,dataset:{savedValue:'',version:'0'}}));
+ const inputs=['actual_volume','note_1'].map(name=>({name,value:'',readOnly:!editable,dataset:{savedValue:'',version:'0'},closest:()=>({})}));
  inputs.forEach(i=>{notes[i.name]={textContent:''};buttons[i.name]={hidden:true};});
  const form={dataset:{canEdit:String(editable)},action:'/rainrock/inputs?operation_id=7',
   querySelectorAll:()=>inputs,addEventListener:(key,fn)=>handlers[key]=fn};
  const status={textContent:'',classList:{toggle(){}}},copyStatus={textContent:''},live={innerHTML:'original'};
  const root={dataset:{operation:'7',stateUrl:'/state?operation_id=7',autoStateUrl:'/state?operation_id=7&automatic=1',sortEndMs:String(sortEndMs),refreshMs:'60000'},querySelector(s){
-  if(s==='[data-rainrock-inputs]')return form;if(s==='[data-rainrock-live]')return live;
+  if(s==='[data-report-inputs]')return form;if(s==='[data-rainrock-live]')return live;
   if(s==='[data-rainrock-notes]')return null;
-  if(s==='[data-rainrock-save-status]')return status;if(s==='[data-rainrock-copy-status]')return copyStatus;
+  if(s==='[data-report-save-status]')return status;if(s==='[data-rainrock-copy-status]')return copyStatus;
   const field=s.match(/\[data-field-status="(.+)"\]/);if(field)return notes[field[1]];
-  const button=s.match(/\[data-rainrock-use-saved="(.+)"\]/);if(button)return buttons[button[1]];
+  const button=s.match(/\[data-report-use-saved="(.+)"\]/);if(button)return buttons[button[1]];
   return {addEventListener:(_,fn)=>{handlers[s.includes('download')?'download':'copy']=fn;}};
- },querySelectorAll:()=>[]};
- const ctx={document:{querySelector:()=>root,hidden:false,fonts:{ready:Promise.resolve()}},
-  window:{addEventListener(){},NeoLiveUpdates:{insidePhysicalSort:()=>physicalWindow}},
+ },querySelectorAll:()=>[],dispatchEvent(){}};
+ const ctx={CustomEvent:class {},document:{querySelector:()=>root,hidden:false,fonts:{ready:Promise.resolve()}},
+  window:{NeoRainBoard:{updateReport:(element,html)=>{element.innerHTML=html;}},addEventListener(){},NeoLiveUpdates:{insidePhysicalSort:()=>physicalWindow}},
   navigator:{},setTimeout:(fn,ms)=>{const id=++timer;timeouts.set(id,{fn,ms});return id;},clearTimeout:id=>timeouts.delete(id),
   setInterval:(fn,ms)=>intervals.push({fn,ms}),clearInterval:()=>{},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))};
  vm.runInNewContext(code,ctx);
- const reply=async(index,extra={})=>{const payload={ok:true,operation_id:7,html:'fresh',fields:Object.fromEntries(inputs.map(i=>[i.name,
+ const reply=async(index,extra={})=>{const payload={ok:true,operation_id:7,can_edit:editable,rainrock_html:'fresh',fields:Object.fromEntries(inputs.map(i=>[i.name,
   {input_value:'saved',version:1,source:'NeoRain entry'}])),...extra};requests[index].resolve({ok:payload.ok,json:async()=>payload});await tick();};
  return {inputs,live,status,copyStatus,notes,buttons,handlers,requests,intervals,timeouts,reply,
   type:(i,value)=>{inputs[i].value=value;handlers.input({target:inputs[i]});},
@@ -42,9 +42,9 @@ test('poll updates output without overwriting focused draft or its conflict vers
 });
 test('stale and cross-sort responses cannot replace current report',async()=>{
  const p=page();const poll=p.intervals[0].fn();await tick();p.type(0,'100');const save=p.blur(0);await tick();
- await p.reply(1,{html:'new save'});await save;await p.reply(0,{html:'stale poll'});await poll;
+ await p.reply(1,{rainrock_html:'new save'});await save;await p.reply(0,{rainrock_html:'stale poll'});await poll;
  assert.equal(p.live.innerHTML,'new save');
- const next=p.intervals[0].fn();await tick();await p.reply(2,{operation_id:8,html:'other sort'});await next;
+ const next=p.intervals[0].fn();await tick();await p.reply(2,{operation_id:8,rainrock_html:'other sort'});await next;
  assert.equal(p.live.innerHTML,'new save');
 });
 test('typing and an intentional revert during a save are queued, not lost',async()=>{

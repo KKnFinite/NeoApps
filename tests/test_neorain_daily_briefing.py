@@ -46,8 +46,8 @@ class DailyBriefingTest(TestCase):
         self.assertNotIn('ANC INFO',text);self.assertNotIn("ULD's",text)
         html=self.client.get('/neorain/daily-briefing').get_data(as_text=True)
         self.assertNotIn('SAVE INPUTS',html)
-        self.assertIn('briefing-short-fields',html)
-        self.assertEqual(html.count(' data-auto-grow'),2)
+        self.assertIn('data-sort-inputs',html)
+        self.assertEqual(html.count('name="actual_volume"'),1)
         self.assertIn('data-can-edit="true"',html)
 
     def test_saved_inputs_zero_multiline_actor_and_google_independence(self):
@@ -167,7 +167,7 @@ class DailyBriefingTest(TestCase):
         self.assertEqual(self.client.get('/neorain/daily-briefing/state').status_code,200)
         html=self.client.get('/neorain/daily-briefing').get_data(as_text=True)
         self.assertNotIn('data-briefing-save',html)
-        self.assertIn('data-briefing-field=',html)
+        self.assertIn('data-report-field data-version',html)
         gateway=Gateway(code='SDF',name='Other');db.session.add(gateway);db.session.flush()
         operation=SortDateOperation(gateway_id=gateway.id,gateway_code='SDF',sort_date=self.operation.sort_date,sort_name='night')
         db.session.add(operation);db.session.commit();self.f.fixture._login(self.f.actor)
@@ -184,6 +184,30 @@ class DailyBriefingTest(TestCase):
         self.assertIn('Earlier saved note',html)
         self.assertIn('&lt;script&gt;not executable&lt;/script&gt;',html)
         self.assertNotIn('<script>not executable</script>',html)
+
+    def test_reports_workspace_rechecks_each_view_and_field_family(self):
+        from app.neonodes.neorain import routes
+
+        can = routes.user_can
+        for tab, permission, included, excluded in (
+            ("rainrock", "neorain.daily_briefing.view", "note_1", "briefing_safety"),
+            ("daily-briefing", "neorain.rainrock.view", "briefing_safety", "note_1"),
+        ):
+            with self.subTest(tab=tab), patch.object(routes, "user_can",
+                    side_effect=lambda key, user=None: key != permission and can(key, user=user)):
+                operation = f"?operation_id={self.operation.id}"
+                state = self.client.get("/neorain/reports/state" + operation).json
+                self.assertEqual(state["rainrock_html"] is not None, tab == "rainrock")
+                self.assertEqual(state["briefing"] is not None, tab == "daily-briefing")
+                self.assertIn(included, state["fields"])
+                self.assertNotIn(excluded, state["fields"])
+                response = self.client.post("/neorain/reports/inputs" + operation,
+                    json={"values": {excluded: "Denied"}, "versions": {excluded: 0}})
+                self.assertEqual(response.status_code, 400)
+                response = self.client.post("/neorain/reports/inputs" + operation,
+                    json={"values": {included: "Allowed"}, "versions": {included: 0}})
+                self.assertEqual(response.status_code, 200)
+        self.assertEqual(NeoRainReportEntry.query.filter_by(value="Denied").count(), 0)
 
     def test_optional_delay_details_preserve_concise_text_order_zero_and_full_notes(self):
         long_note = 'Complete saved note ' * 150 + 'END\nOriginal second line'

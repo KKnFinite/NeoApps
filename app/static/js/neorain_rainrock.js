@@ -1,9 +1,50 @@
 (() => {
   'use strict';
-  const root=document.querySelector('[data-rainrock]');
-  const form=root?.querySelector('[data-rainrock-inputs]');
+  const root=document.querySelector('[data-neorain-reports]');
+  const form=root?.querySelector('[data-report-inputs]');
   if(!form)return;
-  const inputs=[...form.querySelectorAll('[data-rainrock-field]')];
+  const tabButtons = [...root.querySelectorAll('[data-report-tab]')];
+  const panels = [...root.querySelectorAll('[data-report-panel]')];
+  const preference = 'neoapps.neorain.report-tab';
+  function selectTab(name, persist = false) {
+    const tab = tabButtons.find(button => button.dataset.reportTab === name && !button.hidden);
+    if (!tab) return;
+    for (const button of tabButtons) {
+      button.setAttribute('aria-selected', String(button === tab));
+      button.tabIndex = button === tab ? 0 : -1;
+    }
+    panels.forEach(panel => { panel.hidden = panel.dataset.reportPanel !== name; });
+    root.querySelector('[data-sort-tab]').value = name;
+    if (persist) {
+      try { localStorage.setItem(preference, name); } catch (_) { /* Tab selection still works. */ }
+      const url = new URL(root.dataset.reportsUrl, location.origin);
+      url.searchParams.set('operation_id', root.dataset.operation);
+      url.searchParams.set('tab', name);
+      history.replaceState(history.state, '', url);
+    }
+  }
+  if (root.dataset.explicitTab !== 'true') {
+    try { selectTab(localStorage.getItem(preference)); } catch (_) { /* Keep the server selection. */ }
+  }
+  for (const button of tabButtons) {
+    button.addEventListener('click', () => selectTab(button.dataset.reportTab, true));
+    button.addEventListener('keydown', event => {
+      const available = tabButtons.filter(tab => !tab.hidden);
+      const index = available.indexOf(button);
+      const next = {
+        ArrowLeft: (index + available.length - 1) % available.length,
+        ArrowRight: (index + 1) % available.length,
+        Home: 0,
+        End: available.length - 1,
+      }[event.key];
+      if (next === undefined) return;
+      event.preventDefault();
+      const tab = available[next];
+      selectTab(tab.dataset.reportTab, true);
+      tab.focus();
+    });
+  }
+  const inputs=[...form.querySelectorAll('[data-report-field]')];
   const live=root.querySelector('[data-rainrock-live]');
   const notesToggle=root.querySelector('[data-rainrock-notes]');
   const updateNotes=()=>{
@@ -11,9 +52,9 @@
     live.querySelectorAll('[data-rainrock-mission-notes]').forEach(note=>{note.hidden=!notesToggle.checked;});
   };
   notesToggle?.addEventListener('change',updateNotes);
-  const status=root.querySelector('[data-rainrock-save-status]');
+  const status=root.querySelector('[data-report-save-status]');
   const copyStatus=root.querySelector('[data-rainrock-copy-status]');
-  const editable=form.dataset.canEdit==='true';
+  let editable=form.dataset.canEdit==='true';
   const dirty=input=>input.value!==input.dataset.savedValue;
   const timers=new Map(),pending=new Set(),errors=new Map();
   let activeSave=null,generation=0,polling=false,capturing=false;
@@ -22,26 +63,40 @@
     status.classList.toggle('is-error',!!errors.size);
     inputs.forEach(input=>{
       root.querySelector(`[data-field-status="${input.name}"]`).textContent=errors.get(input)||'';
-      root.querySelector(`[data-rainrock-use-saved="${input.name}"]`).hidden=!errors.has(input);
+      root.querySelector(`[data-report-use-saved="${input.name}"]`).hidden=!errors.has(input);
     });
   };
   let lastReportHtml;
   const apply=(payload,sent=null)=>{
     if(String(payload.operation_id)!==root.dataset.operation)return;
-    if(lastReportHtml!==payload.html){
-      window.NeoRainBoard.updateReport(live,payload.html);
-      lastReportHtml=payload.html;
+    for (const button of tabButtons) {
+      button.hidden = button.dataset.reportTab === 'rainrock' ? payload.rainrock_html == null : payload.briefing == null;
     }
-    updateNotes();
+    const currentTab = tabButtons.find(button => button.getAttribute('aria-selected') === 'true' && !button.hidden);
+    const fallback = currentTab || tabButtons.find(button => !button.hidden);
+    if (fallback) selectTab(fallback.dataset.reportTab);
+    if (live && lastReportHtml !== payload.rainrock_html) {
+      if (payload.rainrock_html == null) live.replaceChildren();
+      else window.NeoRainBoard.updateReport(live, payload.rainrock_html);
+      lastReportHtml = payload.rainrock_html;
+      updateNotes();
+    }
+    root.dispatchEvent(new CustomEvent('neorain:reports-updated', {detail: payload}));
+    editable = payload.can_edit;
     inputs.forEach(input=>{
-      const field=payload.fields[input.name];if(!field)return;
+      const field=payload.fields[input.name];
+      input.readOnly = !editable || !field;
+      input.closest('label').hidden = !field && !dirty(input);
+      if (!field) return;
       const acknowledged=sent&&Object.hasOwn(sent,input.name);
       if(!acknowledged&&dirty(input))return;
       const unchanged=acknowledged?input.value===sent[input.name]:true;
       input.dataset.savedValue=field.input_value??'';
       input.dataset.version=field.version;
       if(unchanged)input.value=field.input_value??'';
-      input.title=field.source;
+      const inherited = field.value != null && field.value !== input.dataset.savedValue;
+      input.title = inherited ? field.source + ' · ' + field.value : field.source;
+      if (input.tagName === 'INPUT') input.placeholder = inherited ? field.value : '—';
     });
   };
   const drain=()=>{
@@ -78,10 +133,11 @@
     if(pending.size||activeSave)await drain();
     return !inputs.some(dirty);
   };
+  root.flushReportInputs = flush;
   form.addEventListener('submit',event=>{event.preventDefault();flush();});
   form.addEventListener('click',async event=>{
-    const button=event.target.closest('[data-rainrock-use-saved]');if(!button)return;
-    const input=inputs.find(i=>i.name===button.dataset.rainrockUseSaved);
+    const button=event.target.closest('[data-report-use-saved]');if(!button)return;
+    const input=inputs.find(i=>i.name===button.dataset.reportUseSaved);
     if(!input||activeSave)return;
     const draft=input.value,before=++generation;button.disabled=true;cancel(input);pending.delete(input);
     try{
@@ -90,7 +146,9 @@
       if(!response.ok||!payload.ok)throw new Error('Unable to load saved value. Draft retained.');
       if(generation!==before||input.value!==draft)return;
       apply(payload);
-      const field=payload.fields[input.name];input.value=field.input_value??'';
+      const field=payload.fields[input.name];
+      if (!field) throw new Error('This input is no longer available.');
+      input.value=field.input_value??'';
       input.dataset.savedValue=input.value;input.dataset.version=field.version;
       errors.delete(input);input.focus({preventScroll:true});
     }catch(error){errors.set(input,error.message);}
@@ -161,6 +219,6 @@
     }catch(error){copyStatus.textContent=error.message||'Image capture failed. No partial image was copied.';}
     finally{capturing=false;generation++;root.querySelectorAll('[data-rainrock-copy],[data-rainrock-download]').forEach(b=>b.disabled=false);}
   }
-  root.querySelector('[data-rainrock-copy]').addEventListener('click',()=>exportImage(true));
-  root.querySelector('[data-rainrock-download]').addEventListener('click',()=>exportImage(false));
+  root.querySelector('[data-rainrock-copy]')?.addEventListener('click',()=>exportImage(true));
+  root.querySelector('[data-rainrock-download]')?.addEventListener('click',()=>exportImage(false));
 })();

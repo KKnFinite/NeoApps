@@ -27,8 +27,7 @@ MENUS = {
     RAIN: {
         "Inbound": "/neorain/inbound",
         "Outbound": "/neorain/outbound",
-        "Rainrock": "/neorain/rainrock",
-        "Daily Briefing": "/neorain/daily-briefing",
+        "Reports": "/neorain/reports",
         "Load Planner Lineup": "/neorain/load-planner-lineup",
         "Settings": "/neorain/settings",
     },
@@ -128,13 +127,13 @@ class MobileNodeSplashTest(unittest.TestCase):
             page = browser.new_page(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
             self.env.login(page)
             menu = page.locator("[data-node-splash-menu]")
-            for node, label in ((SUBZERO, "Deice Log"), (RAIN, "Rainrock")):
+            for node, label in ((SUBZERO, "Deice Log"), (RAIN, "Reports")):
                 with self.subTest(node=node):
                     query = f"?operation_id={self.historical_id}"
                     self.env.ready(page, "/" + node + query)
                     menu.get_by_role("link", name=label, exact=True).click()
                     expect(page).to_have_url(self.env.origin + MENUS[node][label] + query)
-                    report = page.locator("[data-evidence-root]" if node == SUBZERO else "[data-rainrock]")
+                    report = page.locator("[data-evidence-root]" if node == SUBZERO else "[data-neorain-reports]")
                     attribute = "data-operation-id" if node == SUBZERO else "data-operation"
                     expect(report).to_have_attribute(attribute, str(self.historical_id))
             with self.env.app.app_context():

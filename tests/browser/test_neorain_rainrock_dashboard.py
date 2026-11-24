@@ -25,7 +25,7 @@ class RainrockDashboardBrowserTest(TestCase):
 
     def exercise(self,engine):
         case=unit.RainrockDashboardTest();case.setUp();self.addCleanup(case.doCleanups)
-        app=case.app;app.config['RAINROCK_REFRESH_INTERVAL_MS']=1000
+        app=case.app;app.config.update(RAINROCK_REFRESH_INTERVAL_MS=1000, SESSION_COOKIE_SECURE=False)
         op=case.operation;actor=case.f.actor
         _, start = configure_sort_window(case.f.gateway, op.sort_date)
         app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = start + timedelta(hours=2)
@@ -76,7 +76,7 @@ class RainrockDashboardBrowserTest(TestCase):
             expect(first.locator('td').last).to_have_text('10 RS, 5 GL - '+long_note+'; Second saved remark\nOriginal newline retained')
             self.assertGreater(first.bounding_box()['height'],page.locator('.rainrock-flight-table tbody tr').nth(1).bounding_box()['height']*2)
             expect(page.locator('.rainrock-delay-row')).to_have_count(0)
-            self.assertEqual(page.locator('[data-rainrock-field]').count(),14)
+            self.assertEqual(page.locator('[data-report-field]').count(),20)
             self.assertEqual(page.locator('[data-rainrock-report] input,[data-rainrock-report] button').count(),0)
             self.assertEqual(page.locator('[data-rainrock-flight]').count(),14)
             metrics.append(dict(width=width,summaryTops=page.locator('.rainrock-summary').evaluate_all('es=>es.map(e=>e.getBoundingClientRect().top)'),overflow=False))
@@ -87,13 +87,14 @@ class RainrockDashboardBrowserTest(TestCase):
                     args=dict(viewport={'width':1440,'height':900},service_workers='block',accept_downloads=True)
                     if engine=='chromium':args['permissions']=['clipboard-read','clipboard-write']
                     context=browser.new_context(**args);page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)));login(page);page.clock.set_fixed_time(app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'].replace(tzinfo=ZoneInfo('America/Chicago')));page.goto(url)
+                    page.locator('[data-sort-inputs] > summary').click()
                     values=dict(planned_volume='119805',actual_volume='117540',smalls_percent='89.4',planned_fph='75000',actual_fph='72850',
                         briefing_ramp_staffing_planned='316',briefing_ramp_staffing_actual='320',briefing_hub_staffing_planned='500',
                         briefing_hub_staffing_actual='510',note_1='RFD: All work safely finished.\nComplete notes are visible.')
-                    for key,value in values.items():page.locator(f'[data-rainrock-field][name="{key}"]').fill(value)
+                    for key,value in values.items():page.locator(f'[data-report-field][name="{key}"]').fill(value)
                     page.locator('h1').click()
                     expect(page.locator('[data-rainrock-value="actual_fph"]')).to_have_text('72,850')
-                    expect(page.locator('[data-rainrock-save-status]')).to_have_text('Auto-saves')
+                    expect(page.locator('[data-report-save-status]')).to_have_text('Auto-saves')
                     # Cross-session canonical values, not a duplicated Rainrock record.
                     other=browser.new_context(service_workers='block',**({'permissions':['clipboard-read','clipboard-write']} if engine=='chromium' else {}));brief=other.new_page();login(brief);brief.clock.set_fixed_time(app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'].replace(tzinfo=ZoneInfo('America/Chicago')))
                     brief.goto(origin+'/neorain/daily-briefing?operation_id='+str(operation_id))
@@ -103,11 +104,12 @@ class RainrockDashboardBrowserTest(TestCase):
                         brief.locator('#copy-briefing').click()
                         expect(brief.locator('#copy-briefing-status')).to_have_text('Copied.')
                         self.assertEqual(brief.evaluate('navigator.clipboard.readText()').replace('\r\n','\n'),brief.locator('#briefing-text').inner_text())
-                    brief.locator('[data-briefing-field][name="actual_volume"]').fill('118000');brief.locator('h1').click()
+                    brief.locator('[data-sort-inputs] > summary').click()
+                    brief.locator('[data-report-field][name="actual_volume"]').fill('118000');brief.locator('h1').click()
                     expect(page.locator('[data-rainrock-value="actual_volume"]')).to_have_text('118,000',timeout=12000)
                     # Real concurrent edit: preserve the local draft/version,
                     # show the conflict beside it, and recover only that field.
-                    note=page.locator('[data-rainrock-field][name="note_1"]');note.fill('Keep my unsaved local note');note.focus()
+                    note=page.locator('[data-report-field][name="note_1"]');note.fill('Keep my unsaved local note');note.focus()
                     remote=other.request.get(origin+'/neorain/rainrock/state?operation_id='+str(operation_id)).json()
                     version=remote['fields']['note_1']['version']
                     saved=other.request.post(origin+'/neorain/rainrock/inputs?operation_id='+str(operation_id),
@@ -116,14 +118,14 @@ class RainrockDashboardBrowserTest(TestCase):
                     expect(page.locator('[data-field-status="note_1"]')).to_contain_text('changed',timeout=8000)
                     expect(note).to_have_value('Keep my unsaved local note');expect(note).to_be_focused()
                     expect(page.locator('[data-rainrock-report]')).to_contain_text('Other operator’s saved note',timeout=8000)
-                    page.locator('[data-rainrock-use-saved="note_1"]').click()
+                    page.locator('[data-report-use-saved="note_1"]').click()
                     expect(note).to_have_value('Other operator’s saved note')
                     expect(page.locator('[data-field-status="note_1"]')).to_have_text('')
                     note.fill(values['note_1']);page.locator('h1').click()
-                    expect(page.locator('[data-rainrock-save-status]')).to_have_text('Auto-saves')
+                    expect(page.locator('[data-report-save-status]')).to_have_text('Auto-saves')
                     # Live updates were exercised above. Keep their DOM replacement
                     # from detaching table nodes during browser geometry assertions.
-                    page.route("**/neorain/rainrock/state?*automatic=1", lambda route: route.fulfill(status=204))
+                    page.route("**/neorain/reports/state?*automatic=1", lambda route: route.fulfill(status=204))
                     for width,height in ((1920,1080),(1440,900),(390,844),(375,568)):
                         page.set_viewport_size({'width':width,'height':height});assert_layout(page,width);screenshot(page,str(width))
                         if width<700:
@@ -132,14 +134,14 @@ class RainrockDashboardBrowserTest(TestCase):
                                 self.assertTrue(region.evaluate('e=>{const c=e.querySelector("tbody tr td:last-child").getBoundingClientRect(),r=e.getBoundingClientRect();return c.right<=r.right+1&&c.left>=r.left-1;}'))
                             screenshot(page,str(width)+'-delays')
                             page.locator('.rainrock-table-scroll').evaluate_all('es=>es.forEach(e=>e.scrollLeft=0)')
-                    page.unroute("**/neorain/rainrock/state?*automatic=1")
+                    page.unroute("**/neorain/reports/state?*automatic=1")
                     with page.expect_download(timeout=20000) as d:page.locator('[data-rainrock-download]').click()
                     mobile_path=EVIDENCE/f'{engine}-mobile-export.png';d.value.save_as(mobile_path)
                     with Image.open(mobile_path) as img:
                         self.assertEqual(img.width,2400);mobile_size=img.size
                     page.set_viewport_size({'width':1440,'height':900})
                     # Native image clipboard: no fake clipboard implementation.
-                    page.locator('[data-rainrock-field][name="actual_fph"]').fill('73000')
+                    page.locator('[data-report-field][name="actual_fph"]').fill('73000')
                     if engine=='chromium':
                         page.locator('[data-rainrock-copy]').click()
                         expect(page.locator('[data-rainrock-copy-status]')).to_have_text('Image copied — ready to paste into your email.',timeout=20000)

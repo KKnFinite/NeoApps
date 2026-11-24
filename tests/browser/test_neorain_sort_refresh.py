@@ -26,8 +26,8 @@ class NeoRainSortRefreshBrowserTest(TestCase):
         case.setUp()
         self.addCleanup(case.doCleanups)
         app = case.app
-        app.config.update(SESSION_COOKIE_SECURE=False, LIVE_SCREEN_REFRESH_INTERVAL_MS=5000, RAINROCK_REFRESH_INTERVAL_MS=1000,
-                          NEORAIN_BRIEFING_REFRESH_MS=1000)
+        app.config.update(SESSION_COOKIE_SECURE=False, LIVE_SCREEN_REFRESH_INTERVAL_MS=5000, RAINROCK_REFRESH_INTERVAL_MS=5000,
+                          NEORAIN_BRIEFING_REFRESH_MS=5000)
         old = SortDateOperation(gateway_id=case.case.gateway.id, gateway_code="RFD",
                                 sort_date=case.operation.sort_date - timedelta(days=1), sort_name="night")
         db.session.add(old)
@@ -43,8 +43,7 @@ class NeoRainSortRefreshBrowserTest(TestCase):
         self.addCleanup(server.shutdown)
         origin = f"http://127.0.0.1:{server.server_port}"
         zone = ZoneInfo("America/Chicago")
-        endpoints = {"inbound": "revision", "outbound": "revision", "rainrock": "state",
-                     "daily-briefing": "state"}
+        endpoints = {"inbound": "revision", "outbound": "revision", "reports": "state"}
 
         with sync_playwright() as pw, getattr(pw, engine).launch() as browser:
             context = browser.new_context(viewport={"width": width, "height": 820}, service_workers="block")
@@ -84,7 +83,7 @@ class NeoRainSortRefreshBrowserTest(TestCase):
                     page.clock.set_system_time((case.start - timedelta(minutes=1)).replace(tzinfo=zone))
                     self.assertEqual(page.goto(url).status, 200)
                     if report:
-                        asset = f"neorain_{screen.replace('-', '_')}.js?v="
+                        asset = "neorain_rainrock.js?v="
                         self.assertEqual(page.locator(f'script[src*="{asset}"]').count(), 1)
                     requests.clear()
                     page.clock.run_for(59000)
@@ -98,6 +97,8 @@ class NeoRainSortRefreshBrowserTest(TestCase):
                         page.clock.run_for(6000)
                     self.assertTrue(poll.value.json()["refresh"]["auto_refresh_enabled"])
                     self.assertTrue(any(f"/{screen}/{endpoint}" in request for request in requests))
+                    if report:
+                        self.assertEqual(sum("/reports/state" in item for item in requests), 1)
 
                     if screen == "outbound":
                         self.assertTrue(any("/google-live-poll/execute" in request for request in requests))
