@@ -21,6 +21,7 @@ class DispatchResetBrowserTest(unittest.TestCase):
         context = browser.new_context(viewport={'width': width, 'height': 844})
         page = context.new_page()
         case.login(page)
+        page.clock.install(time=case.sort_now)
         dialogs = []
         cancel = False
         def confirm(dialog):
@@ -73,10 +74,31 @@ class DispatchResetBrowserTest(unittest.TestCase):
                     note = row.get_by_role('textbox', name='Departure notes', include_hidden=True)
                     # Expand the native disclosures using the same summary controls as an operator.
                     detail = row.locator('[data-ops-disclosure="mission-details"]')
+                    if width <= 900:
+                        card = row.locator('[data-ops-accordion]')
+                        expect(card).to_have_js_property('open', True)
+                        expect(detail).to_have_js_property('open', False)
+                        card.locator(':scope > summary').click()
+                        expect(card).to_have_js_property('open', False)
+                        card.locator(':scope > summary').click()
+                        expect(detail).to_have_js_property('open', False)
                     if detail.get_attribute('open') is None and detail.locator(':scope > summary').is_visible():
                         detail.locator(':scope > summary').click()
                     row.locator('.ops-inline-notes > summary').click()
                     note.fill('unsaved training draft')
+                    if width <= 900:
+                        summary = detail.locator(':scope > summary')
+                        for opened, destination in ((True, 'PHL'), (False, 'ONT')):
+                            if not opened:
+                                summary.click()
+                            with case.app.app_context():
+                                mission = db.session.get(SortDateMission, case.flow_id)
+                                mission.destination = destination
+                                db.session.commit()
+                            expect(row.locator('.ops-outbound-primary')).to_contain_text(destination, timeout=15000)
+                            expect(detail).to_have_js_property('open', opened)
+                            expect(note).to_have_value('unsaved training draft')
+                        summary.click()
                     count = len(posts)
                     row.get_by_role('button', name='Discard unsaved edits').click()
                     expect(row.locator('[data-ops-discard-draft]')).to_be_hidden()
