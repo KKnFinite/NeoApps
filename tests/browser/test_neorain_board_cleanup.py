@@ -19,7 +19,7 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
 
     def exercise(self,engine):
         host=base.CompactRainBrowserTest;host.setUpClass();browser=None
-        fixture=host.fixture; evidence=Path('instance/browser-evidence/rain-board-cleanup');evidence.mkdir(parents=True,exist_ok=True)
+        fixture=host.fixture; evidence=Path('instance/browser-evidence/issue73');evidence.mkdir(parents=True,exist_ok=True)
         geometry={};errors=[]
         try:
             host.stack.enter_context(patch('app.services.neoscorpion.current_existing_operational_sort_operations',
@@ -45,7 +45,7 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
             browser=getattr(fixture.pw,engine).launch();page=browser.new_page(viewport={'width':1920,'height':1080})
             page.on('pageerror',lambda error:errors.append(str(error)));host().login_for_sort(page)
             for width in (3840,1920,1440,390,375):
-                page.set_viewport_size({'width':width,'height':900 if width>900 else 844});geometry[str(width)]={}
+                page.set_viewport_size({'width':width,'height':1080 if width>=1920 else 900 if width>900 else 844});geometry[str(width)]={}
                 for board,kind,count in (('inbound','arrival',7),('outbound','departure',8)):
                     fixture().ready(page,'/neorain/'+board)
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
@@ -96,8 +96,12 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
                         mobile.evaluate('el=>el.scrollLeft=0')
                     page.screenshot(path=str(evidence/f'{engine}-{board}-{width}.png'),full_page=True)
                 if width>900:
-                    self.assertAlmostEqual(geometry[str(width)]['inbound']['height'],geometry[str(width)]['outbound']['height'],delta=2)
-                    self.assertEqual(geometry[str(width)]['inbound']['size'],geometry[str(width)]['outbound']['size'])
+                    for board in ('inbound', 'outbound'):
+                        self.assertEqual(geometry[str(width)][board]['height'], 36)
+                        self.assertEqual(geometry[str(width)][board]['size'], '13px')
+                else:
+                    for board in ('inbound', 'outbound'):
+                        self.assertEqual(geometry[str(width)][board]['height'], 34)
             # Real operational mutations only in the disposable fixture. Rain must
             # observe its exact mission without a manual reload or invented fuel.
             page.set_viewport_size({'width':390,'height':844});fixture().ready(page,'/neorain/outbound')
@@ -123,8 +127,63 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
             expect(cell).to_have_attribute('data-scorpion-final','true')
             self.assertTrue(page.evaluate("window.originalBoard===document.querySelector('[data-neorain-board-page]')"))
             expect(page.locator('[data-neorain-mobile-inline-detail]')).to_be_visible()
+            self.measure_populated_boards(host, page, geometry, evidence, engine)
             self.assertEqual(errors,[])
         finally:
             (evidence/f'{engine}-geometry.json').write_text(json.dumps(geometry,indent=2))
             if browser:browser.close()
             host.tearDownClass()
+
+    def measure_populated_boards(self, host, page, geometry, evidence, engine):
+        with host.fixture.app.app_context():
+            op = db.session.get(SortDateOperation, host.operation_id)
+            for kind, base_number in (('arrival', 7100), ('departure', 7200)):
+                for index in range(30):
+                    db.session.add(SortDateMission(
+                        sort_date_operation_id=op.id, sort_date=op.sort_date, gateway_code=op.gateway_code,
+                        sort_name=op.sort_name, mission_type=kind, mission_source='manual',
+                        flight_number=f'UPS{base_number + index}', assigned_tail_number=f'N{600 + index}UP',
+                        origin='SDF' if kind == 'arrival' else op.gateway_code,
+                        destination=op.gateway_code if kind == 'arrival' else 'SDF',
+                        planned_datetime_utc=datetime(2026, 10, 16, 6) + timedelta(minutes=index * 5),
+                        timezone='America/Chicago', wave='1',
+                    ))
+            db.session.commit()
+        for width, height in ((1440, 900), (1920, 1080)):
+            page.set_viewport_size({'width': width, 'height': height})
+            for board in ('inbound', 'outbound'):
+                host.fixture().ready(page, '/neorain/' + board)
+                table = page.locator('.neorain-desktop-board')
+                stats = table.evaluate("""(wrap, board) => {
+                    const rows = [...wrap.querySelectorAll('tr[data-neorain-' + board + '-row]')];
+                    const edge = wrap.getBoundingClientRect();
+                    const header = wrap.querySelector('thead').getBoundingClientRect();
+                    const top = Math.max(edge.top, header.bottom);
+                    const bottom = Math.min(edge.bottom, innerHeight);
+                    return {
+                        count: rows.length,
+                        heights: [...new Set(rows.map(row => row.getBoundingClientRect().height))],
+                        visible: rows.filter(row => {
+                            const r = row.getBoundingClientRect();
+                            return r.top >= top - 1 && r.bottom <= bottom + 1;
+                        }).length,
+                        priorCapacity: Math.floor((bottom - top) / 42),
+                        clippedControls: rows.flatMap(row => [...row.querySelectorAll('input, button')])
+                            .filter(el => el.getClientRects().length && el.type !== 'hidden')
+                            .filter(el => {
+                                const bounds = el.getBoundingClientRect();
+                                const cell = el.closest('td').getBoundingClientRect();
+                                return bounds.top < cell.top || bounds.bottom > cell.bottom ||
+                                    bounds.left < cell.left - 1 || bounds.right > cell.right + 1 ||
+                                    (el.tagName === 'BUTTON' && el.scrollWidth > el.clientWidth + 1);
+                            }).map(el => el.getAttribute('aria-label') || el.textContent),
+                        overflow: wrap.scrollWidth > wrap.clientWidth + 1
+                    };
+                }""", board)
+                geometry[str(width)][board]['populated'] = stats
+                self.assertEqual(stats['count'], 31)
+                self.assertEqual(stats['heights'], [36])
+                self.assertGreater(stats['visible'], stats['priorCapacity'], stats)
+                self.assertEqual(stats['clippedControls'], [])
+                self.assertFalse(stats['overflow'])
+                page.screenshot(path=evidence/f'{engine}-{board}-{width}-populated.png')
