@@ -203,9 +203,9 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
         NeoSubZeroSprayRecord.sort_date_mission_id,
         NeoSubZeroSprayRecord.tail_number_snapshot,
         NeoSubZeroSprayRecord.started_at_utc,
-    ).filter(
+    ).join(NeoSubZeroDepartureDeiceEvent, NeoSubZeroDepartureDeiceEvent.id == NeoSubZeroSprayRecord.departure_deice_event_id).filter(
         NeoSubZeroSprayRecord.sort_date_operation_id == operation.id,
-        NeoSubZeroSprayRecord.departure_deice_event_id.is_not(None),
+        NeoSubZeroDepartureDeiceEvent.reset_at_utc.is_(None),
         or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),NeoSubZeroSprayRecord.ended_at_utc.is_not(None)),
     ).distinct().all()
     sprayed_tails = {_tail(record.tail_number_snapshot) for record in recorded_sprays if record.tail_number_snapshot}
@@ -341,7 +341,7 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
         return _save_mobile_departure_evidence(operation, mission, event, action, values, actor_id)
     if radio_pending(event) and action in {'initial_contact','move_to_planned'}:
         raise NeoSubZeroDepartureDeiceError('RADIO PENDING: complete the pilot readback before starting another departure event.')
-    if event and event.status=='cleared' and action not in {'initial_contact','move_to_planned','clear','save_treatment','radio_complete','undo_clear'}:
+    if event and event.status=='cleared' and action not in {'initial_contact','move_to_planned','clear','save_treatment','radio_complete','undo_clear','reset'}:
         raise NeoSubZeroDepartureDeiceError('CLEARED evidence cannot be reset. Start an explicit new event or use audited corrections.')
     from app.models import NeoSubZeroSprayRecord
     has_actual = _has_pass_milestones(event) or bool(event and NeoSubZeroSprayRecord.query.filter_by(
@@ -349,15 +349,13 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
     ).filter(or_(NeoSubZeroSprayRecord.started_at_utc.is_not(None),
                  NeoSubZeroSprayRecord.ended_at_utc.is_not(None))).first())
     if action == 'reset':
-        if not actor_id or not event or event.status not in {'deice_planned', 'configured'}:
-            raise NeoSubZeroDepartureDeiceError('Only unstarted INITIAL CONTACT or CONFIGURED work can be reset.')
-        protected = NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id).filter(
-            or_(NeoSubZeroSprayRecord.gallons.is_not(None), NeoSubZeroSprayRecord.official_at_utc.is_not(None)))
-        if has_actual or event.pass_evidence or protected.first():
-            raise NeoSubZeroDepartureDeiceError('Actual spray, participation or gallon evidence cannot be reset. Use audited corrections.')
+        reason = str(values.get('correction_reason') or '').strip()
+        if not event or event.sort_date_mission_id != mission.id:
+            raise NeoSubZeroDepartureDeiceError('This aircraft has no matching departure event to reset.')
+        if not actor_id or values.get('confirm_reset') != '1' or not reason or len(reason) > 500:
+            raise NeoSubZeroDepartureDeiceError('Confirm RESET and enter a correction reason of 1–500 characters.')
+        # Keep original times, participation, queue position and readback for audit.
         event.reset_at_utc = datetime.utcnow()
-        event.configured_at_utc = None
-        event.ucc_queue_order = None
     elif action in {"initial_contact", "move_to_planned"}:
         if event and event.status == 'cleared': event=None
         if event and has_actual:
@@ -804,7 +802,11 @@ def _sync_tail_deice_status(operation, mission, event):
             tail_number=tail,
         )
         db.session.add(row)
-    row.deice_status = 'unknown' if event.reset_at_utc else {
+    if event.reset_at_utc:
+        from app.services.neosubzero_evidence import departure_event_for_tail
+        db.session.flush()
+        event = departure_event_for_tail(operation, mission, lock=True)
+    row.deice_status = 'unknown' if event is None else {
         "deice_planned": "required",
         "configured": "configured",
         "finished": "configured",
@@ -812,7 +814,7 @@ def _sync_tail_deice_status(operation, mission, event):
         "negative": "negative",
         "not_sprayed": "unknown",
     }[event.status]
-    row.deice_completed_at_utc = None if event.reset_at_utc else (
+    row.deice_completed_at_utc = None if event is None else (
         event.pass2_ended_at_utc or event.pass1_ended_at_utc
         if event.status == "cleared"
         else None
@@ -833,7 +835,7 @@ def _collapse_state(mission, event, *, tail_state, pretreat_complete, now_utc):
     if canonical_deice in {"required", "configured", "cleared"}:
         return "active"
     block_out = mission.actual_block_out_datetime_utc
-    if block_out:
+    if block_out or mission.departure_status == 'departed':
         return "gone"  # Display only: no spray event or negative evidence is made.
     if pretreat_complete:
         return "pretreated"

@@ -80,6 +80,7 @@ class RadioPostgresTest(unittest.TestCase):
 
     def test_undo_clear_and_radio_complete_have_exactly_one_winner(self):
         event=self.finish();self.mutate(self.f.alpha,'clear');eid=event.id
+        waiting_mission_id = self.second.id
         undo=self.data(event,self.f.alpha,'undo_clear',correction_reason='Mistaken CLEAR')
         confirm=self.data(event,self.f.alpha,'radio_complete')
         self.assertCountEqual(self.race(undo,confirm),[200,409])
@@ -89,7 +90,11 @@ class RadioPostgresTest(unittest.TestCase):
         if event.status=='finished':
             self.assertIsNone(event.radio_completed_at_utc);self.assertEqual(self.ramp()['pad']['event'].id,eid)
         else:
-            self.assertTrue(radio_complete(event));self.assertIsNone(self.ramp()['pad'])
+            self.assertTrue(radio_complete(event))
+            ramp = self.ramp()
+            self.assertIsNone(ramp['throat'])
+            self.assertTrue(ramp['pad_is_planned'])
+            self.assertEqual(ramp['pad']['mission_id'], waiting_mission_id)
 
     def test_competing_starts_cannot_put_two_aircraft_on_pad(self):
         events=[Event.query.filter_by(sort_date_mission_id=m.id).one() for m in (self.f.alpha,self.second)]

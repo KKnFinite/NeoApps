@@ -1,5 +1,6 @@
 """NeoSubZero current-sort trucks, spray gallons, and Deice Log projections."""
 
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import func, or_
@@ -172,6 +173,8 @@ def set_neosubzero_spray_gallons(operation, mission, event, pass_number, positio
         raise NeoSubZeroSprayError('The coordinator must save this pass END and official participation before gallons entry.')
     if event is None or event.sort_date_operation_id!=operation.id or (record.departure_deice_event_id is not None and record.departure_deice_event_id!=event.id) or (record.pretreat_state_id is not None and record.pretreat_state_id!=event.id) or (record.tail_number_snapshot and record.tail_number_snapshot.strip().upper()!=event.tail_number.strip().upper()):
         raise NeoSubZeroSprayError('Spray record does not match this physical treatment.')
+    if getattr(event, 'reset_at_utc', None):
+        raise NeoSubZeroSprayError('This departure event was superseded. Reload current treatment.')
     if record.excluded_at_utc: raise NeoSubZeroSprayError('This participant was excluded. A coordinator must resolve participation before entering gallons.')
     amount = spray_gallons_amount(gallons, recorded=record.gallons)
     if amount is None or (record.pretreat_state_id and amount == record.gallons):
@@ -180,6 +183,8 @@ def set_neosubzero_spray_gallons(operation, mission, event, pass_number, positio
         raise NeoSubZeroSprayError('Enter a correction reason to change recorded gallons.')
     before=evidence_values(record)
     record.gallons=amount;record.recorded_by_user_id=user_id
+    if record.departure_deice_event_id:
+        event.updated_at = datetime.utcnow()
     audit_change(operation,'spray_gallons',actor_id=user_id,mission=mission,
         event=event if record.departure_deice_event_id else None,record=record,
         reason=correction_reason,before=before,after=evidence_values(record))
@@ -232,7 +237,8 @@ def user_staffing_person(user):
 def driver_owns_participation(user, record):
     person=user_staffing_person(user)
     return bool(person and record and record.driver_person_id==person.id and record.ended_at_utc
-        and (record.official_at_utc or record.gallons) and not record.excluded_at_utc)
+        and (record.official_at_utc or record.gallons) and not record.excluded_at_utc
+        and not getattr(record.departure_deice_event, 'reset_at_utc', None))
 
 
 def neosubzero_deice_log(operation):
@@ -244,6 +250,7 @@ def neosubzero_deice_log(operation):
     for record in records:
         if not record.started_at_utc or not record.ended_at_utc or (record.excluded_at_utc and not record.gallons): continue
         parent=record.pretreat_state or record.departure_deice_event
+        if getattr(parent, 'reset_at_utc', None): continue
         tail=record.tail_number_snapshot or getattr(parent,'tail_number',None)
         if not tail: continue  # Missing ownership must never be borrowed from a replacement tail.
         key=(record.truck_number_snapshot.casefold(),'pretreat' if record.pretreat_state_id else 'departure',getattr(parent,'id',None),tail)

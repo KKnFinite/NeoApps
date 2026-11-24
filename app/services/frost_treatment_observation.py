@@ -30,6 +30,8 @@ def save(operation, mission, event, values, *, actor_id):
     """Caller holds the existing operation/mission/event locks; never commits."""
     if not actor_id or event is None or event.sort_date_operation_id != operation.id or mission.sort_date_operation_id != operation.id:
         raise NeoSubZeroEvidenceError('Choose the current aircraft deicing event.')
+    if event.reset_at_utc:
+        raise NeoSubZeroEvidenceError('This departure event was superseded. Reload current treatment.')
     if str(event.id) != str(values.get('event_id') or '') or normalized_tail(event.tail_number) != normalized_tail(mission.assigned_tail_number) or normalized_tail(values.get('physical_tail')) != normalized_tail(event.tail_number):
         raise NeoSubZeroEvidenceError('Aircraft/event identity changed. Reload current values.')
     if mission.departure_status == 'cancelled':

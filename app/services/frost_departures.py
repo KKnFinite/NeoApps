@@ -269,7 +269,7 @@ def status(gateway_id):
     no_spray=db.session.query(func.count(func.distinct(Audit.after_values['frost_learning']['event_id'].as_integer()))).join(
         Operation,Operation.id==Audit.sort_date_operation_id).join(Event,
         Event.id==Audit.after_values['frost_learning']['event_id'].as_integer()).filter(Operation.gateway_id==gateway_id,
-        Event.status.in_(('not_sprayed','cleared')),Event.pass1_started_at_utc.is_(None),
+        Event.reset_at_utc.is_(None),Event.status.in_(('not_sprayed','cleared')),Event.pass1_started_at_utc.is_(None),
         Audit.after_values['frost_learning']['classification']['label'].as_string()=='LIKELY FROST ABSENT').scalar()
     forecast=aliased(Task)
     forecast_matches=db.session.query(func.count(func.distinct(forecast.summary['capture_id'].as_integer()))).select_from(Task).join(

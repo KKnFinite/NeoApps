@@ -38,7 +38,8 @@ def payloads_for_operation(op):
         payloads[receipt.source_id]=dict(schema_version='subzero-spray/v1',record_type='spray_evidence_correction',
             id=receipt.source_id,gateway_id=operation_gateway_id(op),gateway=op.gateway_code,operation_id=op.id,
             sort_date=op.sort_date.isoformat(),sort_name=op.sort_name,activity=kind,tail=parent.tail_number,
-            pass_number=int(number),state='start_retracted',revision_utc=parent.updated_at.isoformat(),
+            pass_number=int(number),state='event_superseded' if getattr(parent,'reset_at_utc',None) else 'start_retracted',
+            revision_utc=parent.updated_at.isoformat(),
             current_source=evidence_values(parent),audit_provenance=[evidence_values(a) for a in audits])
     return payloads
 

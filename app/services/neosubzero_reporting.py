@@ -30,7 +30,10 @@ def actual_passes(operation, *, activity='all', tail=''):
     for kind, model in (('departure', NeoSubZeroDepartureDeiceEvent), ('pretreat', NeoSubZeroPretreatState)):
         if activity not in ('all', kind):
             continue
-        for parent in model.query.filter_by(sort_date_operation_id=operation.id).all():
+        parents = model.query.filter_by(sort_date_operation_id=operation.id)
+        if kind == 'departure':
+            parents = parents.filter_by(reset_at_utc=None)
+        for parent in parents.all():
             for number in (1, 2):
                 start = getattr(parent, f'pass{number}_started_at_utc')
                 end = getattr(parent, f'pass{number}_ended_at_utc')

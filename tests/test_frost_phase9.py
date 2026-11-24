@@ -181,6 +181,20 @@ class OutcomeTest(unittest.TestCase):
         mutate_departure_deice(f.operation,f.alpha,'set_negative',{},actor_id=self.actor.id);db.session.commit()
         self.assertEqual(payloads(f.operation),{})
 
+    def test_reset_withdraws_existing_observation_without_creating_an_outcome(self):
+        event = self.explicit()
+        before = payloads(self.f.operation)
+        source = next(iter(before))
+        self.assertTrue(before[source]['evidence_active'])
+        mutate_departure_deice(self.f.operation,self.f.alpha,'reset',
+            dict(confirm_reset='1', correction_reason='Mistaken test entry'),event=event,actor_id=self.actor.id)
+        db.session.commit()
+        after = payloads(self.f.operation)
+        self.assertEqual(set(after),{source})
+        self.assertEqual(after[source]['source_audit_id'],before[source]['source_audit_id'])
+        self.assertFalse(after[source]['evidence_active'])
+        self.assertFalse(after[source]['learning_eligible'])
+
     def test_prior_pretreat_unknown_exposure_and_tail_swaps_are_not_strong_negatives(self):
         self.state.pretreat_status=True;db.session.commit();self.explicit()
         item=next(iter(payloads(self.f.operation).values()))

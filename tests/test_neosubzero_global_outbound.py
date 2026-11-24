@@ -36,7 +36,7 @@ class GlobalOutboundTest(TestCase):
         response=self.post(action='toggle_configured',event_id=first.id,expected_version=entity_version(first))
         self.assertEqual(response.status_code,200,response.json)
         self.assertEqual(second.status,'configured')
-        response=self.post(action='reset',event_id=first.id,expected_version=entity_version(first))
+        response=self.post(action='reset',confirm_reset='1',correction_reason='Mistaken entry',event_id=first.id,expected_version=entity_version(first))
         self.assertEqual(response.status_code,200,response.json)
         self.assertEqual(second.status,'configured')
         self.assertEqual(NeoSubZeroDepartureDeiceEvent.query.count(),2)
