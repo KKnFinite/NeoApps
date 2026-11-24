@@ -77,7 +77,7 @@ class RadioBrowserTest(unittest.TestCase):
             correction = detail.locator('[data-ops-disclosure="evidence"]')
             correction.locator('summary').first.click()
             undo = correction.locator('form:has(button[value="undo_clear"])')
-            undo.locator('[name="correction_reason"]').fill('Synthetic CLEAR correction')
+            expect(undo.locator('[name="correction_reason"]')).to_have_count(0)
             ops.OperationsBrowserTest.submit(case, dispatch, undo.locator('button[value="undo_clear"]'))
             expect(first).to_have_attribute('data-status', 'fin')
             expect(detail.locator('[data-ops-disclosure="evidence"] [name="pass1_end"]').first).to_have_value('22:15')
@@ -113,7 +113,7 @@ class RadioBrowserTest(unittest.TestCase):
                     expect(board.locator(f'[data-ops-row][data-mission-id="{neg_id}"]')).to_have_attribute('data-status','negative')
                     expect(board.locator(f'[data-ops-row][data-mission-id="{case.missions[1]}"]')).to_have_attribute('data-status','planned')
                     states=board.locator('[data-ops-board]').evaluate('b=>[...b.querySelectorAll("[data-ops-row]")].filter(e=>e.getBoundingClientRect().height).map(e=>e.dataset.status)')
-                    ranks=[2 if s=='gone' else 1 if s=='radio-pending' else 0 for s in states]
+                    ranks=[{'radio-pending': 0, 'gone': 2}.get(s, 1) for s in states]
                     # Each visual ramp is independently ordered; this fixture's
                     # mixed states all belong to Alpha. List spans all ramps.
                     if layout=='list':self.assertEqual(ranks,sorted(ranks))
@@ -157,6 +157,8 @@ class RadioBrowserTest(unittest.TestCase):
                 expect(pad).to_have_attribute('data-ucc-aircraft',str(case.missions[1]),timeout=10000)
                 expect(p.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position="1"] [data-ucc-aircraft]')).to_have_attribute('data-ucc-aircraft',str(case.missions[2]))
             expect(board.locator(f'[data-ops-row][data-mission-id="{case.missions[0]}"]')).to_have_attribute('data-status','gone',timeout=10000)
+            states = board.locator('[data-ops-row][data-ramp="Alpha"]:visible').evaluate_all('rows => rows.map(row => row.dataset.status)')
+            self.assertEqual(states[states.index('gone'):], ['gone'] * states.count('gone'))
             expect(treatment(form, 'pass1_start')).to_have_value('22:16')
             for p in (desktop,phone):p.screenshot(path=str(EVIDENCE/f'{engine}-ducc-{p.viewport_size["width"]}-advanced.png'))
             with case.app.app_context():

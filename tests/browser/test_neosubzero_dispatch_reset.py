@@ -21,11 +21,12 @@ class DispatchResetBrowserTest(unittest.TestCase):
         context = browser.new_context(viewport={'width': width, 'height': 844})
         page = context.new_page()
         case.login(page)
-        reasons = []
+        dialogs = []
+        cancel = False
         def confirm(dialog):
-            if dialog.type == 'prompt':
-                reasons.append(dialog.message)
-                dialog.accept('Dispatch training correction')
+            dialogs.append(dialog.type)
+            if cancel:
+                dialog.dismiss()
             else:
                 dialog.accept()
         page.on('dialog', confirm)
@@ -83,7 +84,29 @@ class DispatchResetBrowserTest(unittest.TestCase):
                     case.ready(page, path)
                     expect(row.locator('textarea[name="notes"]')).to_have_value('')
                     page.wait_for_load_state('networkidle')
+                if stage in ('fin', 'clear'):
+                    detail = row.locator('[data-ops-disclosure="mission-details"]')
+                    if detail.get_attribute('open') is None and detail.locator(':scope > summary').is_visible():
+                        detail.locator(':scope > summary').click()
+                    evidence = row.locator('[data-ops-disclosure="evidence"]')
+                    if evidence.get_attribute('open') is None:
+                        evidence.locator(':scope > summary').click()
+                    treatment = evidence.locator('[data-ops-treatment-correction]')
+                    treatment.get_by_role('button', name='CORRECT RECORDED TREATMENT').click()
+                    expect(treatment.locator('[name="correction_reason"]')).to_have_count(0)
+                    treatment.locator('[name="pass1_start"]').fill('22:11')
+                    treatment.locator('[name="pass1_end"]').fill('22:16')
+                    case.submit(page, treatment.get_by_role('button', name='SAVE', exact=True))
+                    expect(treatment.locator('[name="pass1_start"]')).to_have_value('22:11')
+                    expect(treatment.locator('[name="pass1_end"]')).to_have_value('22:16')
+                    expect(row).to_have_attribute('data-status', 'radio-pending' if stage == 'clear' else 'fin')
                 count = len(posts)
+                if stage == 'planned':
+                    cancel = True
+                    control.click()
+                    cancel = False
+                    expect(control).to_be_visible()
+                    self.assertEqual(len(posts), count)
                 case.submit(page, control)
                 self.assertEqual(len(posts), count + 1)
                 expected = 'gone' if stage == 'departed' else 'untreated'
@@ -105,7 +128,8 @@ class DispatchResetBrowserTest(unittest.TestCase):
                     tv_plane = ducc.locator('.ucc-tv-wallboard .ucc-tv-stands .ucc-tv-plane[aria-label*="N777UP"]')
                     expect(tv_plane).to_be_visible()
                     ducc.close()
-        self.assertEqual(len(reasons), 9)
+        # One draft discard, one cancelled RESET and nine confirmed RESETs.
+        self.assertEqual(dialogs, ['confirm'] * 11)
 
     def test_chromium_desktop(self):
         self.exercise('chromium', 1366)

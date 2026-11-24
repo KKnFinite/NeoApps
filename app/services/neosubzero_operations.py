@@ -99,7 +99,7 @@ def operations_context(gateway, operation, mode):
                 'surface': SURFACE_LABELS.get(surfaces[number-1]) if len(types) >= number else None})
         row['detail_key'] = f"{mode}:{mission.id}:{row['tail']}:{getattr(event if mode == 'outbound' else row.get('state'), 'id', 0)}"
     def order(row):
-        group=(2 if row['visual_state']=='gone' else 1 if row['visual_state']=='radio-pending' else 0) if mode=='outbound' else 0
+        group = {'radio-pending': 0, 'gone': 2}.get(row['visual_state'], 1) if mode == 'outbound' else 0
         event=row.get('event')
         timestamp=getattr(event,'radio_completed_at_utc',None) or getattr(event,'cleared_at_utc',None) or row.get('block_out_at_utc')
         return (group, datetime.max-(timestamp or datetime.min) if group==2 else timedelta(0),

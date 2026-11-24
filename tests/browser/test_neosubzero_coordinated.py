@@ -135,7 +135,6 @@ class CoordinatedDuccBrowserTest(unittest.TestCase):
             self.assertEqual(pad.locator('.ucc-plane-icon').evaluate('e=>getComputedStyle(e).color'),'rgb(240, 45, 159)')
             self.assertEqual(pad.locator('.ucc-plane').evaluate('e=>getComputedStyle(e).backgroundColor'),'rgb(9, 23, 33)')
             detail.locator('.subzero-undo-clear summary').click()
-            detail.locator('.subzero-undo-clear [name="correction_reason"]').fill('Mistaken CLEAR during synthetic verification')
             ops.OperationsBrowserTest.submit(case, coordinator, detail.locator('button[value="undo_clear"]'))
             expect(pad.locator('.state-finished')).to_be_visible(timeout=10000)
             ops.OperationsBrowserTest.submit(case, coordinator, detail.locator('button[value="clear"]'))

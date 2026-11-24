@@ -242,9 +242,9 @@ class PadAndUndoTest(unittest.TestCase):
         self.assertIsNone(r.ramp()['pad'])
         self.assertEqual(len(r.ramp()['waiting_queue']),4)
 
-    def test_undo_clear_requires_reason_current_identity_and_pending_readback(self):
+    def test_undo_clear_requires_current_identity_and_pending_readback(self):
         r=self.r;event=r.finish();r.mutate(r.f.alpha,'clear')
-        for values in ({},{'correction_reason':'reason','expected_version':'stale'}, {'correction_reason':'reason','physical_tail':'FOREIGN'}, {'correction_reason':'reason','operation_id':-1}):
+        for values in ({'correction_reason':'reason','expected_version':'stale'}, {'correction_reason':'reason','physical_tail':'FOREIGN'}, {'correction_reason':'reason','operation_id':-1}):
             with self.subTest(values=values):self.assertEqual(r.post(event,'undo_clear',**values).status_code,409)
         self.assertEqual(r.post(event,'radio_complete').status_code,200)
         stamp=event.radio_completed_at_utc

@@ -95,7 +95,6 @@
     {% if row.radio_pending and corrections and user_can('neosubzero.coordinator.edit') %}
     <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-confirm="Undo CLEAR and preserve the recorded spray?">
         {{ mutation_identity(row, board, row.ramp) }}
-        <label>Correction reason<input name="correction_reason" maxlength="500" required></label>
         <button name="action" value="undo_clear">UNDO CLEAR</button>
     </form>
     {% endif %}

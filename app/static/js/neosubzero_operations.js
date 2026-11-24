@@ -51,8 +51,7 @@
         }
     };
     const queuePretreat = form => {
-        const correction = form.elements.correction_reason;
-        if (form.dataset.opsCompleted === 'true' || correction?.value.trim() ||
+        if (form.dataset.opsCompleted === 'true' || form.querySelector('[data-ops-participant-correction]:not([hidden])') ||
             (form.matches('[data-ops-new-participant]') && !form.elements.truck_number.value)) return;
         pendingPretreat.add(form);
         setTimeout(drainPretreat,0);
@@ -90,9 +89,9 @@
                 const end = form.elements['pass' + number + '_end'];
                 return end?.defaultValue && (start.value !== start.defaultValue || end.value !== end.defaultValue);
             });
-            if (endedPassChanged) {
+            if (isPretreat && endedPassChanged) {
                 form.querySelector('[data-ops-disclosure="correction"]')?.setAttribute('open','');
-                inlineMessage(inlineFor(form), 'Enter a correction reason and apply the audited correction. Your draft is kept.', true);
+                inlineMessage(inlineFor(form), 'Select Apply correction to save the recorded times.', false);
                 continue;
             }
             form.requestSubmit();
@@ -127,6 +126,7 @@
         for (const content of draftContents()) {
             const forms = [...content.querySelectorAll('form[data-dirty="true"]')].map(form => ({
                 key: formKey(form), unlocked: form.dataset.unlocked,
+                confirmParticipant: !!form.querySelector('[data-ops-participant-correction]:not([hidden])'),
                 fields: [...form.elements].filter(e => e.name && e.name !== 'csrf_token' && !['submit', 'button'].includes(e.type)).map(e => ({name:e.name, value:e.value, checked:e.checked}))
             }));
             const discard = content.querySelector('[data-ops-discard-draft]');
@@ -144,10 +144,8 @@
         if (form.matches('[data-subzero-deice-form]')) {
             if (!form.dataset.unlocked) form.dataset.unlocked = form.dataset.locked === 'true' ? 'false' : 'true';
             shared.syncForm(form);
-            const correction = form.querySelector('[data-ops-correction-field]');
-            if (correction) {
+            if (form.matches('[data-ops-treatment-correction]')) {
                 const unlocked = form.dataset.unlocked === 'true';
-                correction.hidden = !unlocked;
                 form.querySelector('[data-subzero-edit]').hidden = unlocked;
                 form.querySelector('button[type="submit"]').hidden = !unlocked;
             }
@@ -163,9 +161,6 @@
             const save = form.querySelector('[data-ops-apply-correction]');
             if (edit) edit.hidden = unlocked;
             if (save) save.hidden = !unlocked;
-            if (form.elements.correction_reason) {
-                form.elements.correction_reason.disabled = !unlocked;
-            }
         }
     };
     const initialize = (restore = false, onlyFresh = false) => {
@@ -205,13 +200,10 @@
                     if (['checkbox', 'radio'].includes(field.type)) field.checked = saved.checked;
                 });
                 form.dataset.dirty = 'true'; sync(form);
+                if (draft.confirmParticipant) form.querySelector('[data-ops-participant-correction]')?.removeAttribute('hidden');
                 if (form.matches('[data-ops-new-participant]')) {
                     form.hidden = false;
                     form.parentElement.querySelector('[data-ops-add-participant]').hidden = true;
-                }
-                if (form.matches('.ops-pretreat-participant') && form.elements.correction_reason?.value) {
-                    form.querySelector('[data-ops-participant-correction]').hidden = false;
-                    form.elements.correction_reason.disabled = false;
                 }
                 const disclosure = form.closest('[data-ops-disclosure]');
                 if (disclosure) disclosure.open = true;
@@ -645,7 +637,7 @@
             const inline = inlineFor(correct);
             const section = inline.querySelector('[data-ops-disclosure="correction"]');
             section.open = true;
-            section.querySelector('[data-subzero-edit]:not([hidden]), input[name="correction_reason"]:not([disabled])')?.focus();
+            section.querySelector('[data-subzero-edit]:not([hidden]), [data-ops-apply-correction]:not([hidden])')?.focus();
             return;
         }
         const inspection = event.target.closest('[data-open-frost-inspection]');
@@ -718,10 +710,7 @@
             if (inline) {
                 form.dataset.dirty = 'true';
                 saveDraft();
-                const correction = form.elements.correction_reason;
-                if (correction) form.querySelector('[data-ops-disclosure="notes"]')?.setAttribute('open','');
-                if (isPretreat && correction) form.querySelector('[data-ops-disclosure="correction"]').open = true;
-                correction?.focus();
+                form.querySelector('input[data-clock-time]:not([readonly])')?.focus();
             }
             const editor = inline || form;
             editor.querySelectorAll('[data-subzero-spray-control]').forEach(e => {e.readOnly=e.dataset.sprayReady==='false';});
@@ -760,10 +749,6 @@
         if (confirmation && !window.confirm(confirmation)) return;
         const inline = inlineFor(form);
         const autosave = form.matches(autosaveSelector) && !event.submitter;
-        if (form.matches(autosaveSelector) && !autosave && !form.elements.correction_reason?.value.trim()) {
-            inlineMessage(inline, 'Enter a correction reason before applying changes.', true);
-            return;
-        }
         const sentValues = autosave ? autosaveValues(form) : null;
         const body = new FormData(form), content = inline;
         if (event.submitter?.name) body.set(event.submitter.name,event.submitter.value);
@@ -773,17 +758,10 @@
                 notify('Treatment changed. Reload this aircraft before resetting.', true);
                 return;
             }
-            const reason = window.prompt('Reason for resetting ' + form.dataset.opsReset + ' (required, up to 500 characters):');
-            if (reason === null) return;
-            if (!reason.trim() || reason.trim().length > 500) {
-                notify('Enter a correction reason of 1–500 characters.', true);
-                return;
-            }
             const departure = form.dataset.departed === '1' ? ' The recorded flight departure remains in effect.' : '';
             if (!window.confirm('Reset departure deice for ' + form.dataset.opsReset +
                 '? This supersedes the recorded event, retains its history and discards unsaved edits for this aircraft.' + departure)) return;
             body.set('confirm_reset','1');
-            body.set('correction_reason',reason.trim());
             // Keep any unsent edits local if this correction is rejected.
             for (const draft of inline.querySelectorAll('form[data-dirty="true"]')) pendingPretreat.delete(draft);
         }
@@ -881,8 +859,8 @@
                 inlineMessage(inline, message, true);
                 if (correctionRequired) {
                     form.querySelector('[data-ops-participant-correction]').hidden = false;
-                    form.elements.correction_reason.disabled = false;
-                    form.elements.correction_reason.focus({preventScroll:true});
+                    saveDraft();
+                    form.querySelector('[data-ops-save-participant-correction]').focus({preventScroll:true});
                 } else if (autosave && !saved && !message.includes('changed')) {
                     const retry = inline.querySelector('[data-ops-pretreat-retry]');
                     if (retry) retry.hidden = false;

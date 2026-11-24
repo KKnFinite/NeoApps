@@ -142,11 +142,8 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         self.assertEqual(state.pass2_surface_area, "wings_tail")
         self.assertEqual(state.pass2_plan, "type_iv")
         self.assertTrue(pretreat_context(self.gateway, self.operation)["rows"][0]["completed"])
-        with self.assertRaisesRegex(NeoSubZeroPretreatError, "correcting completed"):
-            mutate_pretreat(self.operation, self.departure, "save_treatment", {**values, "pass2_end": "00:01"}, state)
-        mutate_pretreat(self.operation, self.departure, "save_treatment", {
-            **values, "pass2_end": "00:01", "correction_reason": "Verified recorded end time"
-        }, state)
+        mutate_pretreat(self.operation, self.departure, "save_treatment", {**values, "pass2_end": "00:01"}, state)
+        self.assertEqual(state.pass2_ended_at_utc, _parse_hhmm("00:01", self.operation, self.departure))
         self.assertEqual(state.configured_at_utc, config)
         self.assertEqual(state.pass_evidence["1"]["surface"], "wings_only")
 
