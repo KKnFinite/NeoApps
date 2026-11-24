@@ -1,5 +1,6 @@
 """Physical segment concurrency proof in an isolated disposable PostgreSQL schema."""
 import os
+import json
 import re
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -406,7 +407,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
             NeoScorpionFuelWorkState.off_at_utc.is_(None)).all()
         self.assertEqual(len(active),1)
 
-    def test_overlapping_sort_requests_cannot_double_occupy_one_truck(self):
+    def test_distinct_sorts_can_start_the_same_truck_independently(self):
         self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit_current()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
         service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected,separate_visit_confirmed=True)
@@ -429,17 +430,83 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
             return db.session.get(service.SortDateOperation,bound.operation_id)
         def press(index,g,f,d):
             bound.operation_id=operation_ids[index]
-            try:
-                return service.confirm_fueler_truck_on(g,f if index==0 else d,assignment_ids[index],
-                    expected_cycle=1,expected_tail="N491UP" if index==0 else "N492UP",expected_truck_id=truck_id)[0]
-            except ValueError as error:
-                if "TRUCK STILL FUELING" not in str(error): raise
-                db.session.rollback()  # No partial ON from the rejected start.
-                return "busy"
+            return service.confirm_fueler_truck_on(g,f if index==0 else d,assignment_ids[index],
+                expected_cycle=1,expected_tail="N491UP" if index==0 else "N492UP",expected_truck_id=truck_id)[0]
         with patch.object(service,"current_sort_operation",side_effect=operation):
             result=self.concurrent(press)
-        self.assertEqual(result.count(True),1)
-        self.assertEqual(result.count("busy"),1)
+        self.assertEqual(result, [True, True])
         self.assertEqual(NeoScorpionFuelWorkState.query.filter(
             NeoScorpionFuelWorkState.physical_truck_id==truck_id,
-            NeoScorpionFuelWorkState.manual_on_at_utc.is_not(None),NeoScorpionFuelWorkState.off_at_utc.is_(None)).count(),1)
+            NeoScorpionFuelWorkState.manual_on_at_utc.is_not(None),NeoScorpionFuelWorkState.off_at_utc.is_(None)).count(),2)
+
+    def _next_sort_assignment(self):
+        operation = service.SortDateOperation(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+            sort_date=self.operation.sort_date + timedelta(days=1), sort_name="night", window_minutes=60)
+        db.session.add(operation)
+        db.session.flush()
+        mission = self.fixture._mission("UPS902", "N492UP", 25000, 2)
+        mission.sort_date_operation_id = operation.id
+        mission.sort_date = operation.sort_date
+        assignment = self.fixture._assignment(mission, truck=self.truck)
+        assignment.sort_date_operation_id = operation.id
+        assignment.assigned_fueler_user_id = self.fueler.id
+        db.session.add(NeoScorpionSortTruck(sort_date_operation_id=operation.id, fuel_truck_id=self.truck.id,
+            status="available", starting_gallons=10000, current_gallons=10000))
+        db.session.commit()
+        return operation, mission, assignment
+
+    def test_new_sort_ignores_unfinished_on_without_rewriting_history(self):
+        from app.services.neoscorpion_inventory import verification_available
+        operation, mission, assignment = self._next_sort_assignment()
+        def history():
+            return (db.session.execute(db.select(*NeoScorpionFuelWorkState.__table__.columns)
+                        .where(NeoScorpionFuelWorkState.id == self.work.id)).one(),
+                    db.session.execute(db.select(*service.NeoScorpionFuelAuditEntry.__table__.columns)
+                        .where(service.NeoScorpionFuelAuditEntry.sort_date_operation_id == self.operation.id)
+                        .order_by(service.NeoScorpionFuelAuditEntry.id)).all())
+        original = history()
+        with patch.object(service, "current_sort_operation", return_value=operation):
+            for archived in (False, True):
+                with self.subTest(archived=archived):
+                    db.session.rollback()
+                    self.operation.archived_at_utc = self.start if archived else None
+                    db.session.commit()
+                    self.assertTrue(verification_available(operation, self.truck.id))
+                    changed, _, work = service.confirm_fueler_truck_on(self.gateway, self.fueler, assignment.id,
+                        expected_cycle=1, expected_tail=mission.assigned_tail_number, expected_truck_id=self.truck.id)
+                    self.assertTrue(changed)
+                    self.assertFalse(verification_available(operation, self.truck.id))
+                    self.assertTrue(service.mark_fueler_off(self.gateway, self.fueler, assignment.id).changed)
+                    self.assertEqual(work.off_by_user_id, self.fueler.id)
+                    self.assertEqual(history(), original)
+                    db.session.rollback()  # Exercise the same fresh Sort against both historical states.
+
+    def test_dispatcher_preview_checks_authority_and_snapshot_and_records_real_actor(self):
+        operation, mission, assignment = self._next_sort_assignment()
+        path = f'/neoscorpion/fuel-dispatch/fueler-data/{assignment.id}'
+        with patch.object(service, 'current_sort_operation', return_value=operation):
+            def expected():
+                return service.fueler_context(self.gateway, self.dispatcher, dispatcher=True,
+                    assignment_id=assignment.id)['rows'][0]['edit_baseline']
+            baseline = expected()
+            form = dict(expected_cycle='1', expected_tail=mission.assigned_tail_number,
+                        expected_truck_id=str(self.truck.id), expected_work_ref='', expected=json.dumps(baseline))
+            watcher = self.fixture._login_user('preview-watcher', 'watcher')
+            self.login(watcher)
+            self.assertEqual(self.client.post(path+'/on', data=form).status_code, 403)
+            self.assertEqual(self.client.post(path+'/off', data=form).status_code, 403)
+            self.login(self.dispatcher)
+            stale = dict(baseline, assigned_fueler_user_id=self.dispatcher.id)
+            self.assertEqual(self.client.post(path+'/on', data=dict(form, expected=json.dumps(stale))).status_code, 409)
+            self.assertIsNone(assignment.active_work_state_id)
+            self.assertEqual(self.client.post(path+'/on', data=form).status_code, 200)
+            work = db.session.get(NeoScorpionFuelWorkState, assignment.active_work_state_id)
+            self.assertEqual(work.manual_on_by_user_id, self.dispatcher.id)
+            self.assertEqual(work.physical_fueler_user_id, self.fueler.id)
+            audit = service.NeoScorpionFuelAuditEntry.query.filter_by(action='truck_on',fuel_work_state_id=work.id).one()
+            self.assertEqual(audit.changed_by_user_id, self.dispatcher.id)
+            self.assertIn('Dispatcher', audit.reason)
+            self.assertEqual(self.client.post(path+'/off', data=form).status_code, 409)
+            self.assertEqual(self.client.post(path+'/off', data={'expected':json.dumps(expected())}).status_code, 200)
+            self.assertEqual(work.off_by_user_id, self.dispatcher.id)
+            self.assertIsNone(self.work.off_at_utc)

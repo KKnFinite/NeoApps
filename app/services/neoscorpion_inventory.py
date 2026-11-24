@@ -32,7 +32,9 @@ def truck_works(operation, truck_id):
 
 def physical_interval(operation, truck_id):
     works = truck_works(operation, truck_id).all()
-    active = NeoScorpionFuelWorkState.query.filter(
+    active = NeoScorpionFuelWorkState.query.join(NeoScorpionFuelAssignment,
+        NeoScorpionFuelAssignment.id == NeoScorpionFuelWorkState.fuel_assignment_id).filter(
+        NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
         NeoScorpionFuelWorkState.physical_truck_id==truck_id,
         NeoScorpionFuelWorkState.off_at_utc.is_(None),
         NeoScorpionFuelWorkState.ended_early_at_utc.is_(None),

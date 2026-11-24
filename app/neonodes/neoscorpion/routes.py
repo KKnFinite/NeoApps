@@ -1193,14 +1193,13 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
                 expected=_fueler_expected(form,required=True),dispatcher=dispatcher,
                 separate_visit_confirmed=form.get('separate_visit_confirmed') == '1')
         elif truck_on:
-            if dispatcher:
-                raise ValueError("Only the assigned Fueler can confirm TRUCK ON.")
             changed, revision, _work = confirm_fueler_truck_on(
                 gateway, current_user, assignment_id,
                 expected_cycle=form.get("expected_cycle"),
                 expected_tail=form.get("expected_tail"),
                 expected_truck_id=form.get("expected_truck_id"),
                 expected_work_ref=form.get("expected_work_ref"), require_work_ref=True,
+                dispatcher=dispatcher, expected=_fueler_expected(form,required=True) if dispatcher else None,
                 resume_off_at=form.get("resume_off_at",request.args.get('resume_off_at')),
             )
             result = SimpleNamespace(changed=changed, revision=revision, fuel_work_state=_work)
@@ -1354,6 +1353,12 @@ def dispatch_direct_entry(mission_id):
             direct_entry_url=url_for('neoscorpion.dispatch_direct_entry', mission_id=mission_id),
             direct_entry_token=direct.token_for(operation,row['mission'],current_user) if not record else '',
             direct_completed_time=format_local_hhmm(record.completed_at_utc,gateway_timezone(gateway)) if record else '')})
+
+
+@bp.post("/fuel-dispatch/fueler-data/<int:assignment_id>/on")
+@gateway_node_required("scorpion")
+def dispatch_fueler_on(assignment_id):
+    return _fuel_data_request(assignment_id, dispatcher=True, truck_on=True)
 
 
 @bp.post("/fuel-dispatch/fueler-data/<int:assignment_id>/off")
