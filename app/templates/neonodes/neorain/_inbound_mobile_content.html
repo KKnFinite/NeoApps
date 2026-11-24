@@ -59,7 +59,7 @@
             <span role="columnheader">TAIL</span>
             <span role="columnheader">ORIGIN</span>
             <span role="columnheader">PARKING</span>
-            <span role="columnheader">ETA</span>
+            <span role="columnheader">STA/ETA</span>
             <span role="columnheader">BLOCK-IN</span>
             <span role="columnheader">+/-</span>
         </div>
@@ -70,7 +70,7 @@
             <div class="neorain-mobile-mission-grid" role="row">
                 <div role="cell"><button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-label="{{ row.flight_number }} DETAILS" aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button></div>
                 <span role="cell">{{ row.tail or '-' }}</span><span role="cell">{{ row.origin or '-' }}</span>
-                <span role="cell">{{ row.parking or '-' }}</span><span role="cell">{{ row.eta or '—' }}</span>
+                <span role="cell">{{ row.parking or '-' }}</span><span role="cell" data-arrival-mobile-clock aria-label="{{ 'STA' if row.block_in else 'ETA' }}">{{ (row.sta if row.block_in else row.eta) or '—' }}</span>
                 <div role="cell">{{ block_in_control(row) }}</div>
                 <span role="cell" data-neorain-display="arrival_variance">{{ row.arrival_variance }}</span>
             </div>
@@ -82,7 +82,7 @@
                     <div><dt>ORIGIN</dt><dd>{{ row.origin or '-' }}</dd></div>
                     <div><dt>PARKING</dt><dd>{{ row.parking or '-' }}</dd></div>
                     <div><dt>STA</dt><dd>{{ rain_time(row, 'sta', 'STA', row.sta) }}</dd></div>
-                    <div><dt>ETA</dt><dd>{{ row.eta or '—' }}</dd></div>
+                    <div data-arrival-eta {% if row.block_in %}hidden{% endif %}><dt>ETA</dt><dd>{{ row.eta or '—' }}</dd></div>
                     <div><dt>BLOCK-IN</dt><dd data-neorain-display="block_in">{{ row.block_in or '-' }}</dd></div>
                     <div><dt>+/-</dt><dd data-neorain-display="arrival_variance">{{ row.arrival_variance }}</dd></div>
                     <div><dt>INCLUSION</dt><dd>{{ inclusion_control(row) }}</dd></div>

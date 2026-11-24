@@ -1,11 +1,11 @@
 {% if operation and can_edit %}
 <details class="neorain-mission-tools">
   <summary>FLIGHT / TAIL TOOLS</summary>
-  <a class="neorain-add-flight" href="{{ url_for('neorain.mission_new', board='inbound' if request.endpoint == 'neorain.inbound' else 'outbound') }}">{{ 'ADD ARRIVAL' if request.endpoint == 'neorain.inbound' else 'ADD DEPARTURE' }}</a>
-  {% for mission in operation.missions if mission.mission_source == 'manual' and not mission.master_flight_schedule_id and mission.mission_type == ('arrival' if request.endpoint == 'neorain.inbound' else 'departure') %}
+  <a class="neorain-add-flight" href="{{ url_for('neorain.mission_new', board='inbound' if board == 'inbound' else 'outbound') }}">{{ 'ADD ARRIVAL' if board == 'inbound' else 'ADD DEPARTURE' }}</a>
+  {% for mission in operation.missions if mission.mission_source == 'manual' and not mission.master_flight_schedule_id and mission.mission_type == ('arrival' if board == 'inbound' else 'departure') %}
   <a class="neorain-add-flight" href="{{ url_for('neorain.mission_edit', board='inbound' if mission.mission_type == 'arrival' else 'outbound', mission_id=mission.id) }}">EDIT {{ mission.flight_number }}</a>
   {% endfor %}
-  {% if request.endpoint == 'neorain.outbound' %}
+  {% if board == 'outbound' %}
   <form method="post" action="{{ url_for('neorain.tail_action') }}">
     <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="action" value="add_spare">
     <label>Spare tail <input name="tail_number" required maxlength="32"></label>

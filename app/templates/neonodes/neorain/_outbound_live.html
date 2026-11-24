@@ -1,0 +1,12 @@
+    <div id="neorain-board-support" class="neorain-board-support" data-neorain-board-support>
+    {% include 'neonodes/neorain/_mission_tools.html' %}
+    <section class="neorain-outbound-late-summary" aria-label="Outbound aircraft statistics" data-neorain-late-summary>
+        <div><strong>1ST WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="first_wave.aircraft_late">{{ late_summary.first_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="first_wave.late_minutes">{{ late_summary.first_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="first_wave.average">{{ late_summary.first_wave.average }}</output></span></div>
+        <div><strong>2ND WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="second_wave.aircraft_late">{{ late_summary.second_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="second_wave.late_minutes">{{ late_summary.second_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="second_wave.average">{{ late_summary.second_wave.average }}</output></span></div>
+        <div data-neorain-summary-total><strong>TOTAL</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="total.aircraft_late">{{ late_summary.total.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="total.late_minutes">{{ late_summary.total.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="total.average">{{ late_summary.total.average }}</output></span></div>
+    </section>
+    </div>
+    {% include "neonodes/neorain/_override_reset_tools.html" %}
+    <div class="neorain-board-content" data-neorain-outbound-content>
+        {% include "neonodes/neorain/_outbound_content.html" %}
+    </div>

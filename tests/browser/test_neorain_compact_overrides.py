@@ -42,6 +42,9 @@ class CompactRainBrowserTest(unittest.TestCase):
             _, cls.sort_time = configure_sort_window(gateway, operation.sort_date)
             cls.fixture.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = cls.sort_time
         cls.stack = ExitStack()
+        # Token issuance and expiry use the same instant as the simulated open Sort.
+        csrf_time = cls.stack.enter_context(patch("app.services.csrf.time"))
+        csrf_time.time.return_value = cls.sort_time.replace(tzinfo=ZoneInfo("America/Chicago")).timestamp()
         cls.stack.enter_context(patch('app.neonodes.neorain.routes.current_neorain_outbound_operation',
             side_effect=lambda gateway: db.session.get(SortDateOperation, cls.operation_id)))
 
@@ -254,11 +257,13 @@ class CompactRainBrowserTest(unittest.TestCase):
                                 self.input(page, field).fill('')
                                 page.wait_for_timeout(200)
                                 self.assertEqual(len(posts), before)
+                                old_revision = page.locator('[data-neorain-board-page]').get_attribute(f'data-{board}-revision')
                                 page.evaluate('window.rainOriginalDocument = true')
                                 result = self.save(page, field, '1234')
                                 self.assertEqual(result['value'], '12:34')
                                 expect(self.input(page, field)).to_have_value('12:34')
-                                page.wait_for_function('!window.rainOriginalDocument', timeout=20000)
+                                expect(page.locator('[data-neorain-board-page]')).not_to_have_attribute(f'data-{board}-revision',old_revision,timeout=20000)
+                                self.assertTrue(page.evaluate('window.rainOriginalDocument'))
                                 self.assert_compact(page, board)
                                 expect(self.input(page, field)).to_have_value('12:34')
                                 self.reset(page, field)
