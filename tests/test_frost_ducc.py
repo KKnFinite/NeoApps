@@ -54,7 +54,7 @@ class DuccDisplayTest(TestCase):
             before=Task.query.count()
             version,hours=display.project(self.gateway,now=AT+timedelta(minutes=1))
             self.assertEqual(len(hours),4)
-            self.assertTrue(all(v['text']=='FROST 12% / 34%' for v in hours.values()))
+            self.assertTrue(all(v['text']=='Treatment reason (FROST) 12% / 34%' for v in hours.values()))
             self.assertEqual(version,display.revision(self.gateway,now=AT+timedelta(minutes=1)))
             self.assertEqual(Task.query.count(),before)
             self.assertFalse(db.session.dirty)
@@ -90,7 +90,7 @@ class DuccDisplayTest(TestCase):
         payload['predictions'][1].update(state='UNAVAILABLE',score=None)
         store_capture(self.gateway.id,predictions=payload['predictions'])
         _,hours=display.project(self.gateway,now=AT+timedelta(minutes=1))
-        self.assertEqual(hours[AT.replace(minute=0)]['text'],'FROST 12% / —')
+        self.assertEqual(hours[AT.replace(minute=0)]['text'],'Treatment reason (FROST) 12% / —')
         self.assertIn('H0 logistic 12%',hours[AT.replace(minute=0)]['accessible'])
 
     def test_legacy_archive_is_verified_once_bounded_and_not_read_by_revision_or_off(self):
@@ -124,7 +124,7 @@ class DuccDisplayTest(TestCase):
             dict(start=AT+timedelta(hours=2),condition='Snow',temperature='29°F')])]
         display.decorate(cards,hours)
         self.assertEqual(cards[0]['hours'][0]['condition'],'Clear')
-        self.assertEqual(cards[0]['hours'][0]['frost_predictions']['text'],'FROST 12% / 34%')
+        self.assertEqual(cards[0]['hours'][0]['frost_predictions']['text'],'Treatment reason (FROST) 12% / 34%')
         self.assertNotIn('frost_predictions',cards[0]['hours'][1])
         self.assertNotEqual(version,display.revision(self.gateway,now=AT+timedelta(hours=1)))
 
@@ -153,7 +153,7 @@ class DuccDisplayTest(TestCase):
         now=AT+timedelta(hours=6,minutes=40)
         _,hours=display.project(self.gateway,now=now)
         target=(cutoff+timedelta(hours=6)).replace(minute=0)
-        self.assertEqual(hours[target]['text'],'FROST 12% / 34%')
+        self.assertEqual(hours[target]['text'],'Treatment reason (FROST) 12% / 34%')
 
     def test_configured_forecast_and_live_refresh_need_no_operational_sort_record(self):
         from datetime import time

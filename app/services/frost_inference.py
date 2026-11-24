@@ -43,14 +43,21 @@ def normalize_metars(rows):
     result=[]
     for row in rows:
         if row.get('icaoId')!='KRFD':raise ValueError('Current observation station is not verified KRFD.')
-        at=row.get('reportTime')
-        if not at:continue
-        at=datetime.fromisoformat(at.replace('Z','+00:00'))
-        if at.tzinfo is None:continue
+        if row.get('obsTime') is not None:
+            at=datetime.fromtimestamp(model.finite(row['obsTime']),tz=timezone.utc)
+        else:
+            at=row.get('reportTime')
+            if not at:continue
+            at=datetime.fromisoformat(at.replace('Z','+00:00'))
+            if at.tzinfo is None:continue
         t,d=model.finite(row.get('temp')),model.finite(row.get('dewp'))
         wind=model.finite(row.get('wspd'))
         clouds=row.get('clouds') or []
         covers=[c.get('cover') for c in clouds if c.get('cover')]
+        # AWC can report an explicit sky condition without a layer or base.
+        # It counts as sky coverage, but supplies no measured ceiling height.
+        if not covers and row.get('cover') in ('CLR','SKC','NSC','NCD','FEW','SCT','BKN','OVC','VV'):
+            covers=[row['cover']]
         ceilings=[model.finite(c.get('base')) for c in clouds if c.get('cover') in ('BKN','OVC','VV') and c.get('base') is not None]
         visibility=row.get('visib')
         try:visibility=float(visibility) if visibility is not None and '+' not in str(visibility) else None
