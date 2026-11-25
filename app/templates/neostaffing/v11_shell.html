@@ -39,7 +39,7 @@
 </a>
 {% endmacro %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION, rev='sidebar-brand-size') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_v11.css', v=config.STATIC_ASSET_VERSION, rev='30f4b2a89f98') }}">
 <div class="v11-app" data-staffing-v11>
     <aside class="v11-sidebar">
         {{ workspace_brand() }}
@@ -64,6 +64,9 @@
         <header class="v11-top">
             {{ workspace_brand(mobile=true) }}
             <div class="v11-breadcrumb"><a href="{{ url_for('auth.portal_dashboard') }}">NeoApps</a><span aria-hidden="true">›</span><a href="{{ url_for('neostaffing.index') }}">NeoStaffing</a><span aria-hidden="true">›</span><strong>{{ workspace_titles.get(request.endpoint, 'Menu') }}</strong></div>
+            {% with character_switcher_modifier="character-switcher-header operational-character-switcher", character_switcher_use_neofont=true, character_switcher_current=true %}
+                {% include "_change_characters.html" %}
+            {% endwith %}
             <form class="v11-scope" method="post" action="{{ url_for('neostaffing.save_workspace_scope') }}">
                 {% if workspace_scope.operation %}<span class="v11-sort-chip">{{ workspace_scope.operation.sort_date.strftime('%a %b %d') }} · {{ workspace_scope.operation.sort_name|title }} Sort</span>{% endif %}
                 {{ csrf_field() }}<input type="hidden" name="endpoint" value="{{ request.endpoint }}">

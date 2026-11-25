@@ -1,6 +1,10 @@
 /* Shared shell owns primary navigation; page grids only own their content. */
-body.blueprint-neostaffing.operational-shell-page { --node-primary:#39b8af; --node-primary-rgb:57,184,175; }
-.blueprint-neostaffing .operational-desktop-sidebar a[aria-current="page"] { border-color:#55bcb6; background:#173330; }
+body.blueprint-neostaffing.operational-shell-page {
+  --node-primary:#39b8af;
+  --node-primary-rgb:57,184,175;
+  --shell-active-background:#173330;
+  --shell-active-border:#55bcb6;
+}
 .blueprint-neostaffing .staffing-secondary { margin:0 0 16px; padding:12px; background:#10171d; border:1px solid #33434d; border-radius:6px; min-width:0; }
 .staffing-secondary-context { color:#b8cbd1; font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
 .staffing-secondary :is(nav,form,[data-staffing-secondary-nav]) { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; margin:0; }
