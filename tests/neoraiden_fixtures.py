@@ -5,9 +5,57 @@ from app.extensions import db
 from app.models import (
     NeoSektorBallmatCount, NeoSektorBallmatWaveCount, NeoSektorOpenBayState,
     NeoSektorSortState, NeoSektorWaveState, NeoSubZeroDepartureDeiceEvent,
+    NeoScorpionFuelAssignment, NeoScorpionFuelTankState, NeoScorpionFuelTruck,
+    NeoScorpionFuelWorkState, NeoScorpionFuelingEvent,
     SortDateMission, StaffingDailyAttendance, StaffingPerson, StaffingUnit,
 )
 from tests.test_neoraiden import seed_sort
+
+
+def record_departure_milestones(operation):
+    row = SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
+    complete = row.filter_by(flight_number="FX101").one()
+    fob = row.filter_by(flight_number="FX202").one()
+    truck = NeoScorpionFuelTruck(gateway_id=operation.gateway_id, truck_number="82")
+    db.session.add(truck)
+    for mission, tail in ((complete, "N431UP"), (fob, "N432UP")):
+        mission.assigned_tail_number = tail
+        mission.wave = "1"
+        mission.planned_fuel_load = 40000
+        mission.fuel_status = "complete"
+    complete.planned_datetime_utc = datetime(2026, 4, 13, 6)
+    complete.actual_block_out_datetime_utc = datetime(2026, 4, 13, 6, 9)
+    complete.ramp_load_completed_at_utc = datetime(2026, 4, 13, 5, 59)
+    complete.crew_load_completed_at_utc = datetime(2026, 4, 13, 6, 2)
+    complete.actual_pure_pull_time_local = datetime(2026, 4, 12, 23, 47).time()
+    complete.actual_mix_pull_time_local = datetime(2026, 4, 13, 0, 57).time()
+    complete.departure_status = "departed"
+    fob.actual_block_out_datetime_utc = datetime(2026, 4, 13, 4, 55)
+    fob.departure_status = "departed"
+    for mission in (complete, fob):
+        assignment = NeoScorpionFuelAssignment(sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission.id, review_status="complete",
+            confirmed_tail_number=mission.assigned_tail_number)
+        if mission is complete:
+            assignment.completed_at_utc = datetime(2026, 4, 13, 5, 35)
+        else:
+            assignment.fuel_on_board_at_utc = datetime(2026, 4, 13, 4, 30)
+            assignment.transfer_fuel_gallons = 0
+        db.session.add(assignment)
+        db.session.flush()
+        work = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id,
+            tail_number=mission.assigned_tail_number, apu_running=False, apu_allowance_lbs=0)
+        db.session.add(work)
+        db.session.flush()
+        assignment.active_work_state_id = work.id
+        if mission is complete:
+            db.session.add(NeoScorpionFuelingEvent(sort_date_operation_id=operation.id,
+                fuel_assignment_id=assignment.id, fuel_work_state_id=work.id, fuel_truck_id=truck.id,
+                sequence_number=1, tail_number=mission.assigned_tail_number, neo_fuel_lbs=45600))
+        else:
+            for code in ("left", "ctr", "right"):
+                db.session.add(NeoScorpionFuelTankState(fuel_work_state_id=work.id, tank_code=code, actual_lbs=15000))
+    db.session.commit()
 
 
 def record_attendance(operation):

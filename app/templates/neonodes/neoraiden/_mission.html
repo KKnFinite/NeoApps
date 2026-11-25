@@ -1,14 +1,31 @@
 {% macro val(v) -%}{{ v if v is not none and v != '' else '—' }}{%- endmacro %}
 {% macro metric(label,v) %}<span>{{ label }} <b>{{ val(v) }}</b></span>{% endmacro %}
+{% macro detail(key, label, value, color='') %}
+<td role="cell" class="rd-extra" data-field="{{ key }}" {% if color %}data-value-color="{{ color }}"{% endif %}>
+  <span class="rd-detail-label">{{ label }}</span><span class="rd-value">{{ val(value) }}</span>
+</td>
+{% endmacro %}
 {% macro mission(m,inbound) %}
 {% set time = (m.actual or m.eta or m.planned) if inbound else (m.etd or m.planned) %}
 {% set clock = ('ACT' if m.actual else 'ETA' if m.eta else 'STA') if inbound else ('ETD' if m.etd else 'STD') %}
-<tr class="rd-mission" data-mission="{{ m.id }}">
-  <th scope="row">{{ val(m.flight) }}</th>
-  <td>{{ val(m.tail) }}</td>
-  <td>{{ val(m.route_label|default(m.route)) }}</td>
-  <td>{{ val(m.parking) }}</td>
-  <td>{% if time %}<small>{{ clock }}</small> {{ time }}{% else %}—{% endif %}</td>
-  <td class="rd-status" data-status="{{ m.status or '' }}">{{ m.status|replace('_',' ') if m.status else '—' }}</td>
+<tr class="rd-mission" role="row" id="rd-mission-{{ m.id }}" data-mission="{{ m.id }}">
+  <th scope="row" role="rowheader"><span class="rd-flight">{{ val(m.flight) }}</span><button type="button" class="rd-flight-toggle"
+      data-mission-details aria-expanded="false" aria-controls="rd-mission-{{ m.id }}" aria-label="Details for {{ m.flight }}">{{ val(m.flight) }}</button></th>
+  <td role="cell">{{ val(m.tail) }}</td>
+  <td role="cell">{{ val(m.route_label|default(m.route)) }}</td>
+  <td role="cell">{{ val(m.parking) }}</td>
+  <td role="cell">{% if time %}<small>{{ clock }}</small> <time class="rd-value">{{ time }}</time>{% else %}—{% endif %}</td>
+  <td role="cell" class="rd-status" data-status="{{ m.status or '' }}">{{ m.status|replace('_',' ') if m.status else '—' }}</td>
+  {% if inbound %}{{ detail('wave','Wave',m.wave) }}{% endif %}
+  {{ detail('variance','+/− minutes',('%+d'|format(m.variance) if m.variance > 0 else m.variance) if m.variance is not none else none,
+      'late' if m.variance is not none and m.variance > 0 else '') }}
+  {% if not inbound %}
+    {{ detail('fuel','Neo Fuel',m.neo_fuel,m.fuel_color) }}
+    {{ detail('pull','Mission Pull',m.mission_pull) }}
+    {{ detail('ramp','Ramp Load Complete',m.ramp|default(none)) }}
+    {{ detail('crew','Crew Load Complete',m.crew|default(none)) }}
+    {{ detail('block','Block Time',m.block|default(none)) }}
+    {{ detail('no-return','No Return','Yes' if m.no_return else none,'no-return' if m.no_return else '') }}
+  {% endif %}
 </tr>
 {% endmacro %}

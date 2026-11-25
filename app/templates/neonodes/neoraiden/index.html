@@ -1,17 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='side-by-side-board') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='f92d42ea8b40') }}">
 <section class="raiden" data-raiden data-theme="dark" aria-label="NeoRaiden — God Mode"
-         data-windows='{{ poll_windows|tojson }}' data-revision="{{ revision }}" data-state="{{ url_for('neoraiden.state', gateway=gateway.code, operation_id=selected_id) }}">
+         data-windows='{{ poll_windows|tojson }}' data-revision="{{ revision }}" data-interval-ms="{{ refresh_interval_ms }}"
+         data-state="{{ url_for('neoraiden.state', gateway=gateway.code, operation_id=selected_id) }}">
     <header class="rd-header">
-        <h1><span>NeoRaiden</span> God Mode</h1>
+        <h1><span class="rd-brand">Neo<span class="rd-wordmark">Raiden</span></span> God Mode</h1>
         <div class="rd-controls">
             <button type="button" data-tv aria-pressed="false">TV Mode</button>
             <button type="button" data-theme-toggle aria-label="Light theme" aria-pressed="false">Light</button>
-            <button type="button" data-refresh>Refresh</button>
-            <details class="rd-settings"><summary aria-label="Refresh settings" title="Refresh settings">⚙</summary>
-                <label>Refresh interval <select data-interval>{% for n in (15,30,60,120,300) %}<option value="{{ n }}"{% if n == 30 %} selected{% endif %}>{{ n }} seconds</option>{% endfor %}</select></label>
-            </details>
         </div>
     </header>
     <div class="rd-context">
@@ -23,6 +20,6 @@
     <p class="rd-tv-notice" role="status" data-tv-notice hidden></p>
     <div data-board>{% include "neonodes/neoraiden/_board.html" %}</div>
 </section>
-<script defer src="{{ url_for('static', filename='js/neoraiden_workspace.js', v=config.STATIC_ASSET_VERSION, rev='side-by-side-board') }}"></script>
-<script defer src="{{ url_for('static', filename='js/neoraiden.js', v=config.STATIC_ASSET_VERSION, rev='20261123-refresh') }}"></script>
+<script defer src="{{ url_for('static', filename='js/neoraiden_workspace.js', v=config.STATIC_ASSET_VERSION, rev='33bb95554b94') }}"></script>
+<script defer src="{{ url_for('static', filename='js/neoraiden.js', v=config.STATIC_ASSET_VERSION, rev='544952ba0097') }}"></script>
 {% endblock %}

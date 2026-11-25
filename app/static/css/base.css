@@ -63,6 +63,11 @@
     --node-rain-primary-rgb: 127, 77, 255;
     --node-rain-secondary-rgb: 199, 166, 74;
     --node-rain-highlight-rgb: 200, 166, 255;
+    /* Approved Raiden icon original, light and deep blue at (389,238) and (364,238). */
+    --node-raiden-primary: #9fc9f9;
+    --node-raiden-primary-rgb: 159, 201, 249;
+    --node-raiden-secondary: #042b58;
+    --node-raiden-secondary-rgb: 4, 43, 88;
     --node-staffing-primary: #24d6c7;
     --node-staffing-secondary: #17313a;
     --node-staffing-highlight: #4db7ff;
@@ -463,13 +468,14 @@ html {
 }
 
 .blueprint-neoraiden,
-.node-raiden {
-    --node-primary: var(--node-rain-highlight);
-    --node-secondary: var(--node-rain-primary);
-    --node-highlight: var(--node-rain-highlight);
-    --node-rgb: var(--node-rain-highlight-rgb);
-    --node-secondary-rgb: var(--node-rain-primary-rgb);
-    --node-highlight-rgb: var(--node-rain-highlight-rgb);
+.node-raiden,
+.gateway-node-raiden {
+    --node-primary: var(--node-raiden-primary);
+    --node-secondary: var(--node-raiden-secondary);
+    --node-highlight: var(--node-raiden-primary);
+    --node-rgb: var(--node-raiden-primary-rgb);
+    --node-secondary-rgb: var(--node-raiden-secondary-rgb);
+    --node-highlight-rgb: var(--node-raiden-primary-rgb);
 }
 
 .blueprint-neostaffing {
@@ -985,7 +991,7 @@ details.character-switcher.operational-character-switcher > summary.character-sw
     text-shadow: none;
 }
 
-.character-switcher-panel .neo-brand .node-word {
+.character-switcher-panel .neo-brand:where(:not(.node-raiden)) .node-word {
     color: color-mix(in srgb, var(--node-primary, var(--text)) 55%, var(--text));
 }
 

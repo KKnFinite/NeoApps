@@ -152,7 +152,8 @@ def scorpion_board_fuel_by_mission(operation, missions):
     rates, limits = scorpion._effective_aircraft_fuel_configuration(operation.gateway_id)
     rows = scorpion._fuel_rows(operation, missions, assignments_by_mission=assignments,
         fuel_work_states_by_assignment_tail=works, status_settings=settings,
-        apu_rates_by_aircraft_type=rates, lateral_imbalance_limits_by_aircraft_type=limits)
+        apu_rates_by_aircraft_type=rates, lateral_imbalance_limits_by_aircraft_type=limits,
+        tail_swap_sources=scorpion._tail_swap_sources_by_work(operation, works))
     finals = completed_scorpion_fuel_by_mission(operation, include_identity=True)
     result = {}
     for row in rows:

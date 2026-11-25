@@ -5,7 +5,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 from app.extensions import db
-from app.models import Gateway, SortDateMission
+from app.models import Gateway, LiveScreenRefreshSetting, SortDateMission
 from tests.browser import test_mobile_drawer as fixtures
 from tests.test_neoraiden import seed_sort
 from tests.test_neorain_sort_refresh import configure_sort_window
@@ -21,6 +21,7 @@ class CommandCenterBrowser(unittest.TestCase):
             op = seed_sort(gateway)
             op_id = op.id
             _, start = configure_sort_window(gateway, op.sort_date)
+            db.session.add(LiveScreenRefreshSetting(gateway_id=gateway.id, screen_key="neoraiden.index", interval_seconds=15))
             start_utc = start.replace(tzinfo=ZoneInfo("America/Chicago")).astimezone(timezone.utc).replace(tzinfo=None)
             changing = SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
                 gateway_code=gateway.code, mission_type="arrival", flight_number="UPS1361",
@@ -45,26 +46,26 @@ class CommandCenterBrowser(unittest.TestCase):
                         page.set_viewport_size(dict(width=width,height=height))
                         launcher = page.get_by_role("link",name="Open NeoRaiden")
                         expect(launcher).to_be_visible()
+                        expect(launcher.locator(".node-word:visible")).to_have_css("color", "rgb(159, 201, 249)")
                         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width+1)
                         page.screenshot(path=evidence / f"launcher-{engine}-{width}.png")
                     page.get_by_role("link",name="Open NeoRaiden").click()
                     expect(page.locator("[data-raiden]")).to_be_visible()
                     page.locator("[data-sort-choice]").select_option(index=1)
                     arrivals = page.locator("#rd-arrivals [data-mission]")
-                    expect(arrivals.locator("th")).to_have_text(["UPS1361", "UPS0927"])
+                    expect(arrivals.locator(".rd-flight")).to_have_text(["UPS1361", "UPS0927"])
                     expect(arrivals.first).to_contain_text("STA 21:55")
                     expect(arrivals.last).to_contain_text("STA 01:00")
-                    page.get_by_label("Refresh settings").click()
-                    page.locator("[data-interval]").select_option("15")
-                    page.get_by_label("Refresh settings").click()
-                    expect(page.locator("[data-countdown]")).to_have_count(0)
+                    expect(page.locator("[data-countdown],[data-refresh],[data-interval]")).to_have_count(0)
+                    expect(page.locator("[data-raiden]")).to_have_attribute("data-interval-ms", "15000")
                     expect(page.locator("[data-refresh-status]")).to_be_empty()
                     with page.expect_response(lambda r:"/neoraiden/state" in r.url) as first:
-                        page.locator("[data-refresh]").click()
+                        page.clock.fast_forward(15000)
                     self.assertEqual(first.value.status,304)
                     with fixture.app.app_context():
                         m=SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="FX202").one()
                         m.assigned_tail_number="N" + engine.upper()
+                        m.ramp_load_completed_at_utc = start_utc + timedelta(minutes=90)
                         m = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS1361").one()
                         m.eta_datetime_utc = start_utc + timedelta(hours=4, minutes=15)
                         db.session.commit()
@@ -74,7 +75,8 @@ class CommandCenterBrowser(unittest.TestCase):
                     self.assertEqual(updated.value.status,200)
                     self.assertEqual(updated.value.request.headers["x-raiden-automatic"], "1")
                     expect(page.locator("[data-board]")).to_contain_text("N"+engine.upper())
-                    expect(arrivals.locator("th")).to_have_text(["UPS0927", "UPS1361"])
+                    expect(page.locator('#rd-departures [data-field="ramp"] .rd-value').first).to_have_text("22:30")
+                    expect(arrivals.locator(".rd-flight")).to_have_text(["UPS0927", "UPS1361"])
                     expect(arrivals.last).to_contain_text("ETA 01:15")
                     self.assertTrue(page.evaluate("window.raidenRefreshMarker"))
                     for w,h in ((1366,768),(1920,1080),(1024,768),(768,1024),(390,844)):
@@ -100,15 +102,17 @@ class CommandCenterBrowser(unittest.TestCase):
                     expect(page.locator("[data-refresh-status]")).to_have_text("Outside Sort hours")
                     self.assertEqual(automatic_requests, [])
                     expect(page.locator(".rd-tv")).to_be_visible()
+                    page.clock.set_system_time((start + timedelta(minutes=5)).replace(tzinfo=ZoneInfo("America/Chicago")))
                     with page.expect_response(lambda r:"/neoraiden/state" in r.url and r.status == 503):
-                        page.locator("[data-refresh]").click()
+                        page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true}))")
                     expect(page.locator("[data-stale]")).to_contain_text("last successful update")
                     self.assertEqual(page.locator("[data-mission]").count(),4)
                     page.unroute("**/neoraiden/state*")
                     page.route("**/neoraiden/state*",lambda route:route.fulfill(status=403,body=""))
-                    page.locator("[data-refresh]").click()
+                    with page.expect_response(lambda r:"/neoraiden/state" in r.url and r.status == 403):
+                        page.clock.fast_forward(15000)
                     expect(page.locator("[data-board]")).to_be_empty()
-                    expect(page.locator("[data-refresh]")).to_be_disabled()
+                    expect(page.locator("[data-refresh-status]")).to_have_text("Live updates off")
                 finally:
                     browser.close()
                     with fixture.app.app_context():

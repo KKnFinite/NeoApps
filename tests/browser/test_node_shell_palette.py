@@ -17,7 +17,7 @@ SCREENS = {
     "scorpion": ("/neoscorpion/fuel-dispatch", "244, 194, 31"),
     "subzero": ("/neosubzero/pretreat", "77, 183, 255"),
     "rain": ("/neorain/inbound", "127, 77, 255"),
-    "raiden": ("/neoraiden", "200, 166, 255"),
+    "raiden": ("/neoraiden", "159, 201, 249"),
     "staffing": ("/neostaffing/attendance", None),
     "staffing-shared": ("/neostaffing/settings", "36, 214, 199"),
 }

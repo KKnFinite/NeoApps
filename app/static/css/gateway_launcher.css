@@ -1,8 +1,6 @@
 /* The launcher owns its canvas. Operational node pages and Portal use separate shells. */
-.gateway-node-raiden { --node-primary: #abc6ff; --node-highlight: #ccdeff; --node-rgb: 134,170,244; }
 .gateway-node-raiden .gateway-node-card-main { display: flex; }
 .gateway-node-raiden .gateway-node-card-copy small { white-space: normal; }
-.gateway-node-raiden .node-word { color: #b9d3ff; }
 @media (min-width:901px) {
     .gateway-node-launcher:has(.gateway-node-raiden) { grid-template-columns: repeat(2,minmax(0,1fr)); }
     .gateway-node-launcher:has(.gateway-node-raiden) > .gateway-launcher-heading { grid-column: 1/-1; }

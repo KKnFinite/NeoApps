@@ -17,30 +17,36 @@ test("refresh serializes requests, skips hidden tabs, and honors Retry-After", a
             replaceChildren() {this.innerHTML="";}
         };
     }
-    const root={ dataset:{revision:"initial",state:"/neoraiden/state",windows:"[[0,100000]]"}, querySelector:s=>element(s.slice(6,-1)) };
+    const root={ dataset:{revision:"initial",state:"/neoraiden/state",windows:"[[0,130000]]",intervalMs:"15000"}, querySelector:s=>element(s.slice(6,-1)) };
     const document={hidden:false,querySelector:()=>root,addEventListener(event,listener){this[event]=listener;}};
-    const storage={getItem() {return null;}};
     const fetch = (_url, args) => {
         calls++;
         assert.equal(args.headers["If-None-Match"], '"initial"');
+        assert.equal(args.headers["X-Raiden-Automatic"], "1");
         return new Promise(resolve=>{pending=resolve;});
     };
     class Clock extends Date { static now() {return now;} }
-    vm.runInNewContext(source, {document, window:{addEventListener(){}}, localStorage:storage, fetch,
+    const window = {addEventListener(event, listener) { this[event] = listener; }};
+    const flush = () => new Promise(resolve => setImmediate(resolve));
+    vm.runInNewContext(source, {document, window, fetch,
         Date:Clock, setTimeout(fn, ms){timers.set(fn,ms);return fn;}, clearTimeout(fn){timers.delete(fn);}, AbortController});
     assert.equal(elements.countdown,undefined);
-    assert.deepEqual([...timers.values()],[30000]);
-    const request=element("refresh").click();
-    await element("refresh").click();
+    assert.equal(elements.refresh, undefined);
+    assert.equal(elements.interval, undefined);
+    assert.deepEqual([...timers.values()],[15000]);
+    now=14999;
+    window.pageshow({persisted:true});
+    assert.equal(calls,0);
+    now=15000;
+    tick();
     tick();
     assert.equal(calls,1);
     pending({status:429,ok:false,headers:{get:key=>key==="Retry-After"?"90":null}});
-    await request;
-    assert.equal(element("refresh").disabled,true);
-    now=89999;
-    await element("refresh").click();
+    await flush();
+    now=104999;
+    tick();
     assert.equal(calls,1);
-    now=91000;
+    now=105000;
     document.hidden=true;
     tick();
     assert.equal(calls,1);
@@ -48,7 +54,7 @@ test("refresh serializes requests, skips hidden tabs, and honors Retry-After", a
     document.visibilitychange();
     assert.equal(calls,2);
     pending({status:304,headers:{get:key=>key==="ETag"?'"initial"':null}});
-    await new Promise(resolve=>setImmediate(resolve));
+    await flush();
     assert.equal(element("stale").hidden,true);
     now = 150000;
     tick();

@@ -8,6 +8,10 @@ from sqlalchemy.orm import load_only
 from app.extensions import db
 from app.models import (
     NeoErmacDoorPull, NeoNode, NeoSubZeroDepartureDeiceEvent,
+    NeoScorpionAircraftFuelSetting, NeoScorpionDirectEntry, NeoScorpionFuelAssignment,
+    NeoScorpionFuelAuditEntry, NeoScorpionFuelTankState, NeoScorpionFuelTruck,
+    NeoScorpionFuelWorkState, NeoScorpionFuelingEvent, NeoScorpionFuelingEventTankSnapshot,
+    NeoScorpionSettings, NeoScorpionSortTruck, NeoScorpionTailFuelState,
     SortDateMission, SortDateOperation, SortDateParkingAssignment, SortDateTailState,
     StaffingDailyAttendance, StaffingAttendanceSummary, StaffingUnit,
 )
@@ -15,6 +19,10 @@ from app.models.user import ROLE_LEVELS
 from app.services.account_authority import Scope
 from app.services.account_scope_runtime import authority
 from app.services.gateway_matrix import configured_sort_window_utc, gateway_timezone
+from app.services.neorain_fuel_authority import scorpion_board_fuel_by_mission
+from app.services.neorain_performance import completed_variance_minutes
+from app.services.neoscorpion_fueling_status import STAGE_COLORS
+from app.services.night_sorting import night_sort_time_key
 from app.services.neosektor_live_counts import native_uld_summary
 from app.services.permission_rules import user_can
 from app.services.neosubzero_evidence import normalized_tail, select_tail_event
@@ -22,7 +30,7 @@ from app.services.neosubzero_operations import departure_presentation
 from app.services.neosubzero_radio import radio_complete, radio_pending
 from app.services.departure_labels import departure_occurrences, departure_order, destination_label, effective_departure_utc
 from app.services.time_display import format_local_hhmm
-from app.services.sort_date_operations import _planned_datetime_utc, mission_display_timing_data
+from app.services.sort_date_operations import _planned_datetime_utc, mission_display_timing_data, normalize_wave
 
 
 def authorized_gateways(user):
@@ -55,13 +63,22 @@ def can_open_raiden(user, gateway):
 def _source_access(user, gateway):
     evidence = authority(user)
     nodes = db.session.query(NeoNode.id, NeoNode.code).filter(
-        NeoNode.code.in_(("scorpion","ermac","subzero","sektor")), NeoNode.is_active.is_(True))
+        NeoNode.code.in_(("scorpion","ermac","subzero","sektor","rain")), NeoNode.is_active.is_(True))
     return {code for node_id, code in nodes if evidence.role(
         Scope("node","neogateway",gateway.id,node_id))}
 
 
 def _clock(value):
     return value.strftime("%H:%M") if value is not None else None
+
+
+def _mission_pull(mission):
+    # NeoErmac stores actual PURE/MIX aggregates by mission, even after later
+    # departure milestones take precedence over its Last ULD status.
+    pulls = [value for value in (mission.actual_pure_pull_time_local, mission.actual_mix_pull_time_local) if value]
+    if pulls:
+        return _clock(max(pulls, key=lambda value: night_sort_time_key(value, mission.sort_name)))
+    return format_local_hhmm(mission.last_uld_enroute_at_utc, mission.timezone)
 
 
 def arrival_sort_window(gateway, operation):
@@ -130,6 +147,28 @@ def postgres_board_versions(gateway, operation, access):
             versions(SortDateTailState, SortDateTailState.gateway_code == gateway.code,
                      SortDateTailState.sort_date == operation.sort_date, SortDateTailState.sort_name == operation.sort_name),
         ))
+    if 'scorpion' in access:
+        assignment = NeoScorpionFuelAssignment
+        work = NeoScorpionFuelWorkState
+        event = NeoScorpionFuelingEvent
+        assignments = select(assignment.id).where(assignment.sort_date_operation_id == op_id)
+        works = select(work.id).where(work.fuel_assignment_id.in_(assignments))
+        events = select(event.id).where(event.sort_date_operation_id == op_id)
+        columns.extend(versions(model, model.sort_date_operation_id == op_id) for model in (
+            assignment, event, NeoScorpionDirectEntry, NeoScorpionFuelAuditEntry,
+            NeoScorpionSortTruck, NeoScorpionTailFuelState,
+        ))
+        columns.extend(versions(model, model.gateway_id == gateway.id) for model in (
+            NeoScorpionFuelTruck, NeoScorpionSettings, NeoScorpionAircraftFuelSetting,
+        ))
+        columns.extend((
+            versions(work, work.fuel_assignment_id.in_(assignments)),
+            versions(NeoScorpionFuelTankState, NeoScorpionFuelTankState.fuel_work_state_id.in_(works)),
+            versions(NeoScorpionFuelingEventTankSnapshot, NeoScorpionFuelingEventTankSnapshot.fueling_event_id.in_(events)),
+        ))
+        if 'subzero' not in access:
+            columns.append(versions(SortDateTailState, SortDateTailState.gateway_code == gateway.code,
+                SortDateTailState.sort_date == operation.sort_date, SortDateTailState.sort_name == operation.sort_name))
     return tuple(str(value) for value in db.session.execute(select(*columns)).one())
 
 
@@ -143,21 +182,26 @@ def snapshot(user, gateway, operation, *, sources=None):
     op_id = operation.id
     result.update(sort_label=f"{operation.sort_date} · {operation.sort_name.title()}",
                   window=operation.window_minutes)
+    access, result["uld"] = sources if sources is not None else board_sources(user, gateway, operation)
     m = SortDateMission
-    missions = m.query.options(load_only(m.id, m.mission_type, m.flight_number, m.assigned_tail_number,
-        m.origin, m.destination, m.timezone, m.wave, m.planned_datetime_utc, m.planned_datetime_local,
-        m.eta_datetime_utc, m.actual_block_in_datetime_utc, m.actual_block_out_datetime_utc,
-        m.departure_status, m.arrival_status, m.fuel_status, m.planned_fuel_load, m.pure_pull_time_local,
-        m.mix_pull_time_local, m.actual_pure_pull_time_local, m.actual_mix_pull_time_local)).filter_by(sort_date_operation_id=op_id,
+    query = m.query.filter_by(sort_date_operation_id=op_id,
         gateway_code=gateway.code, sort_date=operation.sort_date, sort_name=operation.sort_name
-    ).filter(m.master_retirement.is_(None)).all()
+    ).filter(m.master_retirement.is_(None))
+    # Scorpion can project detached visits from the full mission row.
+    if "scorpion" not in access:
+        query = query.options(load_only(m.id, m.mission_type, m.flight_number, m.assigned_tail_number,
+            m.sort_name, m.origin, m.destination, m.timezone, m.wave, m.planned_datetime_utc, m.planned_datetime_local,
+            m.eta_datetime_utc, m.actual_block_in_datetime_utc, m.actual_block_out_datetime_utc,
+            m.departure_status, m.arrival_status, m.pure_pull_time_local, m.mix_pull_time_local,
+            m.actual_pure_pull_time_local, m.actual_mix_pull_time_local, m.last_uld_enroute_at_utc,
+            m.ramp_load_completed_at_utc, m.crew_load_completed_at_utc))
+    missions = query.all()
     positions = {normalized_tail(tail): (position if str(position).startswith(str(ramp)) else f"{ramp or ''}{position}")
                  + (f" · Lane {lane}" if lane and lane != 1 else "")
         for tail, ramp, position, lane in db.session.query(SortDateParkingAssignment.tail_number,
             SortDateParkingAssignment.ramp_code, SortDateParkingAssignment.position_code,
             SortDateParkingAssignment.lane_number).filter_by(sort_date_operation_id=op_id)
         if tail and position}
-    access, result["uld"] = sources if sources is not None else board_sources(user, gateway, operation)
     pulls = defaultdict(list)
     if "ermac" in access:
         for pull in NeoErmacDoorPull.query.filter_by(gateway_id=gateway.id, sort_date_operation_id=op_id
@@ -178,6 +222,7 @@ def snapshot(user, gateway, operation, *, sources=None):
             sort_date=operation.sort_date, gateway_code=gateway.code, sort_name=operation.sort_name)
             .filter(SortDateTailState.deice_status != "unknown")}
     departures = [m for m in missions if m.mission_type == "departure"]
+    fuel = scorpion_board_fuel_by_mission(operation, departures) if "scorpion" in access else {}
     timings = {m.id: mission_display_timing_data(m, operation) for m in departures}
     departures.sort(key=lambda m: departure_order(m, operation))
     ranks = departure_occurrences(departures, operation)
@@ -197,13 +242,20 @@ def snapshot(user, gateway, operation, *, sources=None):
                    eta=format_local_hhmm(mission.eta_datetime_utc, mission.timezone) if inbound else None,
                    planned=format_local_hhmm(planned,mission.timezone),
                    actual=format_local_hhmm(actual,mission.timezone),
-                   status=mission.arrival_status if inbound else mission.departure_status)
+                   status=mission.arrival_status if inbound else mission.departure_status,
+                   variance=completed_variance_minutes(mission) if "rain" in access else None)
         if inbound:
+            row["wave"] = normalize_wave(mission.wave)
             instant = _arrival_sort_time(mission, planned, window)
             arrivals.append(((instant is None, instant, mission.id), row))
             continue
         row["ordinal"] = ranks.get(mission.id)
         row["route_label"] = destination_label(mission.destination, row["ordinal"])
+        fuel_row = fuel.get(mission.id, {})
+        if "rain" in access:
+            row.update(ramp=format_local_hhmm(mission.ramp_load_completed_at_utc, mission.timezone),
+                       crew=format_local_hhmm(mission.crew_load_completed_at_utc, mission.timezone),
+                       block=row["actual"], no_return=mission.departure_status == "departed")
         candidates = events.get(tail, ())
         if tails[tail] > 1:
             candidates = [e for e in candidates if e.sort_date_mission_id == mission.id]
@@ -215,6 +267,9 @@ def snapshot(user, gateway, operation, *, sources=None):
                 radio_complete=radio_complete(event),radio_pending=radio_pending(event)), tail_state)
         row.update(fuel_status=mission.fuel_status if "scorpion" in access else None,
                    planned_fuel=mission.planned_fuel_load if "scorpion" in access else None,
+                   neo_fuel=fuel_row.get("scorpion_fuel_display"),
+                   fuel_color=STAGE_COLORS.get(fuel_row.get("scorpion_fuel_status")),
+                   mission_pull=_mission_pull(mission) if "ermac" in access else None,
                    etd=format_local_hhmm(effective_departure_utc(mission, operation), mission.timezone),
                    pulls=pulls[mission.id], pure=_clock(timings[mission.id]["adjusted_pure_pull_time"]) if "ermac" in access else None,
                    mix=_clock(timings[mission.id]["adjusted_mix_pull_time"]) if "ermac" in access else None,

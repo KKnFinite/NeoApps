@@ -1,25 +1,35 @@
 .raiden {
     --canvas:#0b151d; --surface:#12212b; --raised:#1b303d; --line:#374d5b;
-    --ink:#edf5f8; --muted:#aac0cb; --accent:#76ded5; --accent-bg:#163e43;
+    --ink:#edf5f8; --muted:#aac0cb; --accent:var(--node-raiden-primary); --accent-bg:#1b3654; --neo-prefix:#76ded5;
     --ready:#89e6b4; --moving:#9fcaff; --hold:#ffcf82; --danger:#ffaba5;
+    --rain-late:#f2a3aa;
+    --fuel-gray:#b5bec9; --fuel-amber:#f4c66b; --fuel-orange:#ffb176; --fuel-yellow:#f6e37a;
+    --fuel-teal:#77ddd3; --fuel-green:#94e0aa; --fuel-red:#ff919c;
+    --rd-operational-font:clamp(10px,1.02cqw,13px);
     box-sizing:border-box; min-width:0; background:var(--canvas); color:var(--ink);
+    container-type:inline-size;
     color-scheme:dark; padding:8px; border-radius:10px;
     font: 13px/1.2 system-ui,sans-serif; font-variant-numeric:tabular-nums;
     display:flex; flex-direction:column;
 }
 .raiden[data-theme="light"] {
     --canvas:#eff4f6; --surface:#fff; --raised:#e2ebef; --line:#afc0c8; --ink:#152a35;
-    --muted:#455e6a; --accent:#006864; --accent-bg:#d1eeeb; --ready:#17633f;
+    --muted:#455e6a; --accent:var(--node-raiden-secondary); --accent-bg:#dceaff; --neo-prefix:#006864; --ready:#17633f;
     --moving:#204e87; --hold:#794d05; --danger:#932e29; color-scheme:light;
+    --rain-late:#932e29;
+    --fuel-gray:#465767; --fuel-amber:#734908; --fuel-orange:#863807; --fuel-yellow:#645409;
+    --fuel-teal:#006864; --fuel-green:#17633f; --fuel-red:#932e29;
 }
 .raiden *, .raiden *::before {box-sizing:border-box}
 .raiden [hidden] {display:none!important}
 .raiden :is(h1,h2,p,form) {margin:0}
 .raiden :is(h1,h2) {color:var(--ink); font-family:inherit; letter-spacing:-.025em}
 .raiden h1 {font-size:clamp(18px,1.4vw,22px); line-height:1.1}
-.raiden h1 span {color:var(--accent)}
+.rd-brand {color:var(--neo-prefix)}
+.rd-wordmark {color:var(--node-raiden-primary)}
+.raiden[data-theme="light"] .rd-wordmark {background:var(--node-raiden-secondary); border-radius:.16em; padding-inline:.12em}
 .raiden h2 {font-size:1.04em}
-.raiden button,.raiden select,.raiden input,.rd-settings>summary {
+.raiden button,.raiden select,.raiden input {
     width:auto; min-height:32px; min-width:0; margin:0; padding:4px 9px; border:1px solid var(--line)!important;
     border-radius:6px; color:var(--ink)!important; background:var(--raised)!important;
     font:600 .9em/1.15 system-ui,sans-serif; text-transform:none; letter-spacing:normal;
@@ -44,41 +54,41 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-workspace {order:5}
 .rd-tv-notice {order:3; color:var(--hold); font-size:.85em}
 .rd-controls button[data-tv] {color:var(--accent)!important}
-.rd-settings {position:relative}
-.rd-settings>summary {display:grid; place-items:center; min-width:32px}
-.rd-settings>label {position:absolute; z-index:4; right:0; top:100%; background:var(--surface); padding:12px; box-shadow:0 4px 12px #0004; border:1px solid var(--line); border-radius:6px; white-space:nowrap}
 .rd-context {margin-block:8px; flex-wrap:wrap}
 .rd-refresh {margin-left:auto; display:flex; gap:.4em; flex-wrap:wrap; color:var(--muted); align-items:baseline; font-size:.88em}
 .rd-refresh [data-refresh-status] {color:var(--accent)}
 .rd-stale {color:var(--hold); font-weight:650; padding:4px 0}
-.rd-overview {display:grid; grid-template-columns:minmax(0,2fr) minmax(170px,1fr); gap:8px}
+.rd-overview {display:grid; grid-template-columns:minmax(0,3fr) minmax(170px,1fr); gap:6px}
 .rd-uld,.rd-sort {background:var(--surface); border:1px solid var(--line); border-radius:8px; min-width:0}
 .rd-uld,.rd-sort {padding:4px 8px}
+.rd-uld {--rd-can-font:clamp(18px,1.65vw,30px)}
 .rd-uld-title {margin-bottom:3px}
+.rd-uld-title h2 {font-size:clamp(15px,1.35vw,24px)}
 .rd-uld-title span,.rd-staff,.rd-uld-foot,.rd-empty {color:var(--muted)}
 .rd-uld-title span {font-size:.88em}
 .rd-uld table {width:100%; border-collapse:collapse; text-align:right; font:inherit; color:inherit}
-.rd-uld :is(th,td) {border:0; padding:2px 4px; background:transparent; text-align:right; color:var(--ink)}
+.rd-uld :is(th,td) {border:0; padding:1px 4px; background:transparent; text-align:right; color:var(--ink)}
 .rd-uld th:first-child {text-align:left}
-.rd-uld thead th {font-size:.84em; font-weight:600; color:var(--muted)}
-.rd-uld tbody td {font-weight:700}
+.rd-uld thead th {font-size:.94em; font-weight:600; color:var(--muted)}
+.rd-uld :is(tbody td,.rd-uld-foot b) {font-size:var(--rd-can-font); font-weight:700; line-height:1.05}
 .rd-uld-foot {flex-wrap:wrap; column-gap:14px; row-gap:2px; border-top:1px solid var(--line); margin-top:3px; padding-top:4px; font-size:.86em}
 .raiden b {color:var(--ink)}
 .rd-totals {display:flex; gap:20px; color:var(--muted)}
 .raiden:not(.rd-tv) .rd-tv-here {display:none}
-.rd-totals b {display:block; color:var(--accent); font-size:1.2em; line-height:1.1}
+.rd-totals b {display:block; color:var(--accent); font-size:var(--rd-operational-font); line-height:1.1}
 .rd-staff {margin-top:7px}
-.rd-tools {justify-content:flex-end; margin-block:8px}
+.rd-tools {justify-content:flex-end; margin-block:5px}
 .rd-tools input {width:min(100%,260px); font-weight:450}
 .rd-tools input::placeholder {color:var(--muted); opacity:1}
-.rd-workspace {min-width:0; container-type:inline-size}
-.rd-mobile-views {display:none}
-.rd-mission-groups {display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(6px,1cqw,18px)}
+.rd-workspace {min-width:0}
+.rd-mobile-views,.raiden .rd-flight-toggle,.rd-detail-label {display:none}
+.rd-mission-groups {display:grid; grid-template-columns:minmax(min-content,34fr) minmax(min-content,66fr); gap:clamp(4px,.55cqw,12px)}
 .rd-mission-group {min-width:0}
 .rd-mission-group h2 {padding:3px 5px; background:var(--accent-bg); color:var(--accent)}
-.raiden .rd-missions {width:100%; margin:0; border:0; border-collapse:collapse; background:var(--surface); color:var(--ink); font:clamp(10px,1.2cqw,13px)/1.15 system-ui,sans-serif; font-variant-numeric:tabular-nums}
-.rd-missions :is(th,td) {height:auto; padding:2px clamp(1px,1cqw - 6.5px,5px); text-align:left; white-space:nowrap; color:inherit; background:transparent; border:0; font:inherit}
+.raiden .rd-missions {width:100%; margin:0; border:0; border-collapse:collapse; background:var(--surface); color:var(--ink); font:var(--rd-operational-font)/1.13 system-ui,sans-serif; font-variant-numeric:tabular-nums}
+.rd-missions :is(th,td) {height:auto; padding:.5px clamp(1px,.14cqw,4px); text-align:left; white-space:nowrap; color:inherit; background:transparent; border:0; font:inherit}
 .rd-missions thead {background:var(--raised); color:var(--muted)}
+.rd-missions thead th {font-size:.92em}
 .rd-missions th,.rd-missions .rd-status {font-weight:650}
 .rd-missions tbody tr:nth-child(even) {background:var(--canvas)}
 .rd-missions small {color:var(--accent); font-size:.88em}
@@ -87,57 +97,84 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-status:is([data-status="en_route"],[data-status="loading"],[data-status="last_uld_enroute"]) {color:var(--moving)}
 .rd-status[data-status="on_ground"] {color:var(--hold)}
 .rd-status[data-status="cancelled"] {color:var(--danger)}
+.rd-extra[data-value-color="late"] .rd-value {color:var(--rain-late); font-weight:800}
+.rd-extra[data-value-color="no-return"] .rd-value {color:var(--ready)}
+.rd-extra[data-value-color="gray"] .rd-value {color:var(--fuel-gray)}
+.rd-extra[data-value-color="amber"] .rd-value {color:var(--fuel-amber)}
+.rd-extra[data-value-color="orange"] .rd-value {color:var(--fuel-orange)}
+.rd-extra[data-value-color="yellow"] .rd-value {color:var(--fuel-yellow)}
+.rd-extra[data-value-color="teal"] .rd-value {color:var(--fuel-teal)}
+.rd-extra[data-value-color="green"] .rd-value {color:var(--fuel-green)}
+.rd-extra[data-value-color="red"] .rd-value {color:var(--fuel-red)}
 .rd-empty {padding:10px}
-.raiden-wordmark {color:#c5d9fc; font:650 1.5rem system-ui,sans-serif}
+.raiden-wordmark {font:650 1.5rem system-ui,sans-serif}
 .operational-sidebar-collapsed .raiden-wordmark {font-size:.66rem}
 @media(max-width:800px) {
     .raiden:not(.rd-tv) {padding:4px; font-size:12px}
     .rd-header {flex-wrap:wrap; gap:4px}
     .rd-controls {gap:4px}
     .rd-overview {grid-template-columns:1fr; gap:0}
-    .rd-uld {padding:5px 8px}
+    .rd-uld {padding:5px 8px; --rd-can-font:14px}
     .rd-sort {padding:0 3px; border:0; background:transparent}
     .rd-totals {gap:12px; margin-top:3px}
-    .rd-totals b {display:inline; font-size:inherit}
+    .rd-totals b {display:inline}
     .rd-staff {margin-top:3px; font-size:.85em}
     .rd-context {gap:4px; margin:5px 0}
     .rd-refresh {font-size:11px; gap:3px}
     .rd-context select {max-width:100%}
     .rd-tools {flex-wrap:wrap; justify-content:space-between; gap:4px; margin-block:5px}
 }
-@container (max-width:740px) {
+@container (max-width:940px) {
     .raiden:not(.rd-tv) .rd-mobile-views {display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:4px}
     .rd-mobile-views button[aria-pressed="true"] {background:var(--accent-bg)!important; color:var(--accent)!important}
     .raiden:not(.rd-tv) .rd-mission-groups {grid-template-columns:1fr}
     .raiden:not(.rd-tv) :is([data-mobile-view="arrivals"] #rd-departures,[data-mobile-view="departures"] #rd-arrivals) {display:none}
     .raiden:not(.rd-tv) .rd-mission-group h2 {position:absolute; width:1px; height:1px; padding:0; clip-path:inset(50%)}
-    .raiden:not(.rd-tv) .rd-missions {font-size:clamp(10px,2.9cqw,13px)}
-    .raiden:not(.rd-tv) .rd-missions :is(th,td) {padding:3px 2px}
-    .raiden:not(.rd-tv) .rd-missions td:is(:nth-child(4),.rd-status) {white-space:normal}
+    .raiden:not(.rd-tv) :is(.rd-missions,.rd-totals b) {font-size:clamp(10px,2.9cqw,13px)}
+    .raiden:not(.rd-tv) .rd-missions :is(thead,tbody) {display:block}
+    .raiden:not(.rd-tv) .rd-missions tr {display:grid; grid-template-columns:1.05fr .95fr .78fr .9fr 1fr 1.32fr}
+    .raiden:not(.rd-tv) .rd-missions :is(th,td) {min-width:0; padding:3px 2px; align-content:center}
+    .raiden:not(.rd-tv) .rd-missions td:is(:nth-child(3),:nth-child(4),.rd-status) {white-space:normal}
+    .raiden:not(.rd-tv) :is(.rd-missions .rd-extra,.rd-flight) {display:none}
+    .raiden:not(.rd-tv) .rd-mission[data-expanded] .rd-extra {display:grid; grid-column:span 2; white-space:normal; padding:4px 6px; border-top:1px solid var(--line)}
+    .raiden:not(.rd-tv) .rd-detail-label {display:inline; font-size:.88em; color:var(--muted)}
+    .raiden:not(.rd-tv) .rd-flight-toggle {
+        display:inline-block; min-height:28px; max-width:100%; padding:0;
+        background:transparent!important; border:0!important; color:inherit!important;
+        font:inherit; white-space:nowrap; letter-spacing:-.035em;
+    }
+    .rd-flight-toggle::after {content:'›'; margin-left:2px; color:var(--accent)}
+    .rd-flight-toggle[aria-expanded="true"]::after {content:'⌄'}
+}
+@container (min-width:941px) {
+    .rd-uld:has(table) {display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:.8em}
+    .rd-uld-title,.rd-uld-foot {flex-direction:column; align-items:flex-start; margin:0; padding:0; border:0}
+    .rd-uld-foot {display:grid; gap:1px}
 }
 body.rd-projecting {overflow:hidden!important}
 body.rd-projecting > :not(.rd-tv) {display:none!important}
 .raiden.rd-tv {
     position:fixed; z-index:20000; inset:0; width:100%; height:100dvh; margin:0; border-radius:0;
     gap:2px; padding:3px 6px; font-size:clamp(11px,1.3vh,21px);
+    --rd-operational-font:var(--rd-row-font,12px);
 }
 .rd-tv .rd-header {margin:0}
 .rd-tv .rd-header h1 {font-size:1.1em}
 .rd-tv .rd-controls button {min-height:22px; padding:2px 6px; font-size:.9em}
-.rd-tv :is(.rd-context form,.rd-context select,.rd-settings,.rd-tools,.rd-staff) {display:none}
+.rd-tv :is(.rd-context form,.rd-context select,.rd-tools,.rd-staff) {display:none}
 .rd-tv .rd-context {margin:0}
 .rd-tv .rd-refresh {margin:0; font-size:.85em}
-.rd-tv .rd-overview {grid-template-columns:2fr 1fr; gap:4px}
+.rd-tv .rd-overview {grid-template-columns:3fr 1fr; gap:4px}
 .rd-tv .rd-totals {display:flex; height:100%; align-items:center; justify-content:space-around}
-.rd-tv .rd-totals b {font-size:1.1em}
 .rd-tv .rd-sort,.rd-tv .rd-uld {padding:2px 5px}
-.rd-tv .rd-uld:has(table) {display:grid; grid-template-columns:auto 1fr minmax(0, .9fr); align-items:center; gap:.8em}
+.rd-tv .rd-uld {--rd-can-font:clamp(21px,2.75vh,56px)}
+.rd-tv .rd-uld:has(table) {display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:.8em}
 .rd-tv .rd-uld-title,.rd-tv .rd-uld-foot {flex-direction:column; align-items:flex-start; border:0}
-.rd-tv .rd-uld-foot {display:grid; grid-template-columns:auto auto; column-gap:.5em}
+.rd-tv .rd-uld-foot {display:grid; gap:1px}
 .rd-tv .rd-uld-title,.rd-tv .rd-uld-foot {margin:0; padding:0}
-.rd-tv .rd-uld :is(th,td) {padding:0 2px}
+.rd-tv .rd-uld :is(th,td) {padding:0 4px}
 .rd-tv .rd-mission-group h2 {padding-block:2px}
-.rd-tv .rd-missions {font-size:var(--rd-row-font,12px); line-height:1.1}
+.rd-tv .rd-missions {line-height:1.1}
 .rd-tv .rd-missions :is(th,td) {padding-block:0; vertical-align:middle}
 .rd-tv .rd-workspace {flex:none}
 @media(min-width:901px) {
