@@ -69,8 +69,8 @@ class GodModeBrowser(unittest.TestCase):
         self.assertGreater(state["canFont"], state["fonts"][0] * 1.2, state)
         self.assertEqual(state["scrollboxes"], 0, state)
         self.assertLessEqual(state["width"], width + 1, state)
+        self.assertTrue(state["fitsAll"], state)
         if tv:
-            self.assertTrue(state["fitsAll"], state)
             self.assertLessEqual(state["height"], height + 1, state)
         return state
 
