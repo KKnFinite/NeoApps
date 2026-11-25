@@ -1,4 +1,14 @@
 {% from 'neonodes/neoraiden/_mission.html' import mission,metric,val %}
+{% macro mission_group(key, title, route, rows, inbound) %}
+<section class="rd-mission-group" id="rd-{{ key }}" data-mission-group="{{ key }}">
+  <h2 id="rd-{{ key }}-heading">{{ title }}</h2>
+  <table class="rd-missions" aria-labelledby="rd-{{ key }}-heading">
+    <thead><tr>{% for heading in ('Flight','Tail',route,'Parking','Time','Status') %}<th scope="col">{{ heading }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for m in rows %}{{ mission(m,inbound) }}{% endfor %}</tbody>
+  </table>
+  <p class="rd-empty" data-empty {% if rows %}hidden{% endif %}>{{ 'No matching flights.' if rows else 'No ' ~ key ~ ' recorded.' }}</p>
+</section>
+{% endmacro %}
 {% if not board.operation_id %}
 <p class="rd-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
 {% else %}
@@ -22,10 +32,13 @@
   <input type="search" data-search aria-label="Find flight, tail or station" placeholder="Find flight, tail or station">
 </div>
 <section class="rd-workspace" aria-label="Mission board">
-  <table class="rd-missions" aria-label="Missions">
-    <thead><tr>{% for heading in ('Type','Flight','Tail','From/To','Park','Time','Status') %}<th scope="col">{{ heading }}</th>{% endfor %}</tr></thead>
-    <tbody>{% for m in board.arrivals %}{{ mission(m,true) }}{% endfor %}{% for m in board.departures %}{{ mission(m,false) }}{% endfor %}</tbody>
-  </table>
-  <p class="rd-empty" data-empty {% if board.arrivals or board.departures %}hidden{% endif %}>{{ 'No matching flights.' if board.arrivals or board.departures else 'No missions recorded.' }}</p>
+  <div class="rd-mobile-views" role="group" aria-label="Mission direction">
+    <button type="button" data-show-missions="arrivals" aria-controls="rd-arrivals" aria-pressed="true">Arrivals</button>
+    <button type="button" data-show-missions="departures" aria-controls="rd-departures" aria-pressed="false">Departures</button>
+  </div>
+  <div class="rd-mission-groups" data-mobile-view="arrivals">
+    {{ mission_group('arrivals','Arrivals','Origin',board.arrivals,true) }}
+    {{ mission_group('departures','Departures','Destination',board.departures,false) }}
+  </div>
 </section>
 {% endif %}

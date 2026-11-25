@@ -15,7 +15,7 @@
     const fullscreenTarget = document.documentElement;
     let tv = false, nativeFullscreen = false, entering = false;
     let normalTheme = pref("theme") || "dark";
-    let search = "", remembered = null, priorScroll = 0, resizeFrame = 0;
+    let search = "", mobileView = "arrivals", remembered = null, priorScroll = 0, resizeFrame = 0;
     function applyTheme(theme) {
         root.dataset.theme = theme;
         const button = one("[data-theme-toggle]");
@@ -23,15 +23,28 @@
         button.setAttribute("aria-label", button.textContent + " theme");
         button.setAttribute("aria-pressed", String(theme === "light"));
     }
-    function normalView() {
+    function showMobileView(direction) {
+        const groups = one(".rd-mission-groups");
+        if (!groups) return;
+        mobileView = direction;
+        groups.dataset.mobileView = direction;
+        for (const button of all("[data-show-missions]"))
+            button.setAttribute("aria-pressed", String(button.dataset.showMissions === direction));
+    }
+    function normalView(followMatch = false) {
         const input = one("[data-search]");
         if (input && input.value !== search) input.value = search;
         const term = search.trim().toLocaleLowerCase();
         const rows = all("[data-mission]");
         for (const row of rows)
             row.hidden = !!term && !row.textContent.toLocaleLowerCase().includes(term);
-        const empty = one("[data-empty]");
-        if (empty) empty.hidden = rows.some(row => !row.hidden);
+        const matches = [];
+        for (const group of all("[data-mission-group]")) {
+            const hasMatch = !!group.querySelector("[data-mission]:not([hidden])");
+            group.querySelector("[data-empty]").hidden = hasMatch;
+            if (hasMatch) matches.push(group.dataset.missionGroup);
+        }
+        showMobileView(followMatch && matches.length === 1 ? matches[0] : mobileView);
     }
     function capture() {
         return {
@@ -74,23 +87,27 @@
     }
     function fitTV() {
         if (!tv || entering) return;
-        const rows = all("[data-mission]");
-        for (const row of rows) row.hidden = false;
-        const empty = one("[data-empty]");
-        if (empty) empty.hidden = rows.length > 0;
-        if (rows.length) {
-            // Budget for the column headings and one line per mission.
-            const tableTop = one(".rd-missions").getBoundingClientRect().top;
-            const available = root.clientHeight - tableTop - 4;
-            const size = Math.min(window.innerHeight * .017, available / ((rows.length + 1) * 1.05));
+        for (const group of all("[data-mission-group]")) {
+            const rows = group.querySelectorAll("[data-mission]");
+            for (const row of rows) row.hidden = false;
+            group.querySelector("[data-empty]").hidden = rows.length > 0;
+        }
+        const tables = all(".rd-missions");
+        const overflows = () => root.scrollHeight > root.clientHeight + 1 ||
+            root.scrollWidth > root.clientWidth + 1 ||
+            tables.some(table => table.getBoundingClientRect().width > table.parentElement.clientWidth + 1);
+        if (tables.length) {
+            const rowCount = Math.max(...tables.map(table => table.rows.length));
+            const available = root.clientHeight - tables[0].getBoundingClientRect().top - 4;
+            const size = Math.min(window.innerHeight * .022, available / (rowCount * 1.1));
             let font = Math.max(10, Math.floor(size * 4) / 4);
             root.style.setProperty("--rd-row-font", font + "px");
-            while (font > 10 && root.scrollHeight > root.clientHeight) {
+            while (font > 10 && overflows()) {
                 font -= .25;
                 root.style.setProperty("--rd-row-font", font + "px");
             }
         }
-        if (root.scrollHeight > root.clientHeight + 1 || root.scrollWidth > root.clientWidth + 1) {
+        if (overflows()) {
             exitTV("TV Mode cannot fit every flight legibly at this display size. All flights are available in God Mode.");
         }
     }
@@ -132,6 +149,7 @@
         const button = event.target.closest("button");
         if (!button) return;
         if (button.hasAttribute("data-tv")) changeMode();
+        if (button.hasAttribute("data-show-missions")) showMobileView(button.dataset.showMissions);
         if (button.hasAttribute("data-theme-toggle")) {
             applyTheme(root.dataset.theme === "dark" ? "light" : "dark");
             if (!tv) normalTheme = root.dataset.theme;
@@ -139,7 +157,7 @@
         }
     });
     root.addEventListener("input", event => {
-        if (event.target.matches("[data-search]")) { search = event.target.value; normalView(); }
+        if (event.target.matches("[data-search]")) { search = event.target.value; normalView(!!search.trim()); }
     });
     document.addEventListener("keydown", event => { if (tv && event.key === "Escape") exitTV(); });
     document.addEventListener("fullscreenchange", () => {

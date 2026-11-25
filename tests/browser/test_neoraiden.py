@@ -1,5 +1,5 @@
 import unittest
-from datetime import timedelta
+from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
@@ -21,6 +21,15 @@ class CommandCenterBrowser(unittest.TestCase):
             op = seed_sort(gateway)
             op_id = op.id
             _, start = configure_sort_window(gateway, op.sort_date)
+            start_utc = start.replace(tzinfo=ZoneInfo("America/Chicago")).astimezone(timezone.utc).replace(tzinfo=None)
+            changing = SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
+                gateway_code=gateway.code, mission_type="arrival", flight_number="UPS1361",
+                origin="SDF", destination=gateway.code, planned_datetime_utc=start_utc + timedelta(minutes=55))
+            overnight = SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
+                gateway_code=gateway.code, mission_type="arrival", flight_number="UPS0927",
+                origin="SDF", destination=gateway.code, planned_datetime_utc=start_utc - timedelta(hours=20))
+            db.session.add_all([changing, overnight])
+            db.session.commit()
             fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
         evidence = Path("instance/browser-evidence/gateway-shell")
         evidence.mkdir(parents=True,exist_ok=True)
@@ -41,7 +50,10 @@ class CommandCenterBrowser(unittest.TestCase):
                     page.get_by_role("link",name="Open NeoRaiden").click()
                     expect(page.locator("[data-raiden]")).to_be_visible()
                     page.locator("[data-sort-choice]").select_option(index=1)
-                    expect(page.locator('[data-mission]')).to_have_count(2)
+                    arrivals = page.locator("#rd-arrivals [data-mission]")
+                    expect(arrivals.locator("th")).to_have_text(["UPS1361", "UPS0927"])
+                    expect(arrivals.first).to_contain_text("STA 21:55")
+                    expect(arrivals.last).to_contain_text("STA 01:00")
                     page.get_by_label("Refresh settings").click()
                     page.locator("[data-interval]").select_option("15")
                     page.get_by_label("Refresh settings").click()
@@ -53,11 +65,18 @@ class CommandCenterBrowser(unittest.TestCase):
                     with fixture.app.app_context():
                         m=SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="FX202").one()
                         m.assigned_tail_number="N" + engine.upper()
+                        m = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS1361").one()
+                        m.eta_datetime_utc = start_utc + timedelta(hours=4, minutes=15)
                         db.session.commit()
+                    page.evaluate("window.raidenRefreshMarker = true")
                     with page.expect_response(lambda r:"/neoraiden/state" in r.url, timeout=22000) as updated:
-                        pass
+                        page.clock.fast_forward(15000)
                     self.assertEqual(updated.value.status,200)
+                    self.assertEqual(updated.value.request.headers["x-raiden-automatic"], "1")
                     expect(page.locator("[data-board]")).to_contain_text("N"+engine.upper())
+                    expect(arrivals.locator("th")).to_have_text(["UPS0927", "UPS1361"])
+                    expect(arrivals.last).to_contain_text("ETA 01:15")
+                    self.assertTrue(page.evaluate("window.raidenRefreshMarker"))
                     for w,h in ((1366,768),(1920,1080),(1024,768),(768,1024),(390,844)):
                         page.set_viewport_size(dict(width=w,height=h))
                         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), w+1)
@@ -84,7 +103,7 @@ class CommandCenterBrowser(unittest.TestCase):
                     with page.expect_response(lambda r:"/neoraiden/state" in r.url and r.status == 503):
                         page.locator("[data-refresh]").click()
                     expect(page.locator("[data-stale]")).to_contain_text("last successful update")
-                    self.assertEqual(page.locator("[data-mission]").count(),2)
+                    self.assertEqual(page.locator("[data-mission]").count(),4)
                     page.unroute("**/neoraiden/state*")
                     page.route("**/neoraiden/state*",lambda route:route.fulfill(status=403,body=""))
                     page.locator("[data-refresh]").click()
@@ -92,3 +111,6 @@ class CommandCenterBrowser(unittest.TestCase):
                     expect(page.locator("[data-refresh]")).to_be_disabled()
                 finally:
                     browser.close()
+                    with fixture.app.app_context():
+                        SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS1361").one().eta_datetime_utc = None
+                        db.session.commit()
