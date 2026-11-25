@@ -1,25 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='af1f6adcfdcf') }}">
-<section class="raiden" data-raiden data-theme="dark" aria-label="NeoRaiden — God Mode"
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='d34938f75df7') }}">
+<section class="raiden" data-raiden data-theme="dark" aria-label="NeoRaiden"
          data-windows='{{ poll_windows|tojson }}' data-revision="{{ revision }}" data-interval-ms="{{ refresh_interval_ms }}"
          data-state="{{ url_for('neoraiden.state', gateway=gateway.code, operation_id=selected_id) }}">
     <header class="rd-header">
-        <h1><span class="rd-brand">Neo<span class="rd-wordmark">Raiden</span></span> God Mode</h1>
+        <h1 class="rd-brand">Neo<span class="rd-wordmark">Raiden</span></h1>
+        <div class="rd-context">
+            <form><select name="gateway" aria-label="Gateway" data-submit-on-change>{% for g in gateways %}<option value="{{ g.code }}"{% if g.id == gateway.id %} selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></form>
+            <select aria-label="Sort" data-sort-choice><option value="{{ url_for('neoraiden.index',gateway=gateway.code) }}" data-current-sort>Current Sort{% if not selected_id and board.sort_label %} · {{ board.sort_label }}{% endif %}</option>{% for s in sorts %}<option value="{{ url_for('neoraiden.index',gateway=gateway.code,operation_id=s.id) }}"{% if s.id == selected_id %} selected{% endif %}>{{ s.sort_date }} · {{ s.sort_name|title }}</option>{% endfor %}</select>
+        </div>
+        <span class="rd-tv-context" data-tv-context data-gateway="{{ gateway.code }}"></span>
+        <input type="search" data-search aria-label="Find flight, tail or station" placeholder="Find flight, tail or station">
+        <div class="rd-refresh"><span>Updated <time data-success></time></span><span data-refresh-status></span></div>
         <div class="rd-controls">
             <button type="button" data-tv aria-pressed="false">TV Mode</button>
             <button type="button" data-theme-toggle aria-label="Light theme" aria-pressed="false">Light</button>
         </div>
     </header>
-    <div class="rd-context">
-        <form><select name="gateway" aria-label="Gateway" data-submit-on-change>{% for g in gateways %}<option value="{{ g.code }}"{% if g.id == gateway.id %} selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></form>
-        <select aria-label="Sort" data-sort-choice><option value="{{ url_for('neoraiden.index',gateway=gateway.code) }}">Current Sort</option>{% for s in sorts %}<option value="{{ url_for('neoraiden.index',gateway=gateway.code,operation_id=s.id) }}"{% if s.id == selected_id %} selected{% endif %}>{{ s.sort_date }} · {{ s.sort_name|title }}</option>{% endfor %}</select>
-        <div class="rd-refresh">Updated <time data-success></time><span data-refresh-status></span></div>
-    </div>
     <p class="rd-stale" role="status" data-stale hidden></p>
     <p class="rd-tv-notice" role="status" data-tv-notice hidden></p>
     <div data-board>{% include "neonodes/neoraiden/_board.html" %}</div>
 </section>
-<script defer src="{{ url_for('static', filename='js/neoraiden_workspace.js', v=config.STATIC_ASSET_VERSION, rev='ce340f1cdf9e') }}"></script>
+<script defer src="{{ url_for('static', filename='js/neoraiden_workspace.js', v=config.STATIC_ASSET_VERSION, rev='01def3d0d25c') }}"></script>
 <script defer src="{{ url_for('static', filename='js/neoraiden.js', v=config.STATIC_ASSET_VERSION, rev='544952ba0097') }}"></script>
 {% endblock %}

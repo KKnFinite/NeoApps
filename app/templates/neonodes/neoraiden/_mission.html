@@ -5,10 +5,17 @@
 {% set departures = (
   ('flight','Flight',''), ('tail','Tail',''), ('route','Dest','Destination'),
   ('pos','POS','Parking position'), ('time','Time',''), ('status','Status',''),
-  ('fuel','Neo Fuel','NeoScorpion Neo Fuel (thousand pounds)'), ('pull','Pull','NeoErmac Mission Pull'),
+  ('fuel','Neo Fuel','NeoScorpion Neo Fuel (thousand pounds)'),
+  ('pure','PURE','NeoErmac actual PURE pull'), ('mix','MIX','NeoErmac actual MIX pull'),
   ('ramp','R-LC','Ramp Load Complete'), ('crew','C-LC','Crew Load Complete'),
-  ('block','Block','Block Time'), ('variance','+/−','Variance in minutes'), ('no-return','No Return','')
+  ('block','Block','Block Time'), ('variance','+/−','Variance in minutes'),
+  ('deice','DEICE','NeoSubZero departure deicing'), ('no-return','No Return','')
 ) %}
+{% set deice_short = {
+  'TREATMENT OWNERSHIP REVIEW':'REVIEW', 'TAIL IDENTITY REVIEW':'REVIEW',
+  'CLEARED · RADIO PENDING':'RADIO PEND', 'GONE · RADIO COMPLETE':'RADIO DONE',
+  'GONE · CLEARED':'CLEARED', 'NEGATIVE DEICE':'NEG DEICE',
+} %}
 
 {% macro val(v) -%}{{ v if v is not none and v != '' else '—' }}{%- endmacro %}
 {% macro metric(key,label,value) %}
@@ -20,7 +27,7 @@
 {% set variance = ('%+d'|format(m.variance) if m.variance > 0 else m.variance) if m.variance is not none else none %}
 {% set values = {
   'wave':m.wave, 'tail':m.tail, 'route':m.route_label|default(m.route), 'pos':m.parking,
-  'variance':variance, 'fuel':m.neo_fuel, 'pull':m.mission_pull, 'ramp':m.ramp,
+  'variance':variance, 'fuel':m.neo_fuel, 'pure':m.pure, 'mix':m.mix, 'ramp':m.ramp,
   'crew':m.crew, 'block':m.block, 'no-return':'Yes' if m.no_return else none,
 } %}
 {% set colors = {
@@ -41,7 +48,10 @@
       {% set extra = not inbound and loop.index > 6 %}
       <td role="cell" data-field="{{ key }}"{% if extra %} class="rd-extra"{% endif %}{% if colors.get(key) %} data-value-color="{{ colors[key] }}"{% endif %}>
         {% if extra %}<span class="rd-detail-label"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</span>{% endif %}
-        <span class="rd-value">{{ val(values[key]|default(none)) }}</span>
+        {% if key == 'deice' and m.deice %}
+          <span class="rd-value rd-deice" data-deice-state="{{ m.deice_state }}" title="{{ m.deice }}"><span class="rd-deice-short" aria-hidden="true">{{ deice_short.get(m.deice, m.deice) }}</span><span class="rd-deice-full">{{ m.deice }}</span></span>
+        {% elif key in ('pure', 'mix') %}<span class="rd-value">{{ values[key] or '' }}</span>
+        {% else %}<span class="rd-value">{{ val(values[key]|default(none)) }}</span>{% endif %}
       </td>
     {% endif %}
   {% endfor %}

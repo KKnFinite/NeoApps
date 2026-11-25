@@ -53,7 +53,7 @@
         {% elif is_neosubzero_page %}
         {% with subzero_nav_mode='desktop' %}{% include 'neonodes/neosubzero/_navigation_items.html' %}{% endwith %}
         {% elif is_neoraiden_page %}
-        <a class="motherbrain-desktop-side-link is-active" aria-current="page" href="{{ url_for('neoraiden.index', gateway=gateway.code, operation_id=selected_id) }}"><span class="operational-side-link-icon">R</span><span class="operational-side-link-label">God Mode</span></a>
+        <a class="motherbrain-desktop-side-link is-active" aria-current="page" href="{{ url_for('neoraiden.index', gateway=gateway.code, operation_id=selected_id) }}"><span class="operational-side-link-icon">R</span><span class="operational-side-link-label">NeoRaiden</span></a>
         {% elif is_neoreptile_page %}
         <a class="motherbrain-desktop-side-link is-active" href="{{ url_for('neoreptile.index') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Dashboard</span></a>
         {% endif %}

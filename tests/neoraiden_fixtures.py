@@ -1,8 +1,9 @@
 """Recorded native rows for a two-wave, 52-mission synthetic Sort."""
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from app.extensions import db
 from app.models import (
+    MasterFlightSchedule, NeoErmacBuildingLineup, NeoErmacDoorPull,
     NeoSektorBallmatCount, NeoSektorBallmatWaveCount, NeoSektorOpenBayState,
     NeoSektorSortState, NeoSektorWaveState, NeoSubZeroDepartureDeiceEvent,
     NeoScorpionFuelAssignment, NeoScorpionFuelTankState, NeoScorpionFuelTruck,
@@ -70,6 +71,36 @@ def record_attendance(operation):
             db.session.add(StaffingDailyAttendance(person=person, sort=unit, status=status,
                 attendance_date=operation.sort_date, sort_date_operation=operation))
     db.session.commit()
+
+
+def record_pull_roster(operation):
+    missions = {mission.flight_number: mission for mission in SortDateMission.query.filter(
+        SortDateMission.sort_date_operation_id == operation.id,
+        SortDateMission.flight_number.in_(("FX101", "FX202")))}
+    complete, other = missions["FX101"], missions["FX202"]
+    for mission in (complete, other):
+        master = MasterFlightSchedule(gateway_id=operation.gateway_id, gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name, mission_type="departure", flight_number=mission.flight_number,
+            origin=operation.gateway_code, destination="OAK", active_days="Sun", planned_time_local=time(1))
+        db.session.add(master)
+        db.session.flush()
+        mission.master_flight_schedule_id = master.id
+    lineup = NeoErmacBuildingLineup(gateway_id=operation.gateway_id, runout_key="green_runout",
+        runout_name="D1-D4 Belts", east_destination_1="OAK", west_destination_1="OAK", east_destination_2="OAK",
+        flight_assignments={"east_destination_1": complete.master_flight_schedule_id,
+                            "west_destination_1": complete.master_flight_schedule_id,
+                            "east_destination_2": other.master_flight_schedule_id})
+    db.session.add(lineup)
+    for mission, door, pure, mix, no_mix in (
+        (complete, "D1", time(23, 47), time(0, 57), False),
+        (complete, "D4", time(0, 2), None, True),
+        (other, "D1", None, None, True),
+    ):
+        db.session.add(NeoErmacDoorPull(gateway_id=operation.gateway_id, sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission.id, door=door, destination="OAK",
+            actual_pure_pull_time_local=pure, actual_mix_pull_time_local=mix, no_mix_pull=no_mix))
+    db.session.commit()
+    return lineup
 
 
 def record_counts(gateway, operation):

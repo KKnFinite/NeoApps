@@ -175,7 +175,7 @@
         {% elif uses_operational_shell %}
         <header class="operational-node-topbar" data-operational-topbar>
             {% if is_neostaffing_page %}<span class="operational-node-identity" aria-label="NeoStaffing">{% else %}<a class="operational-node-identity" href="{{ raiden_home_url or url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
-                <span>{{ neo_brand_name(node_header_name, node_header_key) }}<small>{{ node_current_label }}</small></span>
+                <span>{{ neo_brand_name(node_header_name, node_header_key) }}{% if not is_neoraiden_page %}<small>{{ node_current_label }}</small>{% endif %}</span>
             {% if is_neostaffing_page %}</span>{% else %}</a>{% endif %}
             {% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}
             {% with character_switcher_modifier="character-switcher-header operational-character-switcher", character_switcher_use_neofont=true, character_switcher_current=true %}
