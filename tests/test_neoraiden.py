@@ -2,7 +2,7 @@ import re
 import unittest
 from hashlib import sha256
 from pathlib import Path
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 from sqlalchemy import event
 
@@ -61,7 +61,6 @@ class RaidenTest(unittest.TestCase):
             self.assertIsNone(here(other))
 
     def test_automatic_state_is_bounded_by_physical_sort_hours(self):
-        from datetime import timedelta
         from tests.test_neorain_sort_refresh import configure_sort_window
         op = seed_sort(self.gateway)
         _, start = configure_sort_window(self.gateway, op.sort_date)
@@ -74,6 +73,62 @@ class RaidenTest(unittest.TestCase):
         db.session.commit()
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
         self.assertEqual(self.client.get(path, headers={"X-Raiden-Automatic":"1"}).status_code, 204)
+
+    def test_arrival_order_uses_displayed_time_and_overnight_window(self):
+        from tests.test_neorain_sort_refresh import configure_sort_window
+
+        op = seed_sort(self.gateway)
+        configure_sort_window(self.gateway, op.sort_date)
+        first = SortDateMission.query.filter_by(flight_number="FX101").one()
+        second = SortDateMission.query.filter_by(flight_number="FX202").one()
+        first.wave = second.wave = "1"
+        start = datetime(2026, 4, 13, 2)  # 21:00 at RFD
+
+        def add(flight, planned=None, *, eta=None, actual=None, origin="SDF", status="scheduled"):
+            mission = SortDateMission(
+                sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
+                gateway_code=self.gateway.code, mission_type="arrival", flight_number=flight,
+                origin=origin, destination=self.gateway.code, arrival_status=status,
+                planned_datetime_utc=start + timedelta(minutes=planned) if planned is not None else None,
+                eta_datetime_utc=start + timedelta(minutes=eta) if eta is not None else None,
+                actual_block_in_datetime_utc=start + timedelta(minutes=actual) if actual is not None else None,
+            )
+            db.session.add(mission)
+            return mission
+
+        missing = add("NO-TIME", status="cancelled")
+        late = add("UPS0612", -1145)  # Legacy STA 01:55 on the Sort date
+        no_overnight = add("OUTSIDE", 495)
+        hot = add("HOT-01", 10, origin="HOT")
+        eta = add("UPS1361", 110, eta=55)
+        actual = add("UPS0540", 125, eta=250, actual=65)
+        midnight = add("UPS0990", 180, eta=182)
+        first_sta = add("UPS0927", -1200)  # Legacy STA 01:00 on the Sort date
+        middle_sta = add("UPS0616")
+        middle_sta.planned_datetime_local = datetime(2026, 4, 12, 1, 30)
+        tied = add("UPS0888", 55)
+        db.session.commit()
+
+        def read():
+            with self.app.test_request_context():
+                return snapshot(self.user, self.gateway, op)
+
+        board = read()
+        self.assertEqual([row["id"] for row in board["arrivals"]],
+                         [m.id for m in (eta, tied, actual, midnight, first_sta, middle_sta, late,
+                                         missing, no_overnight, hot)])
+        self.assertEqual([(row["flight"], row["route_label"], row["tail"], row["parking"])
+                          for row in board["departures"]],
+                         [("FX202", "1st OAK", "N202", "B02"), ("FX101", "2nd OAK", "N101", None)])
+        self.assertEqual(first_sta.planned_datetime_utc, start - timedelta(minutes=1200))
+        self.assertEqual(board["arrivals"][4]["planned"], "01:00")
+        self.assertEqual(board["arrivals"][5]["planned"], "01:30")
+        self.assertFalse(board["arrivals"][4]["eta"])
+        self.assertEqual(board["arrivals"][7]["status"], "cancelled")
+        eta.eta_datetime_utc = start + timedelta(minutes=255)
+        db.session.commit()
+        self.assertEqual([row["id"] for row in read()["arrivals"]][:6],
+                         [m.id for m in (tied, actual, midnight, first_sta, eta, middle_sta)])
 
     def test_explicit_selection_loads_archive_status_without_a_second_select(self):
         from sqlalchemy import inspect

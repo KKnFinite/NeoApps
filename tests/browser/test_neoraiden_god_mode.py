@@ -15,17 +15,23 @@ class GodModeBrowser(unittest.TestCase):
         ShellFixture.setUpClass()
         self.addCleanup(ShellFixture.tearDownClass)
         with ShellFixture.app.app_context():
-            operation = busy_sort(Gateway.query.one(), extra_arrivals=29, extra_departures=28)
+            operation = busy_sort(Gateway.query.one(), extra_arrivals=29, extra_departures=29)
             record_attendance(operation)
             for tail, position, lane in (("N401UP", "D05", 1), ("N402UP", "D06", 2)):
                 db.session.add(SortDateParkingAssignment(sort_date_operation_id=operation.id,
                     tail_number=tail, ramp_code="D", position_code=position, lane_number=lane))
+            longest = SortDateMission.query.filter_by(sort_date_operation_id=operation.id, flight_number="UPS0702").one()
+            longest.departure_status = "crew_load_complete"
             db.session.commit()
             op_id = operation.id
-        output = Path("instance/browser-evidence/issue66")
+        output = Path("instance/browser-evidence/issue79")
         output.mkdir(parents=True, exist_ok=True)
         for engine in ("chromium", "webkit"):
             with self.subTest(engine=engine):
+                with ShellFixture.app.app_context():
+                    attendance = StaffingDailyAttendance.query.filter_by(sort_date_operation_id=op_id)
+                    attendance.order_by(StaffingDailyAttendance.id.desc()).first().status = "call_in"
+                    db.session.commit()
                 browser = getattr(ShellFixture.pw, engine).launch()
                 try:
                     page = browser.new_page(viewport={"width":390,"height":844})
@@ -33,7 +39,7 @@ class GodModeBrowser(unittest.TestCase):
                     path = "/neoraiden?gateway=RFD&operation_id=" + str(op_id)
                     ShellFixture().ready(page,path)
                     self.assertEqual(page.title(),"NeoRaiden — God Mode")
-                    expect(page.locator("[data-mission]")).to_have_count(59)
+                    expect(page.locator("[data-mission]")).to_have_count(60)
                     stats = []
                     expect(page.locator(".rd-staff summary")).to_contain_text("1 HERE")
                     expect(page.locator(".rd-tv-here")).to_be_hidden()
@@ -49,16 +55,19 @@ class GodModeBrowser(unittest.TestCase):
                     for width in (320,375,390,430):
                         page.set_viewport_size(dict(width=width,height=844))
                         check_uld_first()
-                        expect(page.get_by_role("table",name="Missions")).to_have_count(1)
-                        expect(page.locator("[data-mission]:visible")).to_have_count(59)
-                        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"),width+1)
-                        page.screenshot(path=output/f"phone-{engine}-{width}.png",full_page=True)
+                        for direction, count in (("Departures",31),("Arrivals",29)):
+                            page.get_by_role("button", name=direction, exact=True).click()
+                            expect(page.get_by_role("table", name=direction, exact=True)).to_be_visible()
+                            expect(page.locator("[data-mission]:visible")).to_have_count(count)
+                            self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width+1)
+                        if width in (320,390):
+                            page.screenshot(path=output/f"phone-{engine}-{width}.png",full_page=True)
                         if width==390:
                             page.screenshot(path=output/f"phone-{engine}-390-viewport.png")
                     page.get_by_role("searchbox").fill("FX101")
                     expect(page.locator("[data-mission]:visible")).to_have_count(1)
                     item = page.locator("[data-mission]:visible")
-                    expect(item.locator("td,th")).to_have_count(7)
+                    expect(item.locator("td,th")).to_have_count(6)
                     expect(item.locator("details,summary")).to_have_count(0)
                     page.locator("[data-theme-toggle]").click()
                     expect(page.locator("[data-raiden]")).to_have_attribute("data-theme","light")
@@ -81,19 +90,26 @@ class GodModeBrowser(unittest.TestCase):
                     page.reload()
                     expect(page.locator("[data-raiden]")).to_have_attribute("data-theme","light")
                     page.screenshot(path=output/f"phone-{engine}-light.png")
-                    for width, height in ((1366,768),(1920,1080)):
+                    resolutions = ((1280,720),(1366,768),(1920,1080),(3840,2160))
+                    for width, height in ((1024,768), *resolutions):
                         page.set_viewport_size(dict(width=width,height=height))
                         rows = page.locator("[data-mission]")
-                        expect(rows).to_have_count(59)
+                        expect(page.locator("[data-mission]:visible")).to_have_count(60)
+                        arrivals = page.locator("#rd-arrivals").bounding_box()
+                        departures = page.locator("#rd-departures").bounding_box()
+                        self.assertLessEqual(arrivals["x"] + arrivals["width"], departures["x"])
+                        self.assertEqual(arrivals["y"], departures["y"])
+                        for group, box in (("arrivals", arrivals), ("departures", departures)):
+                            table = page.get_by_role("table", name=group.capitalize(), exact=True).bounding_box()
+                            self.assertLessEqual(table["width"], box["width"] + 1)
                         heights = rows.evaluate_all("rows => rows.map(row => row.getBoundingClientRect().height)")
                         self.assertLess(max(heights), 26)
+                        stats.append([width,"desktop",height,{"rowMin": min(heights),"rowMax":max(heights)}])
                         self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width + 1)
                         expect(page.locator(".rd-staff summary")).to_be_visible()
                         check_uld_first()
-                        page.screenshot(path=output/f"desktop-{engine}-{width}-light.png",full_page=True)
-                        page.locator("[data-theme-toggle]").click()
-                        page.screenshot(path=output/f"desktop-{engine}-{width}-dark.png",full_page=True)
-                        page.locator("[data-theme-toggle]").click()
+                        if width == 1366:
+                            page.screenshot(path=output/f"desktop-{engine}-{width}-light.png",full_page=True)
                     page.locator(".operational-sidebar-collapse").click()
                     gutter = page.evaluate("""() => document.querySelector('[data-raiden]').getBoundingClientRect().left -
                         document.querySelector('.operational-desktop-sidebar').getBoundingClientRect().right""")
@@ -104,7 +120,7 @@ class GodModeBrowser(unittest.TestCase):
                     expect(page.locator("[data-board]")).not_to_contain_text("Lane 1")
                     expect(page.locator("[data-board]")).to_contain_text("D06 \u00b7 Lane 2")
                     page.locator(".operational-sidebar-utilities [data-operational-board-toggle]").click()
-                    for width, height in ((1280,720),(1366,768),(1920,1080),(3840,2160)):
+                    for width, height in resolutions:
                         page.set_viewport_size(dict(width=width,height=height))
                         page.get_by_role("button",name="TV Mode",exact=True).click()
                         expect(page.get_by_role("button",name="Exit TV Mode")).to_be_visible()
@@ -119,27 +135,44 @@ class GodModeBrowser(unittest.TestCase):
                         state = page.evaluate("""() => {
                             const rows=[...document.querySelectorAll('.rd-mission')];
                             const fields=[...document.querySelectorAll('.rd-mission :is(th,td)')];
+                            const arrivals=document.querySelector('#rd-arrivals');
+                            const departures=document.querySelector('#rd-departures');
+                            const left=arrivals.getBoundingClientRect(), right=departures.getBoundingClientRect();
+                            const heights=rows.map(row=>row.getBoundingClientRect().height);
                             const visible=el=>{
                                 const r=el.getBoundingClientRect();
                                 return r.width>0 && r.height>0 && r.top>=0 && r.left>=0
                                     && r.bottom<=innerHeight+1 && r.right<=innerWidth+1;
                             };
-                            return {arrivals:rows.filter(el=>el.cells[0].textContent==='ARR').length,
-                                departures:rows.filter(el=>el.cells[0].textContent==='DEP').length,
+                            return {arrivals:arrivals.querySelectorAll('.rd-mission').length,
+                                departures:departures.querySelectorAll('.rd-mission').length,
                                 visible:rows.filter(visible).length,
                                 fieldsFit:fields.every(el=>visible(el) && el.scrollWidth<=el.clientWidth+1),
-                                oneColumn:rows.every((row,i)=>!i || row.offsetTop>rows[i-1].offsetTop),
+                                sideBySide:left.right<=right.left && left.top===right.top &&
+                                    arrivals.querySelector('table').getBoundingClientRect().right<=right.left,
+                                oneLine:rows.every(row=>row.cells.length===6 &&
+                                    row.getBoundingClientRect().height<=parseFloat(getComputedStyle(row).lineHeight)+1 &&
+                                    [...row.cells].every(cell=>getComputedStyle(cell).whiteSpace==='nowrap')),
+                                headers:[...document.querySelectorAll('.rd-missions thead')].map(head=>
+                                    [...head.querySelectorAll('th')].map(cell=>cell.textContent)),
                                 scrollboxes:[...document.querySelectorAll('.rd-tv *')].filter(el=>
-                                    /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight>el.clientHeight+1).length,
+                                    (/auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight>el.clientHeight+1) ||
+                                    (/auto|scroll/.test(getComputedStyle(el).overflowX) && el.scrollWidth>el.clientWidth+1)).length,
                                 w:document.documentElement.scrollWidth,h:document.documentElement.scrollHeight,
-                                font:parseFloat(getComputedStyle(rows[0].cells[1]).fontSize)};
+                                font:parseFloat(getComputedStyle(rows[0].cells[1]).fontSize),
+                                rowMin:Math.min(...heights),rowMax:Math.max(...heights)};
                         }""")
-                        self.assertEqual((state["arrivals"], state["departures"], state["visible"]), (29, 30, 59), state)
+                        self.assertEqual((state["arrivals"], state["departures"], state["visible"]), (29, 31, 60), state)
                         self.assertTrue(state["fieldsFit"], state)
                         self.assertLessEqual(state["w"],width+1)
                         self.assertLessEqual(state["h"],height+1)
                         self.assertGreaterEqual(state["font"],10)
-                        self.assertTrue(state["oneColumn"])
+                        self.assertTrue(state["sideBySide"], state)
+                        self.assertTrue(state["oneLine"], state)
+                        self.assertEqual(state["headers"], [
+                            ["Flight","Tail","Origin","Parking","Time","Status"],
+                            ["Flight","Tail","Destination","Parking","Time","Status"],
+                        ])
                         self.assertEqual(state["scrollboxes"],0)
                         stats.append([width,"tv",height,state])
                         for theme in ("dark","light"):
@@ -157,9 +190,9 @@ class GodModeBrowser(unittest.TestCase):
                         db.session.commit()
                     with page.expect_response(lambda r:'/neoraiden/state' in r.url and r.status==200):
                         page.locator("[data-refresh]").click()
-                    expect(page.locator("[data-mission]:visible")).to_have_count(59)
+                    expect(page.locator("[data-mission]:visible")).to_have_count(60)
                     self.assertEqual(page.evaluate("document.fullscreenElement === document.documentElement"), native)
-                    expect(page.locator(".rd-missions")).to_contain_text("NBOARD")
+                    expect(page.locator("#rd-departures .rd-missions")).to_contain_text("NBOARD")
                     expect(page.locator(".rd-uld-foot")).to_contain_text("E 0 · W 3")
                     expect(page.locator(".rd-tv-here b")).to_have_text("1")
                     page.get_by_role("button",name="Exit TV Mode").click()
@@ -172,11 +205,16 @@ class GodModeBrowser(unittest.TestCase):
                     page.evaluate("document.exitFullscreen()")
                     expect(page.locator(".rd-tv")).to_have_count(0)
                     expect(page.locator(".operational-sidebar-utilities")).to_be_visible()
+                    page.get_by_role("button",name="TV Mode",exact=True).click()
+                    expect(page.locator(".rd-tv")).to_be_visible()
+                    page.keyboard.press("Escape")
+                    page.wait_for_function("document.fullscreenElement === null")
+                    expect(page.locator(".rd-tv")).to_have_count(0)
                     page.set_viewport_size(dict(width=640,height=400))
                     page.get_by_role("button",name="TV Mode",exact=True).click()
                     expect(page.locator("[data-tv-notice]")).to_contain_text("cannot fit every flight legibly")
                     expect(page.locator(".rd-tv")).to_have_count(0)
-                    expect(page.locator("[data-mission]")).to_have_count(59)
+                    expect(page.locator("[data-mission]")).to_have_count(60)
                     page.evaluate("() => { document.documentElement.requestFullscreen = async () => { throw new Error(); }; }")
                     page.get_by_role("button",name="TV Mode",exact=True).click()
                     expect(page.locator("[data-tv-notice]")).to_contain_text("requires browser fullscreen")
