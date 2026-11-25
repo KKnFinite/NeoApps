@@ -36,6 +36,13 @@
         for (const button of all("[data-show-missions]"))
             button.setAttribute("aria-pressed", String(button.dataset.showMissions === direction));
     }
+    function updateContext() {
+        const sort = one("[data-sort-context]")?.dataset.sortContext;
+        const context = one("[data-tv-context]");
+        context.textContent = context.dataset.gateway + (sort ? " · " + sort : "");
+        one("[data-current-sort]").textContent = "Current Sort" + (sort && one("[data-current-sort]").selected ? " · " + sort : "");
+        one("[data-search]").hidden = !sort;
+    }
     function normalView(followMatch = false) {
         const input = one("[data-search]");
         if (input && input.value !== search) input.value = search;
@@ -121,7 +128,7 @@
             }
         }
         if (overflows()) {
-            exitTV("TV Mode cannot fit every flight legibly at this display size. All flights are available in God Mode.");
+            exitTV("TV Mode cannot fit every flight legibly at this display size. All flights are available in the workspace.");
         }
     }
     function scheduleFit() {
@@ -188,8 +195,10 @@
     observer.observe(one("[data-stale]"));
     root.addEventListener("raiden:before-update", () => { if (!tv) remembered = capture(); });
     root.addEventListener("raiden:updated", () => {
+        updateContext();
         if (tv) fitTV(); else restore(remembered);
     });
     applyTheme(normalTheme);
+    updateContext();
     normalView();
 })();

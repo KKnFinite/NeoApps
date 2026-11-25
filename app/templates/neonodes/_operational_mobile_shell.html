@@ -2,7 +2,7 @@
 <header class="operational-mobile-header" data-operational-mobile-header>
     {% if is_neostaffing_page %}<span class="operational-mobile-identity" aria-label="NeoStaffing">{% else %}<a class="operational-mobile-identity" href="{{ raiden_home_url or url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
         {% if node_header_logo %}<img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="34" height="34" decoding="async">{% endif %}
-        <span><strong class="neo-mobile-product-name">{{ neo_brand_name(node_header_name, node_header_key) }}</strong><small>{{ node_current_label }}</small></span>
+        <span><strong class="neo-mobile-product-name">{{ neo_brand_name(node_header_name, node_header_key) }}</strong>{% if not is_neoraiden_page %}<small>{{ node_current_label }}</small>{% endif %}</span>
     {% if is_neostaffing_page %}</span>{% else %}</a>{% endif %}
     <div class="operational-mobile-actions">
         {% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}

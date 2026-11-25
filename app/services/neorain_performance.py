@@ -39,3 +39,20 @@ def completed_actual(mission):
 def completed_variance_minutes(mission):
     actual, scheduled = completed_actual(mission), mission.planned_datetime_utc
     return int((actual - scheduled).total_seconds() / 60) if actual and scheduled else None
+
+
+def average_lateness(missions):
+    """Average positive completed variances, first overall and then with exclusions applied."""
+    completed = [(mission, minutes) for mission in missions if not mission_cancelled(mission)
+                 if (minutes := completed_variance_minutes(mission)) is not None]
+
+    def average(variances):
+        if not variances:
+            return None
+        late = [minutes for minutes in variances if minutes > 0]
+        return sum(late) / len(late) if late else 0.0
+
+    return {
+        "overall": average([minutes for _, minutes in completed]),
+        "included": average([minutes for mission, minutes in completed if eligible_for_performance(mission)]),
+    }

@@ -138,10 +138,12 @@ class RaidenTest(unittest.TestCase):
 
     def test_milestones_use_exact_missions_and_respect_node_access(self):
         from app.models import NeoScorpionFuelAssignment
-        from tests.neoraiden_fixtures import record_departure_milestones
+        from tests.neoraiden_fixtures import record_departure_milestones, record_pull_roster
 
         op = seed_sort(self.gateway)
         record_departure_milestones(op)
+        record_pull_roster(op)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(op.sort_date, time(21))
         db.session.add(SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date,
             sort_name=op.sort_name, gateway_code=op.gateway_code, mission_type="arrival",
             flight_number="ARR1", origin="SDF", destination=op.gateway_code, wave="2nd Wave",
@@ -153,17 +155,18 @@ class RaidenTest(unittest.TestCase):
             board = snapshot(self.user, self.gateway, op)
             self.assertEqual((board["arrivals"][0]["wave"], board["arrivals"][0]["variance"]), ("2", 7))
             fob, complete = board["departures"]
-            self.assertEqual((fob["route_label"], fob["neo_fuel"], fob["variance"], fob["mission_pull"]),
-                             ("1st OAK", "45.0", -5, ""))
+            self.assertEqual((fob["route_label"], fob["neo_fuel"], fob["variance"], fob["pure"], fob["mix"]),
+                             ("1st OAK", "45.0", -5, None, "NO MIX"))
             self.assertEqual((complete["route_label"], complete["neo_fuel"], complete["variance"],
-                              complete["mission_pull"], complete["ramp"], complete["crew"],
+                              complete["pure"], complete["mix"], complete["ramp"], complete["crew"],
                               complete["block"], complete["no_return"]),
-                             ("2nd OAK", "45.6", 9, "00:57", "00:59", "01:02", "01:09", True))
+                             ("2nd OAK", "45.6", 9, "00:02", "00:57", "00:59", "01:02", "01:09", True))
             self.assertEqual((fob["fuel_color"], complete["fuel_color"]), ("green", "green"))
             restricted = snapshot(self.user, self.gateway, op, sources=(set(), None))
             for row in restricted["departures"]:
                 self.assertIsNone(row["neo_fuel"])
-                self.assertIsNone(row["mission_pull"])
+                self.assertIsNone(row["pure"])
+                self.assertIsNone(row["mix"])
                 self.assertIsNone(row["variance"])
                 self.assertNotIn("block", row)
             mission = db.session.get(SortDateMission, complete["id"])
@@ -190,6 +193,75 @@ class RaidenTest(unittest.TestCase):
         response = self.client.get(f"/neoraiden/state?operation_id={operation_id}",
                                    headers={"X-Raiden-Automatic": "1"})
         self.assertEqual(response.status_code, 204)
+
+    def test_performance_uses_completed_late_only_cases_and_native_exclusions(self):
+        from app.neonodes.neorain.services import _inbound_late_summary
+
+        op = seed_sort(self.gateway)
+        planned = datetime(2026, 4, 13, 3)
+        arrivals = []
+        for number, minutes, status, wave, included in (
+            ("A1", 10, "arrived", "1", None),
+            ("A2", 30, "unloaded", "2", False),
+            ("A3", -20, "arrived", "2", None),
+            ("A4", 45, "cancelled", "1", True),
+            ("A5", 50, "on_ground", "1", None),
+        ):
+            arrivals.append(SortDateMission(sort_date_operation_id=op.id, gateway_code=op.gateway_code,
+                sort_date=op.sort_date, sort_name=op.sort_name, mission_type="arrival", flight_number=number,
+                origin="SDF", destination="RFD", planned_datetime_utc=planned,
+                actual_block_in_datetime_utc=planned + timedelta(minutes=minutes), arrival_status=status,
+                wave=wave, late_metrics_included_override=included))
+        db.session.add_all(arrivals)
+        db.session.commit()
+        with self.app.test_request_context():
+            def performance():
+                return snapshot(self.user, self.gateway, op)["performance"]
+            self.assertEqual(performance(), {"inbound": {"overall": 20.0, "included": 10.0},
+                                            "outbound": {"overall": None, "included": None}})
+            self.assertEqual(performance()["inbound"]["included"], float(_inbound_late_summary(arrivals)["total"]["average"]))
+            arrivals[0].late_metrics_included_override = False
+            db.session.commit()
+            self.assertEqual(performance()["inbound"]["included"], 0.0)
+            self.assertEqual(snapshot(self.user, self.gateway, op, sources=(set(), None))["performance"], {})
+
+    def test_deice_revision_follows_physical_tail_and_requires_ownership_evidence(self):
+        from app.models import NeoSubZeroDepartureDeiceEvent
+
+        op = seed_sort(self.gateway)
+        a = SortDateMission.query.filter_by(flight_number="FX101").one()
+        b = SortDateMission.query.filter_by(flight_number="FX202").one()
+        event = NeoSubZeroDepartureDeiceEvent(sort_date_operation_id=op.id, sort_date_mission_id=a.id,
+            tail_number="N101", status="cleared", radio_state="pending")
+        db.session.add(event)
+        db.session.commit()
+        with self.app.test_request_context():
+            def statuses(sources=None):
+                return {r["flight"]: (r["deice_state"], r["deice"])
+                        for r in snapshot(self.user, self.gateway, op, sources=sources)["departures"]}
+            self.assertEqual(statuses()["FX101"], ("radio-pending", "CLEARED · RADIO PENDING"))
+            self.assertEqual(statuses()["FX202"], (None, None))
+            a.assigned_tail_number, b.assigned_tail_number = "N202", "N101"
+            db.session.commit()
+            self.assertEqual(statuses()["FX202"][0], "radio-pending")
+            self.assertEqual(statuses()["FX101"], (None, None))
+            first = self.client.get(f"/neoraiden/state?operation_id={op.id}")
+            self.assertIn("CLEARED · RADIO PENDING", first.json["html"])
+            event.radio_state = "complete"
+            event.radio_completed_at_utc = datetime(2026, 4, 13, 5, 30)
+            event.radio_completed_by_user_id = self.user.id
+            db.session.commit()
+            reply = self.client.get(f"/neoraiden/state?operation_id={op.id}", headers={"If-None-Match": first.headers["ETag"]})
+            self.assertEqual(reply.status_code, 200)
+            self.assertIn("GONE · RADIO COMPLETE", reply.json["html"])
+            a.assigned_tail_number = "N101"
+            db.session.commit()
+            self.assertEqual(statuses()["FX202"], ("review", "TREATMENT OWNERSHIP REVIEW"))
+            self.assertEqual(statuses()["FX101"], ("gone", "GONE · RADIO COMPLETE"))
+            self.assertEqual(statuses((set(), None))["FX101"], (None, None))
+            event.reset_at_utc = datetime(2026, 4, 13, 5, 32)
+            db.session.commit()
+            self.assertEqual(set(statuses().values()), {(None, None)})
 
     def test_recorded_uld_projection_and_wave_lifecycle(self):
         from datetime import timedelta
@@ -279,7 +351,11 @@ class RaidenTest(unittest.TestCase):
         self.assertEqual(self.client.get("/neoraiden/state").status_code,403)
 
     def test_native_projection_identity_and_revalidation(self):
+        from tests.neoraiden_fixtures import record_pull_roster
+
         op = seed_sort(self.gateway)
+        lineup = record_pull_roster(op)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(op.sort_date, time(21))
         self.user.role = "watcher"
         db.session.commit()
         path = "/neoraiden/state?gateway=RFD&operation_id=" + str(op.id)
@@ -290,17 +366,44 @@ class RaidenTest(unittest.TestCase):
                 rows = snapshot(self.user, self.gateway, op)["departures"]
             self.assertEqual([(r["tail"], r["route_label"], r["ordinal"], r["parking"]) for r in rows],
                              [("N202", "OAK", None, "B02"), ("N101", "OAK", None, None)])
-            self.assertEqual([len(r["pulls"]) for r in rows], [0,1])
-            self.assertEqual(rows[1]["pulls"][0]["pure"],"01:25")
+            self.assertEqual([(r["pure"], r["mix"]) for r in rows], [(None, "NO MIX"), ("00:02", "00:57")])
             self.assertIsNone(rows[0]["deice"])
             self.assertEqual(self.client.get(path, headers={"If-None-Match":result.headers["ETag"]}).status_code, 304)
             self.assertIn("no-store",result.headers["Cache-Control"])
+            complete = SortDateMission.query.filter_by(flight_number="FX101").one()
+            last = NeoErmacDoorPull.query.filter_by(sort_date_mission_id=complete.id, door="D4").one()
+            last.actual_pure_pull_time_local = None
+            db.session.commit()
+            corrected = self.client.get(path, headers={"If-None-Match":result.headers["ETag"]})
+            self.assertEqual(corrected.status_code, 200)
+            self.assertNotIn("00:02", corrected.json["html"])
+            self.assertIn("00:57", corrected.json["html"])
+            lineup.west_destination_2 = "OAK"
+            lineup.flight_assignments = dict(lineup.flight_assignments, west_destination_2=complete.master_flight_schedule_id)
+            db.session.delete(last)
+            db.session.commit()
+            # Without the second assigned door both types remain blank, even though D1 reported.
+            with self.app.test_request_context():
+                self.assertEqual([(r["pure"], r["mix"]) for r in snapshot(self.user, self.gateway, op)["departures"]],
+                                 [(None, "NO MIX"), (None, None)])
+            lineup.west_destination_1 = lineup.west_destination_2 = None
+            lineup.flight_assignments = {key: value for key, value in lineup.flight_assignments.items()
+                                         if key.startswith("east_")}
+            db.session.commit()
+            assigned = self.client.get(path, headers={"If-None-Match":corrected.headers["ETag"]})
+            self.assertEqual(assigned.status_code, 200)
+            self.assertIn("23:47", assigned.json["html"])
+            self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] += timedelta(days=1)
+            historical = self.client.get(path, headers={"If-None-Match":assigned.headers["ETag"]})
+            self.assertEqual(historical.status_code, 200)
+            self.assertNotIn("23:47", historical.json["html"])
+            self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] -= timedelta(days=1)
             node = NeoNode.query.filter_by(code="ermac").one()
             GatewayNodeRole.query.filter_by(node_id=node.id).update({"is_active":False})
             db.session.commit()
-            changed = self.client.get(path, headers={"If-None-Match":result.headers["ETag"]})
+            changed = self.client.get(path, headers={"If-None-Match":assigned.headers["ETag"]})
             self.assertEqual(changed.status_code,200)
-            self.assertNotIn("D13",changed.json["html"])
+            self.assertNotIn("23:47",changed.json["html"])
             self.assertEqual(self.client.post(path).status_code,405)
             GatewayMembership.query.filter_by(user_id=self.user.id).update({"is_active": False})
             db.session.commit()

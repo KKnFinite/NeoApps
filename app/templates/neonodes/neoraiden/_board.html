@@ -11,23 +11,37 @@
   <p class="rd-empty" data-empty {% if rows %}hidden{% endif %}>{{ 'No matching flights.' if rows else 'No ' ~ key ~ ' recorded.' }}</p>
 </section>
 {% endmacro %}
+{% macro performance_metric(label, values, key) %}
+  {% set value = values.get(key) %}
+  <div><dt>{{ label }}</dt><dd>{{ '%.1f'|format(value) if value is not none else '—' }}</dd></div>
+{% endmacro %}
 {% if not board.operation_id %}
 <p class="rd-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
 {% else %}
-<div class="rd-overview">
+<div class="rd-overview" data-sort-context="{{ board.sort_label }}">
   <section class="rd-uld" aria-label="Native ULD counts">
-    <div class="rd-uld-title"><h2>CAN / ULD counts</h2><span>{{ board.gateway }} · {{ board.sort_label }}</span></div>
     {% if board.uld %}{% set u = board.uld %}
-    <div class="rd-uld-values">
-      <table><thead><tr>{% for label in ('Wave','East','West','Left to arrive','Left to unload') %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
-      <tbody>{% for w in u.waves %}<tr><th scope="row">{{ '1st' if loop.first else '2nd' }}</th><td>{{ val(w.east) }}</td><td>{{ val(w.west) }}</td><td>{{ val(w.arrive) }}</td><td>{{ val(w.unload) }}</td></tr>{% endfor %}</tbody></table>
-      <dl class="rd-uld-foot">
-        {{ metric('open-bays','Open bays','E ' ~ val(u.east_open) ~ ' · W ' ~ val(u.west_open)) }}
-        {{ metric('ballmats','On ballmats',u.unloaded) }}
-        {% if u.percent is not none %}{{ metric('progress','Progress',u.percent ~ '%') }}{% endif %}
+    <table aria-label="CAN / ULD counts">
+      <thead><tr>{% for label in ('Wave','East','West','Left to arrive','Left to unload') %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for w in u.waves %}<tr><th scope="row">{{ '1st' if loop.first else '2nd' }}</th><td>{{ val(w.east) }}</td><td>{{ val(w.west) }}</td><td>{{ val(w.arrive) }}</td><td>{{ val(w.unload) }}</td></tr>{% endfor %}
+        <tr data-openings><th scope="row">Openings</th><td>{{ val(u.east_open) }}</td><td>{{ val(u.west_open) }}</td><td></td><td></td></tr>
+      </tbody>
+    </table>
+    {% if u.percent is not none %}<dl class="rd-progress">{{ metric('progress','Progress',u.percent ~ '%') }}</dl>{% endif %}
+    {% else %}<p>Native ULD counts unavailable.</p>{% endif %}
+  </section>
+  <section class="rd-performance" aria-label="Average lateness in minutes">
+    {% for side, label in (('inbound','In'), ('outbound','Out')) %}
+    {% set values = board.performance.get(side, {}) %}
+    <div data-performance="{{ side }}">
+      <h2>{{ side|upper }}</h2>
+      <dl>
+        {{ performance_metric('Average Late ' ~ label, values, 'overall') }}
+        {{ performance_metric('With Removed', values, 'included') }}
       </dl>
     </div>
-    {% else %}<p>Native ULD counts unavailable.</p>{% endif %}
+    {% endfor %}
   </section>
   <aside class="rd-sort">
     <dl class="rd-totals">
@@ -37,9 +51,6 @@
     <details class="rd-staff"><summary>Staffing details{% if board.window is not none %} · {{ board.window }} min window{% endif %}</summary>
     {% for s in board.staffing %}<p>{{ s.area }} · {{ s.worked }} worked / {{ s.payroll }} payroll</p>{% else %}<p>Finalized staffing totals unavailable.</p>{% endfor %}</details>
   </aside>
-</div>
-<div class="rd-tools">
-  <input type="search" data-search aria-label="Find flight, tail or station" placeholder="Find flight, tail or station">
 </div>
 <section class="rd-workspace" aria-label="Mission board">
   <div class="rd-mobile-views" role="group" aria-label="Mission direction">

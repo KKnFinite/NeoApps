@@ -1,13 +1,14 @@
 import json
 import unittest
+from datetime import datetime, time
 from pathlib import Path
 
 from playwright.sync_api import expect
 
 from app.extensions import db
-from app.models import Gateway, SortDateMission, SortDateParkingAssignment
+from app.models import Gateway, NeoSubZeroDepartureDeiceEvent, SortDateMission, SortDateParkingAssignment
 from tests.browser import test_mobile_drawer as shell_tests
-from tests.neoraiden_fixtures import busy_sort, record_attendance, record_departure_milestones
+from tests.neoraiden_fixtures import busy_sort, record_attendance, record_departure_milestones, record_pull_roster
 
 
 RESOLUTIONS = ((1280, 720), (1366, 768), (1920, 1080), (3840, 2160))
@@ -15,7 +16,7 @@ RAIDEN_BLUE = "rgb(159, 201, 249)"
 HEADINGS = (
     ["Wave", "Flight", "Tail", "Origin", "POS", "Time", "+/−", "Status"],
     ["Flight", "Tail", "Dest", "POS", "Time", "Status", "Neo Fuel",
-     "Pull", "R-LC", "C-LC", "Block", "+/−", "No Return"],
+     "PURE", "MIX", "R-LC", "C-LC", "Block", "+/−", "DEICE", "No Return"],
 )
 
 
@@ -26,7 +27,10 @@ class GodModeBrowser(unittest.TestCase):
             board.locator("[data-theme-toggle]").click()
         expect(board.locator(".rd-wordmark")).to_have_css("color", RAIDEN_BLUE)
         expect(board.locator("[data-refresh], [data-countdown], [data-pause], [data-interval], .rd-settings")).to_have_count(0)
-        expect(board.locator(".rd-uld-foot")).not_to_contain_text("Plan")
+        expect(board.locator("h1")).to_have_text("NeoRaiden")
+        expect(page).to_have_title("NeoRaiden")
+        expect(board.locator(".rd-overview")).not_to_contain_text("Plan")
+        expect(board.locator(".rd-overview")).not_to_contain_text("On ballmats")
         expect(board.locator("#rd-departures [data-mission] [data-field='time'] small")).to_have_count(0)
 
     def check_overview(self, page):
@@ -37,6 +41,11 @@ class GodModeBrowser(unittest.TestCase):
         expect(shift.locator("dd")).to_have_text("1")
         expect(ramp.locator("dt")).to_have_text("Ramp Staffing")
         expect(ramp.locator("dd")).to_have_text("—")
+        expect(overview.get_by_role("table", name="CAN / ULD counts").locator("thead th")).to_have_text(
+            ["Wave", "East", "West", "Left to arrive", "Left to unload"])
+        expect(overview.locator("tbody th")).to_have_text(["1st", "2nd", "Openings"])
+        expect(overview.locator("tr[data-openings] td")).to_have_text(["2", "3", "", ""])
+        expect(overview.locator("[data-performance] dd")).to_have_text(["0.0", "0.0", "9.0", "9.0"])
         self.assertAlmostEqual(shift.bounding_box()["y"], ramp.bounding_box()["y"], delta=1)
         self.assertLess(shift.bounding_box()["x"], ramp.bounding_box()["x"])
         misaligned = overview.evaluate("""el => {
@@ -48,13 +57,10 @@ class GodModeBrowser(unittest.TestCase):
             const center = rect => rect.left + rect.width / 2;
             const centered = (a, b) => Math.abs(center(a) - center(b)) <= 1;
             const misaligned = [];
-            const heading = el.querySelector('.rd-uld-title h2');
-            if (!centered(textRect(heading), el.querySelector('.rd-uld').getBoundingClientRect())) {
-                misaligned.push(heading.textContent);
-            }
             const labels = [...el.querySelectorAll('.rd-uld thead th')];
             const waves = [...el.querySelectorAll('.rd-uld tbody tr')];
-            const pairs = waves.flatMap(row => [...row.cells].map((cell, i) => [labels[i], cell]));
+            const pairs = waves.flatMap(row => [...row.cells].flatMap((cell, i) =>
+                cell.textContent ? [[labels[i], cell]] : []));
             pairs.push(...[...el.querySelectorAll('.rd-metric')].map(metric =>
                 [metric.querySelector('dt'), metric.querySelector('dd')]));
             for (const [label, value] of pairs) {
@@ -77,7 +83,9 @@ class GodModeBrowser(unittest.TestCase):
             const heights = rows.map(row => row.getBoundingClientRect().height);
             const left = boxes[0].getBoundingClientRect(), right = boxes[1].getBoundingClientRect();
             const bounds = document.querySelector('[data-raiden]').getBoundingClientRect();
-            const values = [...fields,...document.querySelectorAll('.rd-value,.rd-totals dd')].filter(el => el.getClientRects().length);
+            const values = [...fields,...document.querySelectorAll('.rd-value')].filter(el => el.getClientRects().length);
+            const toolbar = [...document.querySelector('.rd-header').children].filter(el => el.clientHeight > 0);
+            const verticalCenters = toolbar.map(el => el.getBoundingClientRect().top + el.clientHeight / 2);
             return {
                 counts: boxes.map(box => box.querySelectorAll('[data-mission]').length),
                 sideBySide: left.right <= right.left && left.top === right.top && left.width < right.width,
@@ -88,6 +96,8 @@ class GodModeBrowser(unittest.TestCase):
                     const rect = cell.getBoundingClientRect();
                     return rect.width > 0 && rect.right <= bounds.right + 1 && cell.scrollWidth <= cell.clientWidth + 1;
                 }),
+                overflowingCells: fields.filter(cell => cell.scrollWidth > cell.clientWidth + 1)
+                    .map(cell => [cell.dataset.field, cell.innerText, cell.clientWidth, cell.scrollWidth]),
                 oneLine: rows.every(row => row.getBoundingClientRect().height <=
                     parseFloat(getComputedStyle(row).lineHeight) + 4 &&
                     [...row.cells].every(cell => getComputedStyle(cell).whiteSpace === 'nowrap')),
@@ -99,7 +109,9 @@ class GodModeBrowser(unittest.TestCase):
                 }),
                 fonts: [...new Set(values.map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
                 cellPadding: parseFloat(getComputedStyle(fields[0]).paddingInlineStart),
-                canFont: parseFloat(getComputedStyle(document.querySelector('.rd-uld tbody td')).fontSize),
+                overviewFonts: [...new Set([...document.querySelectorAll('.rd-overview :is(tbody th,tbody td,dd)')]
+                    .map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
+                toolbarSpread: Math.max(...verticalCenters) - Math.min(...verticalCenters),
                 scrollboxes: boxes.filter(box => /auto|scroll/.test(getComputedStyle(box).overflow)).length,
                 width:document.documentElement.scrollWidth, height:document.documentElement.scrollHeight,
                 rowMin:Math.min(...heights), rowMax:Math.max(...heights)
@@ -113,8 +125,8 @@ class GodModeBrowser(unittest.TestCase):
         self.assertGreaterEqual(state["fonts"][0], 10, state)
         self.assertLessEqual(state["fonts"][0], 24 if tv else 12, state)
         self.assertGreaterEqual(state["cellPadding"], 2, state)
-        self.assertGreater(state["canFont"], state["fonts"][0], state)
-        self.assertLessEqual(state["canFont"], 30 if tv else 20, state)
+        self.assertEqual(len(state["overviewFonts"]), 1, state)
+        self.assertLessEqual(state["toolbarSpread"], 2, state)
         self.assertEqual(state["scrollboxes"], 0, state)
         self.assertLessEqual(state["width"], width + 1, state)
         self.assertTrue(state["fitsAll"], state)
@@ -128,8 +140,12 @@ class GodModeBrowser(unittest.TestCase):
         self.addCleanup(fixture.tearDownClass)
         with fixture.app.app_context():
             operation = busy_sort(Gateway.query.one(), extra_arrivals=29, extra_departures=29)
+            fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(operation.sort_date, time(21))
             record_attendance(operation)
             record_departure_milestones(operation)
+            record_pull_roster(operation)
+            event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id).one()
+            event.tail_number, event.status, event.radio_state = "N431UP", "cleared", "pending"
             for tail, position, lane in (("N431UP", "D05", 1), ("N402UP", "D06", 2)):
                 db.session.add(SortDateParkingAssignment(sort_date_operation_id=operation.id,
                     tail_number=tail, ramp_code="D", position_code=position, lane_number=lane))
@@ -139,7 +155,7 @@ class GodModeBrowser(unittest.TestCase):
             db.session.commit()
             op_id = operation.id
 
-        output = Path("instance/browser-evidence/issue85/after")
+        output = Path("instance/browser-evidence/issue88/mission-checks")
         output.mkdir(parents=True, exist_ok=True)
         for engine in ("chromium", "webkit"):
             with self.subTest(engine=engine), getattr(fixture.pw, engine).launch() as browser:
@@ -180,9 +196,12 @@ class GodModeBrowser(unittest.TestCase):
                                 row = toggle.locator("xpath=ancestor::tr")
                                 expect(row.locator(".rd-detail-label:visible")).to_have_text(HEADINGS[1][6:])
                                 expect(row.locator("[data-field='time'] time")).to_have_text("01:00")
-                                for field, value in (("variance","+9"), ("fuel","45.6"), ("pull","00:57"),
+                                for field, value in (("variance","+9"), ("fuel","45.6"), ("pure","00:02"), ("mix","00:57"),
                                                      ("ramp","00:59"), ("crew","01:02"), ("block","01:09"), ("no-return","Yes")):
                                     expect(row.locator(f'[data-field="{field}"] .rd-value')).to_have_text(value)
+                                expect(row.locator(".rd-deice-full")).to_have_text("CLEARED · RADIO PENDING")
+                                expect(row.locator(".rd-deice-full")).to_be_visible()
+                                row.evaluate("el => el.scrollIntoView({block:'center'})")
                             self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width + 1)
                             self.assertTrue(table.locator("tbody td:visible, tbody th:visible").evaluate_all(
                                 "cells => cells.every(cell => cell.scrollWidth <= cell.clientWidth + 1)"))
@@ -191,6 +210,11 @@ class GodModeBrowser(unittest.TestCase):
                                 toggle.click()
                 (output/f"mobile-font-{engine}.json").write_text(json.dumps(mobile_fonts, indent=2))
 
+                page.set_viewport_size({"width":1280, "height":720})
+                page.get_by_label("Gateway", exact=True).focus()
+                for selector in ("[data-sort-choice]", "[data-search]", "[data-tv]", "[data-theme-toggle]", ".rd-staff summary"):
+                    page.keyboard.press("Tab")
+                    expect(page.locator(selector)).to_be_focused()
                 stats = []
                 for mode in ("desktop", "board", "tv"):
                     for width, height in RESOLUTIONS:
