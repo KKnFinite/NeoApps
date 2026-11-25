@@ -3,13 +3,8 @@
     const root = document.querySelector("[data-raiden]");
     if (!root) return;
     const get = name => root.querySelector("[data-" + name + "]");
-    const chooser = get("interval");
-    const storageKey = "neoapps.raiden.refresh.seconds";
-    try {
-        const stored = localStorage.getItem(storageKey);
-        if (Array.from(chooser.options).some(option => option.value === stored)) chooser.value = stored;
-    } catch (_) { /* Storage is optional on shared displays. */ }
-    let due = Date.now() + Number(chooser.value) * 1000;
+    let intervalMs = Number(root.dataset.intervalMs);
+    let due = Date.now() + intervalMs;
     let revision = root.dataset.revision;
     let pending = false;
     let stopped = false;
@@ -26,23 +21,23 @@
     }
     let windows = JSON.parse(root.dataset.windows || "[]");
     const insideSort = () => windows.some(([start, end]) => start <= Date.now() && Date.now() < end);
-    async function refresh(automatic = false) {
-        if (automatic && !insideSort()) return;
+    async function refresh() {
+        if (!intervalMs || !insideSort()) return;
         if (pending || stopped || document.hidden || Date.now() < retriesAfter) return;
         pending = true;
         clearTimeout(timer);
-        get("refresh").disabled = true;
         get("refresh-status").textContent = "Updating…";
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
         try {
             const response = await fetch(root.dataset.state, {
                 credentials: "same-origin", cache: "no-store", signal: controller.signal,
-                headers: { ...(revision && { "If-None-Match": '"' + revision + '"' }),
-                           ...(automatic && { "X-Raiden-Automatic": "1" }) }
+                headers: { "X-Raiden-Automatic": "1", ...(revision && { "If-None-Match": '"' + revision + '"' }) }
             });
             const periods = response.headers.get("X-Raiden-Windows");
             if (periods) windows = JSON.parse(periods);
+            const interval = response.headers.get("X-Raiden-Interval-Ms");
+            if (interval !== null) intervalMs = Number(interval);
             if (response.status === 204) return;
             if (response.redirected || [401,403,404].includes(response.status)) {
                 get("board").replaceChildren();
@@ -72,7 +67,7 @@
         } finally {
             clearTimeout(timeout);
             pending = false;
-            due = Math.max(retriesAfter, Date.now() + Number(chooser.value) * 1000);
+            due = Math.max(retriesAfter, Date.now() + intervalMs);
             tick();
         }
     }
@@ -81,28 +76,20 @@
         if (pending || document.hidden) return;
         const now = Date.now();
         const active = insideSort();
-        get("refresh").disabled = stopped || now < retriesAfter;
-        get("refresh-status").textContent = stopped ? "Refresh stopped" : active ? "" : "Outside Sort hours";
-        if (stopped) return;
+        get("refresh-status").textContent = stopped || !intervalMs ? "Live updates off" : active ? "" : "Outside Sort hours";
+        if (stopped || !intervalMs) return;
         if (active && now >= due && now >= retriesAfter) {
-            refresh(true);
+            refresh();
             return;
         }
         // Wake for a due update, a physical window boundary, or a manual retry.
         const wakes = windows.flat().filter(time => time > now);
         if (active) wakes.push(Math.max(due, retriesAfter));
-        if (retriesAfter > now) wakes.push(retriesAfter);
         if (wakes.length) timer = setTimeout(tick, Math.min(Math.min(...wakes) - now, 2147483647));
     }
-    chooser.addEventListener("change", () => {
-        try { localStorage.setItem(storageKey, chooser.value); } catch (_) {}
-        due = Math.max(retriesAfter, Date.now() + Number(chooser.value) * 1000);
-        tick();
-    });
     get("sort-choice").addEventListener("change", event => location.assign(event.target.value));
-    get("refresh").addEventListener("click", () => refresh());
     document.addEventListener("visibilitychange", tick);
-    window.addEventListener("pageshow", event => { if (event.persisted) refresh(true); });
+    window.addEventListener("pageshow", event => { if (event.persisted) tick(); });
     stamp();
     tick();
 })();

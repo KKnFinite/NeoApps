@@ -17,6 +17,7 @@ class LiveScreenDefinition:
 
 
 UCC_TV_REFRESH_KEY = "neosubzero.ucc_tv"
+RAIDEN_REFRESH_KEY = "neoraiden.index"
 
 LIVE_SCREEN_REGISTRY = (
     LiveScreenDefinition("motherbrain", "NeoMotherBrain", "Arrival Planning", "neomotherbrain.arrival_planning", "neomotherbrain.alp_import", "neomotherbrain.planning_live_state", (("mission_type", "arrival"),)),
@@ -37,6 +38,7 @@ LIVE_SCREEN_REGISTRY = (
     LiveScreenDefinition("scorpion", "NeoScorpion", "Hanzo", "neoscorpion.hanzo", "neoscorpion.hanzo", "neoscorpion.hanzo_revision"),
     LiveScreenDefinition("rain", "NeoRain", "Inbound", "neorain.inbound", "neorain.inbound", "neorain.inbound_revision"),
     LiveScreenDefinition("rain", "NeoRain", "Outbound", "neorain.outbound", "neorain.outbound", "neorain.outbound_revision"),
+    LiveScreenDefinition("raiden", "NeoRaiden", "God Mode", RAIDEN_REFRESH_KEY, "neoraiden.index", "neoraiden.state", default_interval_seconds=30),
     LiveScreenDefinition("subzero", "NeoSubZero", "Pretreat", "neosubzero.pretreat", "neosubzero.pretreat", "neosubzero.pretreat_revision_endpoint"),
     LiveScreenDefinition("subzero", "NeoSubZero", "Outbound", "neosubzero.outbound", "neosubzero.outbound", "neosubzero.outbound_revision_endpoint"),
     LiveScreenDefinition("subzero", "NeoSubZero", "Coordinator", "neosubzero.coordinator", "neosubzero.operations", "neosubzero.coordinator_revision_endpoint"),

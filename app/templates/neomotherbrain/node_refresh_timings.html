@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
+{% macro group_label(group) %}{{ neo_brand("Raiden", "raiden") if group.key == "raiden" else group.label }}{% endmacro %}
 {% block title %}Node Refresh Timings | NeoMotherBrain{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/motherbrain_planning.css', v=config.STATIC_ASSET_VERSION) }}">
@@ -9,12 +11,12 @@
     </header>
     <p class="admin-note">Each interval applies to one screen during its configured Sort hours.{% if not can_edit_system_settings %} View only.{% endif %}</p>
     <nav class="mb-jumps admin-jumps" aria-label="Screen groups">
-        {% for group in refresh_groups %}<a href="#refresh-group-{{ group.key }}">{{ group.label }}</a>{% endfor %}
+        {% for group in refresh_groups %}<a href="#refresh-group-{{ group.key }}">{{ group_label(group) }}</a>{% endfor %}
     </nav>
     <div>
         {% for group in refresh_groups %}
         <section class="mb-section admin-timings" aria-labelledby="refresh-group-{{ group.key }}">
-            <h2 id="refresh-group-{{ group.key }}">{{ group.label }}</h2>
+            <h2 id="refresh-group-{{ group.key }}">{{ group_label(group) }}</h2>
             <div class="admin-timing-list">
                 {% for screen in group.screens %}
                 {% set setting = refresh_values[screen.screen_key] %}

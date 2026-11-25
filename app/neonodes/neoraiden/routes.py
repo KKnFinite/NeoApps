@@ -10,6 +10,8 @@ from app.extensions import db
 from app.models import Gateway, SortDateOperation
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
 from app.services.gateway_matrix import current_gateway_local_datetime, gateway_timezone, physical_poll_windows
+from app.services.live_screen_refresh import live_screen_refresh_value
+from app.services.live_screen_registry import RAIDEN_REFRESH_KEY
 from . import bp
 from .services import arrival_sort_window, authorized_gateways, board_sources, gateway_operations, postgres_board_versions, snapshot
 
@@ -47,7 +49,7 @@ def _board(gateway, operation, *, conditional=False):
         # Reauthorize every source and recalculate time-dependent wave states on every read.
         sources = board_sources(current_user, gateway, operation)
         access, uld = sources
-        revision = _revision(("board-v2", current_app.config.get("STATIC_ASSET_VERSION"),
+        revision = _revision(("board-v3", current_app.config.get("STATIC_ASSET_VERSION"),
             current_user.id, gateway.id, gateway.code, operation.id, str(operation.sort_date), operation.sort_name,
             operation.window_minutes, operation.first_wave_window_minutes, operation.second_wave_window_minutes,
             tuple(map(str, arrival_sort_window(gateway, operation))), sorted(access), uld,
@@ -76,7 +78,8 @@ def index():
     board, revision = _board(gateway, operation)
     return render_template("neonodes/neoraiden/index.html", gateways=gateways, gateway=gateway, sorts=sorts,
         selected_id=request.args.get("operation_id",type=int), board=board, revision=revision,
-        poll_windows=_poll_windows(gateway, operation))
+        poll_windows=_poll_windows(gateway, operation),
+        refresh_interval_ms=live_screen_refresh_value(gateway, RAIDEN_REFRESH_KEY).effective_interval_ms)
 
 
 @bp.get("/state")
@@ -84,14 +87,16 @@ def index():
 def state():
     _, gateway, operation = _selection()
     windows = _poll_windows(gateway, operation)
+    interval_ms = live_screen_refresh_value(gateway, RAIDEN_REFRESH_KEY).effective_interval_ms
     if request.headers.get("X-Raiden-Automatic") == "1":
         active = False
         if windows:
             now = current_gateway_local_datetime(gateway).replace(tzinfo=ZoneInfo(gateway_timezone(gateway)))
             active = any(start <= now.timestamp() * 1000 < end for start, end in windows)
-        if not active:
+        if not active or not interval_ms:
             response = make_response("", 204)
             response.headers["X-Raiden-Windows"] = json.dumps(windows)
+            response.headers["X-Raiden-Interval-Ms"] = str(interval_ms)
             response.cache_control.no_store = True
             return response
     board, revision = _board(gateway, operation, conditional=True)
@@ -103,5 +108,6 @@ def state():
         response = jsonify(html=template.render(board=board))
     response.set_etag(revision)
     response.headers["X-Raiden-Windows"] = json.dumps(windows)
+    response.headers["X-Raiden-Interval-Ms"] = str(interval_ms)
     response.cache_control.no_store = True
     return response

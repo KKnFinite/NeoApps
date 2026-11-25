@@ -61,6 +61,7 @@ class RaidenTest(unittest.TestCase):
             self.assertIsNone(here(other))
 
     def test_automatic_state_is_bounded_by_physical_sort_hours(self):
+        from app.models import LiveScreenRefreshSetting
         from tests.test_neorain_sort_refresh import configure_sort_window
         op = seed_sort(self.gateway)
         _, start = configure_sort_window(self.gateway, op.sort_date)
@@ -73,6 +74,11 @@ class RaidenTest(unittest.TestCase):
         db.session.commit()
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
         self.assertEqual(self.client.get(path, headers={"X-Raiden-Automatic":"1"}).status_code, 204)
+        op.archived_at_utc = None
+        db.session.add(LiveScreenRefreshSetting(gateway_id=self.gateway.id, screen_key="neoraiden.index", interval_seconds=0))
+        db.session.commit()
+        off = self.client.get(path, headers={"X-Raiden-Automatic":"1"})
+        self.assertEqual((off.status_code, off.headers["X-Raiden-Interval-Ms"]), (204, "0"))
 
     def test_arrival_order_uses_displayed_time_and_overnight_window(self):
         from tests.test_neorain_sort_refresh import configure_sort_window
@@ -129,6 +135,45 @@ class RaidenTest(unittest.TestCase):
         db.session.commit()
         self.assertEqual([row["id"] for row in read()["arrivals"]][:6],
                          [m.id for m in (tied, actual, midnight, first_sta, eta, middle_sta)])
+
+    def test_milestones_use_exact_missions_and_respect_node_access(self):
+        from app.models import NeoScorpionFuelAssignment
+        from tests.neoraiden_fixtures import record_departure_milestones
+
+        op = seed_sort(self.gateway)
+        record_departure_milestones(op)
+        db.session.add(SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date,
+            sort_name=op.sort_name, gateway_code=op.gateway_code, mission_type="arrival",
+            flight_number="ARR1", origin="SDF", destination=op.gateway_code, wave="2nd Wave",
+            arrival_status="arrived", planned_datetime_utc=datetime(2026,4,13,5),
+            actual_block_in_datetime_utc=datetime(2026,4,13,5,7)))
+        db.session.commit()
+        with self.app.test_request_context(), patch("requests.sessions.Session.request",
+                side_effect=AssertionError("Raiden requested external traffic")):
+            board = snapshot(self.user, self.gateway, op)
+            self.assertEqual((board["arrivals"][0]["wave"], board["arrivals"][0]["variance"]), ("2", 7))
+            fob, complete = board["departures"]
+            self.assertEqual((fob["route_label"], fob["neo_fuel"], fob["variance"], fob["mission_pull"]),
+                             ("1st OAK", "45.0", -5, ""))
+            self.assertEqual((complete["route_label"], complete["neo_fuel"], complete["variance"],
+                              complete["mission_pull"], complete["ramp"], complete["crew"],
+                              complete["block"], complete["no_return"]),
+                             ("2nd OAK", "45.6", 9, "00:57", "00:59", "01:02", "01:09", True))
+            self.assertEqual((fob["fuel_color"], complete["fuel_color"]), ("green", "green"))
+            restricted = snapshot(self.user, self.gateway, op, sources=(set(), None))
+            for row in restricted["departures"]:
+                self.assertIsNone(row["neo_fuel"])
+                self.assertIsNone(row["mission_pull"])
+                self.assertIsNone(row["variance"])
+                self.assertNotIn("block", row)
+            mission = db.session.get(SortDateMission, complete["id"])
+            assignment = NeoScorpionFuelAssignment.query.filter_by(sort_date_mission_id=mission.id).one()
+            assignment.completed_at_utc = None
+            assignment.review_status = "pending"
+            mission.fuel_status = "waiting"
+            db.session.commit()
+            pending = snapshot(self.user, self.gateway, op)["departures"][1]
+            self.assertEqual((pending["neo_fuel"], pending["fuel_color"]), ("PENDING", "gray"))
 
     def test_explicit_selection_loads_archive_status_without_a_second_select(self):
         from sqlalchemy import inspect

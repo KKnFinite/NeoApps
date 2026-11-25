@@ -5454,6 +5454,7 @@ def _validated_tail_swap_inherited_measurement(
     fuel_work_state,
     *,
     tank_states=None,
+    sources=None,
 ):
     if not operation or not assignment or not mission or fuel_work_state is None:
         return None
@@ -5471,50 +5472,14 @@ def _validated_tail_swap_inherited_measurement(
     ):
         return None
 
-    inheritance_audit = (
-        NeoScorpionFuelAuditEntry.query.filter_by(
-            sort_date_operation_id=operation.id,
-            fuel_assignment_id=assignment.id,
-            action="confirm_tail",
-            fuel_work_state_id=fuel_work_state.id,
-            field_name=TAIL_SWAP_INHERITED_EVENT_AUDIT_FIELD,
-            old_value=current_tail,
-        )
-        .order_by(
-            NeoScorpionFuelAuditEntry.created_at.desc(),
-            NeoScorpionFuelAuditEntry.id.desc(),
-        )
-        .first()
-    )
-    if inheritance_audit is None:
-        return None
-    try:
-        source_event_id = int(inheritance_audit.new_value)
-    except (TypeError, ValueError):
-        return None
-
-    source_row = (
-        db.session.query(
-            NeoScorpionFuelingEvent,
-            NeoScorpionFuelAssignment,
-        )
-        .join(
-            NeoScorpionFuelAssignment,
-            NeoScorpionFuelAssignment.id
-            == NeoScorpionFuelingEvent.fuel_assignment_id,
-        )
-        .filter(
-            NeoScorpionFuelingEvent.id == source_event_id,
-            NeoScorpionFuelingEvent.sort_date_operation_id == operation.id,
-            NeoScorpionFuelingEvent.tail_number == current_tail,
-        )
-        .options(selectinload(NeoScorpionFuelingEvent.tank_snapshots))
-        .first()
-    )
+    if sources is not None:
+        source_row = sources.get((assignment.id, fuel_work_state.id, current_tail))
+    else:
+        source_row = _tail_swap_inherited_source(operation, assignment, fuel_work_state, current_tail)
     if source_row is None:
         return None
     source_event, source_assignment = source_row
-    if (
+    if source_event.tail_number != current_tail or (
         source_assignment.completed_at_utc is None
         or source_assignment.review_status != "complete"
     ):
@@ -5534,6 +5499,67 @@ def _validated_tail_swap_inherited_measurement(
         ):
             return None
     return measurement
+
+
+def _tail_swap_inheritance_audits(operation):
+    return NeoScorpionFuelAuditEntry.query.filter_by(
+        sort_date_operation_id=operation.id, action="confirm_tail",
+        field_name=TAIL_SWAP_INHERITED_EVENT_AUDIT_FIELD,
+    ).order_by(NeoScorpionFuelAuditEntry.created_at.desc(), NeoScorpionFuelAuditEntry.id.desc())
+
+
+def _tail_swap_inherited_source(operation, assignment, fuel_work_state, current_tail):
+    inheritance_audit = (
+        _tail_swap_inheritance_audits(operation).filter_by(
+            fuel_assignment_id=assignment.id,
+            fuel_work_state_id=fuel_work_state.id,
+            old_value=current_tail,
+        )
+        .first()
+    )
+    if inheritance_audit is None:
+        return None
+    try:
+        source_event_id = int(inheritance_audit.new_value)
+    except (TypeError, ValueError):
+        return None
+
+    event = NeoScorpionFuelingEvent
+    return _tail_swap_source_events(operation).filter(
+        event.id == source_event_id, event.tail_number == current_tail,
+    ).first()
+
+
+def _tail_swap_source_events(operation):
+    event = NeoScorpionFuelingEvent
+    return db.session.query(event, NeoScorpionFuelAssignment).join(
+        NeoScorpionFuelAssignment, NeoScorpionFuelAssignment.id == event.fuel_assignment_id,
+    ).filter(event.sort_date_operation_id == operation.id).options(selectinload(event.tank_snapshots))
+
+
+def _tail_swap_sources_by_work(operation, work_states):
+    """Load the same latest audit and exact event in bulk for board projections."""
+    work_ids = {work.id for work in all_work(work_states)}
+    if not work_ids:
+        return {}
+    audits = _tail_swap_inheritance_audits(operation).filter(
+        NeoScorpionFuelAuditEntry.fuel_work_state_id.in_(work_ids),
+    ).all()
+    recorded = {}
+    for audit in audits:
+        recorded.setdefault((audit.fuel_assignment_id, audit.fuel_work_state_id, audit.old_value), audit.new_value)
+    event_ids = {}
+    for key, value in recorded.items():
+        try:
+            event_ids[key] = int(value)
+        except (TypeError, ValueError):
+            continue
+    if not event_ids:
+        return {}
+    sources = {row[0].id: row for row in _tail_swap_source_events(operation).filter(
+        NeoScorpionFuelingEvent.id.in_(set(event_ids.values())),
+    ).all()}
+    return {key: sources[value] for key, value in event_ids.items() if value in sources}
 
 
 def _segment_movement_status(assignment, fuel_work_state, tank_states, *, existing_events=()):
@@ -6516,6 +6542,7 @@ def _fuel_rows(
     projection_sources=(),
     departure_ranks=None,
     compact_arrivals=False,
+    tail_swap_sources=None,
 ):
     if departure_ranks is None:
         departure_ranks = operation_departure_occurrences(operation)
@@ -6636,6 +6663,7 @@ def _fuel_rows(
                 mission,
                 fuel_work_state,
                 tank_states=tuple(tank_states_by_code.values()),
+                sources=tail_swap_sources,
             )
             if assignment
             else None

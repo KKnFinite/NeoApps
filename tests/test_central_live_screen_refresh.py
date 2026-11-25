@@ -75,6 +75,7 @@ class CentralLiveScreenRefreshTest(unittest.TestCase):
             "neoscorpion.hanzo",
             "neorain.inbound",
             "neorain.outbound",
+            "neoraiden.index",
             "neosubzero.pretreat",
             "neosubzero.outbound",
             "neosubzero.coordinator",
@@ -186,6 +187,23 @@ class CentralLiveScreenRefreshTest(unittest.TestCase):
             self.assertNotEqual(denied.location, path)
             gateway = db.session.get(Gateway, gateway_id)
             self.assertEqual(live_screen_refresh_value(gateway, key).effective_interval_ms, 30_000)
+
+    def test_raiden_uses_authorized_gateway_refresh_settings(self):
+        self._login("grandmaster")
+        path = "/motherbrain/system-settings/node-refresh-timings"
+        key = "neoraiden.index"
+        self.assertIn(b'data-refresh-screen="neoraiden.index"', self.client.get(path).data)
+        self.assertIn(b'data-interval-ms="30000"', self.client.get("/neoraiden").data)
+        self.assertEqual(self.client.post(path, data={"screen_key": key, "refresh_interval_seconds": "15"}).status_code, 302)
+        self.assertIn(b'data-interval-ms="15000"', self.client.get("/neoraiden").data)
+        gateway_id = self.gateway.id
+        with self.app.app_context():
+            self.client = self.app.test_client()
+            self._login("watcher")
+            denied = self.client.post(path, data={"screen_key": key, "refresh_interval_seconds": "5"})
+            self.assertIn(denied.status_code, (302, 403))
+            self.assertNotEqual(denied.location, path)
+            self.assertEqual(live_screen_refresh_value(db.session.get(Gateway, gateway_id), key).effective_interval_ms, 15_000)
 
     def test_legacy_ermac_override_seeds_effective_per_screen_values(self):
         db.session.add(
