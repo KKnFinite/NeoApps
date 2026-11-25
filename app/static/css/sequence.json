@@ -6,8 +6,8 @@
     {
       "file": "base.css",
       "scope": "shared",
-      "bytes": 72264,
-      "sha256": "5db8d361b631d34935aa1343baa1a5555d48302c64ae03c98a3e9da029ca4459"
+      "bytes": 74006,
+      "sha256": "a71a11c09043689a55d581288f3825dbdfa6f2f0ab8ea5728f0a3ae3d9804ddb"
     },
     {
       "file": "01-neoermac.css",
@@ -96,8 +96,8 @@
     {
       "file": "15-shared.css",
       "scope": "shared",
-      "bytes": 25435,
-      "sha256": "ab8d8757ec1359c72a3758abaf9d22e270b8998897f4067636dc6c53f33f9477"
+      "bytes": 24410,
+      "sha256": "e31e46691234ff3be39d94bd2a7482df50bf9fce7d295b1d2899119845ec5602"
     },
     {
       "file": "16-neosektor.css",

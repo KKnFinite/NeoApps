@@ -5,7 +5,8 @@
     position: fixed; inset: 0 0 auto; z-index: 1100; box-sizing: border-box;
     background: #06090d; border-bottom: 1px solid #34343b;
 }
-.operational-node-topbar > * { position: static; flex-shrink: 0; }
+.operational-node-topbar > * { flex-shrink: 0; }
+.operational-node-topbar > details { position: relative; }
 .operational-node-topbar .character-switcher-header { margin: 0; }
 .operational-node-identity {
     display: flex; align-items: center; gap: 16px; min-width: 0;
@@ -46,8 +47,6 @@
         color: #c8d6da;
         font: 600 .85rem/1.3 system-ui, sans-serif;
     }
-    .node-secondary-tools summary:hover { background: #1c333d; }
-    .node-secondary-tools summary:focus-visible { outline: 2px solid #83dfd4; outline-offset: -2px; }
     .node-secondary-tools[open] > a { margin-top: 3px; }
     body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-menu {
         grid-template-columns: minmax(0,1fr);
@@ -86,39 +85,63 @@
 
 
 
-/* Shared operational selects must never fall back to bright native controls. */
-body.operational-shell-page:not(.blueprint-neostaffing) .operational-node-topbar,
-body.operational-shell-page:not(.blueprint-neostaffing) .operational-mobile-header {
-    background: #0d1a22;
-    border-bottom-color: #29434d;
+body.operational-shell-page {
+    --shell-chrome-border: rgba(var(--node-rgb), .42);
+    --shell-chrome-hover: rgba(var(--node-rgb), .15);
 }
+body.operational-shell-page .operational-node-topbar,
+body.operational-shell-page .operational-mobile-header {
+    background: linear-gradient(100deg, rgba(var(--node-rgb), .18), rgba(var(--node-rgb), .035) 60%), #0e1015;
+}
+body.operational-shell-page .shell > :is(.operational-node-topbar,.operational-mobile-header) {
+    border-bottom-color: var(--shell-chrome-border);
+}
+.operational-node-topbar :is(.operational-account-menu,.motherbrain-alert-tray) > summary {
+    border-color: var(--shell-chrome-border);
+}
+.operational-node-topbar :is(.operational-account-menu,.motherbrain-alert-tray) > summary:hover {
+    background: var(--shell-chrome-hover);
+}
+.operational-node-topbar :is(.operational-account-menu,.motherbrain-alert-tray) > summary:focus-visible {
+    outline: 2px solid var(--node-highlight);
+    outline-offset: 2px;
+}
+
 @media (min-width:901px) {
-    body.operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar {
-        background: #0e1b24;
-        border-right-color: #29434d;
+    body.operational-shell-page .operational-desktop-sidebar {
+        background: linear-gradient(170deg, rgba(var(--node-rgb), .17), rgba(var(--node-rgb), .035) 72%), #0d0f13;
+        border-right-color: var(--shell-chrome-border);
     }
-    .operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar .motherbrain-desktop-side-link,
-    .operational-shell-page:not(.blueprint-neostaffing) .operational-sidebar-utility {
+    .operational-shell-page .operational-desktop-sidebar :is(.motherbrain-desktop-side-link,.operational-sidebar-utility) {
         border: 1px solid transparent;
         border-radius: 7px;
         background: transparent;
-        color: #c8d6da;
+        color: #d0d2da;
         font: 600 .85rem/1.3 system-ui,sans-serif;
         text-transform: none;
         letter-spacing: normal;
     }
-    .operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar :is(a,button):focus-visible {
-        outline: 2px solid #83dfd4;
+    .operational-shell-page .operational-desktop-sidebar :is(a,button,summary):focus-visible {
+        outline: 2px solid var(--node-highlight);
         outline-offset: -2px;
     }
-    .operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar :is(.motherbrain-desktop-side-link,.operational-sidebar-utility):hover {
-        background: #1c333d;
+    .operational-shell-page .operational-desktop-sidebar :is(.motherbrain-desktop-side-link,.operational-sidebar-utility,.node-secondary-tools summary,.operational-sidebar-collapse):hover {
+        background: var(--shell-chrome-hover);
     }
-    .operational-shell-page:not(.blueprint-neostaffing) .operational-desktop-sidebar .motherbrain-desktop-side-link.is-active {
-        background: #173a40;
-        border-color: #35646c;
-        box-shadow: inset 3px 0 #56cabf;
-        color: #f0fffd;
+    .operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-link:is(.is-active,[aria-current="page"]) {
+        background: var(--shell-active-background, rgba(var(--node-rgb), .22));
+        border-color: var(--shell-active-border, var(--shell-chrome-border));
+        box-shadow: inset 3px 0 var(--node-primary);
+        color: #f6f4f7;
+    }
+    .operational-desktop-sidebar :is(.operational-sidebar-logo,.operational-sidebar-utilities) {
+        border-color: var(--shell-chrome-border);
+    }
+    .operational-desktop-sidebar .operational-side-link-icon {
+        background: rgba(var(--node-rgb), .09);
+    }
+    .operational-desktop-sidebar .motherbrain-desktop-side-context {
+        background: rgba(var(--node-rgb), .06);
     }
     /* Several page styles compute gutters independently from the sidebar element. */
     :is(html.operational-board-view-boot body,body.operational-board-view).operational-shell-page {
@@ -150,6 +173,29 @@ body.operational-shell-page:not(.blueprint-neostaffing) .operational-mobile-head
         box-sizing: border-box;
     }
 }
+
+@media (max-width:900px) {
+    .operational-shell-page .neo-mobile-navigation .neo-mobile-drawer {
+        background: linear-gradient(160deg, rgba(var(--node-rgb), .16), transparent 45%), #0e1015;
+        border-left-color: var(--shell-chrome-border);
+    }
+    .operational-shell-page .neo-mobile-navigation .neo-mobile-bottom {
+        border-top-color: var(--shell-chrome-border);
+    }
+    .operational-shell-page .neo-mobile-navigation :focus-visible {
+        outline-color: var(--node-highlight);
+    }
+    .operational-shell-page .neo-drawer-links :is(a,button,summary):hover {
+        background: rgba(var(--node-rgb), .15);
+    }
+    .operational-shell-page .neo-drawer-links :is(.is-active,[aria-current="page"]) {
+        border-color: rgba(var(--node-rgb), .42);
+        background: rgba(var(--node-rgb), .22);
+        box-shadow: inset 2px 0 var(--node-primary);
+    }
+}
+
+/* Shared operational selects must never fall back to bright native controls. */
 body.operational-shell-page select {
     color-scheme: dark;
     background-color: #0d171c !important;

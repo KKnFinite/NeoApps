@@ -111,6 +111,7 @@ body:has(.v11-app) > .shell > .content {
     border-bottom: 1px solid var(--v11-border);
     background: var(--v11-sidebar);
 }
+.v11-top > .operational-character-switcher { margin-inline-start: auto; }
 .v11-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--v11-muted); font-size: 12px; }
 .v11-breadcrumb strong { color: var(--v11-text); }
 .v11-sort-chip { border: 1px solid var(--v11-border); border-radius: 7px; padding: 7px 9px; background: var(--v11-surface-2); font-size: 11px; font-weight: 700; white-space: nowrap; }
@@ -398,6 +399,9 @@ body:has(.v11-app) > .shell > .content {
     .v11-top { flex-wrap: wrap; }
     .v11-org-layout { grid-template-columns: minmax(130px, 25%) minmax(0, 1fr); }
     .v11-org-layout > :last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 900px) {
+    .v11-top > .operational-character-switcher { display: none; }
 }
 @media (max-width: 760px) {
     .v11-app { display: block; }

@@ -848,11 +848,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("Scorpion", menu)
 
         css = stylesheet_source()
-        self.assertIn("width: min(238px, calc(100vw - 32px));", css)
-        self.assertIn("grid-template-columns: 20px minmax(0, 1fr) auto;", css)
-        self.assertIn('.character-switcher-label {\n        min-width: 0;', css)
-        self.assertIn('font-family: "NeoFont", Arial, sans-serif;', css)
-        self.assertIn("font-size: 0.54rem;", css)
+        self.assertIn("width: min(294px, calc(100vw - 24px));", css)
+        self.assertIn("grid-template-columns: 24px minmax(0, 1fr) auto;", css)
+        self.assertIn(".character-switcher-panel .character-switcher-label {", css)
+        self.assertIn("font: 400 .62rem/1.2 NeoFont, Arial, sans-serif;", css)
 
     def test_mobile_shell_renders_motherbrain_topbar_alerts_and_bottom_nav(self):
         self._asset_test_login()

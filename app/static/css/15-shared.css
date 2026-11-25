@@ -766,49 +766,6 @@ a.neoscorpion-spear-indicator:focus-visible {
             0 0 22px rgba(var(--node-rgb), 0.22);
     }
 
-    /* Keep the shared desktop character picker compact without changing mobile controls. */
-    .character-switcher-panel {
-        top: calc(100% + 6px);
-        gap: 4px;
-        width: min(238px, calc(100vw - 32px));
-        padding: 6px;
-    }
-
-    .character-switcher-link {
-        display: grid;
-        grid-template-columns: 20px minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 7px;
-        min-height: 30px;
-        padding: 5px 7px;
-        font-size: 0.54rem;
-    }
-
-    .character-switcher-icon {
-        align-self: center;
-        width: 20px;
-        height: 20px;
-        border-radius: 5px;
-    }
-
-    .character-switcher-label {
-        min-width: 0;
-        color: inherit;
-        font-family: "NeoFont", Arial, sans-serif;
-        font-size: 0.54rem;
-        letter-spacing: 0.04em;
-        line-height: 1;
-        white-space: nowrap;
-    }
-
-    .character-switcher-label .neo-brand {
-        font-size: inherit;
-    }
-
-    .character-switcher-suffix {
-        font-size: 0.5rem;
-    }
-
     body.node-desktop-nav-page {
         --motherbrain-side-nav-width: 292px;
     }

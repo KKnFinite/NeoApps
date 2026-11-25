@@ -882,16 +882,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_desktop_ballmat_and_character_switcher_compaction_rules_are_present(self):
         css = stylesheet_source()
-        desktop_switcher_panel = css.rsplit(".character-switcher-panel {", 1)[1].split("}", 1)[0]
+        desktop_switcher_panel = css.split(".character-switcher > .character-switcher-panel {", 1)[1].split("}", 1)[0]
         desktop_switcher_link = css.rsplit(".character-switcher-link {", 1)[1].split("}", 1)[0]
         desktop_switcher_icon = css.rsplit(".character-switcher-icon {", 1)[1].split("}", 1)[0]
 
         self.assertIn('body.blueprint-neosektor.node-desktop-nav-page.neosektor-ballmat-operator-page', css)
         self.assertIn('font-size: clamp(1.32rem, 1.9vw, 1.7rem);', css)
-        self.assertIn('width: min(238px, calc(100vw - 32px));', desktop_switcher_panel)
-        self.assertIn('min-height: 30px;', desktop_switcher_link)
-        self.assertIn('width: 20px;', desktop_switcher_icon)
-        self.assertIn('height: 20px;', desktop_switcher_icon)
+        self.assertIn('width: min(294px, calc(100vw - 24px));', desktop_switcher_panel)
+        self.assertIn('min-height: 36px;', desktop_switcher_link)
+        self.assertIn('width: 24px;', desktop_switcher_icon)
+        self.assertIn('height: 24px;', desktop_switcher_icon)
 
     def test_tunnel_conductor_marks_duplicate_title_for_mobile_shell(self):
         self._login_approved_user(role="simulator")

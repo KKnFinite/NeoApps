@@ -29,13 +29,15 @@
         {% if is_neostaffing_page %}
         {% include "neostaffing/_navigation_items.html" %}
         {% elif is_neoermac_page %}
-        <a href="{{ url_for('neoermac.door_view') }}">Door View</a><a href="{{ url_for('neoermac.building_lineup') }}">Building Lineup</a><a href="{{ url_for('neoermac.view_outbound') }}">View Outbound</a><a href="{{ url_for('neoermac.upcoming_pulls') }}">Upcoming Pulls</a><a href="{{ url_for('neoermac.tug_assignments') }}">Tug Assignments</a>{% if user_can('neoermac.settings.view') %}<a href="{{ url_for('neoermac.settings') }}">Settings</a>{% endif %}
+        {% for label, endpoint in [('Door View','neoermac.door_view'), ('Building Lineup','neoermac.building_lineup'), ('View Outbound','neoermac.view_outbound'), ('Upcoming Pulls','neoermac.upcoming_pulls'), ('Tug Assignments','neoermac.tug_assignments'), ('Settings','neoermac.settings')] %}
+            {% if endpoint != 'neoermac.settings' or user_can('neoermac.settings.view') %}<a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} aria-current="page"{% endif %}>{{ label }}</a>{% endif %}
+        {% endfor %}
         {% elif is_neosektor_page %}
-        {% for item in neosektor_internal_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
+        {% for item in neosektor_internal_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
         {% elif is_neoscorpion_page %}
-        {% for item in neoscorpion_internal_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
+        {% for item in neoscorpion_internal_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
         {% elif is_neorain_page %}
-        {% for item in neorain_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
+        {% for item in neorain_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
         {% elif is_neosubzero_page %}
         {% with subzero_nav_mode='mobile' %}{% include 'neonodes/neosubzero/_navigation_items.html' %}{% endwith %}
         {% elif is_motherbrain_page %}
