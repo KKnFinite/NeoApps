@@ -1,16 +1,12 @@
-{% from 'neonodes/neoraiden/_mission.html' import mission,metric,val %}
-{% macro mission_group(key, title, route, rows, inbound) %}
+{% from 'neonodes/neoraiden/_mission.html' import arrivals,departures,mission,metric,val %}
+{% macro mission_group(key, title, columns, rows, inbound) %}
 <section class="rd-mission-group" id="rd-{{ key }}" data-mission-group="{{ key }}">
   <h2 id="rd-{{ key }}-heading">{{ title }}</h2>
   <table class="rd-missions" role="table" aria-labelledby="rd-{{ key }}-heading">
     <thead role="rowgroup"><tr role="row">
-      {% for heading in ('Flight','Tail',route,'Parking','Time','Status') %}<th scope="col" role="columnheader">{{ heading }}</th>{% endfor %}
-      {% set details = [('Wave','Wave'), ('+/−','Variance in minutes')] if inbound else
-        [('+/−','Variance in minutes'), ('Neo Fuel','NeoScorpion Neo Fuel (thousand pounds)'), ('Pull','NeoErmac Mission Pull'),
-         ('Ramp LC','Ramp Load Complete'), ('Crew LC','Crew Load Complete'), ('Block','Block Time'), ('No Return','No Return')] %}
-      {% for heading, label in details %}<th scope="col" role="columnheader" class="rd-extra" title="{{ label }}">{{ heading }}</th>{% endfor %}
+      {% for field, label, description in columns %}<th scope="col" role="columnheader" data-field="{{ field }}"{% if not inbound and loop.index > 6 %} class="rd-extra"{% endif %}{% if description %} title="{{ description }}"{% endif %}>{{ label }}</th>{% endfor %}
     </tr></thead>
-    <tbody role="rowgroup">{% for m in rows %}{{ mission(m,inbound) }}{% endfor %}</tbody>
+    <tbody role="rowgroup">{% for m in rows %}{{ mission(m,columns,inbound) }}{% endfor %}</tbody>
   </table>
   <p class="rd-empty" data-empty {% if rows %}hidden{% endif %}>{{ 'No matching flights.' if rows else 'No ' ~ key ~ ' recorded.' }}</p>
 </section>
@@ -22,15 +18,23 @@
   <section class="rd-uld" aria-label="Native ULD counts">
     <div class="rd-uld-title"><h2>CAN / ULD counts</h2><span>{{ board.gateway }} · {{ board.sort_label }}</span></div>
     {% if board.uld %}{% set u = board.uld %}
-    <table><thead><tr><th>Wave</th><th>East</th><th>West</th><th>Left to arrive</th><th>Left to unload</th></tr></thead>
-    <tbody>{% for w in u.waves %}<tr><th scope="row">{{ '1st' if loop.first else '2nd' }}</th><td>{{ val(w.east) }}</td><td>{{ val(w.west) }}</td><td>{{ val(w.arrive) }}</td><td>{{ val(w.unload) }}</td></tr>{% endfor %}</tbody></table>
-    <div class="rd-uld-foot"><span>Open bays <b>E {{ val(u.east_open) }} · W {{ val(u.west_open) }}</b></span>
-      {{ metric('On ballmats',u.unloaded) }}{% if u.percent is not none %}<span>Progress <b>{{ u.percent }}%</b></span>{% endif %}</div>
+    <div class="rd-uld-values">
+      <table><thead><tr>{% for label in ('Wave','East','West','Left to arrive','Left to unload') %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for w in u.waves %}<tr><th scope="row">{{ '1st' if loop.first else '2nd' }}</th><td>{{ val(w.east) }}</td><td>{{ val(w.west) }}</td><td>{{ val(w.arrive) }}</td><td>{{ val(w.unload) }}</td></tr>{% endfor %}</tbody></table>
+      <dl class="rd-uld-foot">
+        {{ metric('open-bays','Open bays','E ' ~ val(u.east_open) ~ ' · W ' ~ val(u.west_open)) }}
+        {{ metric('ballmats','On ballmats',u.unloaded) }}
+        {% if u.percent is not none %}{{ metric('progress','Progress',u.percent ~ '%') }}{% endif %}
+      </dl>
+    </div>
     {% else %}<p>Native ULD counts unavailable.</p>{% endif %}
   </section>
-  <aside class="rd-sort"><div class="rd-totals">{{ metric('Arrivals',board.arrivals|length) }}{{ metric('Departures',board.departures|length) }}
-    <span class="rd-tv-here">Staffing HERE <b>{{ val(board.marked_here) }}</b></span></div>
-    <details class="rd-staff"><summary>Staffing{% if board.marked_here is not none %} · {{ board.marked_here }} HERE{% endif %}{% if board.window is not none %} · {{ board.window }} min window{% endif %}</summary>
+  <aside class="rd-sort">
+    <dl class="rd-totals">
+      {{ metric('arrivals','Arrivals',board.arrivals|length) }}{{ metric('departures','Departures',board.departures|length) }}
+      {{ metric('shift-staffing','Shift Staffing',board.marked_here) }}{{ metric('ramp-staffing','Ramp Staffing',none) }}
+    </dl>
+    <details class="rd-staff"><summary>Staffing details{% if board.window is not none %} · {{ board.window }} min window{% endif %}</summary>
     {% for s in board.staffing %}<p>{{ s.area }} · {{ s.worked }} worked / {{ s.payroll }} payroll</p>{% else %}<p>Finalized staffing totals unavailable.</p>{% endfor %}</details>
   </aside>
 </div>
@@ -43,8 +47,8 @@
     <button type="button" data-show-missions="departures" aria-controls="rd-departures" aria-pressed="false">Departures</button>
   </div>
   <div class="rd-mission-groups" data-mobile-view="arrivals">
-    {{ mission_group('arrivals','Arrivals','Origin',board.arrivals,true) }}
-    {{ mission_group('departures','Departures','Dest',board.departures,false) }}
+    {{ mission_group('arrivals','Arrivals',arrivals,board.arrivals,true) }}
+    {{ mission_group('departures','Departures',departures,board.departures,false) }}
   </div>
 </section>
 {% endif %}

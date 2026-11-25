@@ -111,7 +111,8 @@
         if (tables.length) {
             const rowCount = Math.max(...tables.map(table => table.rows.length));
             const available = root.clientHeight - tables[0].getBoundingClientRect().top - 4;
-            const size = Math.min(window.innerHeight * .022, available / (rowCount * 1.1));
+            const preferred = Math.min(24, window.innerHeight * .016);
+            const size = Math.min(preferred, available / (rowCount * 1.25));
             let font = Math.max(10, Math.floor(size * 4) / 4);
             root.style.setProperty("--rd-row-font", font + "px");
             while (font > 10 && overflows()) {
