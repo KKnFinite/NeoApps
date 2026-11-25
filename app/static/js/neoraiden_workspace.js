@@ -15,7 +15,6 @@
     const fullscreenTarget = document.documentElement;
     let tv = false, nativeFullscreen = false, entering = false;
     let normalTheme = pref("theme") || "dark";
-    let selected = pref("list") === "departures" ? "departures" : "arrivals";
     let search = "", remembered = null, priorScroll = 0, resizeFrame = 0;
     function applyTheme(theme) {
         root.dataset.theme = theme;
@@ -25,25 +24,18 @@
         button.setAttribute("aria-pressed", String(theme === "light"));
     }
     function normalView() {
-        root.dataset.list = selected;
-        for (const button of all("[data-list-choice]"))
-            button.setAttribute("aria-pressed", String(button.dataset.listChoice === selected));
         const input = one("[data-search]");
         if (input && input.value !== search) input.value = search;
         const term = search.trim().toLocaleLowerCase();
-        for (const panel of all("[data-panel]")) {
-            const rows = Array.from(panel.querySelectorAll("[data-mission]"));
-            for (const row of rows)
-                row.hidden = !!term && !row.querySelector("summary").textContent.toLocaleLowerCase().includes(term);
-            panel.querySelector("[data-empty]").hidden = rows.some(row => !row.hidden);
-        }
+        const rows = all("[data-mission]");
+        for (const row of rows)
+            row.hidden = !!term && !row.textContent.toLocaleLowerCase().includes(term);
+        const empty = one("[data-empty]");
+        if (empty) empty.hidden = rows.some(row => !row.hidden);
     }
     function capture() {
         return {
-            open: all("details[data-mission][open]").map(row => row.dataset.mission),
             staffing: !!one(".rd-staff")?.open,
-            scroll: all(".rd-scroll").map(el => el.scrollTop),
-            focus: document.activeElement?.closest("[data-mission]")?.dataset.mission,
             searchFocus: document.activeElement === one("[data-search]"),
             caret: one("[data-search]")?.selectionStart,
         };
@@ -51,15 +43,11 @@
     function restore(state) {
         normalView();
         if (!state) return;
-        for (const row of all("[data-mission]")) row.open = state.open.includes(row.dataset.mission);
         if (one(".rd-staff")) one(".rd-staff").open = state.staffing;
-        all(".rd-scroll").forEach((el, i) => { el.scrollTop = state.scroll[i] || 0; });
         const input = one("[data-search]");
         if (state.searchFocus && input) {
             input.focus({preventScroll:true});
             input.setSelectionRange(state.caret, state.caret);
-        } else if (state.focus) {
-            one('[data-mission="' + state.focus + '"] summary')?.focus({preventScroll:true});
         }
     }
     function notice(message) {
@@ -78,7 +66,6 @@
         marker.replaceWith(root);
         tvButton.textContent = "TV Mode";
         tvButton.setAttribute("aria-pressed", "false");
-        all(".rd-mission summary").forEach(el => el.removeAttribute("tabindex"));
         applyTheme(normalTheme);
         restore(remembered);
         window.scrollTo(0, priorScroll);
@@ -87,17 +74,22 @@
     }
     function fitTV() {
         if (!tv || entering) return;
-        for (const panel of all("[data-panel]")) {
-            const rows = panel.querySelectorAll("[data-mission]");
-            for (const row of rows) {
-                row.hidden = false;
-                row.open = false;
-                row.querySelector("summary").tabIndex = -1;
+        const rows = all("[data-mission]");
+        for (const row of rows) row.hidden = false;
+        const empty = one("[data-empty]");
+        if (empty) empty.hidden = rows.length > 0;
+        if (rows.length) {
+            // Budget for the column headings and one line per mission.
+            const tableTop = one(".rd-missions").getBoundingClientRect().top;
+            const available = root.clientHeight - tableTop - 4;
+            const size = Math.min(window.innerHeight * .017, available / ((rows.length + 1) * 1.05));
+            let font = Math.max(10, Math.floor(size * 4) / 4);
+            root.style.setProperty("--rd-row-font", font + "px");
+            while (font > 10 && root.scrollHeight > root.clientHeight) {
+                font -= .25;
+                root.style.setProperty("--rd-row-font", font + "px");
             }
-            panel.querySelector("[data-empty]").hidden = rows.length > 0;
         }
-        // With no scrolling or pagination, use the normal workspace if this
-        // display cannot fit all flights at the wallboard's minimum type size.
         if (root.scrollHeight > root.clientHeight + 1 || root.scrollWidth > root.clientWidth + 1) {
             exitTV("TV Mode cannot fit every flight legibly at this display size. All flights are available in God Mode.");
         }
@@ -116,6 +108,11 @@
         } catch (_) {
             nativeFullscreen = false;
         }
+        if (!nativeFullscreen) {
+            entering = false;
+            notice("TV Mode requires browser fullscreen. Allow fullscreen and try again.");
+            return;
+        }
         remembered = capture();
         priorScroll = window.scrollY;
         root.before(marker);
@@ -126,25 +123,19 @@
         tvButton.textContent = "Exit TV Mode";
         tvButton.setAttribute("aria-pressed", "true");
         applyTheme(pref("tv.theme") || root.dataset.theme);
-        notice(nativeFullscreen ? "" : "Browser fullscreen is unavailable. TV Mode is using this window.");
+        notice("");
         entering = false;
         fitTV();
         tvButton.focus({preventScroll:true});
     }
     root.addEventListener("click", event => {
         const button = event.target.closest("button");
-        if (tv && event.target.closest(".rd-mission summary")) event.preventDefault();
         if (!button) return;
         if (button.hasAttribute("data-tv")) changeMode();
         if (button.hasAttribute("data-theme-toggle")) {
             applyTheme(root.dataset.theme === "dark" ? "light" : "dark");
             if (!tv) normalTheme = root.dataset.theme;
             remember(tv ? "tv.theme" : "theme",root.dataset.theme);
-        }
-        if (button.dataset.listChoice) {
-            selected = button.dataset.listChoice;
-            remember("list",selected);
-            normalView();
         }
     });
     root.addEventListener("input", event => {

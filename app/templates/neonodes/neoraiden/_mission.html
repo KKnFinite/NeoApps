@@ -1,19 +1,15 @@
 {% macro val(v) -%}{{ v if v is not none and v != '' else '—' }}{%- endmacro %}
 {% macro metric(label,v) %}<span>{{ label }} <b>{{ val(v) }}</b></span>{% endmacro %}
 {% macro mission(m,inbound) %}
-<details class="rd-mission" data-mission="{{ m.id }}">
-  <summary>
-    <span><strong>{{ val(m.flight) }}</strong><small>{{ val(m.tail) }}</small></span>
-    <span><strong>{{ val(m.route_label|default(m.route)) }}</strong><small>{{ val(m.parking) }}</small></span>
-    <span><strong>{{ val(m.actual or (m.eta if inbound else m.etd) or m.planned) }}</strong><small>{{ 'Actual' if m.actual else ('ETA' if inbound and m.eta else ('ETD' if not inbound and m.etd else 'Sched')) }}</small></span>
-    <span class="rd-status" data-status="{{ m.status or '' }}">{{ m.status|replace('_',' ') if m.status else '—' }}</span>
-  </summary>
-  <div class="rd-detail">
-    {{ metric('Scheduled',m.planned) }}{{ metric('ETA' if inbound else 'ETD',m.eta if inbound else m.etd) }}{{ metric('Actual',m.actual) }}
-    {% if not inbound %}{{ metric('Fuel',m.fuel_status) }}{{ metric('Planned lb',m.planned_fuel) }}{{ metric('Deice',m.deice) }}
-    <span>Pull · Pure / Mix <b>{{ val(m.pure) }} / {{ val(m.mix) }}</b></span>
-    <span>Actual pull <b>{{ val(m.actual_pure) }} / {{ val(m.actual_mix) }}</b></span>
-    {% for p in m.pulls %}<span>{{ p.door }} <b>{{ val(p.pure) }} / {{ val(p.mix) }}</b></span>{% endfor %}{% endif %}
-  </div>
-</details>
+{% set time = (m.actual or m.eta or m.planned) if inbound else (m.etd or m.planned) %}
+{% set clock = ('ACT' if m.actual else 'ETA' if m.eta else 'STA') if inbound else ('ETD' if m.etd else 'STD') %}
+<tr class="rd-mission" data-mission="{{ m.id }}">
+  <td class="rd-type">{{ 'ARR' if inbound else 'DEP' }}</td>
+  <th scope="row">{{ val(m.flight) }}</th>
+  <td>{{ val(m.tail) }}</td>
+  <td>{{ val(m.route_label|default(m.route)) }}</td>
+  <td>{{ val(m.parking) }}</td>
+  <td>{% if time %}<small>{{ clock }}</small> {{ time }}{% else %}—{% endif %}</td>
+  <td class="rd-status" data-status="{{ m.status or '' }}">{{ m.status|replace('_',' ') if m.status else '—' }}</td>
+</tr>
 {% endmacro %}

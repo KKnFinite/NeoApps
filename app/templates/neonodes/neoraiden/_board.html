@@ -19,16 +19,13 @@
   </aside>
 </div>
 <div class="rd-tools">
-  <div class="rd-segments" role="group" aria-label="Mission list">{% for title,rows in (('Arrivals',board.arrivals),('Departures',board.departures)) %}<button type="button" data-list-choice="{{ title|lower }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ title }} <b>{{ rows|length }}</b></button>{% endfor %}</div>
   <input type="search" data-search aria-label="Find flight, tail or station" placeholder="Find flight, tail or station">
 </div>
-<div class="rd-workspace">
-{% for title,rows in (('Arrivals',board.arrivals),('Departures',board.departures)) %}
-<section class="rd-panel" data-panel="{{ title|lower }}" aria-label="{{ title }}">
-  <h2>{{ title }} <b>{{ rows|length }}</b></h2>
-  <div class="rd-scroll"><div class="rd-columns" aria-hidden="true"><span>Flight / Tail</span><span>{{ 'From' if loop.first else 'To' }} / Park</span><span>Time</span><span>Status</span></div>
-  <div class="rd-rows">{% for m in rows %}{{ mission(m,title=='Arrivals') }}{% endfor %}</div>
-  <p class="rd-empty" data-empty {% if rows %}hidden{% endif %}>{{ 'No matching flights.' if rows else 'No ' ~ title|lower ~ ' recorded.' }}</p></div>
-</section>{% endfor %}
-</div>
+<section class="rd-workspace" aria-label="Mission board">
+  <table class="rd-missions" aria-label="Missions">
+    <thead><tr>{% for heading in ('Type','Flight','Tail','From/To','Park','Time','Status') %}<th scope="col">{{ heading }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for m in board.arrivals %}{{ mission(m,true) }}{% endfor %}{% for m in board.departures %}{{ mission(m,false) }}{% endfor %}</tbody>
+  </table>
+  <p class="rd-empty" data-empty {% if board.arrivals or board.departures %}hidden{% endif %}>{{ 'No matching flights.' if board.arrivals or board.departures else 'No missions recorded.' }}</p>
+</section>
 {% endif %}
