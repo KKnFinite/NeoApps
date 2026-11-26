@@ -44,7 +44,7 @@ class SharedKrfdTest(TestCase):
         self.at -= timedelta(seconds=1)
         self.assertIsNone(weather.cached_metar_observation(self.gateway, now=self.at))
         self.assertEqual(shared.next_deadline(self.schedule, self.at), self.at + timedelta(seconds=1))
-        with patch.object(frost_auto, "fetch", return_value=self.response(self.at)) as fetch:
+        with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(self.at)) as fetch:
             shared.refresh(self.schedule, self.clock)
             fetch.assert_not_called()
             self.at += timedelta(seconds=1)
@@ -66,6 +66,17 @@ class SharedKrfdTest(TestCase):
             self.at += timedelta(hours=5)
             self.assertIsNone(weather.cached_metar_observation(self.gateway, now=self.at))
 
+    def test_operational_metar_still_acquires_under_continuous_foreground_load(self):
+        from app.services import frost_resources
+
+        with patch.object(frost_resources, "reason", return_value="Operational request in progress"), \
+             patch.object(frost_auto, "fetch_weather_source", return_value=self.response(self.at)) as transport:
+            with self.assertRaises(frost_resources.Deferred):
+                frost_auto.fetch(shared.METAR_URL, shared.MAX_BYTES)
+            shared.refresh(self.schedule, self.clock)
+            transport.assert_called_once_with(shared.METAR_URL, shared.MAX_BYTES)
+            self.assertEqual(weather.cached_metar_observation(self.gateway, now=self.at)["temperature"], "0°F")
+
     def test_competing_workers_share_one_attempt_and_one_backoff(self):
         started, release = Event(), Event()
         payload = self.response(self.at)
@@ -76,7 +87,7 @@ class SharedKrfdTest(TestCase):
         def worker():
             with self.new_app().app_context():
                 shared.refresh(self.schedule, self.clock)
-        with patch.object(frost_auto, "fetch", side_effect=provider) as fetch, ThreadPoolExecutor(2) as pool:
+        with patch.object(frost_auto, "fetch_weather_source", side_effect=provider) as fetch, ThreadPoolExecutor(2) as pool:
             first = pool.submit(worker)
             try:
                 self.assertTrue(started.wait(5))
@@ -86,7 +97,7 @@ class SharedKrfdTest(TestCase):
             first.result(timeout=5)
             fetch.assert_called_once()
         self.at += shared.CADENCE
-        with patch.object(frost_auto, "fetch", side_effect=OSError("Temporary outage")) as fetch:
+        with patch.object(frost_auto, "fetch_weather_source", side_effect=OSError("Temporary outage")) as fetch:
             worker()
             worker()
             self.at += timedelta(seconds=59)
@@ -99,23 +110,23 @@ class SharedKrfdTest(TestCase):
             self.assertEqual(shared.next_deadline(self.schedule, self.at), self.at + timedelta(minutes=2))
 
     def test_valid_epoch_fallback_and_invalid_or_foreign_report(self):
-        with patch.object(frost_auto, "fetch", return_value=self.response(
+        with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(
                 self.at, icaoId="KORD")) as fetch:
             shared.refresh(self.schedule, self.clock)
             fetch.assert_called_once()
         self.assertIsNone(shared.latest(self.at))
         self.at += timedelta(minutes=1)
-        with patch.object(frost_auto, "fetch", return_value=self.response(self.at, reportTime="invalid")):
+        with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(self.at, reportTime="invalid")):
             shared.refresh(self.schedule, self.clock)
         self.assertEqual(weather.cached_metar_observation(self.gateway, now=self.at)["observed_at"], self.at.isoformat())
         self.at += timedelta(minutes=5)
-        with patch.object(frost_auto, "fetch", return_value=self.response(
+        with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(
                 self.at + timedelta(minutes=1), reportTime="2030-01-01T00:00:00Z")):
             shared.refresh(self.schedule, self.clock)
         self.assertTrue(weather.cached_metar_observation(self.gateway, now=self.at)["stale"])
 
     def test_forecast_and_frost_read_shared_bytes_without_second_metar_call(self):
-        with patch.object(frost_auto, "fetch", return_value=self.response(self.at)) as fetch:
+        with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(self.at)) as fetch:
             shared.refresh(self.schedule, self.clock)
             from app.services.frost_inference import current_observations
             self.assertTrue(current_observations(self.at))

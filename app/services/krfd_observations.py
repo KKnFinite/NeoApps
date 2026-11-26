@@ -6,6 +6,7 @@ from math import isfinite
 import os
 from pathlib import Path
 import tempfile
+import sys
 from threading import Lock
 
 from flask import current_app, has_app_context
@@ -140,16 +141,17 @@ def note_raiden_render(observation, windows):
         if observation["observed_at"] == _last_rendered:
             return
         _last_rendered = observation["observed_at"]
-    current_app.logger.info(
-        "NeoRaiden served shared KRFD METAR: observed_utc=%s temperature=%s dewpoint=%s wind=%s visibility=%s",
-        observation["observed_at"], observation["temperature"], observation["dewpoint"],
-        observation["wind"], observation["visibility"],
+    print(
+        f'NeoRaiden served shared KRFD METAR: observed_utc={observation["observed_at"]} '
+        f'temperature={observation["temperature"]} dewpoint={observation["dewpoint"]} '
+        f'wind={observation["wind"]} visibility={observation["visibility"]}',
+        file=sys.stderr, flush=True,
     )
 
 
 def refresh(schedule, now, *, revision=None):
     """Only called by the archive deadline worker. Viewers never acquire."""
-    from app.services import frost_auto, frost_resources
+    from app.services.frost_auto import fetch_weather_source
 
     at = now()
     if not schedule.eligible(at):
@@ -167,8 +169,12 @@ def refresh(schedule, now, *, revision=None):
         # Retain the last good payload through a crash or interrupted attempt.
         state["retry_at"] = at.timestamp() + 60
         _write(directory, state)
+        if not schedule.eligible(now()) or revision is not None and schedule_revision() != revision:
+            return
         try:
-            raw, receipt = frost_auto.fetch(METAR_URL, MAX_BYTES)
+            # A short operational observation must be available even while live
+            # viewers keep the research-only foreground-priority gate closed.
+            raw, receipt = fetch_weather_source(METAR_URL, MAX_BYTES)
             payload = json.loads(raw)
             if not isinstance(payload, list) or not payload or any(
                     not isinstance(row, dict) or row.get("icaoId") != KRFD for row in payload):
@@ -183,10 +189,8 @@ def refresh(schedule, now, *, revision=None):
             state = dict(raw=b64encode(raw).decode("ascii"), receipt=receipt, latest=row,
                          fetched_at=finished.timestamp(), retry_at=(finished + CADENCE).timestamp())
             _write(directory, state)
-            current_app.logger.info("Shared KRFD METAR acquired: provider_requests=1 observed_utc=%s",
-                                    observed.isoformat())
-        except frost_resources.Deferred:
-            current_app.logger.info("Shared KRFD METAR deferred: provider_requests=0")
+            print(f"Shared KRFD METAR acquired: provider_requests=1 observed_utc={observed.isoformat()}",
+                  file=sys.stderr, flush=True)
         except (OSError, ValueError, TypeError, KeyError) as error:
             failures = min(state.get("failures", 0) + 1, 5)
             state.update(failures=failures, retry_at=now().timestamp() + min(60 * 2 ** (failures - 1), 900))

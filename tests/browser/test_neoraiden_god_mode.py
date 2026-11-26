@@ -309,7 +309,7 @@ class GodModeBrowser(unittest.TestCase):
         fixture.app.config["NEOSUBZERO_WEATHER_ENABLED"] = True
         fixture.app.config["NEOAPPS_METAR_CACHE_DIR"] = self.enterContext(TemporaryDirectory())
         with fixture.app.app_context():
-            with patch.object(frost_auto, "fetch", return_value=(json.dumps(payload).encode(), {})) as fetch:
+            with patch.object(frost_auto, "fetch_weather_source", return_value=(json.dumps(payload).encode(), {})) as fetch:
                 krfd_observations.refresh(SimpleNamespace(eligible=lambda _at: True), lambda: datetime.now(timezone.utc))
                 fetch.assert_called_once()
             operation = busy_sort(Gateway.query.one(), extra_arrivals=29, extra_departures=29)
