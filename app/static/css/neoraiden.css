@@ -222,8 +222,8 @@ body.rd-projecting > :not(.rd-tv) {display:none!important}
 
 @media (min-width:901px) and (max-height:800px) {
     /* Reserve space for both heading lines on short displays at the approved font sizes. */
-    .rd-performance :is(th,td) {padding-block:0; line-height:1}
-    .rd-performance :is(dt,dd,.rd-mission-count,.rd-count-label) {line-height:1}
+    .raiden .rd-performance :is(th,td) {padding-block:0; line-height:1}
+    .raiden .rd-performance :is(dt,dd,.rd-mission-count,.rd-count-label) {line-height:1}
 }
 @media (min-height:1080px) {
     .raiden.rd-tv {
