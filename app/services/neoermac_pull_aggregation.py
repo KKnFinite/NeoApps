@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -196,6 +197,51 @@ def _departure_missions(operation):
         .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
         .all()
     )
+
+
+def complete_pull_roster(gateway, missions, slots):
+    """Resolve current assigned doors only when the mission and lineup agree on identity."""
+    assignments = []
+    unresolved_destinations = set()
+    unresolved_masters = set()
+    for slot in slots:
+        master = slot["master_flight_schedule_id"]
+        destination = slot["destination"]
+        if master and destination:
+            assignments.append(slot)
+        elif destination:
+            unresolved_destinations.add(destination)
+        elif master:
+            unresolved_masters.add(master)
+
+    doors_by_master = get_building_lineup_doors_by_master(gateway, assignments=assignments)
+    master_counts = Counter(mission.master_flight_schedule_id for mission in missions)
+    roster = {}
+    for mission in missions:
+        master = mission.master_flight_schedule_id
+        doors = doors_by_master.get(master)
+        if (
+            doors and master_counts[master] == 1 and master not in unresolved_masters
+            and normalize_destination(mission.destination) not in unresolved_destinations
+        ):
+            roster[mission.id] = doors
+    return roster
+
+
+def completed_door_pull(operation, records, actual_attr, no_attr):
+    """Return the final actual or an all-No-Pull flag after every door reports."""
+    if not records:
+        return None, False
+    actuals = []
+    for record in records:
+        if record is None:
+            return None, False
+        if not getattr(record, no_attr):
+            actual = getattr(record, actual_attr)
+            if actual is None:
+                return None, False
+            actuals.append(actual)
+    return _latest_actual_time(operation, actuals), not actuals
 
 
 def _door_pulls_by_mission_and_door(gateway, operation, missions, *, rows=None):
