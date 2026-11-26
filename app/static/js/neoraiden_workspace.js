@@ -116,15 +116,22 @@
             root.scrollWidth > root.clientWidth + 1 ||
             tables.some(table => table.getBoundingClientRect().width > table.parentElement.clientWidth + 1);
         if (tables.length) {
-            const rowCount = Math.max(...tables.map(table => table.rows.length));
-            const available = root.clientHeight - tables[0].getBoundingClientRect().top - 4;
-            const preferred = Math.min(24, window.innerHeight * .016);
-            const size = Math.min(preferred, available / (rowCount * 1.25));
-            let font = Math.max(10, Math.floor(size * 4) / 4);
-            root.style.setProperty("--rd-row-font", font + "px");
-            while (font > 10 && overflows()) {
-                font -= .25;
+            // Keep the existing font fit. Extra spacing can affect capacity,
+            // but must not cause the mission text to shrink.
+            root.classList.add("rd-measuring-tv");
+            try {
+                const rowCount = Math.max(...tables.map(table => table.rows.length));
+                const available = root.clientHeight - tables[0].getBoundingClientRect().top - 4;
+                const preferred = Math.min(24, window.innerHeight * .016);
+                const size = Math.min(preferred, available / (rowCount * 1.25));
+                let font = Math.max(10, Math.floor(size * 4) / 4);
                 root.style.setProperty("--rd-row-font", font + "px");
+                while (font > 10 && overflows()) {
+                    font -= .25;
+                    root.style.setProperty("--rd-row-font", font + "px");
+                }
+            } finally {
+                root.classList.remove("rd-measuring-tv");
             }
         }
         if (overflows()) {
