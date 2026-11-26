@@ -12,7 +12,7 @@ from app.services.gateway_matrix import (
     active_sorts_for_gateway_date,
     current_gateway_local_datetime,
 )
-from app.services.request_cache import MISSING, get_request_cached, request_cached
+from app.services.request_cache import MISSING, get_request_cached, request_cached, set_request_cached
 from app.services.operational_request_policy import operation_read_options
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
@@ -116,6 +116,7 @@ def current_existing_operational_sort_operations(
             if sort_settings is not None
             else _sort_settings_for_gateway(gateway)
         )
+        set_request_cached("operation_lifecycle.resolved_sort_settings", gateway.id, resolved_sort_settings)
         windows = _eligible_operation_windows(
             gateway,
             local_now,
@@ -190,6 +191,12 @@ def current_existing_operational_sort_operations(
         (gateway.id, gateway.code, local_now),
         resolve,
     )
+
+
+def resolved_operational_sort_setting(gateway, sort_name):
+    """Reuse the settings loaded during this request's operation resolution."""
+    settings = get_request_cached("operation_lifecycle.resolved_sort_settings", gateway.id)
+    return settings.get(str(sort_name or "").strip().lower()) if settings is not MISSING else None
 
 
 def manual_current_sort_creation_status(gateway, now=None, *, local_now=None):

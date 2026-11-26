@@ -3,7 +3,7 @@
     {%- if row.no_pulls[key] -%}
         NO {{ label|upper }}
     {%- else -%}
-        {{ row.actual_pulls[key] or "-" }}
+        {{ row.actual_pulls[key] }}
     {%- endif -%}
     </span>
 {%- endmacro %}

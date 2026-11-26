@@ -1,7 +1,7 @@
 """Presentation-only pull timing and shared outbound row contracts."""
 import re
 import unittest
-from datetime import datetime, time
+from datetime import date, datetime, time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -36,7 +36,7 @@ class OutboundPresentationTest(unittest.TestCase):
             self.assertEqual(_pull_timing_state(None, time(1), key), "")
             self.assertEqual(_pull_timing_state(time(1), time(2), key, no_pull=True), "")
 
-    def row(self, *, missing=False, no_pull=False):
+    def row(self, *, missing=False, no_pull=False, incomplete=False):
         mission = None if missing else SimpleNamespace(
             id=41, master_flight_schedule_id=11, flight_number="UPS501", assigned_tail_number="N501UP",
             departure_status="scheduled", planned_datetime_local=datetime(2026, 6, 11, 2, 35),
@@ -45,14 +45,22 @@ class OutboundPresentationTest(unittest.TestCase):
             actual_mix_pull_time_local=None if no_pull else time(2, 17),
         )
         assignments = [dict(door=door, master_id=11, location="Belt fixture") for door in ("D32", "D34")]
-        pulls = [SimpleNamespace(door=door, no_pure_pull=True, no_mix_pull=True,
-                    actual_pure_pull_time_local=None, actual_mix_pull_time_local=None)
-                 for door in ("D32", "D34")] if no_pull else []
+        pulls = {
+            door: SimpleNamespace(
+                no_pure_pull=no_pull, no_mix_pull=no_pull,
+                actual_pure_pull_time_local=time(1, 45), actual_mix_pull_time_local=time(2, 17),
+            )
+            for door in (("D32",) if incomplete else ("D32", "D34"))
+        }
+        operation = SimpleNamespace(sort_date=date(2026, 6, 10), sort_name="night")
         with patch('app.services.neoermac_view_outbound.mission_display_timing_data', return_value={
             'effective_window_minutes':20, 'adjusted_pure_pull_time':time(1, 40),
             'adjusted_mix_pull_time':time(2, 15),
         }):
-            return _row_for_destination("SDF", assignments, pulls, None, mission, {"N501UP":"E02"}, {})
+            return _row_for_destination(
+                "SDF", assignments, pulls, operation, mission, {"N501UP": "E02"}, {},
+                completion_doors=("D32", "D34") if mission else (),
+            )
 
     def snapshot(self, row):
         app = Flask(__name__, template_folder=str(Path('app/templates').resolve()))
@@ -102,3 +110,12 @@ class OutboundPresentationTest(unittest.TestCase):
                 if missing:
                     self.assertIn('is-missing-mission', html)
                     self.assertIn('data-outbound-key="master:11"', html)
+
+    def test_incomplete_render_ignores_stored_aggregates_and_keeps_plans(self):
+        row = self.row(incomplete=True)
+        self.assertEqual(row["actual_pulls"], {"pure": "", "mix": ""})
+        self.assertEqual(row["adjusted_pulls"], {"pure": "01:40", "mix": "02:15"})
+        self.assertEqual(row["pull_timing"], {"pure": "", "mix": ""})
+        snapshot, _ = self.snapshot(row)
+        for html in snapshot["rows"]["m41"].values():
+            self.assertEqual(html.count('class="neoermac-outbound-actual"></span>'), 2)

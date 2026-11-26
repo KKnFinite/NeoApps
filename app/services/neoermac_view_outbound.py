@@ -18,6 +18,7 @@ from app.models import (
     SortTimelineSortSetting,
 )
 from app.services.gateway_matrix import (
+    configured_sort_times_utc,
     current_gateway_local_datetime,
     gateway_timezone,
 )
@@ -30,13 +31,19 @@ from app.services.neoermac_live_refresh import (
     NEOERMAC_VIEW_OUTBOUND_REFRESH_KEY,
     neoermac_live_refresh_status,
 )
-from app.services.operation_scope import current_operational_sort_operation
+from app.services.neoermac_pull_aggregation import (
+    _door_pulls_by_mission_and_door,
+    complete_pull_roster,
+    completed_door_pull,
+)
 from app.services.neoermac_tail_presence import (
     arrival_presence_by_tail,
     departure_tail_presence,
     normalize_tail_number,
     tail_presence_status_override,
 )
+from app.services.operation_lifecycle import resolved_operational_sort_setting
+from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import master_schedule_runs_on_date, mission_display_timing_data
 
 
@@ -62,15 +69,24 @@ def view_outbound_context(
 ):
     if operation is _OPERATION_UNSET:
         operation = _current_operation(gateway)
-    assignments_by_master = _lineup_assignments_by_master(
-        gateway,
-        initialize=initialize_lineup,
+    slots = get_building_lineup_assignments(
+        gateway, include_blank=True, initialize=initialize_lineup,
     )
+    assignments_by_master = _lineup_assignments_by_master(slots)
     parking_by_tail = _parking_assignments_by_tail(operation)
     arrivals_by_tail = arrival_presence_by_tail(operation)
     missions = _departure_missions(operation)
-    pulls_by_mission = _door_pulls_by_mission(gateway, operation, missions)
-    ranks = departure_occurrences([m for m in missions if not m.master_retirement], operation)
+    departures = [m for m in missions if not m.master_retirement]
+    roster = {}
+    if _has_current_pull_lineup(gateway, operation, current_gateway_local_datetime(gateway)):
+        roster = complete_pull_roster(gateway, departures, slots)
+    pulls_by_mission = {}
+    if operation:
+        # Retired missions still count when deciding whether legacy evidence is ambiguous.
+        door_records = _door_pulls_by_mission_and_door(gateway, operation, missions)
+        for (mission_id, door), record in door_records.items():
+            pulls_by_mission.setdefault(mission_id, {})[door] = record
+    ranks = departure_occurrences(departures, operation)
 
     rows = []
     seen_masters = set()
@@ -85,11 +101,12 @@ def view_outbound_context(
             _row_for_destination(
                 destination_label(destination, ranks.get(mission.id)),
                 assignments_by_master.get(mission.master_flight_schedule_id, []),
-                pulls_by_mission.get(mission.id, []),
+                pulls_by_mission.get(mission.id, {}),
                 operation,
                 mission,
                 parking_by_tail,
                 arrivals_by_tail,
+                completion_doors=roster.get(mission.id, ()),
             )
         )
 
@@ -103,7 +120,7 @@ def view_outbound_context(
             _row_for_destination(
                 assignments_by_master[master_id][0]["destination"],
                 assignments_by_master[master_id],
-                [],
+                {},
                 operation,
                 None,
                 parking_by_tail,
@@ -217,6 +234,7 @@ def view_outbound_revision(gateway, *, operation=_OPERATION_UNSET, now=None):
     payload = {
         "gateway_id": gateway.id,
         "operation_id": operation_id,
+        "current_pull_lineup": _has_current_pull_lineup(gateway, operation, local_now),
         "operation_updated_at": _revision_value(
             getattr(operation, "updated_at", None)
         ),
@@ -259,6 +277,8 @@ def _row_for_destination(
     mission,
     parking_by_tail,
     arrivals_by_tail,
+    *,
+    completion_doors=(),
 ):
     timing_data = mission_display_timing_data(mission, operation) if mission else {}
     row_window = timing_data.get("effective_window_minutes")
@@ -271,27 +291,12 @@ def _row_for_destination(
     assigned_doors = _unique(
         assignment["door"] for assignment in assignments if assignment.get("door")
     )
-    pulls_by_door = {door_pull.door: door_pull for door_pull in door_pulls}
+    completion_records = [door_pulls.get(door) for door in completion_doors]
 
     for key, _label, planned_attr, actual_attr, no_attr in PULL_KEYS:
         base_value = getattr(mission, planned_attr, None) if mission else None
         adjusted_value = _adjusted_pull_value(timing_data, key) or base_value
-        actual_value = getattr(mission, actual_attr, None) if mission else None
-        if actual_value is None:
-            actual_values = [
-                getattr(door_pull, actual_attr, None)
-                for door_pull in door_pulls
-                if not getattr(door_pull, no_attr, False)
-                and getattr(door_pull, actual_attr, None) is not None
-            ]
-            actual_value = max(actual_values) if actual_values else None
-        no_pull = bool(assigned_doors) and all(
-            pulls_by_door.get(door) is not None
-            and bool(getattr(pulls_by_door[door], no_attr, False))
-            for door in assigned_doors
-        )
-        if actual_value is not None:
-            no_pull = False
+        actual_value, no_pull = completed_door_pull(operation, completion_records, actual_attr, no_attr)
 
         planned_pulls[key] = _time_value(base_value)
         adjusted_pulls[key] = _time_value(adjusted_value)
@@ -305,7 +310,7 @@ def _row_for_destination(
         assignment["location"] for assignment in assignments if assignment.get("location")
     )
     if not assigned_doors and door_pulls:
-        assigned_doors = _unique(door_pull.door for door_pull in door_pulls)
+        assigned_doors = list(door_pulls)
     tail_presence = departure_tail_presence(mission, arrivals_by_tail) if mission else None
 
     return {
@@ -351,9 +356,11 @@ def _pull_timing_state(planned, actual, pull_key, *, no_pull=False):
     return "late" if lateness > allowance else "on-time"
 
 
-def _lineup_assignments_by_master(gateway, *, initialize=True):
+def _lineup_assignments_by_master(slots):
     assignments_by_master = {}
-    for slot in get_building_lineup_assignments(gateway, initialize=initialize):
+    for slot in slots:
+        if not slot["master_flight_schedule_id"] or not slot["destination"]:
+            continue
         assignments_by_master.setdefault(slot["master_flight_schedule_id"], []).append(
             {
                 "destination": slot["destination"],
@@ -365,31 +372,24 @@ def _lineup_assignments_by_master(gateway, *, initialize=True):
     return assignments_by_master
 
 
-def _door_pulls_by_mission(gateway, operation, missions):
-    query = NeoErmacDoorPull.query.filter_by(gateway_id=gateway.id)
-    if operation:
-        query = query.filter_by(sort_date_operation_id=operation.id)
-    else:
-        query = query.filter(NeoErmacDoorPull.sort_date_operation_id.is_(None))
-
-    rows = query.order_by(NeoErmacDoorPull.updated_at.desc(), NeoErmacDoorPull.id.desc()).all()
-    missions_by_destination = {}
-    for mission in missions:
-        destination = normalize_destination(mission.destination)
-        if destination:
-            missions_by_destination.setdefault(destination, []).append(mission)
-    pulls_by_mission = {}
-    for row in rows:
-        mission_id = getattr(row, "sort_date_mission_id", None)
-        if mission_id:
-            pulls_by_mission.setdefault(mission_id, []).append(row)
-            continue
-        destination = normalize_destination(row.destination)
-        candidates = missions_by_destination.get(destination, ())
-        # Destination-only historical rows are safe only for a unique mission.
-        if len(candidates) == 1:
-            pulls_by_mission.setdefault(candidates[0].id, []).append(row)
-    return pulls_by_mission
+def _has_current_pull_lineup(gateway, operation, local_now):
+    if not operation or operation.archived_at_utc:
+        return False
+    if operation.sort_date == local_now.date():
+        return True
+    # The gateway-wide lineup is mutable. Yesterday's roster is usable only while
+    # that Sort is physically active, even if its lifecycle window extends later.
+    setting = resolved_operational_sort_setting(gateway, operation.sort_name)
+    if not setting:
+        return False
+    try:
+        zone = ZoneInfo(gateway_timezone(gateway))
+    except ZoneInfoNotFoundError:
+        return False
+    start, end = configured_sort_times_utc(
+        operation.sort_date, setting.sort_window_start_local, setting.sort_window_end_local, zone,
+    )
+    return bool(start is not None and start <= local_now.replace(tzinfo=zone) < end)
 
 
 def _parking_assignments_by_tail(operation):

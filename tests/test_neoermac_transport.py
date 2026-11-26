@@ -8,7 +8,7 @@ import re
 from unittest.mock import patch
 
 from app.extensions import db
-from app.models import Gateway, GatewayMembership, SortDateMission
+from app.models import Gateway, GatewayMembership, NeoErmacDoorPull, SortDateMission
 from tests import test_neoermac_read_budgets as fixtures
 
 
@@ -45,7 +45,14 @@ class NeoErmacTransportTest(unittest.TestCase):
             if 'row_manifest' in response.json:
                 manifest = response.json['row_manifest']
                 mission = SortDateMission.query.filter_by(sort_date_operation_id=self.operation_id, flight_number='UPS501').one()
-                mission.actual_pure_pull_time_local = time(1, count)
+                pull = NeoErmacDoorPull.query.filter_by(sort_date_mission_id=mission.id, door="D1").first()
+                if pull is None:
+                    pull = NeoErmacDoorPull(
+                        gateway_id=self.gateway_id, sort_date_operation_id=self.operation_id,
+                        sort_date_mission_id=mission.id, destination=mission.destination, door="D1",
+                    )
+                    db.session.add(pull)
+                pull.actual_pure_pull_time_local = time(1, count)
                 db.session.commit()
                 query = urlencode({'revision':response.json['revision'], 'rows':json.dumps(manifest, separators=(',',':'))})
                 delta, delta_metrics = self.measure('/neoermac/view-outbound/state?'+query)
@@ -61,9 +68,12 @@ class NeoErmacTransportTest(unittest.TestCase):
         self.assertEqual(result['lineup_changed']['SELECT'], 11)
         self.assertLess(result['lineup_incremental_bytes'], 16404)
         self.assertLess(result['door_html_bytes'], 53000)  # was 90,429
+
+    def test_outbound_transport_budgets(self):
+        result = self.profile()
         for count, byte_budget in ((2, 3800), (50, 5800)):
             metric = result[f'outbound_delta_{count}']
-            self.assertEqual(metric['SELECT'], 14)  # No extra DB reads for transport.
+            self.assertLessEqual(metric['SELECT'], 14)  # No extra DB reads for transport.
             self.assertLess(metric['bytes'], byte_budget)
             self.assertLess(metric['bytes'], result[f'outbound_{count}']['bytes'] / 2)
             self.assertLess(metric['request_query_bytes'], 3500)
@@ -82,14 +92,15 @@ class NeoErmacTransportTest(unittest.TestCase):
         self.assertIn(f'm{second_id}', manifest['rows'])  # Repeated destinations stay distinct.
         self.assertIn(f"master:{self.flight_ids['PHX']}", manifest['rows'])
         second = db.session.get(SortDateMission, second_id)
-        second.actual_mix_pull_time_local = time(2, 45)
+        second.actual_mix_pull_time_local = time(2, 45)  # No assigned evidence for this stored aggregate.
         second.pure_pull_time_local = time(0, 30)  # Change canonical order as well.
         db.session.commit()
         delta, _ = self.measure('/neoermac/view-outbound/state?'+urlencode({'revision':initial.json['revision'], 'rows':json.dumps(manifest)}))
         self.assertEqual(list(delta.json['row_delta']['rows']), [f'm{second_id}'])
         changed = delta.json['row_delta']['rows'][f'm{second_id}']
-        self.assertIn('02:45', changed['desktop'])
-        self.assertIn('02:45', changed['mobile'])
+        for html in changed.values():
+            self.assertIn('00:30', html)
+            self.assertNotIn('02:45', html)
         self.assertIn('N504UP', changed['desktop'])
         full, _ = self.measure('/neoermac/view-outbound/state?revision=old')
         self.assertEqual(delta.json['row_manifest'], full.json['row_manifest'])

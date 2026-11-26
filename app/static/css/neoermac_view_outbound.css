@@ -84,4 +84,5 @@
     .neoermac-outbound-shell .neoermac-outbound-top { color: #fff; }
     .neoermac-outbound-shell .neoermac-outbound-bottom { color: var(--node-ermac-secondary); }
     .neoermac-outbound-shell .neoermac-outbound-mobile-pulls { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .neoermac-outbound-shell .neoermac-outbound-mobile-pulls .neoermac-outbound-actual { min-block-size: 1.1em; }
 }

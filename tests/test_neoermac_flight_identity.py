@@ -246,3 +246,122 @@ class FlightIdentityTest(unittest.TestCase):
         response=self.f.client.get('/neoermac/view-outbound')
         self.assertEqual(response.status_code,200)
         self.assertIn(b'UPS101',response.data);self.assertIn(b'UPS202',response.data)
+
+    def test_outbound_completion_matches_raiden_after_door_changes(self):
+        from app.neonodes.neoraiden.ermac import completed_pulls
+        from app.services.neoermac_view_outbound import view_outbound_context
+        self.f.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(
+            self.operation.sort_date, time(22),
+        )
+        self.assign(self.b, self.row, "east_destination_1")  # D29, also assigned to UPS202.
+        self.assign(self.a, self.row, "west_destination_2")  # D32, shared with UPS202.
+
+        def record(door, mission=None, **evidence):
+            row = NeoErmacDoorPull(
+                gateway_id=self.gateway.id, sort_date_operation_id=self.operation.id,
+                sort_date_mission_id=mission.id if mission else None, door=door,
+                destination="LAX", **evidence,
+            )
+            db.session.add(row)
+            return row
+
+        def check(first, second, extra=None):
+            db.session.flush()
+            departures = [self.a, self.b] if extra is None else [self.a, self.b, extra]
+            _, raiden = completed_pulls(self.gateway, self.operation, departures)
+            ermac = {
+                row["mission_id"]: tuple(
+                    "NO " + key.upper() if row["no_pulls"][key] else row["actual_pulls"][key] or None
+                    for key in ("pure", "mix")
+                )
+                for row in view_outbound_context(self.gateway, operation=self.operation)["rows"]
+            }
+            for mission, expected in ((self.a, first), (self.b, second)):
+                self.assertEqual(ermac[mission.id], expected)
+                self.assertEqual(raiden.get(mission.id, (None, None)), expected)
+
+        west = record("D32", self.b, actual_pure_pull_time_local=time(23, 59), no_mix_pull=True)
+        record("D29", actual_pure_pull_time_local=time(0, 45), no_mix_pull=True)
+        self.b.actual_pure_pull_time_local = time(23, 59)
+        check((None, None), (None, None))
+
+        east = record("D29", self.b, actual_pure_pull_time_local=time(0, 4))
+        check((None, None), ("00:04", None))
+        east.no_mix_pull = True
+        check((None, None), ("00:04", "NO MIX"))
+        east.no_pure_pull = True  # Explicit No Pull supersedes even a stale actual on that record.
+        check((None, None), ("23:59", "NO MIX"))
+        west.no_pure_pull = True
+        check((None, None), ("NO PURE", "NO MIX"))
+        west.no_pure_pull = False
+        west.actual_pure_pull_time_local = None
+        check((None, None), (None, "NO MIX"))
+        west.no_mix_pull = False
+        west.actual_mix_pull_time_local = time(0, 20)
+        check((None, None), (None, "00:20"))
+
+        east.actual_pure_pull_time_local = time(0, 5)
+        east.no_pure_pull = False
+        west.actual_pure_pull_time_local = time(23, 58)
+        record("D32", self.a, actual_pure_pull_time_local=time(23, 12), no_mix_pull=True)
+        check(("23:12", "NO MIX"), ("00:05", "00:20"))
+
+        self.assign(self.a, self.row, "east_destination_1")  # A previous result must become incomplete.
+        check((None, None), ("23:58", "00:20"))
+        self.row.east_destination_2 = "LAX"  # Legacy slot without authoritative mission identity.
+        check((None, None), (None, None))
+        self.row.east_destination_2 = None
+
+        extra = self.f._add_operation_departure("UPS202", "LAX", tail="N303UP")
+        extra.master_flight_schedule_id = self.b.master_flight_schedule_id
+        check((None, None), (None, None), extra)
+
+    def test_unique_legacy_evidence_never_overrides_canonical_door_record(self):
+        from app.services.neoermac_view_outbound import view_outbound_context
+
+        self.f.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(
+            self.operation.sort_date, time(22),
+        )
+        self.a.destination = "OAK"
+        for mission_id, actual, updated in ((self.b.id, time(0, 15), 1), (None, time(0, 30), 2)):
+            db.session.add(NeoErmacDoorPull(
+                gateway_id=self.gateway.id, sort_date_operation_id=self.operation.id,
+                sort_date_mission_id=mission_id, door="D32", destination="LAX",
+                actual_pure_pull_time_local=actual, updated_at=datetime(2026, 6, 11, updated),
+            ))
+        db.session.flush()
+
+        def actual():
+            rows = view_outbound_context(self.gateway, operation=self.operation)["rows"]
+            return next(row for row in rows if row["mission_id"] == self.b.id)["actual_pulls"]["pure"]
+
+        self.assertEqual(actual(), "00:15")
+        db.session.delete(NeoErmacDoorPull.query.filter_by(sort_date_mission_id=self.b.id).one())
+        db.session.flush()
+        self.assertEqual(actual(), "00:30")
+        self.a.destination = "LAX"
+        self.a.master_retirement = {"status": "scheduled"}
+        db.session.flush()
+        self.assertEqual(actual(), "")
+
+    def test_outbound_rejects_mutable_yesterday_roster_without_a_physical_window(self):
+        import re
+        from datetime import timedelta
+        from tests.test_neorain_sort_refresh import configure_sort_window
+
+        setting, opening = configure_sort_window(self.gateway, self.operation.sort_date)
+        self.f.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = opening + timedelta(hours=4)
+        self.write(self.cards()[0])
+        db.session.commit()
+        page = self.f.client.get("/neoermac/view-outbound")
+        self.assertIn(b'class="neoermac-outbound-actual is-pull-on-time">00:25', page.data)
+        revision = re.search(rb'data-outbound-revision="([a-f0-9]+)"', page.data).group(1).decode()
+
+        setting.sort_window_start_local = None  # Planning still keeps the operation in scope.
+        db.session.commit()
+        response = self.f.client.get(f"/neoermac/view-outbound/state?revision={revision}")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json["changed"])
+        self.assertIn("UPS202", response.json["content_html"])  # The lifecycle is still open.
+        self.assertNotIn("00:25", response.json["content_html"])
+        self.assertEqual(NeoErmacDoorPull.query.one().actual_pure_pull_time_local, time(0, 25))
