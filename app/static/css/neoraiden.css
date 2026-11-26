@@ -6,6 +6,10 @@
     --fuel-gray:#b5bec9; --fuel-amber:#f4c66b; --fuel-orange:#ffb176; --fuel-yellow:#f6e37a;
     --fuel-teal:#77ddd3; --fuel-green:#94e0aa; --fuel-red:#ff919c;
     --rd-operational-font:clamp(10px,.90cqw,12px);
+    --rd-section-gap:8px;
+    --rd-metric-font:18px; --rd-label-font:14px;
+    --rd-mission-heading-font:clamp(16px,1.8vh,24px);
+    --rd-overview-heading-font:calc(var(--rd-label-font) + 1px);
     box-sizing:border-box; min-width:0; background:var(--canvas); color:var(--ink);
     container-type:inline-size;
     color-scheme:dark; padding:8px; border-radius:10px;
@@ -57,20 +61,22 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-stale {color:var(--hold); font-weight:650; padding:4px 0}
 .rd-tv-notice {color:var(--hold); font-size:.85em}
 .rd-overview {
-    --rd-metric-font:18px; --rd-label-font:14px;
     --rd-label-color:color-mix(in srgb,var(--muted) 55%,var(--ink));
     display:grid; grid-template-columns:minmax(0,34fr) minmax(0,54fr) minmax(0,12fr);
-    align-items:stretch; gap:4px; margin-bottom:4px;
+    align-items:stretch; gap:var(--rd-section-gap);
 }
-.rd-overview-box {
-    min-width:0; background:var(--surface); border:1px solid var(--line);
-    border-radius:5px; overflow:clip;
+.rd-overview + .rd-workspace {margin-block-start:var(--rd-section-gap)}
+.rd-overview-box,.rd-mission-group {
+    min-width:0; background:var(--surface); border-radius:5px;
+    outline:1px solid var(--line); outline-offset:-1px; overflow:clip;
 }
 .raiden .rd-section-heading {
+    display:grid; place-items:center; text-align:center;
+    min-block-size:calc(max(var(--rd-mission-heading-font),var(--rd-overview-heading-font)) * 1.15 + 6px);
     background:var(--accent-bg); color:var(--accent); font-weight:700;
     letter-spacing:normal; line-height:1.15; padding:3px 6px;
 }
-.rd-overview .rd-section-heading {font-size:calc(var(--rd-label-font) + 1px)}
+.rd-overview .rd-section-heading {font-size:var(--rd-overview-heading-font)}
 .rd-overview table {width:100%; border-collapse:collapse; font:inherit; color:inherit}
 .rd-overview :is(th,td) {padding:1px 2px; border:0; background:transparent; text-align:center}
 .rd-overview :is(th,dt,.rd-count-label) {
@@ -89,8 +95,8 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-performance :is(thead tr:last-child th:nth-child(4),tbody td:nth-child(5),tfoot td:last-child) {
     border-inline-start:1px solid var(--line);
 }
-.rd-performance :is(tbody tr:nth-child(odd),tfoot) {background:var(--canvas)}
-.rd-performance [data-performance-wave="combined"] {border-top:1px solid var(--line)}
+.rd-overview table thead {border-bottom:1px solid var(--line)}
+.rd-performance :is([data-performance-wave="combined"],tfoot) {border-top:1px solid var(--line)}
 .rd-averages,.rd-averages > div {display:flex; align-items:baseline; justify-content:center; gap:3px 5px}
 .rd-averages {flex-wrap:wrap; gap:2px 9px}
 .rd-metric {display:grid; align-content:center; gap:3px; min-width:0; text-align:center}
@@ -117,9 +123,8 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 }
 .rd-workspace {min-width:0}
 .rd-mobile-views,.raiden .rd-paired {display:none}
-.rd-mission-groups {display:grid; grid-template-columns:minmax(min-content,34fr) minmax(min-content,66fr); gap:clamp(8px,.85cqw,18px)}
-.rd-mission-group {min-width:0; border-radius:5px; outline:1px solid var(--line); outline-offset:-1px; overflow:clip}
-.rd-mission-group .rd-section-heading {font-size:clamp(16px,1.8vh,24px); padding-block:4px}
+.rd-mission-groups {display:grid; grid-template-columns:minmax(min-content,34fr) minmax(min-content,66fr); gap:var(--rd-section-gap)}
+.rd-mission-group .rd-section-heading {font-size:var(--rd-mission-heading-font)}
 .raiden .rd-missions {width:100%; margin:0; border:0; border-collapse:collapse; background:var(--surface); color:var(--ink); font:var(--rd-operational-font)/1.17 system-ui,sans-serif; font-variant-numeric:tabular-nums}
 .rd-missions :is(th,td) {height:auto; padding:.04em clamp(2px,.20cqw,8px); text-align:left; white-space:nowrap; color:inherit; background:transparent; border:0; font:inherit}
 .raiden:not(.rd-measuring-tv) .rd-missions tbody :is(th,td) {padding-block:calc(.04em + var(--rd-row-space,1.05px))}
@@ -155,8 +160,8 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     .rd-deice {border-inline-start-width:2px; padding-inline-start:2px}
 }
 @media(max-width:800px) {
-    .raiden:not(.rd-tv) {padding:4px; font-size:12px}
-    .raiden:not(.rd-tv) .rd-overview {
+    .raiden:not(.rd-tv) {
+        padding:4px; font-size:12px;
         --rd-metric-font:16px;
         --rd-label-font:13px;
     }
@@ -173,11 +178,11 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     .raiden:not(.rd-tv) .rd-totals {grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @container (max-width:940px) {
-    .raiden:not(.rd-tv) .rd-mobile-views {display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:4px}
+    .raiden:not(.rd-tv) .rd-mobile-views {display:grid; grid-template-columns:1fr 1fr; gap:var(--rd-section-gap); margin-bottom:var(--rd-section-gap)}
     .rd-mobile-views button[aria-pressed="true"] {background:var(--accent-bg)!important; color:var(--accent)!important}
     .raiden:not(.rd-tv) .rd-mission-groups {grid-template-columns:1fr}
     .raiden:not(.rd-tv) :is([data-mobile-view="arrivals"] #rd-departures,[data-mobile-view="departures"] #rd-arrivals) {display:none}
-    .raiden:not(.rd-tv) .rd-mission-group h2 {position:absolute; width:1px; height:1px; padding:0; clip-path:inset(50%)}
+    .raiden:not(.rd-tv) .rd-mission-group h2 {position:absolute; width:1px; height:1px; min-block-size:0; padding:0; clip-path:inset(50%)}
     .raiden:not(.rd-tv) .rd-missions {font-size:clamp(10px,2.65cqw,11.5px)}
     .raiden:not(.rd-tv) .rd-missions :is(thead,tbody) {display:block}
     .raiden:not(.rd-tv) .rd-missions tr {display:grid; grid-template-columns:1.15fr 1fr .85fr .95fr .8fr 1.25fr}
@@ -204,10 +209,10 @@ body.rd-projecting {overflow:hidden!important}
 body.rd-projecting > :not(.rd-tv) {display:none!important}
 .raiden.rd-tv {
     position:fixed; z-index:20000; inset:0; width:100%; height:100dvh; margin:0; border-radius:0;
-    gap:3px; padding:4px 8px; font-size:clamp(11px,1.15vh,18px);
+    padding:4px 8px; font-size:clamp(11px,1.15vh,18px);
     --rd-operational-font:var(--rd-row-font,12px);
 }
-.rd-tv .rd-header,.rd-tv .rd-overview {margin:0}
+.rd-tv .rd-header {margin:0 0 3px}
 .rd-tv .rd-header h1 {font-size:1.1em}
 .raiden.rd-tv .rd-controls button {min-height:22px; padding:2px 6px; font-size:.9em}
 .rd-tv :is(.rd-context,[data-search]) {display:none}
@@ -215,19 +220,22 @@ body.rd-projecting > :not(.rd-tv) {display:none!important}
 .rd-tv .rd-tv-context {display:block}
 
 @media (min-height:1080px) {
-    .raiden.rd-tv .rd-overview {
+    .raiden.rd-tv {
         --rd-metric-font:24px;
         --rd-label-font:16px;
     }
 }
 @media (min-height:2160px) {
-    .raiden.rd-tv .rd-overview {
+    .raiden.rd-tv {
         --rd-metric-font:32px;
         --rd-label-font:22px;
     }
 }
 .rd-tv {--rd-row-space:clamp(.75px,.095vh,1.4px)}
 .rd-tv .rd-workspace {flex:none}
+@media(min-width:2560px) {
+    .raiden {--rd-section-gap:clamp(8px,.42vw,16px)}
+}
 @media(min-width:901px) {
     body.blueprint-neoraiden.operational-shell-page:not(.operational-board-view) .content {
         padding-inline:8px;
