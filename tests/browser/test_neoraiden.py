@@ -32,12 +32,15 @@ class CommandCenterBrowser(unittest.TestCase):
                 pass1_started_at_utc=start_utc))
             changing = SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
                 gateway_code=gateway.code, mission_type="arrival", flight_number="UPS1361",
-                origin="SDF", destination=gateway.code, planned_datetime_utc=start_utc + timedelta(minutes=55))
+                origin="SDF", destination=gateway.code, arrival_status="en_route",
+                planned_datetime_utc=start_utc + timedelta(minutes=55),
+                eta_datetime_utc=start_utc + timedelta(minutes=50))
             overnight = SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
                 gateway_code=gateway.code, mission_type="arrival", flight_number="UPS0927",
                 origin="SDF", destination=gateway.code, planned_datetime_utc=start_utc - timedelta(hours=20))
             db.session.add_all([changing, overnight])
             db.session.commit()
+            changing_id = changing.id
             fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
         evidence = Path("instance/browser-evidence/gateway-shell")
         evidence.mkdir(parents=True,exist_ok=True)
@@ -61,7 +64,9 @@ class CommandCenterBrowser(unittest.TestCase):
                     page.locator("[data-sort-choice]").select_option(index=1)
                     arrivals = page.locator("#rd-arrivals [data-mission]")
                     expect(arrivals.locator(".rd-flight")).to_have_text(["UPS1361", "UPS0927"])
-                    expect(arrivals.first).to_contain_text("STA 21:55")
+                    expect(arrivals.first).to_contain_text("ETA 21:50")
+                    variance = page.locator(f'#rd-mission-{changing_id} [data-field="variance"]')
+                    expect(variance).to_have_text("-5")
                     expect(arrivals.last).to_contain_text("STA 01:00")
                     departure = page.locator(f'#rd-mission-{mission_id}')
                     expect(departure.locator('[data-field="pure"] .rd-value')).to_have_text("00:02")
@@ -96,6 +101,8 @@ class CommandCenterBrowser(unittest.TestCase):
                     expect(page.locator('#rd-departures [data-field="ramp"] .rd-value').first).to_have_text("22:30")
                     expect(arrivals.locator(".rd-flight")).to_have_text(["UPS0927", "UPS1361"])
                     expect(arrivals.last).to_contain_text("ETA 01:15")
+                    expect(variance).to_have_text("+200")
+                    expect(variance).to_have_attribute("data-value-color", "late")
                     expect(departure.locator('[data-field="pure"] .rd-value')).to_be_empty()
                     expect(departure.locator('[data-field="mix"] .rd-value')).to_have_text("00:57")
                     expect(departure.locator(".rd-deice")).to_have_attribute("title", "Completed 21:04")
@@ -138,7 +145,7 @@ class CommandCenterBrowser(unittest.TestCase):
                 finally:
                     browser.close()
                     with fixture.app.app_context():
-                        SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS1361").one().eta_datetime_utc = None
+                        SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS1361").one().eta_datetime_utc = start_utc + timedelta(minutes=50)
                         NeoErmacDoorPull.query.filter_by(sort_date_mission_id=mission_id, door="D4").one().actual_pure_pull_time_local = time(0, 2)
                         event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mission_id).one()
                         event.status = "configured"
