@@ -9,7 +9,7 @@ from playwright.sync_api import sync_playwright,expect
 from werkzeug.serving import make_server
 from app import create_app
 from app.extensions import db
-from app.models import User,PortalAppAccess,PermissionRule,AccountAuthorizationState
+from app.models import User,PortalAppAccess,PermissionRule,AccountAuthorizationState,GatewayMembership,GatewayNodeRole,NeoNode
 from app.services.account_foundation_schema import ensure_account_history_guards
 from tests.test_scoped_authorization import prepare_scope_fixture
 from tests.test_account_security_phase1 import fixture_user,PASSWORD
@@ -65,6 +65,9 @@ class ScopedAuthorizationBrowserTest(TestCase):
             prepare_scope_fixture()
             from app.models import Gateway, NeoSektorOperationalSetting
             gateway = Gateway.query.filter_by(code='RFD').one()
+            from tests.neoraiden_fixtures import busy_sort
+            operation = busy_sort(gateway)
+            operation_id = operation.id
             db.session.add(NeoSektorOperationalSetting(gateway_id=gateway.id, gateway_code=gateway.code,
                                                        integration_mode='neo_only'))
             admin=fixture_user('scope-app-admin',platform='master')
@@ -127,8 +130,29 @@ class ScopedAuthorizationBrowserTest(TestCase):
                                 page.screenshot(path=str(evidence/f'app-access-{engine}-{width}.png'),full_page=True)
                                 self.assertEqual(page.request.get(origin+'/neogateway/accounts').status,403)
                                 self.assertEqual(page.request.post(origin+'/neostaffing/accounts',form={'user_id':str(subject)}).status,400)
-                                workspace.AccountsWorkspaceBrowserTest.login(page,origin,'scope-subject@example.test')
+                                with app.app_context():
+                                    membership = GatewayMembership.query.filter_by(user_id=subject).one()
+                                    sektor_id = NeoNode.query.filter_by(code="sektor").one().id
+                                    GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id, node_id=sektor_id).delete()
+                                    db.session.commit()
+                                workspace.AccountsWorkspaceBrowserTest.login(page,origin,f'scope-{engine}-{width}@example.test')
                                 check_node_navigation(page, origin, width, administrator=False)
+                                self.assertEqual(page.goto(origin+'/neosektor?dashboard=1').status, 200)
+                                self.assertEqual(page.goto(origin+'/neosektor/live-counts').status, 200)
+                                expect(page.locator('body')).not_to_contain_text("Access denied.")
+                                self.assertEqual(page.request.get(origin+'/neosektor/live-counts/state').status, 200)
+                                self.assertEqual(page.goto(origin+f'/neoraiden?operation_id={operation_id}').status, 200)
+                                expect(page.locator(".rd-uld tr[data-openings] td")).to_have_text(["2", "3", "", ""])
+                                self.assertEqual(page.request.get(origin+f'/neoraiden/state?operation_id={operation_id}').status, 200)
+                                with app.app_context():
+                                    membership = GatewayMembership.query.filter_by(user_id=subject).one()
+                                    self.assertIsNone(GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id, node_id=sektor_id).first())
+                                    db.session.add(GatewayNodeRole(gateway_membership_id=membership.id, node_id=sektor_id, role="watcher", is_active=False))
+                                    db.session.commit()
+                                reply = page.request.get(origin+'/neosektor/live-counts/state', max_redirects=0)
+                                self.assertNotEqual(reply.status, 200)
+                                reply = page.request.get(origin+f'/neoraiden/state?operation_id={operation_id}')
+                                self.assertIn("Native ULD counts unavailable.", reply.json()["html"])
                                 self.assertEqual(errors,[])
                                 context.close()
                     finally:browser.close()

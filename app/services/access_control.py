@@ -21,6 +21,7 @@ from app.models import (
     SortTimelineSortSetting,
 )
 from app.models.user import ROLE_LEVELS
+from app.services.account_authority import effective_node_role
 from app.services.operation_scope import (
     OPERATION_BY_ID_NAMESPACE,
 )
@@ -220,7 +221,7 @@ def prime_lightweight_live_request_scope(
     include_sektor_routing_signal=False,
 ):
     """Resolve and seed shared live-request access facts in one projection."""
-    if not _is_authenticated_user(user):
+    if not _is_authenticated_user(user) or not user.is_active:
         return None
 
     gateway_code = _default_gateway_code()
@@ -355,12 +356,7 @@ def prime_lightweight_live_request_scope(
         and _app_access_is_approved_active(app_access)
         and node is not None
     ):
-        if node_role is not None:
-            resolved_node_role = node_role.role if node_role.is_active else None
-        elif not explicit and app_access.role in ROLE_LEVELS:
-            resolved_node_role = app_access.role
-        elif not explicit:
-            resolved_node_role = "watcher"
+        resolved_node_role = effective_node_role(node_role)
 
     set_request_cached("access.default_gateway", gateway_code, gateway)
     set_request_cached(
@@ -485,7 +481,7 @@ def user_has_gateway_access(user, gateway_code):
 
 
 def get_user_node_role(user, gateway_code, node_code):
-    if not _is_authenticated_user(user):
+    if not _is_authenticated_user(user) or not user.is_active:
         return None
 
     gateway_code = _normalize_gateway_code(gateway_code)
@@ -498,11 +494,7 @@ def get_user_node_role(user, gateway_code, node_code):
         membership = get_user_gateway_membership(user, gateway_code)
         if not _membership_is_approved_active(membership):
             return None
-        from app.services.account_scope_runtime import scoped_active
-        if (gateway_code == _default_gateway_code() or scoped_active()) and not user_has_app_access(
-            user,
-            "neogateway",
-        ):
+        if not user_has_app_access(user, "neogateway"):
             return None
 
         node = _get_active_node(node_code)
@@ -513,22 +505,7 @@ def get_user_node_role(user, gateway_code, node_code):
             gateway_membership_id=membership.id,
             node_id=node.id,
         ).first()
-        if node_role is not None:
-            return node_role.role if node_role.is_active else None
-
-        seed_role = _neogateway_seed_role_for_user(user)
-        from app.services.account_scope_runtime import scoped_active
-        if scoped_active():
-            return None
-        if _is_lightweight_live_state_request():
-            return seed_role
-        seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
-        node_role = GatewayNodeRole.query.filter_by(
-            gateway_membership_id=membership.id,
-            node_id=node.id,
-            is_active=True,
-        ).first()
-        return node_role.role if node_role and node_role.is_active else None
+        return effective_node_role(node_role)
 
     return request_cached("access.node_role", cache_key, resolve)
 
@@ -543,7 +520,7 @@ def user_can_access_node(user, gateway_code, node_code, minimum_role="watcher"):
 
 def prime_user_node_roles_for_request(user, gateway_code, node_codes):
     """Seed the existing per-node access cache with one bounded projection."""
-    if not _is_authenticated_user(user):
+    if not _is_authenticated_user(user) or not user.is_active:
         return {}
 
     gateway_code = _normalize_gateway_code(gateway_code)
@@ -622,12 +599,7 @@ def prime_user_node_roles_for_request(user, gateway_code, node_codes):
                 and _app_access_is_approved_active(app_access)
                 and active_node is not None
             ):
-                if node_role is not None:
-                    resolved_role = node_role.role if node_role.is_active else None
-                elif not explicit and app_access.role in ROLE_LEVELS:
-                    resolved_role = app_access.role
-                elif not explicit:
-                    resolved_role = "watcher"
+                resolved_role = effective_node_role(node_role)
 
             set_request_cached("access.default_gateway", gateway_code, gateway)
             set_request_cached(
@@ -1012,13 +984,6 @@ def _legacy_neogateway_app_access(user, membership):
         role=_role_from_gateway_membership(user, membership),
         is_active=membership.is_active,
     )
-
-
-def _neogateway_seed_role_for_user(user):
-    access = get_user_app_access(user, "neogateway")
-    if access and access.status == "approved" and access.is_active and access.role in ROLE_LEVELS:
-        return access.role
-    return "watcher"
 
 
 def _get_active_node(node_code):

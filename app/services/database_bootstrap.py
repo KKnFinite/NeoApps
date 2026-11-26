@@ -108,10 +108,17 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
                   ).first())
 
     db.session.commit()
+    from app.services.node_watcher_provisioning import reconcile_watcher_nodes
+
+    watcher_reconciliation, watcher_verification = reconcile_watcher_nodes(user, gateway)
+    if watcher_reconciliation:
+        db.session.commit()
     app.logger.info("NeoStaffing Door Final repair: corrected=%s", shift_door_finals_corrected)
 
     return {
         "username": user.username,
+        "watcher_reconciliation": watcher_reconciliation,
+        "watcher_verification": watcher_verification,
         "shift_door_finals_corrected": shift_door_finals_corrected,
         "neosubzero_management_minimums": subzero_minimums,
         "neosubzero_management_rule_changes": {

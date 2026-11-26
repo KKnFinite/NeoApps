@@ -13,6 +13,14 @@ from app.models.user import ROLE_LEVELS
 
 
 APP_CODES = frozenset({"neogateway", "neostaffing", "neobid"})
+DEFAULT_NODE_ROLE = "watcher"
+
+
+def effective_node_role(grant):
+    """Resolve a node grant after the account, app, gateway and node gates pass."""
+    if grant is None:
+        return DEFAULT_NODE_ROLE
+    return grant.role if grant.is_active else None
 
 
 @dataclass(frozen=True)
@@ -121,7 +129,7 @@ def read_authority(user_id, *, proposed=False):
             # from the app role; its future mapping requires explicit review.
             for node in nodes:
                 existing = grant_map.get((gateway_id, node.id))
-                role = existing.role if existing and existing.is_active else None if existing or explicit else app_roles.get("neogateway")
+                role = effective_node_role(existing) if node.is_active else None
                 if role:
                     roles[f"node:{gateway_id}:{node.id}"] = role
         if proposed and not explicit:

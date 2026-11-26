@@ -20,6 +20,7 @@ from app.services.account_foundation import atomic_account_change,AccountConflic
 from app.services.grandmaster_commissioning import _ready,ReauthenticationFailed
 from app.services.request_cache import clear_request_cache
 from app.services.account_scope_runtime import GATEWAY_PROTECTED
+from app.services.account_authority import DEFAULT_NODE_ROLE
 
 
 def digest(value):
@@ -65,11 +66,8 @@ def plan(data):
         if not eligible:continue
         for node in data['nodes']:
             if node['is_active'] and (member['id'],node['id']) not in grants:
-                role=app['role']
-                if role=='grandmaster':
-                    if user['role']!='grandmaster':blockers.append(f"User {user['id']} has inherited node Grandmaster authority requiring explicit review.")
-                    role='master'
-                inherited.append(dict(user_id=user['id'],membership_id=member['id'],gateway_id=member['gateway_id'],node_id=node['id'],role=role))
+                inherited.append(dict(user_id=user['id'],membership_id=member['id'],gateway_id=member['gateway_id'],
+                    node_id=node['id'],role=DEFAULT_NODE_ROLE))
     return dict(fingerprint=digest(data),retired=retired,inherited=inherited,gateway_roles=gateway_roles,blockers=blockers)
 
 
@@ -99,7 +97,7 @@ def decisions(data,proposed=False):
                         node=nodes.get(prefix[3:] if prefix.startswith('neo') else prefix)
                         grant=grants.get((member['id'],node['id'])) if node else None
                         if node and node['is_active']:
-                            role=grant['role'] if grant and grant['is_active'] else None if grant else app['role']
+                            role=grant['role'] if grant and grant['is_active'] else None if grant else DEFAULT_NODE_ROLE
                             if proposed and role=='grandmaster':role='master'
                     if role:
                         allowed=(key.endswith('.view') and not permission_is_configurable(key)

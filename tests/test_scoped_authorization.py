@@ -86,7 +86,7 @@ class ScopedAuthorizationTest(TestCase):
         self.assertEqual(len(audit.details['inherited']),5)
         self.assertEqual(User.query.filter_by(role='grandmaster').count(),2)
         for code in ('motherbrain','sektor','reptile','ermac','rain'):
-            self.assertEqual(get_user_node_role(self.inherited,'RFD',code),'simulator')
+            self.assertEqual(get_user_node_role(self.inherited,'RFD',code),'watcher')
 
     def test_cutover_rejects_unmapped_node_grandmaster_and_permission_differences(self):
         grant=management.existing_role(self.target,self.scope);grant.role='grandmaster';db.session.commit();clear_request_cache()
@@ -146,7 +146,67 @@ class ScopedAuthorizationTest(TestCase):
             self.assertIsNone(get_user_node_role(self.target,'RFD','scorpion'))
         self.assertEqual(digest(inventory()),before)
         new=NeoNode(code='future',name='Future',is_active=True);db.session.add(new);db.session.commit();clear_request_cache()
-        self.assertIsNone(get_user_node_role(self.root,'RFD','future'))
+        self.assertEqual(get_user_node_role(self.root,'RFD','future'),'watcher')
+        self.assertEqual(read_authority(self.root.id).role(Scope('node','neogateway',self.gateway.id,new.id)), 'watcher')
+        self.assertEqual(prime_user_node_roles_for_request(self.root,'RFD',['future']), {'future':'watcher'})
+        self.assertIsNone(management.existing_role(self.root,Scope('node','neogateway',self.gateway.id,new.id)))
+
+    def test_approval_provisions_watcher_and_retains_roles_tombstones_and_boundaries(self):
+        from app.services.access_control import prime_lightweight_live_request_scope
+
+        self.cutover()
+        member = GatewayMembership.query.filter_by(user_id=self.target.id, gateway_id=self.gateway.id).one()
+        app = PortalAppAccess.query.filter_by(user_id=self.target.id, app_code="neogateway").one()
+        node_ids = {node.code: node.id for node in NeoNode.query.filter_by(is_active=True)}
+        roles = GatewayNodeRole.query.filter_by(gateway_membership_id=member.id)
+        roles.filter(GatewayNodeRole.node_id.not_in([node_ids["scorpion"], node_ids["rain"]])).delete()
+        roles.filter_by(node_id=node_ids["rain"]).one().is_active = False
+        member.status = app.status = "pending"
+        db.session.commit()
+        app_scope = Scope("application", "neogateway")
+        sektor_scope = Scope("node", "neogateway", self.gateway.id, node_ids["sektor"])
+        self.assertIsNone(read_authority(self.target.id).role(sektor_scope))
+        self.assertIsNone(get_user_node_role(self.target, "RFD", "sektor"))
+        with patch("app.auth.routes.email_service.send_access_approved", return_value={"sent": False}):
+            management.decide_application(self.target.id, app_scope, "simulator", "approved", review_token(self.target), "Verify default provisioning")
+        db.session.commit()
+        clear_request_cache()
+        stored = {row.node_id: (row.role, row.is_active) for row in roles}
+        self.assertEqual(stored[node_ids["scorpion"]], ("operator", True))
+        self.assertFalse(stored[node_ids["rain"]][1])
+        self.assertEqual(len(stored), len(node_ids))
+        self.assertTrue(all(stored[id_] == ("watcher", True) for key, id_ in node_ids.items()
+                            if key not in {"scorpion", "rain"}))
+        self.assertEqual(get_user_node_role(self.target, "RFD", "sektor"), "watcher")
+        self.assertEqual(prime_lightweight_live_request_scope(self.target, "sektor").node_role, "watcher")
+        self.assertIsNone(get_user_node_role(self.target, "DEN", "sektor"))
+        self.assertFalse(user_can("neosektor.ebm.edit", user=self.target))
+        self.assertTrue(user_can("neosektor.dashboard.view", user=self.target))
+        self.assertTrue(user_can("neosektor.live_counts.view", user=self.target))
+        self.assertEqual(PortalAppAccess.query.filter_by(user_id=self.target.id).count(), 1)
+
+        future = NeoNode(code="future-scoped", name="Future scoped", is_active=True)
+        db.session.add(future)
+        db.session.commit()
+        future_scope = Scope("node", "neogateway", self.gateway.id, future.id)
+        clear_request_cache()
+        self.assertEqual(read_authority(self.target.id).role(future_scope), "watcher")
+        self.assertEqual(prime_lightweight_live_request_scope(self.target, future.code).node_role, "watcher")
+        management.set_role(self.target.id, future_scope, "disabled", review_token(self.target), "Explicitly disable future node")
+        db.session.commit()
+        receipt = AccountSecurityEvent.query.filter_by(subject_user_id=self.target.id, action="scoped_role_changed").one()
+        self.assertEqual(receipt.details["before"], {"role":"watcher", "active":True, "source":"default"})
+        management.decide_application(self.target.id, app_scope, "simulator", "revoked", review_token(self.target), "Verify access revocation")
+        db.session.commit()
+        clear_request_cache()
+        self.assertIsNone(get_user_node_role(self.target, "RFD", "sektor"))
+        self.assertIsNone(read_authority(self.target.id).role(sektor_scope))
+        management.decide_application(self.target.id, app_scope, "simulator", "approved", review_token(self.target), "Verify access reapproval")
+        db.session.commit()
+        clear_request_cache()
+        self.assertEqual(get_user_node_role(self.target, "RFD", "sektor"), "watcher")
+        self.assertIsNone(read_authority(self.target.id).role(future_scope))
+        self.assertFalse(roles.filter_by(node_id=future.id).one().is_active)
 
     def test_stale_role_review_rejects_replay_after_session_rotation(self):
         self.cutover();token=review_token(self.target);epoch=self.target.auth_session_version

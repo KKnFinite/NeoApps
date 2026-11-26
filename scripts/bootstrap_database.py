@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -102,6 +103,10 @@ def main():
     )
     print("NeoApps bootstrap phase 3/3: schema and seed data ready.", flush=True)
     print("NeoGateway database bootstrap complete.")
+    if report := result.get("watcher_reconciliation"):
+        print("NeoApps #112 Watcher reconciliation: " + json.dumps(report, sort_keys=True), flush=True)
+    if verification := result.get("watcher_verification"):
+        print("NeoApps #112 production permission verification: " + json.dumps(verification, sort_keys=True), flush=True)
     if minimums := result.get("neosubzero_management_minimums"):
         print("NeoSubZero permission rules: " + ", ".join(
             f"{key}={role}" for key, role in sorted(minimums.items())

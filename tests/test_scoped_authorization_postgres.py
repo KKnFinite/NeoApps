@@ -42,6 +42,61 @@ class ScopedAuthorizationPostgresTest(unittest.TestCase):
         result=self.run_as(self.root_id,lambda:activate(review()['token'],PASSWORD,'ACTIVATE SCOPED PERMISSIONS'))
         self.assertIsInstance(result,int,result)
 
+    def test_deployment_reconciles_complete_eligible_matrix_and_audit_atomically(self):
+        from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoScorpionVendorAccount
+        from app.services.node_watcher_provisioning import REPAIR_ACTION, reconcile_watcher_nodes
+        from tests.neoraiden_fixtures import record_counts
+        from tests.test_neoraiden import seed_sort
+
+        self.cutover()
+        with self.app.app_context():
+            gateway = Gateway.query.filter_by(code="RFD").one()
+            root = db.session.get(User, self.root_id)
+            target = db.session.get(User, self.target_id)
+            member = GatewayMembership.query.filter_by(user_id=target.id).one()
+            sektor_id = NeoNode.query.filter_by(code="sektor").one().id
+            roles = GatewayNodeRole.query.filter_by(gateway_membership_id=member.id)
+            roles.filter_by(node_id=sektor_id).delete()
+            disabled = roles.filter_by(node_id=NeoNode.query.filter_by(code="rain").one().id).one()
+            disabled.is_active = False
+            denied = PortalAppAccess.query.filter_by(user_id=self.master_id, app_code="neogateway").one()
+            denied.is_active = False
+            db.session.add(NeoScorpionVendorAccount(user_id=self.backup_id, gateway_id=gateway.id,
+                                                   invited_by_user_id=root.id, enabled=True))
+            vendor_member = GatewayMembership.query.filter_by(user_id=self.backup_id).one()
+            GatewayNodeRole.query.filter_by(gateway_membership_id=vendor_member.id, node_id=sektor_id).delete()
+            operation = seed_sort(gateway)
+            record_counts(gateway, operation)
+            db.session.commit()
+
+            def fail(_mapper, _connection, row):
+                if row.action == REPAIR_ACTION:
+                    raise RuntimeError("Injected reconciliation receipt failure")
+            event.listen(AccountSecurityEvent, "before_insert", fail)
+            try:
+                with self.assertRaisesRegex(RuntimeError, "receipt failure"):
+                    reconcile_watcher_nodes(root, gateway)
+                db.session.rollback()
+            finally:
+                event.remove(AccountSecurityEvent, "before_insert", fail)
+            self.assertIsNone(roles.filter_by(node_id=sektor_id).first())
+            summary, verification = reconcile_watcher_nodes(root, gateway)
+            db.session.commit()
+            self.assertEqual(summary["eligible_accounts"], 3)
+            self.assertEqual(summary["assignments_corrected"], 1)
+            self.assertEqual(summary["missing_after"], 0)
+            self.assertEqual(summary["explicit_disabled"], 1)
+            self.assertGreater(summary["higher_roles"], 0)
+            self.assertEqual(roles.filter_by(node_id=sektor_id).one().role, "watcher")
+            self.assertFalse(disabled.is_active)
+            self.assertFalse(denied.is_active)
+            self.assertIsNone(GatewayNodeRole.query.filter_by(gateway_membership_id=vendor_member.id, node_id=sektor_id).first())
+            self.assertTrue(verification["dashboard"] and verification["live_counts"])
+            self.assertFalse(verification["ebm_edit"])
+            self.assertTrue(verification["uld_matches_higher_role"])
+            self.assertEqual(reconcile_watcher_nodes(root, gateway), (summary, verification))
+            self.assertEqual(AccountSecurityEvent.query.filter_by(action=REPAIR_ACTION).count(), 1)
+
     def test_concurrent_cutovers_commit_one_complete_mapping(self):
         token=self.run_as(self.root_id,lambda:review()['token']);start=Barrier(2)
         def apply():

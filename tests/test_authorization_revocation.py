@@ -265,7 +265,7 @@ class AuthorizationRevocationTest(unittest.TestCase):
         self.gateway.is_active=False;node=NeoNode.query.filter_by(code='rain').one()
         node.is_active=False;db.session.commit()
         from tests.test_auth_account_flows import AuthAccountFlowsTest
-        data=AuthAccountFlowsTest._account_form(self,email='new-registration@example.test',employee_id='NEW-REG')
+        data=AuthAccountFlowsTest._account_form(self,email='new-registration@example.test',employee_id='7236149')
         with patch('app.auth.routes.email_service.send_email_verification',return_value={'sent':False}):
             response=self.app.test_client().post('/create-account',data=data)
         self.assertEqual(response.status_code,200)
