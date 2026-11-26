@@ -12,6 +12,7 @@ from app.services.operation_lifecycle import current_existing_operational_sort_o
 from app.services.gateway_matrix import current_gateway_local_datetime, gateway_timezone, physical_poll_windows
 from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_screen_registry import RAIDEN_REFRESH_KEY
+from app.services.krfd_observations import note_raiden_render
 from . import bp
 from .services import (
     arrival_sort_window, authorized_gateways, board_sources, board_weather, gateway_operations, postgres_board_versions,
@@ -82,10 +83,13 @@ def index():
     sorts = gateway_operations(gateway).options(load_only(SortDateOperation.id, SortDateOperation.sort_date,
         SortDateOperation.sort_name)).order_by(SortDateOperation.sort_date.desc(),SortDateOperation.id.desc()).all()
     board, revision = _board(gateway, operation)
-    return render_template("neonodes/neoraiden/index.html", gateways=gateways, gateway=gateway, sorts=sorts,
+    windows = _poll_windows(gateway, operation)
+    page = render_template("neonodes/neoraiden/index.html", gateways=gateways, gateway=gateway, sorts=sorts,
         selected_id=request.args.get("operation_id",type=int), board=board, revision=revision,
-        poll_windows=_poll_windows(gateway, operation),
+        poll_windows=windows,
         refresh_interval_ms=live_screen_refresh_value(gateway, RAIDEN_REFRESH_KEY).effective_interval_ms)
+    note_raiden_render(board["weather"]["observation"], windows)
+    return page
 
 
 @bp.get("/state")
@@ -112,6 +116,7 @@ def state():
         # A refresh fragment has no shell, account menu or alert-tray dependencies.
         template = current_app.jinja_env.get_template("neonodes/neoraiden/_board.html")
         response = jsonify(html=template.render(board=board))
+        note_raiden_render(board["weather"]["observation"], windows)
     response.set_etag(revision)
     response.headers["X-Raiden-Windows"] = json.dumps(windows)
     response.headers["X-Raiden-Interval-Ms"] = str(interval_ms)

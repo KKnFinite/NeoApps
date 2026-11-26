@@ -75,7 +75,11 @@ def normalize_metars(rows):
 
 
 def current_observations(now):
-    from app.services import neosubzero_weather as weather
+    from app.services import krfd_observations, neosubzero_weather as weather
+    if krfd_observations.enabled():
+        import json
+        raw, _ = krfd_observations.source(now)
+        return normalize_metars(json.loads(raw))
     # Reuse official-source cache/retry infrastructure. Only a bounded recent
     # 14-hour observation window; no historical season/catalog download.
     url=weather.AVIATION_WEATHER_METAR_URL+'?'+urlencode(dict(ids='KRFD',format='json',hours=14))

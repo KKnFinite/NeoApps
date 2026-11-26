@@ -4,13 +4,15 @@ import re
 import unittest
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from playwright.sync_api import expect
 
 from app.extensions import db
 from app.models import Gateway, NeoSubZeroDepartureDeiceEvent, NeoSubZeroOperationContext, NeoSubZeroPretreatState, SortDateMission, SortDateParkingAssignment
-from app.services import neosubzero_weather
+from app.services import frost_auto, krfd_observations, neosubzero_weather
 from tests.browser import test_mobile_drawer as shell_tests
 from tests.neoraiden_fixtures import busy_sort, record_attendance, record_departure_milestones, record_pull_roster
 
@@ -301,13 +303,15 @@ class GodModeBrowser(unittest.TestCase):
         fixture.setUpClass()
         self.addCleanup(fixture.tearDownClass)
         observed = datetime.now(timezone.utc) - timedelta(minutes=10)
-        cache = {"krfd_metar": dict(value=[dict(icaoId="KRFD", reportTime=observed.isoformat(),
-                 temp=-17.78, dewp=-20, wdir=300, wspd=12, wgst=20, visib=0, wxString="Mist")],
-                 fetched_at=datetime.now(timezone.utc).timestamp())}
-        self.enterContext(patch.object(neosubzero_weather, "_CACHE", cache))
-        self.enterContext(patch.object(neosubzero_weather, "_request_json", side_effect=AssertionError("Weather I/O")))
+        payload = [dict(icaoId="KRFD", reportTime=observed.isoformat(),
+            temp=-17.78, dewp=-20, wdir=300, wspd=12, wgst=20, visib=0, wxString="Mist")]
+        self.enterContext(patch.object(neosubzero_weather, "_request_json", side_effect=AssertionError("Per-viewer weather I/O")))
         fixture.app.config["NEOSUBZERO_WEATHER_ENABLED"] = True
+        fixture.app.config["NEOAPPS_METAR_CACHE_DIR"] = self.enterContext(TemporaryDirectory())
         with fixture.app.app_context():
+            with patch.object(frost_auto, "fetch", return_value=(json.dumps(payload).encode(), {})) as fetch:
+                krfd_observations.refresh(SimpleNamespace(eligible=lambda _at: True), lambda: datetime.now(timezone.utc))
+                fetch.assert_called_once()
             operation = busy_sort(Gateway.query.one(), extra_arrivals=29, extra_departures=29)
             fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(operation.sort_date, time(21))
             db.session.add(NeoSubZeroOperationContext(sort_date_operation_id=operation.id, active_precipitation="Light snow"))

@@ -13,6 +13,7 @@ from sqlalchemy import event, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.extensions import db
+from app.services import krfd_observations
 
 SAFETY_SECONDS = 600
 BUSY_SECONDS = 30
@@ -43,7 +44,10 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
     at = at or utcnow()
     due, deadlines = {}, [safety_deadline(at)]
     next_frost_capture = None
-    gateways = db.session.execute(select(Gateway.id, Gateway.code)).all()
+    metar_enabled = krfd_observations.enabled()
+    g.krfd_metar_schedule = None
+    g.krfd_schedule_revision = krfd_observations.schedule_revision() if metar_enabled else None
+    gateways = db.session.execute(select(Gateway.id, Gateway.code, Gateway.is_active)).all()
     latest_audit = db.session.scalar(select(func.max(Audit.id))) or 0
     def add(gateway, kind, deadline):
         if deadline is None:
@@ -54,7 +58,8 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
             deadlines.append(deadline)
     def minimum(column, *where):
         return db.session.scalar(select(func.min(column)).where(*where))
-    for gateway_id, code in gateways:
+    for gateway in gateways:
+        gateway_id, code = gateway.id, gateway.code
         if safety and current_app.config.get("NEOSTAFFING_HISTORY_ENABLED") is True and (
             code.upper() == current_app.config.get("DEFAULT_GATEWAY_CODE", "RFD").upper()
         ):
@@ -122,8 +127,12 @@ def plan(at=None, *, safety=False, hinted=False, expedite=()):
                 Task.kind == 'departure_control', Task.identity == 'discovery', Task.version == departures.VERSION)).scalar()
             if discovery is not None and not discovery.get('discovery_complete'):
                 research('departures', at)
-        if current_app.config.get('FROST_AUTO_COLLECTION', True) is True:
-            schedule=auto.Schedule.load(db.session.get(Gateway,gateway_id))
+        frost_enabled = current_app.config.get('FROST_AUTO_COLLECTION', True) is True
+        if frost_enabled or metar_enabled:
+            schedule = auto.Schedule.load(gateway)
+        if metar_enabled:
+            g.krfd_metar_schedule = schedule
+        if frost_enabled:
             aware=at.replace(tzinfo=timezone.utc)
             for cycle in schedule.capture_cycles(aware):
                 row = db.session.execute(select(Task.status, Task.retry_at).where(Task.gateway_id == gateway_id,
@@ -198,7 +207,11 @@ class ArchiveDeadlines:
         self.timer = None
         self.generation = 0
         self.deadline = utcnow() + timedelta(seconds=10)
-        self.safety = self.deadline
+        self.safety = self.archive_deadline = self.deadline
+        self.weather_schedule = None
+        self.weather_revision = None
+        self.weather_deadline = None
+        self.weather_retry = None
         self.hinted = False
         self.running = False
         self.last_started = None
@@ -233,6 +246,7 @@ class ArchiveDeadlines:
             sooner = utcnow() + timedelta(seconds=1)
             if self.last_started:
                 sooner = max(sooner, self.last_started + timedelta(seconds=BUSY_SECONDS))
+            self.archive_deadline = min(self.archive_deadline, sooner)
             if sooner < self.deadline:
                 self.deadline = sooner
                 self.rearm()
@@ -251,7 +265,8 @@ class ArchiveDeadlines:
             current = utcnow()
             if current < self.observed:
                 self.deadline = current  # Recompute UTC deadlines after a backward clock step.
-                self.safety = current
+                self.safety = self.archive_deadline = current
+                self.weather_retry = None
             self.observed = current
             if utcnow() < self.deadline:
                 self.rearm()  # Wall-clock check only; absolutely no database call.
@@ -261,17 +276,30 @@ class ArchiveDeadlines:
             hinted, self.hinted = self.hinted, False
         at = utcnow()
         safety = at >= self.safety
-        next_due = at + timedelta(seconds=BUSY_SECONDS)
+        next_due = self.archive_deadline
+        archive_due = hinted or at >= self.archive_deadline
         try:
             from app.services.memory_diagnostics import observe_process_memory
             with self.app.app_context(), observe_process_memory('archive_delivery_cycle'):
                 g.background_deadline_work = True
                 from app.services.neoscorpion_spear_decisions import _worker_lock
                 if not _worker_lock.acquire(blocking=False):
+                    if archive_due:
+                        next_due = at + timedelta(seconds=BUSY_SECONDS)
+                    elif self.weather_deadline is not None:
+                        self.weather_deadline = at + timedelta(seconds=BUSY_SECONDS)
                     return
                 try:
-                    due, next_due = plan(at, safety=safety, hinted=hinted, expedite=self.expedite)
-                    db.session.remove()
+                    due = {}
+                    if archive_due:
+                        next_due = at + timedelta(seconds=BUSY_SECONDS)
+                        due, next_due = plan(at, safety=safety, hinted=hinted, expedite=self.expedite)
+                        self.weather_schedule = g.get("krfd_metar_schedule")
+                        self.weather_revision = g.get("krfd_schedule_revision")
+                        db.session.remove()
+                    self.run_weather()
+                    if not archive_due:
+                        return
                     for gateway, kinds in due.items():
                         if 'subzero_discovery' in kinds:
                             self.expedite.discard(gateway)
@@ -280,6 +308,8 @@ class ArchiveDeadlines:
                     after = utcnow()
                     if due:
                         remaining, next_due = plan(after, expedite=self.expedite)
+                        self.weather_schedule = g.get("krfd_metar_schedule")
+                        self.weather_revision = g.get("krfd_schedule_revision")
                         if remaining:
                             next_due = min(next_due, after + timedelta(seconds=BUSY_SECONDS))
                     if safety:
@@ -301,8 +331,27 @@ class ArchiveDeadlines:
             with self.lock:
                 self.running = False
                 notified_due = max(utcnow() + timedelta(seconds=1), self.last_started + timedelta(seconds=BUSY_SECONDS))
-                self.deadline = min(next_due, notified_due) if self.hinted else next_due
+                self.archive_deadline = min(next_due, notified_due) if self.hinted else next_due
+                self.deadline = min(self.archive_deadline, self.weather_deadline or self.archive_deadline)
                 self.rearm()
+
+    def run_weather(self):
+        if (self.weather_schedule is None or self.weather_revision is None
+                or self.weather_revision != krfd_observations.schedule_revision()):
+            self.weather_deadline = None
+            return
+        def now():
+            return utcnow().replace(tzinfo=timezone.utc)
+        due = krfd_observations.next_deadline(self.weather_schedule, now(), not_before=self.weather_retry)
+        if due is not None and due <= now():
+            try:
+                krfd_observations.refresh(self.weather_schedule, now, revision=self.weather_revision)
+            except OSError as error:
+                self.app.logger.warning("Shared KRFD METAR storage unavailable: %s", type(error).__name__)
+            # Bound rechecks for lock contention and transient filesystem errors.
+            self.weather_retry = now() + timedelta(seconds=BUSY_SECONDS)
+            due = krfd_observations.next_deadline(self.weather_schedule, now(), not_before=self.weather_retry)
+        self.weather_deadline = due.replace(tzinfo=None) if due else None
 
 
 def notify_archive_worker(app):
@@ -347,7 +396,8 @@ _ARCHIVE_MODELS = frozenset(('NeoScorpionSpearObservation', 'NeoScorpionSpearFle
     'NeoScorpionSpearAuditEntry', 'NeoScorpionFuelingEvent', 'NeoScorpionFuelWorkState',
     'NeoScorpionFuelAssignment', 'NeoSubZeroAuditEntry', 'NeoSubZeroSprayRecord',
     'NeoSubZeroDepartureDeiceEvent', 'NeoSubZeroPretreatState', 'FrostDocument', 'FrostHistoryTask',
-    'SortDateMission', 'SortDateParkingAssignment', 'SortDateOperation', 'NeoScorpionSettings', 'Gateway'))
+    'SortDateMission', 'SortDateParkingAssignment', 'SortDateOperation', 'NeoScorpionSettings', 'Gateway',
+    'GatewaySortMatrix', 'SortTimelineSettings', 'SortTimelineSortSetting'))
 
 
 def _changed(session, _context):
@@ -360,6 +410,8 @@ def _changed(session, _context):
         session.info['recovery_deadline_hint'] = True
     if names & _ARCHIVE_MODELS:
         session.info['archive_deadline_hint'] = True
+    if names & {'GatewaySortMatrix', 'SortTimelineSettings', 'SortTimelineSortSetting', 'Gateway'}:
+        session.info['krfd_schedule_hint'] = True
 
 
 def _committed(session):
@@ -371,6 +423,11 @@ def _committed(session):
             notify_recovery_worker(current_app._get_current_object())
         except Exception as error:
             current_app.logger.warning('Committed recovery wake deferred to safety scan: %s',type(error).__name__)
+    if session.info.pop("krfd_schedule_hint", False) and krfd_observations.enabled():
+        try:
+            krfd_observations.invalidate_schedule()
+        except OSError as error:
+            current_app.logger.warning("Shared KRFD schedule invalidation unavailable: %s", type(error).__name__)
     if session.info.pop('archive_deadline_hint', False):
         try:
             notify_archive_worker(current_app._get_current_object())
@@ -382,3 +439,4 @@ def _rolled_back(session, previous):
     if previous.parent is None:
         session.info.pop('recovery_deadline_hint', None)
         session.info.pop('archive_deadline_hint', None)
+        session.info.pop("krfd_schedule_hint", None)

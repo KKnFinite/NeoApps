@@ -23,6 +23,7 @@ from app.services import frost_research, frost_model as model, frost_analysis as
 from app.services.memory_diagnostics import memory_diagnostics, observe_process_memory
 from app.services import frost_resources as priority
 from app.services.frost_schedule import Schedule, cycle_identity, hourly_targets
+from app.services import krfd_observations
 
 VERSION='frost-auto-v1'
 MAX_SNAPSHOT=1024*1024
@@ -62,7 +63,7 @@ def unpack(value):
 def fetch(url, maximum):
     """One bounded request, closed response; job-level retry, never hidden loops."""
     priority.checkpoint()
-    allowed=(url=='https://aviationweather.gov/api/data/metar?ids=KRFD&format=json&hours=14' or
+    allowed=(url==krfd_observations.METAR_URL or
         url=='https://api.weather.gov/points/42.1915,-89.0876' or
         re.fullmatch(r'https://api.weather.gov/gridpoints/LOT/\d+,\d+',url))
     if not allowed:raise ValueError('Unverified current-weather source URL.')
@@ -98,7 +99,12 @@ def acquire():
     cycle = getattr(g, 'frost_capture_cycle', None) if has_app_context() else None
     observations=[];errors=[]
     try:
-        metars,receipt=get('https://aviationweather.gov/api/data/metar?ids=KRFD&format=json&hours=14',128*1024)
+        if krfd_observations.enabled():
+            raw, receipt = krfd_observations.source(now())
+            sources.append(dict(receipt, raw_base64=base64.b64encode(raw).decode()))
+            metars = json.loads(raw)
+        else:
+            metars,receipt=get(krfd_observations.METAR_URL,krfd_observations.MAX_BYTES)
         observations=normalize_metars(metars)
         for row in observations:row['received_at_utc']=receipt['retrieved_at_utc']
     except priority.Deferred:

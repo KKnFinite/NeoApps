@@ -21,6 +21,7 @@ from app.services.gateway_matrix import (
     sort_lookup_window_for_operation,
 )
 from app.services.memory_diagnostics import memory_diagnostics
+from app.services import krfd_observations
 from app.services.bounded_http import ExternalResponseError, read_json
 
 
@@ -61,7 +62,7 @@ class NeoSubZeroWeatherError(RuntimeError):
 @memory_diagnostics("neosubzero_weather_context")
 def neosubzero_weather_context(gateway, operation=None, *, now=None):
     """Return current KRFD observation and operational-sort forecasts."""
-    snapshot = _weather_snapshot(now=now)
+    snapshot = _weather_snapshot(gateway=gateway, now=now)
     current = parse_aviation_weather_metar(snapshot["metar"].get("value"))
     forecast = snapshot["forecast"].get("value")
     local_now = current_gateway_local_datetime(gateway, now=now)
@@ -146,7 +147,7 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
 
 def neosubzero_weather_revision(*, gateway=None, now=None):
     """Refresh cached provider state and return its stable content revision."""
-    base=_weather_revision(_weather_snapshot(now=now))
+    base=_weather_revision(_weather_snapshot(gateway=gateway, now=now))
     if gateway is None:return base
     from app.services.frost_ducc import revision
     return hashlib.sha256((base+revision(gateway,now=now)).encode()).hexdigest()
@@ -157,14 +158,17 @@ def cached_metar_observation(gateway, *, now=None):
     if gateway.code != "RFD" or not _weather_enabled():
         return None
     now = _utc_now(now)
-    with _CACHE_LOCK:
-        cached = _CACHE.get("krfd_metar")
+    if krfd_observations.enabled():
+        cached = krfd_observations.latest(now)
+    else:
+        with _CACHE_LOCK:
+            cached = _CACHE.get("krfd_metar")
     metar = cached["value"] if cached else None
     row = metar[0] if isinstance(metar, list) and metar else None
     if not isinstance(row, dict) or row.get("icaoId") != KRFD_ICAO:
         return None
-    observed = _parse_datetime(row.get("reportTime"))
-    if observed is None or observed.tzinfo is None or observed > now:
+    observed = krfd_observations.observed_at(row)
+    if observed is None or observed > now:
         return None
     fetched = datetime.fromtimestamp(cached["fetched_at"], timezone.utc)
     expires = min(fetched, observed) + METAR_STALE_TTL
@@ -179,7 +183,7 @@ def cached_metar_observation(gateway, *, now=None):
         visibility="0 SM" if row.get("visib") == 0 else current["visibility"],
         conditions=str(row.get("wxString") or "").strip(), observed_at=observed.isoformat(),
         observed_label=observed.astimezone(timezone.utc).strftime("%H:%MZ"),
-        observed_full_label=current["observed_at_label"], stale=now >= stale_at,
+        observed_full_label=_utc_label(observed), stale=now >= stale_at,
         stale_at_ms=int(stale_at.timestamp() * 1000), expires_at_ms=int(expires.timestamp() * 1000),
     )
 
@@ -214,7 +218,7 @@ def parse_aviation_weather_metar(payload):
         base = _number(cloud.get("base"))
         if cover:
             clouds.append(f"{cover} {int(base):,}" if base is not None else cover)
-    observed_at = _parse_datetime(row.get("reportTime"))
+    observed_at = krfd_observations.observed_at(row)
     wind_speed = _number(row.get("wspd"))
     wind_gust = _number(row.get("wgst"))
     return {
@@ -289,18 +293,21 @@ def current_weather_theme(current):
     return "neutral"
 
 
-def _weather_snapshot(*, now=None):
+def _weather_snapshot(*, gateway=None, now=None):
     now = _utc_now(now)
-    if not _weather_enabled():
+    if not _weather_enabled() or (gateway is not None and gateway.code != "RFD"):
         empty = {"value": None, "stale": False, "error": None}
         return {"metar": dict(empty), "forecast": dict(empty)}
-    metar = _cached_fetch(
-        "krfd_metar",
-        METAR_TTL,
-        METAR_STALE_TTL,
-        _fetch_metar,
-        now=now,
-    )
+    if krfd_observations.enabled():
+        cached = krfd_observations.latest(now)
+        metar = _last_good(cached, now.timestamp(), METAR_STALE_TTL.total_seconds())
+        if cached:
+            stale = (now.timestamp() - cached["fetched_at"] >= METAR_TTL.total_seconds()
+                     or now - krfd_observations.observed_at(cached["value"][0]) >= METAR_OBSERVATION_FRESHNESS)
+            metar = dict(value=cached["value"], stale=stale,
+                         error="Observation is stale; showing last good data." if stale else None)
+    else:
+        metar = _cached_fetch("krfd_metar", METAR_TTL, METAR_STALE_TTL, _fetch_metar, now=now)
     forecast = _cached_fetch(
         "krfd_forecast",
         FORECAST_TTL,
@@ -657,7 +664,7 @@ def _weather_revision(snapshot):
     forecast = snapshot["forecast"].get("value") or {}
     hourly_properties = (forecast.get("hourly") or {}).get("properties") or {}
     payload = {
-        "metar": metar_row.get("reportTime") if isinstance(metar_row, dict) else None,
+        "metar": metar_row if isinstance(metar_row, dict) else None,
         "forecast": hourly_properties.get("generatedAt") or hourly_properties.get("updateTime"),
         "metar_stale": snapshot['metar']['stale'],
         "forecast_stale": snapshot['forecast']['stale'],
