@@ -98,7 +98,7 @@ class RainrockDashboardTest(TestCase):
             NeoRainDelayInfo(sort_date_mission_id=self.departure.id,minutes=5,code='GL',notes='Gate note\nFull second line'),
             NeoRainDelayInfo(sort_date_mission_id=self.departure.id,minutes=0,code='WX',notes='')])
         db.session.commit();html=self.state()['html']
-        for mission,delay in ((self.arrival,'—'),(self.departure,'11 RS, 5 GL, 0 WX - Late inbound; Gate note\nFull second line')):
+        for mission,delay in ((self.arrival,''),(self.departure,'11 RS - Late inbound; 5 GL - Gate note\nFull second line; 0 WX')):
             row=re.search(r'<tr data-rainrock-flight="'+str(mission.id)+r'">(.*?)</tr>',html,re.S).group(1)
             self.assertEqual(row.count('<td'),7)
             self.assertIn('class="rainrock-delay"',row)
