@@ -12,6 +12,7 @@ from sqlalchemy.engine import make_url
 from app import create_app
 from app.extensions import db
 from app.models import NeoRainMissionNote, SortDateOperation
+from app.services.live_collaboration import entity_version
 from tests import test_neorain_full_native as contracts
 
 URI = os.environ.get("NEOSTAFFING_TEST_POSTGRES_URL")
@@ -44,11 +45,12 @@ class NativeRainPostgresTest(contracts.FullNativeRainTest):
             super().setUp()
 
     def test_concurrent_note_update_preserves_the_winning_version(self):
-        self.assertEqual(self.notes(self.departure, "add", text="Original").status_code, 200)
-        note = NeoRainMissionNote.query.one()
+        note = NeoRainMissionNote(sort_date_mission_id=self.departure.id, text="Original")
+        db.session.add(note)
+        db.session.commit()
         operation_id = self.operation.id
         payload = {"board": "outbound", "operation_id": operation_id, "mission_id": self.departure.id,
-                   "action": "update", "note_id": note.id, "version": note.version}
+                   "action": "update", "delay_id": f"note-{note.id}", "expected_version": entity_version(note)}
         with self.client.session_transaction() as session:
             cookies = dict(session)
         barrier = Barrier(2)
@@ -58,7 +60,7 @@ class NativeRainPostgresTest(contracts.FullNativeRainTest):
             with client.session_transaction() as session:
                 session.update(cookies)
             barrier.wait(timeout=5)
-            return client.post("/neorain/mission-notes", data={**payload, "text": value}).status_code
+            return client.post("/neorain/delay-info", data={**payload, "notes": value}, headers={"X-Requested-With": "XMLHttpRequest"}).status_code
 
         with patch("app.neonodes.neorain.routes.current_neorain_outbound_operation",
                    side_effect=lambda _gateway: db.session.get(SortDateOperation, operation_id)):

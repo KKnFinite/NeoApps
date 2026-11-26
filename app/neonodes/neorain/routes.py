@@ -17,7 +17,7 @@ from flask_login import current_user
 from app.auth.decorators import gateway_node_required
 from app.neonodes.landing import node_landing
 from app.extensions import db
-from app.models import MasterFlightSchedule, NeoRainCrewAdminAssignment, NeoRainDelayInfo, NeoRainLoadPlannerContact, NeoRainOutboundServiceState, SortDateMission, SortDateOperation, StaffingPerson
+from app.models import MasterFlightSchedule, NeoRainCrewAdminAssignment, NeoRainLoadPlannerContact, NeoRainOutboundServiceState, SortDateMission, SortDateOperation, StaffingPerson
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
@@ -82,7 +82,7 @@ from app.services.neorain_crew_admin import (
 )
 from app.services.neorain_delay_info import (
     NeoRainDelayInfoError, add_neorain_delay_info, update_neorain_delay_info,
-    delete_neorain_delay_info,
+    delay_entry_payload, delete_neorain_delay_info, find_delay_entry_for_update, mission_delay_entry_count,
 )
 from app.services.neorain_fuel_authority import (
     RAIN_FUEL_SOURCE_NEO,
@@ -560,47 +560,49 @@ def delay_info():
         "inbound": ("arrival", "neorain.inbound", "neorain.inbound.edit"),
         "outbound": ("departure", "neorain.outbound", "neorain.outbound.edit"),
     }.get(board, (None, None, None))
-    if permission is None or not user_can(permission):
+    if permission is None or not user_can(permission) or not user_can(f"neorain.{board}.view"):
         return jsonify(ok=False, error="Your current gateway role does not permit editing this board."), 403
     gateway = get_current_gateway(); operation = current_neorain_outbound_operation(gateway)
     mission_id = request.form.get("mission_id", type=int)
     if operation is None:
         return failure("No current sort. Open the current board before saving.", 409)
-    mission = db.session.execute(db.select(SortDateMission).where(
+    mission = db.session.execute(db.select(SortDateMission).select_from(SortDateOperation)
+        .join(SortDateMission, SortDateMission.sort_date_operation_id == SortDateOperation.id).where(
         SortDateMission.id == mission_id,
-        SortDateMission.sort_date_operation_id == operation.id,
+        SortDateOperation.id == operation.id,
+        SortDateOperation.locked_at_utc.is_(None),
+        SortDateOperation.archived_at_utc.is_(None),
         SortDateMission.gateway_code == gateway.code,
         SortDateMission.mission_type == mission_type,
     ).with_for_update()).scalar_one_or_none()
     if mission is None:
+        db.session.rollback()
         return failure("Mission is not in the current sort. Your entry has not been saved.", 409)
     action = request.form.get("action")
     try:
         if action == "add":
             row = add_neorain_delay_info(mission, request.form.get("minutes"), request.form.get("code"), request.form.get("notes"))
         else:
-            row = db.session.execute(db.select(NeoRainDelayInfo).where(NeoRainDelayInfo.id == request.form.get("delay_id", type=int), NeoRainDelayInfo.sort_date_mission_id == mission.id).with_for_update()).scalar_one_or_none()
-            if row is None: raise NeoRainDelayInfoError("Delay Info was not found for this mission.")
+            row = find_delay_entry_for_update(mission, request.form.get("delay_id", ""))
+            if row is None:
+                db.session.rollback()
+                return failure("This entry is no longer available on this mission. Reload before retrying.", 409)
             if not request.form.get("expected_version"):
                 raise NeoRainDelayInfoError("Reload the current delay before editing or deleting it.")
             conflict = version_conflict(row, request.form.get("expected_version"))
             if conflict:
                 db.session.rollback()
                 return failure(conflict["message"], 409)
-            if action == "update": update_neorain_delay_info(mission, row, request.form.get("minutes"), request.form.get("code"), request.form.get("notes"))
+            if action == "update": update_neorain_delay_info(mission, row, request.form.get("minutes"), request.form.get("code"), request.form.get("notes"), actor_id=current_user.id)
             elif action == "delete": delete_neorain_delay_info(mission, row)
             else: raise NeoRainDelayInfoError("Choose a valid Delay Info action.")
         db.session.flush()
-        delay_id = row.id
+        payload = delay_entry_payload(row)
+        count = mission_delay_entry_count(mission_id) if wants_json else None
         db.session.commit()
         if wants_json:
-            from app.services.neorain_delay_info import neorain_delay_info_rows
-            entries = neorain_delay_info_rows(mission)
-            entry = None if action == "delete" else {
-                "id": row.id, "minutes": row.minutes, "code": row.code,
-                "notes": row.notes or "", "version": entity_version(row),
-            }
-            return jsonify(ok=True, action=action, delay_id=delay_id, count=len(entries),
+            entry = None if action == "delete" else payload
+            return jsonify(ok=True, action=action, delay_id=payload["id"], count=count,
                 html=render_template("neonodes/neorain/_delay_entry.html", delay=entry,
                     mission_id=mission_id, board=board, mobile=False) if entry else "",
                 mobile_html=render_template("neonodes/neorain/_delay_entry.html", delay=entry,

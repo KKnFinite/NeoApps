@@ -30,12 +30,12 @@
             event.preventDefault();
             const missionId = value(form, 'mission_id');
             if (busy.has(missionId) || !form.reportValidity()) return;
-            const scope = form.parentElement.closest('[data-neorain-inbound-edit-protected], [data-neorain-outbound-edit-protected]');
+            const scope = form.parentElement.closest('[data-neorain-delay-editor]');
             if (!scope) return;
             const data = new FormData(form);
             const action = value(form, 'action');
             const entry = form.closest('.neorain-delay-existing-row');
-            const controls = Array.from((entry || form).querySelectorAll('input:not([type="hidden"]), button'));
+            const controls = Array.from((entry || form).querySelectorAll('input:not([type="hidden"]), textarea, button'));
             const disabled = controls.map(control => control.disabled);
             busy.add(missionId);
             form.dataset.neorainDelaySaving = 'true';
@@ -58,7 +58,7 @@
                 // Reconcile only the affected entry, never another unsaved delay.
                 const scopes = new Set(Array.from(root.querySelectorAll('.neorain-delay-line-form'))
                     .filter(candidate => value(candidate, 'mission_id') === missionId)
-                    .map(candidate => candidate.closest('[data-neorain-inbound-edit-protected], [data-neorain-outbound-edit-protected]')));
+                    .map(candidate => candidate.closest('[data-neorain-delay-editor]')));
                 for (const target of scopes) {
                     if (!target) continue;
                     const old = Array.from(target.querySelectorAll('.neorain-delay-existing-row'))
@@ -78,7 +78,7 @@
                 }
                 form.removeAttribute('data-neorain-delay-dirty');
                 for (const toggle of root.querySelectorAll(`[aria-controls="delay-info-${missionId}"]`)) {
-                    toggle.textContent = `Delay ${result.count} / Notes`;
+                    toggle.textContent = `Delay ${result.count}`;
                 }
                 const mobile = root.querySelector(`#mobile-flight-${missionId} [data-neorain-mobile-delay] > summary`);
                 if (mobile) mobile.textContent = `DELAY INFO (${result.count})`;

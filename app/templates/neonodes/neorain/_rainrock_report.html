@@ -21,7 +21,23 @@
   </div>
   {% for side,heading,place,scheduled in (('inbound','INBOUND ARRIVALS','Origin','STA'),('outbound','OUTBOUND DEPARTURES','Destination','STD')) %}
   <section class="rainrock-flights"><h3>✈ {{ heading }}</h3><div class="rainrock-table-scroll" tabindex="0" role="region" aria-label="{{ heading }} flight table"><table class="rainrock-flight-table"><colgroup><col class="rainrock-flight-col"><col class="rainrock-tail-col"><col class="rainrock-route-col"><col class="rainrock-scheduled-col"><col class="rainrock-actual-col"><col class="rainrock-variance-col"><col></colgroup><thead><tr><th>Flight</th><th>Tail</th><th>{{ place }}</th><th>Scheduled</th><th>Actual</th><th>+/-</th><th>Delay Details</th></tr></thead><tbody>
-  {% for row in report[side ~ '_rows'] %}<tr data-rainrock-flight="{{ row.mission_id }}">{% if row.cancelled %}<td colspan="7">{{ row.flight }} — CANCELLED{% if row.mission_notes %}<span data-rainrock-mission-notes hidden> — {{ row.mission_notes|join('; ') }}</span>{% endif %}</td>{% else %}<td>{{ row.flight or '—' }}</td><td>{{ row.tail or '—' }}</td><td>{{ row.place or '—' }}</td><td>{{ row.scheduled or '—' }}</td><td>{{ row.actual or '—' }}</td><td class="rainrock-variance {{ 'is-severe' if row.variance|int >= 15 else 'is-late' if row.variance|int > 5 else 'is-on-time' if row.variance != '—' else '' }}">{{ row.variance }}</td><td class="rainrock-delay"{% if row.delay_details %} data-rainrock-delays="{{ row.mission_id }}"{% endif %}>{% for delay in row.delay_details %}{{ delay.minutes }} {{ delay.code }}{{ ', ' if not loop.last }}{% else %}—{% endfor %}{% set notes=row.delay_details|selectattr('notes')|map(attribute='notes')|list %}{% if notes %} - {{ notes|join('; ') }}{% endif %}{% if row.mission_notes %}<div data-rainrock-mission-notes hidden>Mission Notes: {{ row.mission_notes|join('; ') }}</div>{% endif %}</td>{% endif %}</tr>
+  {% for row in report[side ~ '_rows'] %}
+  <tr data-rainrock-flight="{{ row.mission_id }}">
+    {% if row.cancelled %}
+    <td colspan="7">{{ row.flight }} — CANCELLED{% if row.delay_details %}<span data-rainrock-note-variant="full" hidden> — {{ row.delay_details }}</span>{% endif %}</td>
+    {% else %}
+    <td>{{ row.flight or '—' }}</td><td>{{ row.tail or '—' }}</td><td>{{ row.place or '—' }}</td>
+    <td>{{ row.scheduled or '—' }}</td><td>{{ row.actual or '—' }}</td>
+    <td class="rainrock-variance {{ 'is-severe' if row.variance|int >= 15 else 'is-late' if row.variance|int > 5 else 'is-on-time' if row.variance != '—' else '' }}">{{ row.variance }}</td>
+    <td class="rainrock-delay"{% if row.delay_details %} data-rainrock-delays="{{ row.mission_id }}"{% endif %}>
+      {%- if row.delay_details == row.default_delay_details -%}
+        {{ row.delay_details }}
+      {%- else -%}
+        <span data-rainrock-note-variant="default">{{ row.default_delay_details }}</span><span data-rainrock-note-variant="full" hidden>{{ row.delay_details }}</span>
+      {%- endif -%}
+    </td>
+    {% endif %}
+  </tr>
   {% else %}<tr><td colspan="7">No flights for this sort.</td></tr>{% endfor %}
   </tbody></table></div></section>{% endfor %}
   {% if report.closeout %}<section class="rainrock-report-notes"><h3>CLOSEOUT</h3>{% for entry in report.closeout %}<p><strong>{{ entry.label }}</strong> · {{ entry.value }}</p>{% endfor %}</section>{% endif %}

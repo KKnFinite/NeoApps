@@ -146,7 +146,7 @@ class NeoRainReportTest(TestCase):
         db.session.commit()
         report = report_context(self.operation)
         text = briefing_text(report)
-        self.assertIn("▪ UPS7831 RFD-SDF ATD: 01:11, RS MULTIPLE LATE INBOUND AIRCRAFT; TD HEAT WX RESTRICT", text)
+        self.assertIn("▪ UPS7831 RFD-SDF ATD: 01:11, 3 RS - MULTIPLE LATE INBOUND AIRCRAFT; 2 TD - HEAT WX RESTRICT", text)
         self.assertIn("▪ UPS910 RFD-SDF ATD: 01:20", text)
         self.assertNotIn("▪ UPS948", text)
         self.assertIn("• HPS Plan UNAVAILABLE vs Actual UNAVAILABLE", text)

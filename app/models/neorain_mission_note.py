@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.extensions import db
+from sqlalchemy.orm import synonym
 
 
 class NeoRainMissionNote(db.Model):
@@ -13,6 +14,9 @@ class NeoRainMissionNote(db.Model):
         db.Integer, db.ForeignKey("sort_date_missions.id"), nullable=False, index=True
     )
     text = db.Column(db.Text, nullable=False)
+    notes = synonym("text")
+    minutes = db.Column(db.Integer)
+    code = db.Column(db.String(2))
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"))
     updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

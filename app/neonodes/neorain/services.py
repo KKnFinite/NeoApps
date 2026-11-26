@@ -29,7 +29,7 @@ from app.models import (
     MotherBrainGoogleIntegrationSetting,
 )
 from app.models import NeoRainOperationalSetting, NeoRainCrewAdminAssignment, NeoRainDelayInfo, NeoRainMissionNote
-from app.services.neorain_mission_notes import mission_note_payload
+from app.services.neorain_delay_info import delay_entry_payload, mission_delay_entries
 from app.services.neorain_ground_time_settings import neorain_ground_time_threshold_minutes
 from app.services.neorain_outbound_service_fields import (
     outbound_service_states,
@@ -900,8 +900,7 @@ def _inbound_row(mission, parking_by_tail, departures_by_tail=None, ground_time_
         "sort_time": effective,
         "mission_id": mission.id,
         "version": entity_version(mission),
-        "mission_notes": mission_note_payload(mission),
-        "delay_info": tuple({"id": row.id, "minutes": row.minutes, "code": row.code, "notes": row.notes or "", "version": entity_version(row)} for row in mission.delay_info_rows),
+        "delay_info": tuple(delay_entry_payload(entry) for entry in mission_delay_entries(mission)),
     }
 
 
@@ -1105,8 +1104,7 @@ def _outbound_row(
         "sort_time": planned,
         "mission_id": mission.id,
         "version": entity_version(mission),
-        "mission_notes": mission_note_payload(mission),
-        "delay_info": tuple({"id": row.id, "minutes": row.minutes, "code": row.code, "notes": row.notes or "", "version": entity_version(row)} for row in mission.delay_info_rows),
+        "delay_info": tuple(delay_entry_payload(entry) for entry in mission_delay_entries(mission)),
     }
 
 

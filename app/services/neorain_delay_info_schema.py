@@ -1,30 +1,43 @@
-"""Targeted production schema ensure for NeoRain Delay Info."""
-
-from sqlalchemy import text
-
-from app.extensions import db
-from app.models import NeoRainDelayInfo
+"""Relax Delay Info fields and retain historical notes in their original rows."""
+from sqlalchemy import inspect
 
 
-NEORAIN_DELAY_INFO_SCHEMA_LOCK_KEY = 7_483_327_341_921
-NEORAIN_DELAY_INFO_SCHEMA_LOCK_TIMEOUT = "5s"
-
-
-def ensure_neorain_delay_info_table(app):
-    if app.config.get("TESTING") or not _is_postgresql(app):
-        return False
-    with app.app_context():
-        try:
-            connection = db.session.connection()
-            connection.execute(text(f"SET LOCAL lock_timeout = '{NEORAIN_DELAY_INFO_SCHEMA_LOCK_TIMEOUT}'"))
-            connection.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": NEORAIN_DELAY_INFO_SCHEMA_LOCK_KEY})
-            NeoRainDelayInfo.__table__.create(bind=connection, checkfirst=True)
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            raise
-    return True
-
-
-def _is_postgresql(app):
-    return str(app.config.get("SQLALCHEMY_DATABASE_URI", "")).lower().startswith(("postgresql:", "postgresql+", "postgres:", "postgres+"))
+def sync_neorain_delay_info_schema(connection):
+    inspector = inspect(connection)
+    if inspector.has_table("neorain_mission_notes"):
+        existing = {column["name"] for column in inspector.get_columns("neorain_mission_notes")}
+        for field, column_type in (("minutes", "INTEGER"), ("code", "VARCHAR(2)")):
+            if field not in existing:
+                connection.exec_driver_sql(f"ALTER TABLE neorain_mission_notes ADD COLUMN {field} {column_type}")
+    if not inspector.has_table("neorain_delay_info"):
+        return
+    required = {column["name"] for column in inspector.get_columns("neorain_delay_info")
+                if not column["nullable"]}
+    if not required.intersection(("minutes", "code")):
+        return
+    if connection.dialect.name == "postgresql":
+        connection.exec_driver_sql(
+            "ALTER TABLE neorain_delay_info ALTER COLUMN minutes DROP NOT NULL, ALTER COLUMN code DROP NOT NULL"
+        )
+    elif connection.dialect.name == "sqlite":
+        # SQLite cannot drop a NOT NULL constraint in place. Swap only after
+        # the original rows are copied, with the same primary key and indexes.
+        with connection.begin_nested():
+            connection.exec_driver_sql("""
+                CREATE TABLE neorain_delay_info_nullable (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    sort_date_mission_id INTEGER NOT NULL REFERENCES sort_date_missions(id),
+                    minutes INTEGER, code VARCHAR(2), notes TEXT,
+                    created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL
+                )
+            """)
+            connection.exec_driver_sql("""
+                INSERT INTO neorain_delay_info_nullable
+                    (id, sort_date_mission_id, minutes, code, notes, created_at, updated_at)
+                SELECT id, sort_date_mission_id, minutes, code, notes, created_at, updated_at
+                FROM neorain_delay_info
+            """)
+            connection.exec_driver_sql("DROP TABLE neorain_delay_info")
+            connection.exec_driver_sql("ALTER TABLE neorain_delay_info_nullable RENAME TO neorain_delay_info")
+            for field in ("sort_date_mission_id", "code"):
+                connection.exec_driver_sql(f"CREATE INDEX ix_neorain_delay_info_{field} ON neorain_delay_info ({field})")

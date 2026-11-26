@@ -49,7 +49,9 @@
   const notesToggle=root.querySelector('[data-rainrock-notes]');
   const updateNotes=()=>{
     if (!notesToggle) return;
-    live.querySelectorAll('[data-rainrock-mission-notes]').forEach(note=>{note.hidden=!notesToggle.checked;});
+    live.querySelectorAll('[data-rainrock-note-variant]').forEach(detail=>{
+      detail.hidden=(detail.dataset.rainrockNoteVariant==='full')!==notesToggle.checked;
+    });
   };
   notesToggle?.addEventListener('change',updateNotes);
   const status=root.querySelector('[data-report-save-status]');

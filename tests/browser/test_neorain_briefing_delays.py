@@ -116,9 +116,9 @@ class BriefingDelayBrowserTest(TestCase):
                     self.assertIn('RFD-DEN UPS777 N948UP +7\n', preview.text_content())
                     # Actual state endpoint refresh retains selected ON and
                     # includes a newly saved canonical delay for this mission.
-                    db.session.add(NeoRainDelayInfo(sort_date_mission_id=departure_id, minutes=0, code='TD', notes='LIVE NEW ENTRY'))
+                    db.session.add(NeoRainDelayInfo(sort_date_mission_id=departure_id, notes='LIVE NEW ENTRY'))
                     db.session.commit()
-                    expect(preview).to_contain_text('11 RS, 5 GL, 0 TD', timeout=10000)
+                    expect(preview).to_contain_text('11 RS - Late inbound; 5 GL - Complete', timeout=10000)
                     expect(preview).to_contain_text('LIVE NEW ENTRY')
                     expect(toggle).to_be_checked(); copy_and_check()
                     # Force the API-unavailable path; execCommand itself is

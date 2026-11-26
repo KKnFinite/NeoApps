@@ -6,7 +6,7 @@ from app.extensions import db
 from app.models import Gateway, SortDateMission, SortDateOperation
 from app.services.neorain_delay_info import (
     NeoRainDelayInfoError, add_neorain_delay_info, delete_neorain_delay_info,
-    neorain_delay_info_rows, update_neorain_delay_info,
+    mission_delay_entries, update_neorain_delay_info,
 )
 
 
@@ -28,18 +28,18 @@ class NeoRainDelayInfoTest(unittest.TestCase):
         first = add_neorain_delay_info(self.first, "12", " ab ", "  first\nline  ")
         second = add_neorain_delay_info(self.first, 7, "cd", None)
         db.session.commit()
-        self.assertEqual([row.code for row in neorain_delay_info_rows(self.first)], ["AB", "CD"])
+        self.assertEqual([row.code for row in mission_delay_entries(self.first)], ["AB", "CD"])
         self.assertEqual(first.notes, "first\nline")
         update_neorain_delay_info(self.first, first, 15, "ef", "\n revised \n")
         self.assertEqual((first.minutes, first.code, first.notes), (15, "EF", "revised"))
         delete_neorain_delay_info(self.first, second); db.session.commit()
-        self.assertEqual(len(neorain_delay_info_rows(self.first)), 1)
+        self.assertEqual(len(mission_delay_entries(self.first)), 1)
 
     def test_validation_cross_mission_and_no_sum_enforcement(self):
-        for minutes in (0, -1, "1.5", "", True):
+        for minutes in (0, -1, "1.5", True, 2_147_483_648):
             with self.subTest(minutes=minutes):
                 with self.assertRaises(NeoRainDelayInfoError): add_neorain_delay_info(self.first, minutes, "AA")
-        for code in ("", "A", "ABC"):
+        for code in ("A", "ABC", "A\x00"):
             with self.subTest(code=code):
                 with self.assertRaises(NeoRainDelayInfoError): add_neorain_delay_info(self.first, 1, code)
         row = add_neorain_delay_info(self.first, 999, "AA")

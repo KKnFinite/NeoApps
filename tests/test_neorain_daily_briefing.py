@@ -224,7 +224,7 @@ class DailyBriefingTest(TestCase):
         self.assertNotIn('Late inbound', concise)
         detailed = format_briefing(context, include_delay_details=True)
         arrival = 'SDF-RFD UPS1487 N438UP +15 — 10 GL - Arrival only'
-        departure = 'RFD-SDF UPS948 N948UP +11 — 11 RS, 0 WS, 5 RS - Late inbound; ' + long_note + '; Last entry'
+        departure = 'RFD-SDF UPS948 N948UP +11 — 11 RS - Late inbound; 0 WS - ' + long_note + '; 5 RS - Last entry'
         self.assertIn(arrival, detailed)
         self.assertIn(departure, detailed)
         # Nothing outside the two existing flight lines is reformatted.
@@ -261,12 +261,12 @@ class DailyBriefingTest(TestCase):
             event.remove(db.session(), 'before_flush', reject_write)
         self.assertIn('Late inbound', current['briefing_detailed'])
         self.assertNotIn('OTHER SORT ONLY', current['briefing_detailed'])
-        self.assertIn('UPS1487 — Delay Info: 1 MX - EARLY ONLY', current['briefing_detailed'])
+        self.assertIn('UPS1487 — 1 MX - EARLY ONLY', current['briefing_detailed'])
         self.assertNotIn('EARLY ONLY', current['briefing'])
         self.assertIn('OTHER SORT ONLY', historical['briefing_detailed'])
         self.assertNotIn('Late inbound', historical['briefing_detailed'])
         self.departure.late_metrics_included_override = False; db.session.commit()
         context = briefing_context(self.operation)
         self.assertNotIn('N948UP +11', format_briefing(context, include_delay_details=True))
-        self.assertIn('UPS948 — Delay Info: 11 RS - Late inbound', format_briefing(context, include_delay_details=True))
+        self.assertIn('UPS948 — 11 RS - Late inbound', format_briefing(context, include_delay_details=True))
         self.assertEqual(NeoRainReportEntry.query.count(), 0)
