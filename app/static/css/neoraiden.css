@@ -169,6 +169,11 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     .raiden:not(.rd-tv) .rd-header [data-search] {width:100%}
     .raiden:not(.rd-tv) .rd-refresh {grid-column:2}
 }
+@container (781px <= width <= 1050px) {
+    .raiden:not(.rd-tv):not(.rd-measuring-tv) .rd-overview {
+        grid-template-columns:minmax(0,1.46fr) minmax(0,1fr) minmax(0,1fr);
+    }
+}
 @container (max-width:780px) {
     .raiden:not(.rd-tv) .rd-overview {grid-template-columns:1fr; padding:0}
     .raiden:not(.rd-tv):not(.rd-measuring-tv) .rd-overview {padding-block:0}

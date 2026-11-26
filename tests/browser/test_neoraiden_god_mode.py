@@ -119,6 +119,7 @@ class GodModeBrowser(unittest.TestCase):
                 columnWidths: boxes.map(box => [box.querySelector('table').getBoundingClientRect().width, box.clientWidth]),
                 fitsColumns: boxes.every(box => box.querySelector('table').getBoundingClientRect().width <= box.clientWidth + 1),
                 fitsAll: rows.every(row => row.getBoundingClientRect().bottom <= innerHeight + 1),
+                lastMissionBottom: Math.max(...rows.map(row => row.getBoundingClientRect().bottom)),
                 noClipping: fields.every(cell => {
                     const rect = cell.getBoundingClientRect();
                     return rect.width > 0 && rect.right <= bounds.right + 1 && cell.scrollWidth <= cell.clientWidth + 1;
@@ -318,9 +319,9 @@ class GodModeBrowser(unittest.TestCase):
                             self.check_outline(page.locator("#rd-departures"))
                             self.check_pulse(page, page.locator('[data-deice-state="deicing"]'))
                             expect(page.locator('[data-deice-state="pretreated"] .rd-deice-short')).to_have_text("Pretreated 23:55")
+                            page.screenshot(path=output/f"{mode}-{engine}-{height}-{theme}.png")
                             geometry = self.check_full_board(page, width, height, tv=mode == "tv")
                             stats.append([mode, width, height, theme, {**geometry, **overview_metrics}])
-                            page.screenshot(path=output/f"{mode}-{engine}-{height}-{theme}.png")
                         if mode == "tv":
                             page.keyboard.press("Escape")
                             page.wait_for_function("document.fullscreenElement === null")
