@@ -906,20 +906,42 @@ a {
         0 0 22px rgba(var(--node-rgb), 0.22);
 }
 
-details.character-switcher.operational-character-switcher > summary.character-switcher-trigger {
-    gap: 9px;
+:is(.operational-node-topbar,.v11-top) > details:is(.operational-character-switcher,.operational-account-menu,.motherbrain-alert-tray)
+    > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     min-height: 34px;
-    padding: 0 11px;
-    border: 1px solid #686e7b;
-    border-radius: 7px;
-    background: #17191f;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
     color: #f0f1f5;
     font: 400 .62rem/1 NeoFont, Arial, sans-serif;
     letter-spacing: .04em;
+    white-space: nowrap;
     box-shadow: none;
 }
 
-.character-switcher.operational-character-switcher > .character-switcher-trigger::after {
+:is(.operational-node-topbar,.v11-top) > details:is(.operational-character-switcher,.operational-account-menu,.motherbrain-alert-tray)
+    > summary:hover,
+:is(.operational-node-topbar,.v11-top) > details:is(.operational-character-switcher,.operational-account-menu,.motherbrain-alert-tray)[open]
+    > summary {
+    background: var(--shell-chrome-hover, var(--v11-surface-2, #22252e));
+    box-shadow: none;
+}
+
+:is(.operational-node-topbar,.v11-top) > details:is(.operational-character-switcher,.operational-account-menu,.motherbrain-alert-tray)
+    > summary:focus-visible {
+    outline: 2px solid var(--node-highlight);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+:is(.operational-character-switcher,.operational-account-menu) > summary::after {
+    content: "";
+    flex: none;
     width: 6px;
     height: 6px;
     margin: -3px 1px 0 0;
@@ -928,15 +950,9 @@ details.character-switcher.operational-character-switcher > summary.character-sw
     transform: rotate(45deg);
 }
 
-.character-switcher.operational-character-switcher[open] > .character-switcher-trigger::after {
+:is(.operational-character-switcher,.operational-account-menu)[open] > summary::after {
     margin-top: 3px;
     transform: rotate(225deg);
-}
-
-.character-switcher.operational-character-switcher[open] > .character-switcher-trigger,
-.character-switcher.operational-character-switcher > .character-switcher-trigger:hover {
-    background: #22252e;
-    border-color: var(--node-highlight);
 }
 
 .character-switcher > .character-switcher-panel {

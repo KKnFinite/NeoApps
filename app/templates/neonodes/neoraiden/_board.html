@@ -47,7 +47,7 @@
       <colgroup span="1"></colgroup><colgroup span="3"></colgroup><colgroup span="3"></colgroup>
       <thead>
         <tr><th rowspan="2" scope="col">Wave</th>{% for side, heading, label, count in sides %}
-          <th scope="colgroup" colspan="3" data-performance="{{ side }}"><span class="rd-direction">{{ heading }}</span> <span class="rd-mission-count">{{ count }}</span> <span class="rd-count-label">{{ label }}</span></th>
+          <th scope="colgroup" colspan="3" data-performance="{{ side }}"><span class="rd-direction">{{ heading }}</span><span class="rd-count-line"><span class="rd-mission-count">{{ count }}</span> <span class="rd-count-label">{{ label }}</span></span></th>
         {% endfor %}</tr>
         <tr>{% for side in sides %}{% for label in ('# Late','Late Minutes','Average Late') %}<th scope="col">{{ label }}</th>{% endfor %}{% endfor %}</tr>
       </thead>

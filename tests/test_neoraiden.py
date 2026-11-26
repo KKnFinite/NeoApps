@@ -284,6 +284,27 @@ class RaidenTest(unittest.TestCase):
         flight.timezone = "America/Chicago"
         self.assertIsNone(_arrival_variance_minutes(flight, datetime(2026, 11, 1, 6, 30), window))
 
+    def test_fuel_labels_format_both_mission_layouts_without_changing_fuel_color(self):
+        from flask import render_template_string
+
+        cases = (
+            ("PENDING", "Pending", "gray"), ("ASSIGNED", "Assigned", "orange"),
+            ("READY", "Ready", "amber"), ("FUELING", "Fueling", "yellow"),
+            ("COMPLETE", "Complete", "green"), ("OFF", "Off", "teal"),
+            ("REVIEW", "Review", "red"), ("FOB READY", "FOB Ready", "teal"),
+            ("FOB", "FOB", "green"), ("45.6", "45.6", "green"),
+            ("45.6 K", "45.6 K", "green"),
+        )
+        with self.app.test_request_context():
+            for raw, display, color in cases:
+                with self.subTest(raw=raw):
+                    html = render_template_string(
+                        "{% from 'neonodes/neoraiden/_mission.html' import mission,departures,mobile_departures %}"
+                        "{{ mission(row,departures,false) }}{{ mission(row,mobile_departures,false,mobile=true) }}",
+                        row=dict(id=1, flight="FX101", variance=None, neo_fuel=raw, fuel_color=color),
+                    )
+                    self.assertEqual(html.count(f'data-value-color="{color}">{display}</span>'), 2)
+
     def test_milestones_use_exact_missions_and_respect_node_access(self):
         from app.models import NeoScorpionFuelAssignment
         from tests.neoraiden_fixtures import record_departure_milestones, record_pull_roster
@@ -317,6 +338,9 @@ class RaidenTest(unittest.TestCase):
                 self.assertIsNone(row["mix"])
                 self.assertIsNone(row["variance"])
                 self.assertNotIn("block", row)
+            path = f"/neoraiden/state?operation_id={op.id}"
+            initial = self.client.get(path)
+            self.assertEqual(initial.json["html"].count('data-value-color="green">45.6</span>'), 2)
             mission = db.session.get(SortDateMission, complete["id"])
             assignment = NeoScorpionFuelAssignment.query.filter_by(sort_date_mission_id=mission.id).one()
             assignment.completed_at_utc = None
@@ -325,6 +349,10 @@ class RaidenTest(unittest.TestCase):
             db.session.commit()
             pending = snapshot(self.user, self.gateway, op)["departures"][1]
             self.assertEqual((pending["neo_fuel"], pending["fuel_color"]), ("PENDING", "gray"))
+            updated = self.client.get(path, headers={"If-None-Match": initial.headers["ETag"]})
+            self.assertEqual(updated.status_code, 200)
+            self.assertNotIn('>45.6</span>', updated.json["html"])
+            self.assertEqual(updated.json["html"].count('data-value-color="gray">Pending</span>'), 2)
 
     def test_explicit_selection_loads_archive_status_without_a_second_select(self):
         from sqlalchemy import inspect

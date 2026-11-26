@@ -21,6 +21,11 @@
 <div class="rd-metric" data-metric="{{ key }}"><dt>{{ label }}</dt><dd>{{ val(value) }}</dd></div>
 {% endmacro %}
 
+{% set fuel_labels = {
+  'PENDING':'Pending', 'ASSIGNED':'Assigned', 'READY':'Ready', 'FUELING':'Fueling',
+  'COMPLETE':'Complete', 'OFF':'Off', 'REVIEW':'Review', 'FOB READY':'FOB Ready',
+} %}
+
 {% set mobile_departures = (
   ('flight','route','Flight','Dest'), ('tail','pos','Tail','POS'),
   ('pure','mix','PURE','MIX'), ('fuel','deice','Neo Fuel','DEICE'),
@@ -59,7 +64,7 @@
 {% set variance = ('%+d'|format(m.variance) if m.variance > 0 else m.variance) if m.variance is not none else none %}
 {% set values = {
   'flight':m.flight, 'wave':m.wave, 'tail':m.tail, 'route':m.route_label|default(m.route),
-  'pos':m.parking, 'variance':variance, 'fuel':m.neo_fuel, 'pure':m.pure, 'mix':m.mix,
+  'pos':m.parking, 'variance':variance, 'fuel':fuel_labels.get(m.neo_fuel, m.neo_fuel), 'pure':m.pure, 'mix':m.mix,
   'ramp':m.ramp, 'crew':m.crew, 'block':m.block, 'no-return':m.no_return,
   'deice':m.deice, 'status':m.status, 'time':estimated,
 } %}
