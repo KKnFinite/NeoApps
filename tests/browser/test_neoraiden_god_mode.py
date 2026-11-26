@@ -53,6 +53,14 @@ class GodModeBrowser(unittest.TestCase):
             expect(averages).to_have_count(0)
         expect(overview.locator(".rd-section-heading")).to_have_text(["Inbound ULD Counts", "Flight Data", "Staffing"])
         expect(overview.locator(".rd-mission-count")).to_have_text(["29", "31"])
+        expect(overview.locator(".rd-count-line")).to_have_text(["29 Arrivals", "31 Departures"])
+        for group in overview.locator("[data-performance]").all():
+            direction, count = (group.locator(selector).bounding_box()
+                                for selector in (".rd-direction", ".rd-count-line"))
+            self.assertLessEqual(direction["y"] + direction["height"], count["y"] + .5)
+            self.assertAlmostEqual(direction["x"] + direction["width"] / 2,
+                                   count["x"] + count["width"] / 2, delta=.5)
+            expect(group.locator(".rd-count-line")).to_have_css("text-align", "center")
         expect(overview.locator(".rd-performance tbody th")).to_have_text(["1st Wave", "2nd Wave", "Total"])
         expect(overview.locator('[data-performance-wave="combined"] td')).to_have_text(
             ["0", "0", "0", "1", "9", "9"])

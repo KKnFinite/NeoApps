@@ -141,7 +141,7 @@ class OperationalShellTest(unittest.TestCase):
     def test_desktop_logo_size_and_collapsed_state_are_shared_and_mobile_is_untouched(self):
         css = Path(self.app.root_path, 'static/css/operational_node_shell.css').read_text(encoding='utf-8')
         desktop = css.split('@media (min-width: 901px) {', 1)[1].split('@media (max-width: 900px)', 1)[0]
-        self.assertIn('width: 144px; height: 144px;', desktop)
+        self.assertIn('width: 100%; height: auto;', desktop)
         self.assertIn('object-fit: contain;', desktop)
         self.assertIn('.operational-sidebar-collapsed .operational-sidebar-logo img { width: 40px; height: 40px; }', desktop)
         self.assertIn('body.operational-board-view .operational-node-topbar { display: none; }', desktop)

@@ -90,7 +90,8 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-progress .rd-metric {display:flex; justify-content:center; align-items:baseline; padding-block:3px}
 .rd-performance [data-performance="inbound"] .rd-direction {color:var(--ready)}
 .rd-performance [data-performance="outbound"] .rd-direction {color:var(--danger)}
-.rd-performance [scope="colgroup"] {padding-block:2px}
+.rd-performance [scope="colgroup"] {padding-block:.5px}
+.rd-performance :is(.rd-direction,.rd-count-line) {display:block}
 .rd-performance [scope="colgroup"]:last-child,
 .rd-performance :is(thead tr:last-child th:nth-child(4),tbody td:nth-child(5),tfoot td:last-child) {
     border-inline-start:1px solid var(--line);
@@ -219,6 +220,11 @@ body.rd-projecting > :not(.rd-tv) {display:none!important}
 .rd-tv-context {flex:1; text-align:center}
 .rd-tv .rd-tv-context {display:block}
 
+@media (min-width:901px) and (max-height:800px) {
+    /* Reserve space for both heading lines on short displays at the approved font sizes. */
+    .rd-performance :is(th,td) {padding-block:0; line-height:1}
+    .rd-performance :is(dt,dd,.rd-mission-count,.rd-count-label) {line-height:1}
+}
 @media (min-height:1080px) {
     .raiden.rd-tv {
         --rd-metric-font:24px;
