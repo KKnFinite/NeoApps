@@ -27,7 +27,7 @@
 .raiden *, .raiden *::before {box-sizing:border-box}
 .raiden [hidden] {display:none!important}
 .raiden :is(h1,h2,p,form) {margin:0}
-.raiden :is(h1,h2) {color:var(--ink); font-family:inherit; letter-spacing:-.025em}
+.raiden :is(h1,h2) {color:var(--ink); font-family:inherit; font-weight:400; letter-spacing:-.025em}
 .raiden h1 {font-size:clamp(18px,1.4vw,22px); line-height:1.1}
 .raiden .rd-brand {color:var(--neo-prefix)}
 .rd-wordmark {color:var(--node-raiden-primary)}
@@ -36,7 +36,7 @@
 .raiden button,.raiden select,.raiden input {
     width:auto; min-height:32px; min-width:0; margin:0; padding:4px 9px; border:1px solid var(--line)!important;
     border-radius:6px; color:var(--ink)!important; background:var(--raised)!important;
-    font:600 .9em/1.15 system-ui,sans-serif; text-transform:none; letter-spacing:normal;
+    font:400 .9em/1.15 system-ui,sans-serif; text-transform:none; letter-spacing:normal;
 }
 body.blueprint-neoraiden .raiden select:not([multiple]) {
     appearance:auto; padding-right:4px; color-scheme:inherit;
@@ -53,12 +53,12 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-controls {margin-inline-start:auto}
 .rd-controls button[data-tv] {color:var(--accent)!important}
 .raiden .rd-header :is(button,select,input) {min-height:28px; padding-block:3px}
-.rd-header [data-search] {flex:1 1 130px; width:0; max-width:260px; font-weight:450}
+.rd-header [data-search] {flex:1 1 130px; width:0; max-width:260px}
 .rd-header [data-search]::placeholder {color:var(--muted); opacity:1}
 .rd-tv-context {display:none; color:var(--muted)}
 .rd-refresh {display:flex; gap:.4em; color:var(--muted); align-items:baseline; font-size:.85em; white-space:nowrap}
 .rd-refresh [data-refresh-status] {color:var(--accent)}
-.rd-stale {color:var(--hold); font-weight:650; padding:4px 0}
+.rd-stale {color:var(--hold); padding:4px 0}
 .rd-tv-notice {color:var(--hold); font-size:.85em}
 .rd-overview {
     --rd-label-color:color-mix(in srgb,var(--muted) 55%,var(--ink));
@@ -73,19 +73,21 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .raiden .rd-section-heading {
     display:grid; place-items:center; text-align:center;
     min-block-size:calc(max(var(--rd-mission-heading-font),var(--rd-overview-heading-font)) * 1.15 + 6px);
-    background:var(--accent-bg); color:var(--accent); font-weight:700;
+    background:var(--accent-bg); color:var(--accent); font-weight:400;
     letter-spacing:normal; line-height:1.15; padding:3px 6px;
 }
 .rd-overview .rd-section-heading {font-size:var(--rd-overview-heading-font)}
 .rd-overview table {width:100%; border-collapse:collapse; font:inherit; color:inherit}
 .rd-overview :is(th,td) {padding:.5px 2px; border:0; background:transparent; text-align:center}
 .rd-overview :is(th,dt,.rd-count-label) {
-    font-size:var(--rd-label-font); font-weight:600; line-height:1.1; color:var(--rd-label-color);
+    font-size:var(--rd-label-font); font-weight:400; line-height:1.1; color:var(--rd-label-color);
 }
 .rd-overview :is(td,dd,.rd-mission-count) {
-    font-size:var(--rd-metric-font); font-weight:650; line-height:1.08; color:var(--ink);
+    font-size:var(--rd-metric-font); font-weight:400; line-height:1.08; color:var(--ink);
 }
 .rd-overview :is(dl,dd) {margin:0}
+.rd-overview dd {min-block-size:1.08em}
+.rd-short-label {display:none}
 .rd-uld table {margin-top:2px}
 .rd-progress .rd-metric {display:flex; justify-content:center; align-items:baseline; padding-block:3px}
 .rd-performance [data-performance="inbound"] .rd-direction {color:var(--ready)}
@@ -133,7 +135,6 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-missions [data-field="fuel"] {border-inline-start:1px solid var(--line)}
 .rd-missions thead {background:var(--raised); color:var(--muted)}
 .rd-missions thead th {font-size:.92em}
-.rd-missions th,.rd-missions .rd-status {font-weight:650}
 .rd-missions tbody tr:nth-child(even) {background:var(--canvas)}
 .rd-missions small {color:var(--accent); font-size:.88em}
 .rd-status {text-transform:capitalize}
@@ -143,7 +144,6 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-status[data-status="cancelled"] {color:var(--danger)}
 .rd-value[data-value-color="late"] {color:var(--rain-late)}
 .rd-value:is([data-value-color="on-time"],[data-value-color="no-return"]) {color:var(--ready)}
-[data-field="variance"] .rd-value[data-value-color] {font-weight:800}
 .rd-value[data-value-color="load-mismatch"] {color:var(--fuel-yellow)}
 .rd-value[data-value-color="gray"] {color:var(--fuel-gray)}
 .rd-value[data-value-color="amber"] {color:var(--fuel-amber)}
@@ -163,9 +163,20 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 @media(max-width:800px) {
     .raiden:not(.rd-tv) {
         padding:4px; font-size:12px;
-        --rd-metric-font:16px;
-        --rd-label-font:13px;
+        --rd-metric-font:13px;
+        --rd-label-font:11px;
     }
+    .raiden:not(.rd-tv) .rd-overview .rd-section-heading {min-block-size:0; padding-block:2px}
+    .raiden:not(.rd-tv) .rd-overview :is(th,td) {padding-block:0}
+    .raiden:not(.rd-tv) .rd-uld table {margin-top:0}
+    .raiden:not(.rd-tv) .rd-performance table {table-layout:fixed}
+    .raiden:not(.rd-tv) .rd-averages {gap:1px 4px}
+    .raiden:not(.rd-tv) .rd-averages > div {gap:2px}
+    .raiden:not(.rd-tv) .rd-progress .rd-metric {padding-block:1px}
+    .raiden:not(.rd-tv) .rd-totals {padding-block:3px}
+    .raiden:not(.rd-tv) .rd-totals .rd-metric {gap:1px}
+    .raiden:not(.rd-tv) .rd-full-label {display:none}
+    .raiden:not(.rd-tv) .rd-short-label {display:inline}
     .raiden:not(.rd-tv) .rd-header {
         display:grid; grid-template-columns:minmax(0,1fr) auto; gap:3px 5px;
     }
@@ -224,6 +235,7 @@ body.rd-projecting > :not(.rd-tv) {display:none!important}
     /* Reserve space for both heading lines on short displays at the approved font sizes. */
     .raiden .rd-performance :is(th,td) {padding-block:0; line-height:1}
     .raiden .rd-performance :is(dt,dd,.rd-mission-count,.rd-count-label) {line-height:1}
+    .raiden .rd-performance dd {min-block-size:1em}
 }
 @media (min-height:1080px) {
     .raiden.rd-tv {

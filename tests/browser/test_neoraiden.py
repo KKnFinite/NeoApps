@@ -32,7 +32,7 @@ class CommandCenterBrowser(unittest.TestCase):
                 pass1_started_at_utc=start_utc))
             changing = SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
                 gateway_code=gateway.code, mission_type="arrival", flight_number="UPS1361",
-                origin="SDF", destination=gateway.code, arrival_status="en_route",
+                origin="SDF", destination=gateway.code, arrival_status="en_route", wave="1",
                 planned_datetime_utc=start_utc + timedelta(minutes=55),
                 eta_datetime_utc=start_utc + timedelta(minutes=50))
             overnight = SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
@@ -68,6 +68,9 @@ class CommandCenterBrowser(unittest.TestCase):
                     variance = page.locator(f'#rd-mission-{changing_id} [data-field="variance"]')
                     expect(variance).to_have_text("-5")
                     expect(arrivals.last).to_contain_text("STA 01:00")
+                    waves = page.locator('[data-performance-wave="first_wave"] td')
+                    expect(waves).to_have_text(["0", "0", "0", "", "", ""])
+                    expect(arrivals.last.locator('[data-field="variance"]')).to_be_empty()
                     departure = page.locator(f'#rd-mission-{mission_id}')
                     expect(departure.locator('[data-field="pure"] .rd-value')).to_have_text("00:02")
                     expect(departure.locator(".rd-deice")).to_have_attribute("data-deice-state", "deicing")
@@ -84,6 +87,9 @@ class CommandCenterBrowser(unittest.TestCase):
                         m.ramp_load_completed_at_utc = start_utc + timedelta(minutes=90)
                         m = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS1361").one()
                         m.eta_datetime_utc = start_utc + timedelta(hours=4, minutes=15)
+                        other = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS0927").one()
+                        other.arrival_status = "en_route"
+                        other.eta_datetime_utc = start_utc + timedelta(hours=3, minutes=50)
                         NeoErmacDoorPull.query.filter_by(sort_date_mission_id=mission_id, door="D4").one().actual_pure_pull_time_local = None
                         event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mission_id).one()
                         event.status, event.clear_outcome = "cleared", "sprayed"
@@ -102,6 +108,8 @@ class CommandCenterBrowser(unittest.TestCase):
                     expect(arrivals.locator(".rd-flight")).to_have_text(["UPS0927", "UPS1361"])
                     expect(arrivals.last).to_contain_text("ETA 01:15")
                     expect(variance).to_have_text("+200")
+                    expect(waves).to_have_text(["1", "200", "200", "", "", ""])
+                    expect(arrivals.first.locator('[data-field="variance"]')).to_have_text("-10")
                     expect(variance.locator(".rd-value")).to_have_attribute("data-value-color", "late")
                     expect(departure.locator('[data-field="pure"] .rd-value')).to_be_empty()
                     expect(departure.locator('[data-field="mix"] .rd-value')).to_have_text("00:57")
@@ -176,6 +184,8 @@ class CommandCenterBrowser(unittest.TestCase):
                     browser.close()
                     with fixture.app.app_context():
                         SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS1361").one().eta_datetime_utc = start_utc + timedelta(minutes=50)
+                        other = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS0927").one()
+                        other.arrival_status, other.eta_datetime_utc = None, None
                         NeoErmacDoorPull.query.filter_by(sort_date_mission_id=mission_id, door="D4").one().actual_pure_pull_time_local = time(0, 2)
                         event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mission_id).one()
                         event.status = "configured"

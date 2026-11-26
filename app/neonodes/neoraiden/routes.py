@@ -53,7 +53,7 @@ def _board(gateway, operation, *, conditional=False):
         sources = board_sources(current_user, gateway, operation)
         access, uld = sources
         window = arrival_sort_window(gateway, operation)
-        revision = _revision(("board-v8", current_app.config.get("STATIC_ASSET_VERSION"),
+        revision = _revision(("board-v9", current_app.config.get("STATIC_ASSET_VERSION"),
             current_user.id, gateway.id, gateway.code, operation.id, str(operation.sort_date), operation.sort_name,
             operation.window_minutes, operation.first_wave_window_minutes, operation.second_wave_window_minutes,
             tuple(map(str, window)), "ermac" in access and usable_pull_lineup(gateway, operation, window),

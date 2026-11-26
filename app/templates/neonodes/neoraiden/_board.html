@@ -21,7 +21,7 @@
   <p class="rd-empty" data-empty {% if rows %}hidden{% endif %}>{{ 'No matching flights.' if rows else 'No ' ~ key ~ ' recorded.' }}</p>
 </section>
 {% endmacro %}
-{% macro average(value) -%}{{ '%.1f'|format(value) if value is not none else '—' }}{%- endmacro %}
+{% macro average(value) -%}{{ '%.1f'|format(value) if value is not none else '' }}{%- endmacro %}
 {% if not board.operation_id %}
 <p class="rd-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
 {% else %}
@@ -43,17 +43,17 @@
     <h2 class="rd-section-heading" id="rd-performance-heading">Flight Data</h2>
     {% set sides = (('inbound','Inbound','Arrivals',board.arrivals|length), ('outbound','Outbound','Departures',board.departures|length)) %}
     {% set waves = board.wave_performance|default({}) %}
-    <table aria-label="Completed flight lateness by wave">
+    <table aria-label="Flight lateness by wave. Inbound includes ETA projections until Block-In. Outbound uses completed flights.">
       <colgroup span="1"></colgroup><colgroup span="3"></colgroup><colgroup span="3"></colgroup>
       <thead>
         <tr><th rowspan="2" scope="col">Wave</th>{% for side, heading, label, count in sides %}
-          <th scope="colgroup" colspan="3" data-performance="{{ side }}"><span class="rd-direction">{{ heading }}</span><span class="rd-count-line"><span class="rd-mission-count">{{ count }}</span> <span class="rd-count-label">{{ label }}</span></span></th>
+          <th scope="colgroup" colspan="3" data-performance="{{ side }}"><span class="rd-direction"{% if side == 'inbound' %} title="Includes ETA projections until Block-In"{% endif %}>{{ heading }}</span><span class="rd-count-line"><span class="rd-mission-count">{{ count }}</span> <span class="rd-count-label">{{ label }}</span></span></th>
         {% endfor %}</tr>
-        <tr>{% for side in sides %}{% for label in ('# Late','Late Minutes','Average Late') %}<th scope="col">{{ label }}</th>{% endfor %}{% endfor %}</tr>
+        <tr>{% for side in sides %}{% for label, short in (('# Late','Late'),('Late Minutes','Min'),('Average Late','Avg')) %}<th scope="col" aria-label="{{ label }}"><span class="rd-full-label" aria-hidden="true">{{ label }}</span><span class="rd-short-label" aria-hidden="true">{{ short }}</span></th>{% endfor %}{% endfor %}</tr>
       </thead>
       <tbody>
-        {% for key, label in (('first_wave','1st Wave'),('second_wave','2nd Wave'),('combined','Total')) %}
-        <tr data-performance-wave="{{ key }}"><th scope="row"{% if key == 'combined' %} title="Both waves combined" aria-label="Total, both waves combined"{% endif %}>{{ label }}</th>
+        {% for key, label, short in (('first_wave','1st Wave','1st'),('second_wave','2nd Wave','2nd'),('combined','Total','Total')) %}
+        <tr data-performance-wave="{{ key }}"><th scope="row" aria-label="{{ 'Total, both waves combined' if key == 'combined' else label }}"{% if key == 'combined' %} title="Both waves combined"{% endif %}><span class="rd-full-label" aria-hidden="true">{{ label }}</span><span class="rd-short-label" aria-hidden="true">{{ short }}</span></th>
           {% for side, heading, count_label, count in sides %}
           {% set data = waves.get(side, {}).get(key) %}
           <td>{{ val(data.aircraft_late if data else none) }}</td><td>{{ val(data.late_minutes if data else none) }}</td><td>{{ val(data.average if data else none) }}</td>
