@@ -34,7 +34,7 @@ class GodModeBrowser(unittest.TestCase):
         expect(board.locator(".rd-overview")).not_to_contain_text("On ballmats")
         expect(board.locator("#rd-departures [data-mission] [data-field='time'] small")).to_have_count(0)
 
-    def check_overview(self, page):
+    def check_overview(self, page, *, comparison=False):
         overview = page.locator(".rd-overview")
         shift = overview.locator('[data-metric="shift-staffing"]')
         ramp = overview.locator('[data-metric="ramp-staffing"]')
@@ -46,7 +46,11 @@ class GodModeBrowser(unittest.TestCase):
             ["Wave", "East", "West", "Left to arrive", "Left to unload"])
         expect(overview.locator(".rd-uld tbody th")).to_have_text(["1st", "2nd", "Openings"])
         expect(overview.locator("tr[data-openings] td")).to_have_text(["2", "3", "", ""])
-        expect(overview.locator(".rd-averages")).to_have_count(0)
+        averages = overview.locator(".rd-averages dd")
+        if comparison:
+            expect(averages).to_have_text(["10.0", "10.0"])
+        else:
+            expect(averages).to_have_count(0)
         expect(overview.locator(".rd-section-heading")).to_have_text(["Inbound ULD Counts", "Flight Data", "Staffing"])
         expect(overview.locator(".rd-mission-count")).to_have_text(["29", "31"])
         expect(overview.locator(".rd-performance tbody th")).to_have_text(["1st Wave", "2nd Wave", "Total"])
@@ -72,8 +76,6 @@ class GodModeBrowser(unittest.TestCase):
                 labelContrast: contrast(luminance(getComputedStyle(ordinary).color)),
                 mutedContrast: contrast(muted),
                 boxWidths: [...el.children].map(box => box.getBoundingClientRect().width),
-                frames: [...el.children].map(box => [getComputedStyle(box).borderTopWidth,
-                    getComputedStyle(box.querySelector('h2')).backgroundColor]),
                 sectionHeights: [...el.children].map(box => box.getBoundingClientRect().height),
                 clipped: [...el.querySelectorAll('th,td,dt,dd,h2,.rd-overview-box')].filter(cell =>
                     cell.scrollWidth > cell.clientWidth + 1).map(cell => cell.textContent),
@@ -82,7 +84,7 @@ class GodModeBrowser(unittest.TestCase):
         self.assertGreater(metrics["labelContrast"], metrics["mutedContrast"], metrics)
         self.assertGreaterEqual(metrics["labelContrast"], 4.5, metrics)
         self.assertEqual(metrics["clipped"], [], metrics)
-        self.assertTrue(all(border == "1px" and fill != "rgba(0, 0, 0, 0)" for border, fill in metrics["frames"]))
+        metrics.update(self.check_sections(overview))
         misaligned = overview.evaluate("""el => {
             function textRect(element) {
                 const range = document.createRange();
@@ -108,6 +110,67 @@ class GodModeBrowser(unittest.TestCase):
             return misaligned;
         }""")
         self.assertEqual(misaligned, [])
+        return metrics
+
+    def check_sections(self, overview):
+        metrics = overview.evaluate("""el => {
+            const root = el.closest('[data-raiden]');
+            const style = node => getComputedStyle(node);
+            const rect = node => node.getBoundingClientRect();
+            const boxes = [...el.children];
+            const boards = [...root.querySelectorAll('.rd-mission-group')].filter(box => rect(box).width > 0);
+            const titles = [...boxes, ...boards].map(box => box.querySelector('.rd-section-heading'))
+                .filter(title => rect(title).width > 1);
+            const workspace = root.querySelector('.rd-workspace');
+            const pairedTabs = workspace.querySelector('.rd-mobile-views');
+            const observed = [rect(workspace).top - rect(el).bottom];
+            for (let i = 1; i < boxes.length; i++) {
+                const previous = rect(boxes[i - 1]), current = rect(boxes[i]);
+                observed.push(Math.abs(current.top - previous.top) < 1
+                    ? current.left - previous.right : current.top - previous.bottom);
+            }
+            if (boards.length === 2) observed.push(rect(boards[1]).left - rect(boards[0]).right);
+            if (rect(pairedTabs).height) {
+                observed.push(rect(boards[0]).top - rect(pairedTabs).bottom);
+                observed.push(rect(pairedTabs.children[1]).left - rect(pairedTabs.children[0]).right);
+            }
+            const surface = style(boxes[0]).backgroundColor;
+            const tableLayers = el.querySelectorAll('table,thead,tbody,tfoot,tr,th,td');
+            return {
+                gaps: observed,
+                sectionGap: parseFloat(style(el).gap),
+                titleOffsets: titles.map(title => {
+                    const text = document.createRange();
+                    text.selectNodeContents(title);
+                    const line = text.getBoundingClientRect(), bar = rect(title);
+                    return Math.abs(line.left + line.width / 2 - bar.left - bar.width / 2);
+                }),
+                titleSizes: titles.map(title => style(title).fontSize),
+                titleHeights: titles.map(title => rect(title).height),
+                titleStyles: [...new Set(titles.map(title => [style(title).backgroundColor, style(title).color,
+                    style(title).padding, style(title).textAlign].join('|')))],
+                frames: [...new Set([...boxes, ...boards].map(box => [style(box).outlineWidth,
+                    style(box).outlineOffset, style(box).outlineColor, style(box).borderRadius].join('|')))],
+                uniformSurface: boxes.every(box => style(box).backgroundColor === surface) &&
+                    [...tableLayers].every(node => ['rgba(0, 0, 0, 0)', surface].includes(style(node).backgroundColor)),
+                missionStripes: boards.every(box => {
+                    const rows = box.querySelector('table:not(.rd-paired)').tBodies[0].rows;
+                    return style(rows[0]).backgroundColor !== style(rows[1]).backgroundColor;
+                }),
+            };
+        }""")
+        for gap in metrics["gaps"]:
+            self.assertAlmostEqual(gap, metrics["sectionGap"], delta=.15, msg=metrics)
+        width = overview.page.viewport_size["width"]
+        self.assertEqual(metrics["sectionGap"], 16 if width == 3840 else 8)
+        self.assertTrue(all(offset < 1 for offset in metrics["titleOffsets"]), metrics)
+        self.assertLess(max(metrics["titleHeights"]) - min(metrics["titleHeights"]), .15, metrics)
+        self.assertEqual(len(metrics["titleStyles"]), 1, metrics)
+        self.assertEqual(len(metrics["frames"]), 1, metrics)
+        self.assertTrue(metrics["frames"][0].startswith("1px|-1px|"), metrics)
+        self.assertTrue(metrics["frames"][0].endswith("|5px"), metrics)
+        self.assertTrue(metrics["uniformSurface"], metrics)
+        self.assertTrue(metrics["missionStripes"], metrics)
         return metrics
 
     def check_full_board(self, page, width, height, *, tv=False):
@@ -183,7 +246,7 @@ class GodModeBrowser(unittest.TestCase):
         expect(board).to_have_css("outline-offset", "-1px")
         expect(board).to_have_css("border-top-left-radius", "5px")
         self.assertTrue(board.evaluate("""el => getComputedStyle(el).outlineColor ===
-            getComputedStyle(el.closest('[data-raiden]').querySelector('.rd-overview-box')).borderTopColor"""))
+            getComputedStyle(el.closest('[data-raiden]').querySelector('.rd-overview-box')).outlineColor"""))
         expect(board).to_have_css("padding", "0px")
 
     def check_pulse(self, page, active):
@@ -342,6 +405,31 @@ class GodModeBrowser(unittest.TestCase):
                             page.wait_for_function("document.fullscreenElement === null")
                         if mode == "board":
                             page.get_by_role("button", name="Exit Board View").click()
+                # Force a nonredundant comparison using an explicitly included mission outside waves 1 and 2.
+                with fixture.app.app_context():
+                    outlier = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS0404").one()
+                    original = outlier.actual_block_in_datetime_utc, outlier.late_metrics_included_override
+                    outlier.actual_block_in_datetime_utc = outlier.planned_datetime_utc + timedelta(minutes=10)
+                    outlier.late_metrics_included_override = True
+                    db.session.commit()
+                try:
+                    page.set_viewport_size({"width":1280, "height":720})
+                    fixture().ready(page, f"/neoraiden?gateway=RFD&operation_id={op_id}")
+                    page.get_by_role("button", name="TV Mode", exact=True).click()
+                    expect(page.get_by_role("button", name="Exit TV Mode")).to_be_visible()
+                    for theme in ("dark", "light"):
+                        self.set_theme(page, theme)
+                        overview_metrics = self.check_overview(page, comparison=True)
+                        geometry = self.check_full_board(page, 1280, 720, tv=True)
+                        stats.append(["tv-averages", 1280, 720, theme, {**geometry, **overview_metrics}])
+                        page.screenshot(path=output/f"tv-averages-{engine}-720-{theme}.png")
+                    page.keyboard.press("Escape")
+                    page.wait_for_function("document.fullscreenElement === null")
+                finally:
+                    with fixture.app.app_context():
+                        outlier = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS0404").one()
+                        outlier.actual_block_in_datetime_utc, outlier.late_metrics_included_override = original
+                        db.session.commit()
                 page.set_viewport_size({"width":640, "height":400})
                 page.get_by_role("button", name="TV Mode", exact=True).click()
                 expect(page.locator("[data-tv-notice]")).to_contain_text("cannot fit every flight legibly")
