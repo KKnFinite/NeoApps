@@ -21,7 +21,8 @@ from app.services.account_scope_runtime import authority
 from app.services.gateway_matrix import configured_sort_window_utc, current_gateway_local_datetime, gateway_timezone
 from app.services.neorain_fuel_authority import scorpion_board_fuel_by_mission
 from app.services.neorain_performance import (
-    ARRIVAL_COMPLETE, average_lateness, completed_variance_minutes, mission_status,
+    ARRIVAL_COMPLETE, average_lateness, completed_actual, completed_variance_minutes,
+    eligible_for_performance, mission_status,
 )
 from app.services.neoscorpion_fueling_status import STAGE_COLORS
 from app.services.neosektor_live_counts import native_uld_summary
@@ -213,6 +214,25 @@ def postgres_board_versions(gateway, operation, access):
     return tuple(str(value) for value in db.session.execute(select(*columns)).one())
 
 
+def _flight_performance(missions):
+    from app.neonodes.neorain.services import _late_average_display, _late_summary
+
+    summary = _late_summary(missions)
+    recorded_waves = {
+        normalize_wave(mission.wave) for mission in missions
+        if eligible_for_performance(mission) and completed_actual(mission) is not None
+    }
+    first, second = summary["first_wave"], summary["second_wave"]
+    count = first["aircraft_late"] + second["aircraft_late"]
+    minutes = first["late_minutes"] + second["late_minutes"]
+    combined = dict(aircraft_late=count, late_minutes=minutes, average=_late_average_display(minutes, count))
+    return {
+        "first_wave": first if "1" in recorded_waves else None,
+        "second_wave": second if "2" in recorded_waves else None,
+        "combined": combined if recorded_waves & {"1", "2"} else None,
+    }
+
+
 def snapshot(user, gateway, operation, *, sources=None):
     result = dict(gateway=gateway.code, operation_id=operation.id if operation else None,
                   sort_label=None, arrivals=[], departures=[], staffing=[], marked_here=None, window=None,
@@ -248,6 +268,7 @@ def snapshot(user, gateway, operation, *, sources=None):
     window = arrival_sort_window(gateway, operation)
     if "rain" in access:
         result["performance"] = dict(inbound=average_lateness(inbound_missions), outbound=average_lateness(departures))
+        result["wave_performance"] = dict(inbound=_flight_performance(inbound_missions), outbound=_flight_performance(departures))
     pulls = {}
     if "ermac" in access and usable_pull_lineup(gateway, operation, window):
         result["pull_roster"], pulls = completed_pulls(gateway, operation, departures)
@@ -293,8 +314,10 @@ def snapshot(user, gateway, operation, *, sources=None):
         row["route_label"] = destination_label(mission.destination, row["ordinal"])
         fuel_row = fuel.get(mission.id, {})
         if "rain" in access:
-            row.update(ramp=format_local_hhmm(mission.ramp_load_completed_at_utc, mission.timezone),
-                       crew=format_local_hhmm(mission.crew_load_completed_at_utc, mission.timezone),
+            ramp, crew = mission.ramp_load_completed_at_utc, mission.crew_load_completed_at_utc
+            row.update(ramp=format_local_hhmm(ramp, mission.timezone),
+                       crew=format_local_hhmm(crew, mission.timezone),
+                       load_mismatch=bool(ramp and crew and abs(_utc_instant(ramp) - _utc_instant(crew)) > timedelta(minutes=1)),
                        block=row["actual"], no_return=mission.departure_status == "departed")
         event, review = treatment.get(tail, (None, None))
         if event and tails[tail] > 1 and event.sort_date_mission_id != mission.id:

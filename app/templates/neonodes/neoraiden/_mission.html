@@ -16,43 +16,78 @@
   'GONE · CLEARED':'CLEARED', 'NEGATIVE DEICE':'NEG DEICE',
 } %}
 
-{% macro val(v) -%}{{ v if v is not none and v != '' else '—' }}{%- endmacro %}
+{% macro val(v) -%}{{ v if v is defined and v is not none and v != '' else '—' }}{%- endmacro %}
 {% macro metric(key,label,value) %}
 <div class="rd-metric" data-metric="{{ key }}"><dt>{{ label }}</dt><dd>{{ val(value) }}</dd></div>
 {% endmacro %}
 
-{% macro mission(m,columns,inbound) %}
-{% set time = (m.actual or m.eta or m.planned) if inbound else (m.etd or m.planned) %}
+{% set mobile_departures = (
+  ('flight','route','Flight','Dest'), ('tail','pos','Tail','POS'),
+  ('pure','mix','PURE','MIX'), ('fuel','deice','Neo Fuel','DEICE'),
+  ('ramp','crew','R-LC','C-LC'), ('time','status','ETD/Block','Status/+/−'),
+  ('no-return',none,'No R',none)
+) %}
+{% set mobile_status = {
+  'ramp_load_complete':'Ramp LC', 'crew_load_complete':'Crew LC', 'last_uld_enroute':'ULD en route',
+  'blocked_out':'Out', 'gate_return':'Returned',
+} %}
+{% set mobile_deice = {
+  'TREATMENT OWNERSHIP REVIEW':'REVIEW', 'TAIL IDENTITY REVIEW':'REVIEW', 'GONE · CLEARED':'CLEARED',
+  'NEGATIVE DEICE':'NEG DEICE', 'NOT SPRAYED':'No spray', 'CONFIGURED':'CONFIG',
+} %}
+
+{% macro cell_value(m, key, value, mobile=false) -%}
+  {%- set tone = ('late' if m.variance > 0 else 'on-time') if m.variance is not none else '' -%}
+  {%- if key == 'no-return' -%}
+    {%- if value -%}<span class="rd-value" data-value-color="no-return" role="img" aria-label="No Return confirmed">✓</span>{%- endif -%}
+  {%- elif key == 'deice' and value -%}
+    {%- set short = value|replace('Completed ', 'FIN ')|replace('Pretreated ', 'Pre ') if mobile else deice_short.get(value, value) -%}
+    {%- if mobile -%}{%- set short = mobile_deice.get(value, short) -%}{%- endif -%}
+    <span class="rd-value rd-deice" data-deice-state="{{ m.deice_state }}" title="{{ value }}"><span class="rd-deice-short" aria-hidden="true">{{ short }}</span><span class="rd-deice-full">{{ value }}</span></span>
+  {%- elif key == 'status' -%}
+    {%- set status = value|replace('_', ' ') if value else none -%}
+    <span class="rd-status" data-status="{{ value or '' }}"{% if mobile and value and value in mobile_status %} title="{{ status }}" aria-label="{{ status }}"{% endif %}>{{ val(mobile_status.get(value, status) if mobile else status) }}</span>
+  {%- else -%}
+    {%- if key == 'fuel' and m.fuel_color -%}{%- set tone = m.fuel_color -%}{%- endif -%}
+    {%- if key in ('ramp','crew') and m.load_mismatch -%}{%- set tone = 'load-mismatch' -%}{%- endif -%}
+    <span class="rd-value{% if key == 'flight' %} rd-flight{% endif %}"{% if value is defined and value is not none and value not in ('', '—') and tone %} data-value-color="{{ tone }}"{% endif %}>{{ (value or '') if key in ('pure', 'mix') else val(value) }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro mission(m, columns, inbound, mobile=false) %}
+{% set estimated = (m.actual or m.eta or m.planned) if inbound else (m.etd or m.planned) %}
 {% set variance = ('%+d'|format(m.variance) if m.variance > 0 else m.variance) if m.variance is not none else none %}
 {% set values = {
-  'wave':m.wave, 'tail':m.tail, 'route':m.route_label|default(m.route), 'pos':m.parking,
-  'variance':variance, 'fuel':m.neo_fuel, 'pure':m.pure, 'mix':m.mix, 'ramp':m.ramp,
-  'crew':m.crew, 'block':m.block, 'no-return':'Yes' if m.no_return else none,
+  'flight':m.flight, 'wave':m.wave, 'tail':m.tail, 'route':m.route_label|default(m.route),
+  'pos':m.parking, 'variance':variance, 'fuel':m.neo_fuel, 'pure':m.pure, 'mix':m.mix,
+  'ramp':m.ramp, 'crew':m.crew, 'block':m.block, 'no-return':m.no_return,
+  'deice':m.deice, 'status':m.status, 'time':estimated,
 } %}
-{% set colors = {
-  'variance':'late' if m.variance is not none and m.variance > 0 else '',
-  'fuel':m.fuel_color, 'no-return':'no-return' if m.no_return else '',
-} %}
+{% if mobile %}
+<tr class="rd-mission" role="row" data-paired-mission="{{ m.id }}">
+  {% for upper, lower, upper_label, lower_label in columns %}
+    {% set block = upper == 'time' and m.block %}
+    {% set top = 'block' if block else upper %}
+    {% set bottom = 'variance' if block else lower %}
+    <{{ 'th' if loop.first else 'td' }} role="{{ 'rowheader' if loop.first else 'cell' }}"{% if loop.first %} scope="row"{% endif %} data-pair="{{ upper }}">
+      <span class="rd-pair-value" data-field="{{ top }}"{% if upper == 'time' %} aria-label="{{ 'Block' if block else 'ETD' }} {{ val(values[top]) }}"{% endif %}>{% if block %}<small class="rd-time-kind" aria-hidden="true">B</small> {% endif %}{{ cell_value(m, top, values[top], true) }}</span>
+      {% if bottom %}<span class="rd-pair-value" data-field="{{ bottom }}">{{ cell_value(m, bottom, values[bottom], true) }}</span>{% endif %}
+    </{{ 'th' if loop.first else 'td' }}>
+  {% endfor %}
+</tr>
+{% else %}
 <tr class="rd-mission" role="row" id="rd-mission-{{ m.id }}" data-mission="{{ m.id }}">
-  {% for key, label, title in columns %}
+  {% for key, label, description in columns %}
     {% if key == 'flight' %}
-      <th scope="row" role="rowheader" data-field="flight"><span class="rd-flight">{{ val(m.flight) }}</span><button type="button" class="rd-flight-toggle"
-          data-mission-details aria-expanded="false" aria-controls="rd-mission-{{ m.id }}" aria-label="Details for {{ m.flight }}">{{ val(m.flight) }}</button></th>
-    {% elif key == 'time' %}
-      <td role="cell" data-field="time">{% if time %}{% if inbound %}<small>{{ 'ACT' if m.actual else 'ETA' if m.eta else 'STA' }}</small> {% endif %}<time
-          class="rd-value"{% if not inbound %} aria-label="{{ 'Estimated departure' if m.etd else 'Scheduled departure' }} {{ time }}"{% endif %}>{{ time }}</time>{% else %}—{% endif %}</td>
-    {% elif key == 'status' %}
-      <td role="cell" class="rd-status" data-field="status" data-status="{{ m.status or '' }}">{{ m.status|replace('_',' ') if m.status else '—' }}</td>
+      <th scope="row" role="rowheader" data-field="flight">{{ cell_value(m, key, values[key]) }}</th>
     {% else %}
-      {% set extra = not inbound and loop.index > 6 %}
-      <td role="cell" data-field="{{ key }}"{% if extra %} class="rd-extra"{% endif %}{% if colors.get(key) %} data-value-color="{{ colors[key] }}"{% endif %}>
-        {% if extra %}<span class="rd-detail-label"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</span>{% endif %}
-        {% if key == 'deice' and m.deice %}
-          <span class="rd-value rd-deice" data-deice-state="{{ m.deice_state }}" title="{{ m.deice }}"><span class="rd-deice-short" aria-hidden="true">{{ deice_short.get(m.deice, m.deice) }}</span><span class="rd-deice-full">{{ m.deice }}</span></span>
-        {% elif key in ('pure', 'mix') %}<span class="rd-value">{{ values[key] or '' }}</span>
-        {% else %}<span class="rd-value">{{ val(values[key]|default(none)) }}</span>{% endif %}
+      <td role="cell" data-field="{{ key }}"{% if not inbound and loop.index > 6 %} class="rd-extra"{% endif %}>
+        {% if key == 'time' and estimated %}
+          {% if inbound %}<small>{{ 'ACT' if m.actual else 'ETA' if m.eta else 'STA' }}</small> {% endif %}<time{% if not inbound %} aria-label="{{ 'Estimated departure' if m.etd else 'Scheduled departure' }} {{ estimated }}"{% endif %}>{{ cell_value(m, key, estimated) }}</time>
+        {% else %}{{ cell_value(m, key, values[key]) }}{% endif %}
       </td>
     {% endif %}
   {% endfor %}
 </tr>
+{% endif %}
 {% endmacro %}

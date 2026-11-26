@@ -57,48 +57,45 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-stale {color:var(--hold); font-weight:650; padding:4px 0}
 .rd-tv-notice {color:var(--hold); font-size:.85em}
 .rd-overview {
-    --rd-metric-font:clamp(12px,1.15cqw,18px);
-    display:grid; grid-template-columns:minmax(0,1.28fr) minmax(0,1fr) minmax(0,1fr);
-    align-items:stretch; background:var(--surface); border:1px solid var(--line);
-    border-radius:6px; margin-bottom:4px; padding-block:3px;
-}
-.raiden:not(.rd-measuring-tv) .rd-overview {
-    --rd-metric-font:18px;
-    --rd-label-font:14px;
+    --rd-metric-font:18px; --rd-label-font:14px;
     --rd-label-color:color-mix(in srgb,var(--muted) 55%,var(--ink));
-    padding-block:5px;
+    display:grid; grid-template-columns:minmax(0,34fr) minmax(0,54fr) minmax(0,12fr);
+    align-items:stretch; gap:4px; margin-bottom:4px;
 }
-.rd-overview > * {padding-inline:clamp(4px,.7cqw,14px); min-width:0}
-.rd-overview > :not(:first-child) {border-inline-start:1px solid var(--line)}
-.rd-uld {display:flex; align-items:center; gap:5px}
-.rd-uld table {width:100%; border-collapse:collapse; font:inherit; color:inherit}
-.rd-uld :is(th,td) {padding:1px 2px; border:0; background:transparent; text-align:center; color:var(--ink)}
-.rd-uld thead th,.rd-overview dt,.rd-performance h2 {
-    font-size:var(--rd-label-font,.85em); font-weight:600; line-height:1.1;
-    color:var(--rd-label-color,var(--muted));
+.rd-overview-box {
+    min-width:0; background:var(--surface); border:1px solid var(--line);
+    border-radius:5px; overflow:clip;
 }
-.rd-uld tbody :is(th,td),.rd-overview dd {
+.raiden .rd-section-heading {
+    background:var(--accent-bg); color:var(--accent); font-weight:700;
+    letter-spacing:normal; line-height:1.15; padding:3px 6px;
+}
+.rd-overview .rd-section-heading {font-size:calc(var(--rd-label-font) + 1px)}
+.rd-overview table {width:100%; border-collapse:collapse; font:inherit; color:inherit}
+.rd-overview :is(th,td) {padding:1px 2px; border:0; background:transparent; text-align:center}
+.rd-overview :is(th,dt,.rd-count-label) {
+    font-size:var(--rd-label-font); font-weight:600; line-height:1.1; color:var(--rd-label-color);
+}
+.rd-overview :is(td,dd,.rd-mission-count) {
     font-size:var(--rd-metric-font); font-weight:650; line-height:1.08; color:var(--ink);
 }
-.raiden:not(.rd-measuring-tv) .rd-uld tbody th {
-    font-size:var(--rd-label-font); color:var(--rd-label-color);
+.rd-overview :is(dl,dd) {margin:0}
+.rd-uld table {margin-top:2px}
+.rd-progress .rd-metric {display:flex; justify-content:center; align-items:baseline; padding-block:3px}
+.rd-performance [data-performance="inbound"] .rd-direction {color:var(--ready)}
+.rd-performance [data-performance="outbound"] .rd-direction {color:var(--danger)}
+.rd-performance [scope="colgroup"] {padding-block:2px}
+.rd-performance [scope="colgroup"]:last-child,
+.rd-performance :is(thead tr:last-child th:nth-child(4),tbody td:nth-child(5),tfoot td:last-child) {
+    border-inline-start:1px solid var(--line);
 }
-.rd-progress,.rd-performance dl,.rd-totals,.rd-overview dd {margin:0}
-.rd-progress {flex:none}
-.rd-performance,.rd-totals {display:grid}
-.rd-performance {grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; gap:clamp(10px,1.2cqw,18px)}
-.rd-performance h2 {margin-bottom:3px; text-align:center; letter-spacing:normal}
-.rd-performance [data-performance="inbound"] h2 {color:var(--ready)}
-.rd-performance [data-performance="outbound"] h2 {color:var(--danger)}
-.rd-performance dl {display:grid; gap:2px}
-.rd-performance dl > div {display:flex; justify-content:space-between; align-items:baseline; gap:3px}
+.rd-performance :is(tbody tr:nth-child(odd),tfoot) {background:var(--canvas)}
+.rd-performance [data-performance-wave="combined"] {border-top:1px solid var(--line)}
+.rd-averages,.rd-averages > div {display:flex; align-items:baseline; justify-content:center; gap:3px 5px}
+.rd-averages {flex-wrap:wrap; gap:2px 9px}
 .rd-metric {display:grid; align-content:center; gap:3px; min-width:0; text-align:center}
-.rd-sort {display:grid; align-content:center; gap:2px}
-.rd-totals {grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.15fr); gap:3px 4px}
-.rd-totals .rd-metric {grid-row:span 2; grid-template-rows:subgrid}
-.rd-totals [data-metric="ramp-staffing"] dd,.rd-staff,.rd-empty {color:var(--muted)}
-.rd-staff {font-size:.82em}
-.rd-staff summary {width:max-content; max-width:100%}
+.rd-totals {display:grid; gap:6px; padding:6px 2px}
+.rd-totals [data-metric="ramp-staffing"] dd,.rd-empty {color:var(--muted)}
 .rd-deice {position:relative; border-inline-start:3px solid var(--rd-deice-color, var(--line)); padding-inline-start:3px}
 .rd-deice-full {position:absolute; inset:0 auto auto 0; inline-size:1px; block-size:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap}
 /* NeoSubZero aircraft-state colors from neosubzero_workspace.css. */
@@ -119,10 +116,10 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     50% {text-shadow:0 0 6px color-mix(in srgb,var(--rd-deice-color) 46%,transparent); border-inline-start-color:var(--rd-deice-color)}
 }
 .rd-workspace {min-width:0}
-.rd-mobile-views,.raiden .rd-flight-toggle,.rd-detail-label {display:none}
+.rd-mobile-views,.raiden .rd-paired {display:none}
 .rd-mission-groups {display:grid; grid-template-columns:minmax(min-content,34fr) minmax(min-content,66fr); gap:clamp(8px,.85cqw,18px)}
 .rd-mission-group {min-width:0; border-radius:5px; outline:1px solid var(--line); outline-offset:-1px; overflow:clip}
-.rd-mission-group h2 {padding:3px 5px; background:var(--accent-bg); color:var(--accent)}
+.rd-mission-group .rd-section-heading {font-size:clamp(16px,1.8vh,24px); padding-block:4px}
 .raiden .rd-missions {width:100%; margin:0; border:0; border-collapse:collapse; background:var(--surface); color:var(--ink); font:var(--rd-operational-font)/1.17 system-ui,sans-serif; font-variant-numeric:tabular-nums}
 .rd-missions :is(th,td) {height:auto; padding:.04em clamp(2px,.20cqw,8px); text-align:left; white-space:nowrap; color:inherit; background:transparent; border:0; font:inherit}
 .raiden:not(.rd-measuring-tv) .rd-missions tbody :is(th,td) {padding-block:calc(.04em + var(--rd-row-space,1.05px))}
@@ -138,15 +135,17 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-status:is([data-status="en_route"],[data-status="loading"],[data-status="last_uld_enroute"]) {color:var(--moving)}
 .rd-status[data-status="on_ground"] {color:var(--hold)}
 .rd-status[data-status="cancelled"] {color:var(--danger)}
-[data-field="variance"][data-value-color="late"] .rd-value {color:var(--rain-late); font-weight:800}
-.rd-extra[data-value-color="no-return"] .rd-value {color:var(--ready)}
-.rd-extra[data-value-color="gray"] .rd-value {color:var(--fuel-gray)}
-.rd-extra[data-value-color="amber"] .rd-value {color:var(--fuel-amber)}
-.rd-extra[data-value-color="orange"] .rd-value {color:var(--fuel-orange)}
-.rd-extra[data-value-color="yellow"] .rd-value {color:var(--fuel-yellow)}
-.rd-extra[data-value-color="teal"] .rd-value {color:var(--fuel-teal)}
-.rd-extra[data-value-color="green"] .rd-value {color:var(--fuel-green)}
-.rd-extra[data-value-color="red"] .rd-value {color:var(--fuel-red)}
+.rd-value[data-value-color="late"] {color:var(--rain-late)}
+.rd-value:is([data-value-color="on-time"],[data-value-color="no-return"]) {color:var(--ready)}
+[data-field="variance"] .rd-value[data-value-color] {font-weight:800}
+.rd-value[data-value-color="load-mismatch"] {color:var(--fuel-yellow)}
+.rd-value[data-value-color="gray"] {color:var(--fuel-gray)}
+.rd-value[data-value-color="amber"] {color:var(--fuel-amber)}
+.rd-value[data-value-color="orange"] {color:var(--fuel-orange)}
+.rd-value[data-value-color="yellow"] {color:var(--fuel-yellow)}
+.rd-value[data-value-color="teal"] {color:var(--fuel-teal)}
+.rd-value[data-value-color="green"] {color:var(--fuel-green)}
+.rd-value[data-value-color="red"] {color:var(--fuel-red)}
 .rd-empty {padding:10px}
 .raiden-wordmark {font:650 1.5rem system-ui,sans-serif}
 .operational-sidebar-collapsed .raiden-wordmark {font-size:.66rem}
@@ -157,7 +156,7 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 }
 @media(max-width:800px) {
     .raiden:not(.rd-tv) {padding:4px; font-size:12px}
-    .raiden:not(.rd-tv):not(.rd-measuring-tv) .rd-overview {
+    .raiden:not(.rd-tv) .rd-overview {
         --rd-metric-font:16px;
         --rd-label-font:13px;
     }
@@ -169,16 +168,9 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     .raiden:not(.rd-tv) .rd-header [data-search] {width:100%}
     .raiden:not(.rd-tv) .rd-refresh {grid-column:2}
 }
-@container (781px <= width <= 1050px) {
-    .raiden:not(.rd-tv):not(.rd-measuring-tv) .rd-overview {
-        grid-template-columns:minmax(0,1.46fr) minmax(0,1fr) minmax(0,1fr);
-    }
-}
 @container (max-width:780px) {
-    .raiden:not(.rd-tv) .rd-overview {grid-template-columns:1fr; padding:0}
-    .raiden:not(.rd-tv):not(.rd-measuring-tv) .rd-overview {padding-block:0}
-    .raiden:not(.rd-tv) .rd-overview > * {padding:4px 6px; border-inline-start:0}
-    .raiden:not(.rd-tv) .rd-overview > :not(:first-child) {border-top:1px solid var(--line)}
+    .raiden:not(.rd-tv) .rd-overview {grid-template-columns:minmax(0,1fr)}
+    .raiden:not(.rd-tv) .rd-totals {grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @container (max-width:940px) {
     .raiden:not(.rd-tv) .rd-mobile-views {display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:4px}
@@ -191,22 +183,22 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     .raiden:not(.rd-tv) .rd-missions tr {display:grid; grid-template-columns:1.15fr 1fr .85fr .95fr .8fr 1.25fr}
     .raiden:not(.rd-tv) #rd-arrivals tr {grid-template-columns:.64fr 1.17fr .98fr .76fr .85fr 1.15fr .70fr 1.18fr}
     .raiden:not(.rd-tv) .rd-missions :is(th,td) {min-width:0; padding:3px 2px; align-content:center}
-    .raiden:not(.rd-tv) .rd-missions tbody :is(th,td):not(.rd-extra) {padding-block:4px}
+    .raiden:not(.rd-tv) #rd-arrivals .rd-missions tbody :is(th,td) {padding-block:4px}
     .raiden:not(.rd-tv) .rd-missions :is([data-field="tail"],[data-field="route"],[data-field="pos"],[data-field="variance"],.rd-status),
     .raiden:not(.rd-tv) #rd-arrivals .rd-flight {white-space:normal; overflow-wrap:anywhere}
-    .raiden:not(.rd-tv) .rd-missions .rd-extra,
-    .raiden:not(.rd-tv) #rd-departures .rd-flight {display:none}
-    .raiden:not(.rd-tv) .rd-mission[data-expanded] .rd-extra {display:grid; grid-column:span 2; text-align:left; white-space:normal; padding:4px 6px; border:0; border-top:1px solid var(--line)}
-    .raiden:not(.rd-tv) .rd-detail-label {display:inline; font-size:.88em; color:var(--muted)}
-    .raiden:not(.rd-tv) .rd-deice-short {display:none}
-    .raiden:not(.rd-tv) .rd-deice-full {position:static; inline-size:auto; block-size:auto; clip-path:none; white-space:normal}
-    .raiden:not(.rd-tv) #rd-departures .rd-flight-toggle {
-        display:inline-block; min-height:28px; max-width:100%; padding:0;
-        background:transparent!important; border:0!important; color:inherit!important;
-        font:inherit; white-space:nowrap; letter-spacing:-.035em;
+    .raiden:not(.rd-tv) .rd-wide-departures {display:none}
+    .raiden:not(.rd-tv) .rd-paired {display:block}
+    .raiden:not(.rd-tv) .rd-paired tr {
+        grid-template-columns:minmax(0,1.16fr) minmax(0,1.05fr) minmax(0,.74fr)
+            minmax(0,1.17fr) minmax(0,.78fr) minmax(0,1.22fr) minmax(0,.46fr);
     }
-    .rd-flight-toggle::after {content:'›'; margin-left:2px; color:var(--accent)}
-    .rd-flight-toggle[aria-expanded="true"]::after {content:'⌄'}
+    .raiden:not(.rd-tv) .rd-paired :is(td,th) {
+        text-align:center; white-space:normal; overflow-wrap:anywhere; padding-inline:1px;
+    }
+    .raiden:not(.rd-tv) .rd-paired tbody :is(th,td) {padding-block:2px}
+    .rd-pair-value {display:block; min-height:1.17em}
+    .rd-paired [data-pair="no-return"] {white-space:nowrap}
+    .rd-paired .rd-deice {border-inline-start-width:2px; padding-inline-start:2px}
 }
 body.rd-projecting {overflow:hidden!important}
 body.rd-projecting > :not(.rd-tv) {display:none!important}
@@ -218,25 +210,23 @@ body.rd-projecting > :not(.rd-tv) {display:none!important}
 .rd-tv .rd-header,.rd-tv .rd-overview {margin:0}
 .rd-tv .rd-header h1 {font-size:1.1em}
 .raiden.rd-tv .rd-controls button {min-height:22px; padding:2px 6px; font-size:.9em}
-.rd-tv :is(.rd-context,[data-search],.rd-staff) {display:none}
+.rd-tv :is(.rd-context,[data-search]) {display:none}
 .rd-tv-context {flex:1; text-align:center}
 .rd-tv .rd-tv-context {display:block}
-.rd-tv .rd-overview {--rd-metric-font:clamp(13px,1.52vh,22px)}
-/* The measurement pass keeps its original banner geometry to preserve TV mission sizing. */
+
 @media (min-height:1080px) {
-    .raiden.rd-tv:not(.rd-measuring-tv) .rd-overview {
+    .raiden.rd-tv .rd-overview {
         --rd-metric-font:24px;
         --rd-label-font:16px;
     }
 }
 @media (min-height:2160px) {
-    .raiden.rd-tv:not(.rd-measuring-tv) .rd-overview {
+    .raiden.rd-tv .rd-overview {
         --rd-metric-font:32px;
         --rd-label-font:22px;
     }
 }
 .rd-tv {--rd-row-space:clamp(.75px,.095vh,1.4px)}
-.rd-tv .rd-mission-group h2 {padding-block:2px}
 .rd-tv .rd-workspace {flex:none}
 @media(min-width:901px) {
     body.blueprint-neoraiden.operational-shell-page:not(.operational-board-view) .content {

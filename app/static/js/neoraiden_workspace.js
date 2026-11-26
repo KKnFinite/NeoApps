@@ -16,11 +16,6 @@
     let tv = false, nativeFullscreen = false, entering = false;
     let normalTheme = pref("theme") || "dark";
     let search = "", mobileView = "arrivals", remembered = null, priorScroll = 0, resizeFrame = 0;
-    const expanded = new Set();
-    function showMissionDetails(row, open) {
-        row.toggleAttribute("data-expanded", open);
-        row.querySelector("[data-mission-details]").setAttribute("aria-expanded", String(open));
-    }
     function applyTheme(theme) {
         root.dataset.theme = theme;
         const button = one("[data-theme-toggle]");
@@ -50,8 +45,9 @@
         const rows = all("[data-mission]");
         for (const row of rows) {
             row.hidden = !!term && !row.textContent.toLocaleLowerCase().includes(term);
-            showMissionDetails(row, expanded.has(row.dataset.mission));
         }
+        const visible = new Set(rows.filter(row => !row.hidden).map(row => row.dataset.mission));
+        for (const row of all("[data-paired-mission]")) row.hidden = !visible.has(row.dataset.pairedMission);
         const matches = [];
         for (const group of all("[data-mission-group]")) {
             const hasMatch = !!group.querySelector("[data-mission]:not([hidden])");
@@ -62,24 +58,17 @@
     }
     function capture() {
         return {
-            staffing: !!one(".rd-staff")?.open,
             searchFocus: document.activeElement === one("[data-search]"),
             caret: one("[data-search]")?.selectionStart,
-            missionFocus: document.activeElement?.matches("[data-mission-details]") &&
-                document.activeElement.closest("[data-mission]").dataset.mission,
         };
     }
     function restore(state) {
         normalView();
         if (!state) return;
-        if (one(".rd-staff")) one(".rd-staff").open = state.staffing;
         const input = one("[data-search]");
         if (state.searchFocus && input) {
             input.focus({preventScroll:true});
             input.setSelectionRange(state.caret, state.caret);
-        }
-        if (state.missionFocus) {
-            one(`#rd-mission-${state.missionFocus} [data-mission-details]`)?.focus({preventScroll:true});
         }
     }
     function notice(message) {
@@ -111,7 +100,7 @@
             for (const row of rows) row.hidden = false;
             group.querySelector("[data-empty]").hidden = rows.length > 0;
         }
-        const tables = all(".rd-missions");
+        const tables = all(".rd-missions:not(.rd-paired)");
         const overflows = () => root.scrollHeight > root.clientHeight + 1 ||
             root.scrollWidth > root.clientWidth + 1 ||
             tables.some(table => table.getBoundingClientRect().width > table.parentElement.clientWidth + 1);
@@ -177,13 +166,6 @@
         if (!button) return;
         if (button.hasAttribute("data-tv")) changeMode();
         if (button.hasAttribute("data-show-missions")) showMobileView(button.dataset.showMissions);
-        if (button.hasAttribute("data-mission-details")) {
-            const row = button.closest("[data-mission]");
-            const id = row.dataset.mission;
-            const open = !expanded.delete(id);
-            if (open) expanded.add(id);
-            showMissionDetails(row, open);
-        }
         if (button.hasAttribute("data-theme-toggle")) {
             applyTheme(root.dataset.theme === "dark" ? "light" : "dark");
             if (!tv) normalTheme = root.dataset.theme;

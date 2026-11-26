@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='overview-readability-1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoraiden.css', v=config.STATIC_ASSET_VERSION, rev='consolidated-101') }}">
 <section class="raiden" data-raiden data-theme="dark" aria-label="NeoRaiden"
          data-windows='{{ poll_windows|tojson }}' data-revision="{{ revision }}" data-interval-ms="{{ refresh_interval_ms }}"
          data-state="{{ url_for('neoraiden.state', gateway=gateway.code, operation_id=selected_id) }}">
@@ -22,6 +22,6 @@
     <p class="rd-tv-notice" role="status" data-tv-notice hidden></p>
     <div data-board>{% include "neonodes/neoraiden/_board.html" %}</div>
 </section>
-<script defer src="{{ url_for('static', filename='js/neoraiden_workspace.js', v=config.STATIC_ASSET_VERSION, rev='64574d50366b') }}"></script>
+<script defer src="{{ url_for('static', filename='js/neoraiden_workspace.js', v=config.STATIC_ASSET_VERSION, rev='consolidated-101') }}"></script>
 <script defer src="{{ url_for('static', filename='js/neoraiden.js', v=config.STATIC_ASSET_VERSION, rev='544952ba0097') }}"></script>
 {% endblock %}

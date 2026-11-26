@@ -44,9 +44,15 @@ class GodModeBrowser(unittest.TestCase):
         expect(ramp.locator("dd")).to_have_text("—")
         expect(overview.get_by_role("table", name="CAN / ULD counts").locator("thead th")).to_have_text(
             ["Wave", "East", "West", "Left to arrive", "Left to unload"])
-        expect(overview.locator("tbody th")).to_have_text(["1st", "2nd", "Openings"])
+        expect(overview.locator(".rd-uld tbody th")).to_have_text(["1st", "2nd", "Openings"])
         expect(overview.locator("tr[data-openings] td")).to_have_text(["2", "3", "", ""])
-        expect(overview.locator("[data-performance] dd")).to_have_text(["0.0", "0.0", "9.0", "9.0"])
+        expect(overview.locator(".rd-averages")).to_have_count(0)
+        expect(overview.locator(".rd-section-heading")).to_have_text(["Inbound ULD Counts", "Flight Data", "Staffing"])
+        expect(overview.locator(".rd-mission-count")).to_have_text(["29", "31"])
+        expect(overview.locator(".rd-performance tbody th")).to_have_text(["1st Wave", "2nd Wave", "Total"])
+        expect(overview.locator('[data-performance-wave="combined"] td')).to_have_text(
+            ["0", "0", "0", "1", "9", "9"])
+        expect(page.locator("[data-raiden] details, [data-mission-details]")).to_have_count(0)
         metrics = overview.evaluate("""el => {
             const ctx = document.createElement('canvas').getContext('2d', {willReadFrequently: true});
             function luminance(color) {
@@ -58,22 +64,25 @@ class GodModeBrowser(unittest.TestCase):
                 });
                 return .2126 * r + .7152 * g + .0722 * b;
             }
-            const background = luminance(getComputedStyle(el).backgroundColor);
-            const ordinary = el.querySelector('dt');
+            const background = luminance(getComputedStyle(el.querySelector('.rd-staffing')).backgroundColor);
+            const ordinary = el.querySelector('.rd-staffing dt');
             const muted = luminance(getComputedStyle(el).getPropertyValue('--muted').trim());
             const contrast = l => (Math.max(l, background) + .05) / (Math.min(l, background) + .05);
             return {
                 labelContrast: contrast(luminance(getComputedStyle(ordinary).color)),
                 mutedContrast: contrast(muted),
-                clipped: [...el.querySelectorAll('th,td,dt,dd,h2')].filter(cell =>
+                boxWidths: [...el.children].map(box => box.getBoundingClientRect().width),
+                frames: [...el.children].map(box => [getComputedStyle(box).borderTopWidth,
+                    getComputedStyle(box.querySelector('h2')).backgroundColor]),
+                sectionHeights: [...el.children].map(box => box.getBoundingClientRect().height),
+                clipped: [...el.querySelectorAll('th,td,dt,dd,h2,.rd-overview-box')].filter(cell =>
                     cell.scrollWidth > cell.clientWidth + 1).map(cell => cell.textContent),
             };
         }""")
         self.assertGreater(metrics["labelContrast"], metrics["mutedContrast"], metrics)
         self.assertGreaterEqual(metrics["labelContrast"], 4.5, metrics)
         self.assertEqual(metrics["clipped"], [], metrics)
-        self.assertAlmostEqual(shift.bounding_box()["y"], ramp.bounding_box()["y"], delta=1)
-        self.assertLess(shift.bounding_box()["x"], ramp.bounding_box()["x"])
+        self.assertTrue(all(border == "1px" and fill != "rgba(0, 0, 0, 0)" for border, fill in metrics["frames"]))
         misaligned = overview.evaluate("""el => {
             function textRect(element) {
                 const range = document.createRange();
@@ -87,7 +96,7 @@ class GodModeBrowser(unittest.TestCase):
             const waves = [...el.querySelectorAll('.rd-uld tbody tr')];
             const pairs = waves.flatMap(row => [...row.cells].flatMap((cell, i) =>
                 cell.textContent ? [[labels[i], cell]] : []));
-            pairs.push(...[...el.querySelectorAll('.rd-metric')].map(metric =>
+            pairs.push(...[...el.querySelectorAll('.rd-totals .rd-metric')].map(metric =>
                 [metric.querySelector('dt'), metric.querySelector('dd')]));
             for (const [label, value] of pairs) {
                 const a = textRect(label), b = textRect(value);
@@ -131,17 +140,17 @@ class GodModeBrowser(unittest.TestCase):
                     return style.whiteSpace === 'nowrap' && cell.getBoundingClientRect().height <=
                         parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + 1.25;
                 })),
-                headers: boxes.map(box => [...box.querySelectorAll('thead th')].map(cell => cell.textContent)),
+                headers: boxes.map(box => [...box.querySelectorAll('table:not(.rd-paired) thead th')].map(cell => cell.textContent)),
                 cellsMatchHeaders: boxes.every(box => {
-                    const keys = [...box.querySelectorAll('thead th')].map(cell => cell.dataset.field).join();
-                    return [...box.querySelectorAll('tbody tr')].every(row =>
+                    const keys = [...box.querySelectorAll('table:not(.rd-paired) thead th')].map(cell => cell.dataset.field).join();
+                    return [...box.querySelectorAll('table:not(.rd-paired) tbody tr')].every(row =>
                         [...row.cells].map(cell => cell.dataset.field).join() === keys);
                 }),
                 fonts: [...new Set(values.map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
                 cellPadding: parseFloat(getComputedStyle(fields[0]).paddingInlineStart),
-                overviewFonts: [...new Set([...document.querySelectorAll('.rd-overview :is(tbody td,dd)')]
+                overviewFonts: [...new Set([...document.querySelectorAll('.rd-overview :is(tbody td,dd,.rd-mission-count)')]
                     .map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
-                overviewLabels: [...new Set([...document.querySelectorAll('.rd-overview :is(thead th,tbody th,dt,.rd-performance h2)')]
+                overviewLabels: [...new Set([...document.querySelectorAll('.rd-overview :is(th,dt,.rd-count-label)')]
                     .map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
                 overviewHeight: document.querySelector('.rd-overview').getBoundingClientRect().height,
                 toolbarSpread: Math.max(...verticalCenters) - Math.min(...verticalCenters),
@@ -164,8 +173,8 @@ class GodModeBrowser(unittest.TestCase):
         self.assertLessEqual(state["toolbarSpread"], 2, state)
         self.assertEqual(state["scrollboxes"], 0, state)
         self.assertLessEqual(state["width"], width + 1, state)
-        self.assertTrue(state["fitsAll"], state)
         if tv:
+            self.assertTrue(state["fitsAll"], state)
             self.assertLessEqual(state["height"], height + 1, state)
         return state
 
@@ -174,7 +183,7 @@ class GodModeBrowser(unittest.TestCase):
         expect(board).to_have_css("outline-offset", "-1px")
         expect(board).to_have_css("border-top-left-radius", "5px")
         self.assertTrue(board.evaluate("""el => getComputedStyle(el).outlineColor ===
-            getComputedStyle(el.closest('[data-raiden]').querySelector('.rd-overview')).borderTopColor"""))
+            getComputedStyle(el.closest('[data-raiden]').querySelector('.rd-overview-box')).borderTopColor"""))
         expect(board).to_have_css("padding", "0px")
 
     def check_pulse(self, page, active):
@@ -182,7 +191,7 @@ class GodModeBrowser(unittest.TestCase):
         expect(active).to_have_css("animation-duration", "3s")
         expect(active.locator("xpath=ancestor::tr")).to_have_css("animation-name", "none")
         for state in ("fin", "pretreated"):
-            expect(page.locator(f'[data-deice-state="{state}"]')).to_have_css("animation-name", "none")
+            expect(page.locator(f'[data-deice-state="{state}"]:visible')).to_have_css("animation-name", "none")
         page.emulate_media(reduced_motion="reduce")
         expect(active).to_have_css("animation-name", "none")
         page.emulate_media(reduced_motion="no-preference")
@@ -226,9 +235,6 @@ class GodModeBrowser(unittest.TestCase):
                 fixture().login(page)
                 fixture().ready(page, f"/neoraiden?gateway=RFD&operation_id={op_id}")
                 expect(page.locator(".operational-mobile-header .node-word")).to_have_css("color", RAIDEN_BLUE)
-                page.locator(".rd-staff summary").click()
-                expect(page.locator(".rd-staff")).to_have_attribute("open", "")
-                page.locator(".rd-staff summary").click()
                 mobile_fonts = {}
                 mobile_metrics = {}
                 for width in (390, 430):
@@ -238,8 +244,8 @@ class GodModeBrowser(unittest.TestCase):
                         overview_metrics = self.check_overview(page)
                         mobile_metrics[f"{width}-{theme}"] = page.locator(".rd-overview").evaluate("""el => ({
                             overviewHeight: el.getBoundingClientRect().height,
-                            overviewFont: parseFloat(getComputedStyle(el.querySelector('dd')).fontSize),
-                            overviewLabel: parseFloat(getComputedStyle(el.querySelector('dt')).fontSize)
+                            overviewFont: parseFloat(getComputedStyle(el.querySelector('.rd-staffing dd')).fontSize),
+                            overviewLabel: parseFloat(getComputedStyle(el.querySelector('.rd-staffing dt')).fontSize)
                         })""")
                         metrics = mobile_metrics[f"{width}-{theme}"]
                         metrics.update(overview_metrics)
@@ -247,11 +253,11 @@ class GodModeBrowser(unittest.TestCase):
                         page.locator(".rd-overview").screenshot(path=output/f"overview-mobile-{engine}-{width}-{theme}.png")
                         for direction, flight, count in (("Arrivals", "UPS0403", 29), ("Departures", "FX101", 31)):
                             page.get_by_role("button", name=direction, exact=True).click()
-                            expect(page.locator("[data-mission]:visible")).to_have_count(count)
+                            expect(page.locator(":is([data-mission],[data-paired-mission]):visible")).to_have_count(count)
                             table = page.get_by_role("table", name=direction, exact=True)
                             self.check_outline(page.locator(f"#rd-{direction.lower()}"))
                             visible_headers = table.locator("thead th:visible")
-                            fonts = table.locator("tbody tr :is(th,td,.rd-value,.rd-flight-toggle):visible").evaluate_all(
+                            fonts = table.locator("tbody tr :is(th,td,.rd-value):visible").evaluate_all(
                                 "cells => [...new Set(cells.map(cell => parseFloat(getComputedStyle(cell).fontSize)))]")
                             self.assertEqual(len(fonts), 1, fonts)
                             self.assertTrue(10 <= fonts[0] <= 11.5, fonts)
@@ -268,36 +274,37 @@ class GodModeBrowser(unittest.TestCase):
                                 expect(row.locator("td:visible, th:visible").last).to_have_attribute("data-field", "status")
                                 expect(row.locator("[data-field='time'] small")).to_have_text("ACT")
                             else:
-                                expect(visible_headers).to_have_text(HEADINGS[1][:6])
-                                toggle = page.get_by_role("button", name=f"Details for {flight}", exact=True)
-                                toggle.click()
-                                row = toggle.locator("xpath=ancestor::tr")
-                                expect(row.locator(".rd-detail-label:visible")).to_have_text(HEADINGS[1][6:])
-                                expect(row.locator("[data-field='time'] time")).to_have_text("01:00")
+                                self.assertEqual(visible_headers.evaluate_all("cells => cells.map(el => el.dataset.pair)"),
+                                    ["flight", "tail", "pure", "fuel", "ramp", "time", "no-return"])
+                                row = table.locator("[data-paired-mission]").filter(has_text=flight)
+                                expect(row.locator('[data-pair="time"] [data-field="block"]')).to_have_attribute(
+                                    "aria-label", "Block 01:09")
                                 for field, value in (("variance","+9"), ("fuel","45.6"), ("pure","00:02"), ("mix","00:57"),
-                                                     ("ramp","00:59"), ("crew","01:02"), ("block","01:09"), ("no-return","Yes")):
+                                                     ("ramp","00:59"), ("crew","01:02"), ("block","01:09"), ("no-return","✓")):
                                     expect(row.locator(f'[data-field="{field}"] .rd-value')).to_have_text(value)
-                                expect(row.locator(".rd-deice-full")).to_have_text("Completed 00:15")
-                                expect(row.locator(".rd-deice-full")).to_be_visible()
-                                row.evaluate("el => el.scrollIntoView({block:'center'})")
+                                expect(row.locator(".rd-deice-short")).to_have_text("FIN 00:15")
+                                expect(row.locator(".rd-deice")).to_have_attribute("title", "Completed 00:15")
+                                warning = "rgb(246, 227, 122)" if theme == "dark" else "rgb(100, 84, 9)"
+                                for field in ("ramp", "crew"):
+                                    expect(row.locator(f'[data-field="{field}"] .rd-value')).to_have_css("color", warning)
+                                expect(row.locator('[data-field="flight"] .rd-value')).to_have_attribute("data-value-color", "late")
+                                ready = "rgb(137, 230, 180)" if theme == "dark" else "rgb(23, 99, 63)"
+                                expect(row.get_by_role("img", name="No Return confirmed")).to_have_css("color", ready)
+                                late = "rgb(242, 163, 170)" if theme == "dark" else "rgb(147, 46, 41)"
+                                expect(row.locator('[data-field="variance"] .rd-value')).to_have_css("color", late)
+                                expect(table.locator('[data-deice-state="pretreated"] .rd-deice-short')).to_have_text("Pre 23:55")
+                                self.check_pulse(page, table.locator('[data-deice-state="deicing"]'))
+                                page.evaluate("window.scrollTo(0, 0)")
                             self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width + 1)
                             self.assertTrue(table.locator("tbody td:visible, tbody th:visible").evaluate_all(
                                 "cells => cells.every(cell => cell.scrollWidth <= cell.clientWidth + 1)"))
                             page.screenshot(path=output/f"mobile-{direction.lower()}-{engine}-{width}-{theme}.png")
-                            if direction == "Departures":
-                                toggle.click()
-                                page.get_by_role("button", name="Details for UPS0712").click()
-                                active = page.locator('[data-deice-state="deicing"]')
-                                self.check_pulse(page, active)
-                                active.evaluate("el => el.closest('tr').scrollIntoView({block:'center'})")
-                                page.screenshot(path=output/f"pulse-mobile-{engine}-{width}-{theme}.png")
-                                page.get_by_role("button", name="Details for UPS0712").click()
                 (output/f"mobile-font-{engine}.json").write_text(json.dumps(mobile_fonts, indent=2))
                 (output/f"mobile-metrics-{engine}.json").write_text(json.dumps(mobile_metrics, indent=2))
 
                 page.set_viewport_size({"width":1280, "height":720})
                 page.get_by_label("Gateway", exact=True).focus()
-                for selector in ("[data-sort-choice]", "[data-search]", "[data-tv]", "[data-theme-toggle]", ".rd-staff summary"):
+                for selector in ("[data-sort-choice]", "[data-search]", "[data-tv]", "[data-theme-toggle]"):
                     page.keyboard.press("Tab")
                     expect(page.locator(selector)).to_be_focused()
                 stats = []
@@ -317,10 +324,18 @@ class GodModeBrowser(unittest.TestCase):
                             overview_metrics = self.check_overview(page)
                             self.check_outline(page.locator("#rd-arrivals"))
                             self.check_outline(page.locator("#rd-departures"))
-                            self.check_pulse(page, page.locator('[data-deice-state="deicing"]'))
-                            expect(page.locator('[data-deice-state="pretreated"] .rd-deice-short')).to_have_text("Pretreated 23:55")
+                            self.check_pulse(page, page.locator('.rd-wide-departures [data-deice-state="deicing"]'))
+                            expect(page.locator('.rd-wide-departures [data-deice-state="pretreated"] .rd-deice-short')).to_have_text("Pretreated 23:55")
+                            self.assertGreater(overview_metrics["boxWidths"][1], max(overview_metrics["boxWidths"][0], overview_metrics["boxWidths"][2]))
+                            expect(page.locator('.rd-wide-departures [data-value-color="no-return"]').first).to_have_text("✓")
                             page.screenshot(path=output/f"{mode}-{engine}-{height}-{theme}.png")
                             geometry = self.check_full_board(page, width, height, tv=mode == "tv")
+                            if not geometry["fitsAll"]:
+                                last = page.locator("#rd-departures [data-mission]").last
+                                last.scroll_into_view_if_needed()
+                                bounds = last.bounding_box()
+                                self.assertLessEqual(bounds["y"] + bounds["height"], height + 1)
+                                page.evaluate("window.scrollTo(0, 0)")
                             stats.append([mode, width, height, theme, {**geometry, **overview_metrics}])
                         if mode == "tv":
                             page.keyboard.press("Escape")

@@ -1,25 +1,33 @@
-{% from 'neonodes/neoraiden/_mission.html' import arrivals,departures,mission,metric,val %}
+{% from 'neonodes/neoraiden/_mission.html' import arrivals,departures,mobile_departures,mission,metric,val %}
 {% macro mission_group(key, title, columns, rows, inbound) %}
 <section class="rd-mission-group" id="rd-{{ key }}" data-mission-group="{{ key }}">
-  <h2 id="rd-{{ key }}-heading">{{ title }}</h2>
-  <table class="rd-missions" role="table" aria-labelledby="rd-{{ key }}-heading">
+  <h2 class="rd-section-heading" id="rd-{{ key }}-heading">{{ title }}</h2>
+  <table class="rd-missions{% if not inbound %} rd-wide-departures{% endif %}" role="table" aria-labelledby="rd-{{ key }}-heading">
     <thead role="rowgroup"><tr role="row">
       {% for field, label, description in columns %}<th scope="col" role="columnheader" data-field="{{ field }}"{% if not inbound and loop.index > 6 %} class="rd-extra"{% endif %}{% if description %} title="{{ description }}"{% endif %}>{{ label }}</th>{% endfor %}
     </tr></thead>
     <tbody role="rowgroup">{% for m in rows %}{{ mission(m,columns,inbound) }}{% endfor %}</tbody>
   </table>
+  {% if not inbound %}
+  <table class="rd-missions rd-paired" role="table" aria-labelledby="rd-{{ key }}-heading">
+    <thead role="rowgroup"><tr role="row">
+      {% for upper, lower, label, secondary in mobile_departures %}
+      <th scope="col" role="columnheader" data-pair="{{ upper }}"><span class="rd-pair-value">{{ label }}</span>{% if secondary %}<span class="rd-pair-value">{{ secondary }}</span>{% endif %}</th>
+      {% endfor %}
+    </tr></thead>
+    <tbody role="rowgroup">{% for m in rows %}{{ mission(m,mobile_departures,false,mobile=true) }}{% endfor %}</tbody>
+  </table>
+  {% endif %}
   <p class="rd-empty" data-empty {% if rows %}hidden{% endif %}>{{ 'No matching flights.' if rows else 'No ' ~ key ~ ' recorded.' }}</p>
 </section>
 {% endmacro %}
-{% macro performance_metric(label, values, key) %}
-  {% set value = values.get(key) %}
-  <div><dt>{{ label }}</dt><dd>{{ '%.1f'|format(value) if value is not none else '—' }}</dd></div>
-{% endmacro %}
+{% macro average(value) -%}{{ '%.1f'|format(value) if value is not none else '—' }}{%- endmacro %}
 {% if not board.operation_id %}
 <p class="rd-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
 {% else %}
 <div class="rd-overview" data-sort-context="{{ board.sort_label }}">
-  <section class="rd-uld" aria-label="Native ULD counts">
+  <section class="rd-overview-box rd-uld" aria-labelledby="rd-uld-heading">
+    <h2 class="rd-section-heading" id="rd-uld-heading">Inbound ULD Counts</h2>
     {% if board.uld %}{% set u = board.uld %}
     <table aria-label="CAN / ULD counts">
       <thead><tr>{% for label in ('Wave','East','West','Left to arrive','Left to unload') %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
@@ -29,28 +37,56 @@
       </tbody>
     </table>
     {% if u.percent is not none %}<dl class="rd-progress">{{ metric('progress','Progress',u.percent ~ '%') }}</dl>{% endif %}
-    {% else %}<p>Native ULD counts unavailable.</p>{% endif %}
+    {% else %}<p class="rd-empty">Native ULD counts unavailable.</p>{% endif %}
   </section>
-  <section class="rd-performance" aria-label="Average lateness in minutes">
-    {% for side, label in (('inbound','In'), ('outbound','Out')) %}
-    {% set values = board.performance.get(side, {}) %}
-    <div data-performance="{{ side }}">
-      <h2>{{ side|upper }}</h2>
-      <dl>
-        {{ performance_metric('Average Late ' ~ label, values, 'overall') }}
-        {{ performance_metric('With Removed', values, 'included') }}
-      </dl>
-    </div>
-    {% endfor %}
+  <section class="rd-overview-box rd-performance" aria-labelledby="rd-performance-heading">
+    <h2 class="rd-section-heading" id="rd-performance-heading">Flight Data</h2>
+    {% set sides = (('inbound','Inbound','Arrivals',board.arrivals|length), ('outbound','Outbound','Departures',board.departures|length)) %}
+    {% set waves = board.wave_performance|default({}) %}
+    <table aria-label="Completed flight lateness by wave">
+      <colgroup span="1"></colgroup><colgroup span="3"></colgroup><colgroup span="3"></colgroup>
+      <thead>
+        <tr><th rowspan="2" scope="col">Wave</th>{% for side, heading, label, count in sides %}
+          <th scope="colgroup" colspan="3" data-performance="{{ side }}"><span class="rd-direction">{{ heading }}</span> <span class="rd-mission-count">{{ count }}</span> <span class="rd-count-label">{{ label }}</span></th>
+        {% endfor %}</tr>
+        <tr>{% for side in sides %}{% for label in ('# Late','Late Minutes','Average Late') %}<th scope="col">{{ label }}</th>{% endfor %}{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for key, label in (('first_wave','1st Wave'),('second_wave','2nd Wave'),('combined','Total')) %}
+        <tr data-performance-wave="{{ key }}"><th scope="row"{% if key == 'combined' %} title="Both waves combined" aria-label="Total, both waves combined"{% endif %}>{{ label }}</th>
+          {% for side, heading, count_label, count in sides %}
+          {% set data = waves.get(side, {}).get(key) %}
+          <td>{{ val(data.aircraft_late if data else none) }}</td><td>{{ val(data.late_minutes if data else none) }}</td><td>{{ val(data.average if data else none) }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% set comparison = namespace(averages=[]) %}
+      {% for side, heading, label, count in sides %}
+        {% set values = board.performance.get(side, {}) %}
+        {% set combined = waves.get(side, {}).get('combined') %}
+        {% set total_average = average(combined.average|float if combined else none) %}
+        {% set overall, removed = average(values.get('overall')), average(values.get('included')) %}
+        {% set comparison.averages = comparison.averages + [(overall, removed) if overall != total_average or removed != total_average else none] %}
+      {% endfor %}
+      {% if comparison.averages|reject('none')|list %}
+      <tfoot>
+        <tr><th scope="row">Avg.</th>{% for averages in comparison.averages %}
+          <td colspan="3">{% if averages %}<dl class="rd-averages">
+            <div><dt>Overall</dt><dd>{{ averages[0] }}</dd></div>
+            <div><dt>With Removed</dt><dd>{{ averages[1] }}</dd></div>
+          </dl>{% endif %}</td>
+        {% endfor %}</tr>
+      </tfoot>
+      {% endif %}
+    </table>
   </section>
-  <aside class="rd-sort">
+  <section class="rd-overview-box rd-staffing" aria-labelledby="rd-staffing-heading">
+    <h2 class="rd-section-heading" id="rd-staffing-heading">Staffing</h2>
     <dl class="rd-totals">
-      {{ metric('arrivals','Arrivals',board.arrivals|length) }}{{ metric('departures','Departures',board.departures|length) }}
       {{ metric('shift-staffing','Shift Staffing',board.marked_here) }}{{ metric('ramp-staffing','Ramp Staffing',none) }}
     </dl>
-    <details class="rd-staff"><summary>Staffing details{% if board.window is not none %} · {{ board.window }} min window{% endif %}</summary>
-    {% for s in board.staffing %}<p>{{ s.area }} · {{ s.worked }} worked / {{ s.payroll }} payroll</p>{% else %}<p>Finalized staffing totals unavailable.</p>{% endfor %}</details>
-  </aside>
+  </section>
 </div>
 <section class="rd-workspace" aria-label="Mission board">
   <div class="rd-mobile-views" role="group" aria-label="Mission direction">
