@@ -778,6 +778,41 @@ class RaidenTest(unittest.TestCase):
             self.assertNotIn("Source revoked", denied.json["html"])
             fetch.assert_not_called()
 
+    def test_cold_raiden_refresh_etag_changes_when_shared_worker_publishes(self):
+        from datetime import timezone
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from zoneinfo import ZoneInfo
+        from app.services import frost_auto, krfd_observations as metar, neosubzero_weather as weather
+        from app.services.frost_schedule import Schedule
+        from tests.test_neorain_sort_refresh import configure_sort_window
+
+        op = seed_sort(self.gateway)
+        _, start = configure_sort_window(self.gateway, op.sort_date)
+        now = start.replace(tzinfo=ZoneInfo("America/Chicago")).astimezone(timezone.utc)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = start
+        self.app.config["NEOSUBZERO_WEATHER_ENABLED"] = True
+        self.app.config["NEOAPPS_METAR_CACHE_DIR"] = self.enterContext(TemporaryDirectory())
+        raw = json.dumps([dict(icaoId="KRFD", obsTime=now.timestamp(), temp=-17.78, visib=0, wxString="SN")]).encode()
+        path = f"/neoraiden/state?operation_id={op.id}"
+        with patch.object(frost_auto, "fetch", return_value=(raw, {})) as fetch, \
+             patch.object(weather, "_utc_now", return_value=now), \
+             patch.object(weather, "_weather_snapshot", side_effect=AssertionError("Raiden cannot fetch forecasts")):
+            cold = self.client.get(path)
+            self.assertIn("Observation unavailable", cold.json["html"])
+            self.assertFalse(list(Path(self.app.config["NEOAPPS_METAR_CACHE_DIR"]).iterdir()))
+            fetch.assert_not_called()
+            metar.refresh(Schedule.load(self.gateway), lambda: now)
+            headers = {"If-None-Match": cold.headers["ETag"], "X-Raiden-Automatic": "1"}
+            fresh = self.client.get(path, headers=headers)
+            self.assertEqual(fresh.status_code, 200)
+            self.assertIn("0°F", fresh.json["html"])
+            self.assertIn("0 SM", fresh.json["html"])
+            headers["If-None-Match"] = fresh.headers["ETag"]
+            self.assertEqual(self.client.get(path, headers=headers).status_code, 304)
+            fetch.assert_called_once_with(metar.METAR_URL, metar.MAX_BYTES)
+
     def test_gateway_and_sort_isolation_and_read_only_current(self):
         foreign = Gateway(code="DEN",name="Denver")
         db.session.add(foreign)

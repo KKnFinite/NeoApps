@@ -176,6 +176,53 @@ class DeadlineTest(unittest.TestCase):
         self.assertGreater(result['longest_database_free_seconds'], 300)
         self.assertEqual(Task.query.filter_by(kind='auto_capture',status='ready').count(),2)
 
+    def test_shared_metar_uses_existing_deadlines_without_sql_at_weather_only_wakes(self):
+        import json
+        from tempfile import TemporaryDirectory
+        from app.services import krfd_observations as metar
+
+        directory = self.enterContext(TemporaryDirectory())
+        self.app.config["NEOAPPS_METAR_CACHE_DIR"] = directory
+        self.app.config["FROST_AUTO_COLLECTION"] = False
+        start = self.at
+        requests = []
+
+        def provider(url, maximum):
+            self.assertEqual((url, maximum), (metar.METAR_URL, metar.MAX_BYTES))
+            requests.append(self.at)
+            return json.dumps([dict(icaoId="KRFD", obsTime=self.at.timestamp(), temp=0)]).encode(), {}
+
+        sql_at_weather_wake = []
+        def sql(_conn, _cursor, stmt, *_args):
+            if self.at in requests[1:]:
+                sql_at_weather_wake.append(stmt)
+        engine = db.engine
+        event.listen(engine, "before_cursor_execute", sql)
+        self.addCleanup(event.remove, engine, "before_cursor_execute", sql)
+        with patch.object(auto, "fetch", side_effect=provider):
+            self.simulate(seconds=670)
+        self.assertEqual([(stamp - start).total_seconds() for stamp in requests], [10, 310, 610])
+        self.assertEqual(sql_at_weather_wake, [])
+        self.assertEqual(metar.latest(start + timedelta(seconds=670))["value"][0]["temp"], 0)
+
+    def test_shared_schedule_cancellation_fences_cross_worker_weather_only_wake(self):
+        import json
+        from tempfile import TemporaryDirectory
+        from app.services import krfd_observations as metar
+        from app.services.gateway_matrix import save_gateway_matrix
+
+        self.app.config["NEOAPPS_METAR_CACHE_DIR"] = self.enterContext(TemporaryDirectory())
+        self.app.config["FROST_AUTO_COLLECTION"] = False
+        def cancel():
+            # Another worker committed this edit without delivering a local
+            # notify to the process holding the old weather-only deadline.
+            with patch.object(scheduling, "notify_archive_worker"):
+                save_gateway_matrix(db.session.get(Gateway, self.gateway_id), [])
+        raw = json.dumps([dict(icaoId="KRFD", obsTime=self.at.timestamp(), temp=0)]).encode()
+        with patch.object(auto, "fetch", return_value=(raw, {})) as fetch:
+            self.simulate(seconds=700, actions={120:cancel})
+        fetch.assert_called_once_with(metar.METAR_URL, metar.MAX_BYTES)
+
     def test_recovery_24_hour_deadline_purges_at_exact_boundary(self):
         self.seed_capture()
         deadline = self.naive()+timedelta(seconds=1800)

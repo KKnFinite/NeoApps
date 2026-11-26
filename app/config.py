@@ -54,6 +54,7 @@ class Config:
     NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED = env_flag("NEOSUBZERO_UNLOAD_LOAD_ATTENDANCE_ENABLED", False)
     # Bounded current evidence only; historical analysis/training stays LOCAL.
     FROST_AUTO_COLLECTION = env_flag('FROST_AUTO_COLLECTION', True)
+    NEOAPPS_SHARED_METAR_ENABLED = True
     FROST_AUTO_HRRR = env_flag('FROST_AUTO_HRRR', True)
     # Inject a private durable adapter in deployment configuration; no DB/disk fallback.
     EMPLOYEE_RECORD_SIGNATURE_STORAGE = None

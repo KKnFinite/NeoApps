@@ -25,19 +25,22 @@ def audits(operation, tail=None):
 def cached_weather(observed):
     """Reference only already acquired, preceding KRFD evidence; never fetch."""
     from app.services import neosubzero_weather as weather
-    with weather._CACHE_LOCK:
-        entry = weather._CACHE.get('krfd_metar')
-        rows = entry.get('value') if entry else None
-        row = dict(rows[0]) if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
-        fetched = entry.get('fetched_at') if entry else None
+    if weather.krfd_observations.enabled():
+        entry = weather.krfd_observations.latest(datetime.now(timezone.utc))
+    else:
+        with weather._CACHE_LOCK:
+            entry = weather._CACHE.get('krfd_metar')
+    rows = entry.get('value') if entry else None
+    row = dict(rows[0]) if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    fetched = entry.get('fetched_at') if entry else None
     if not row or row.get('icaoId') != 'KRFD' or not row.get('rawOb'): return None
     if len(frost_vault.canonical(row)) > 16384: return None
-    at = weather._parse_datetime(row.get('reportTime'))
+    at = weather.krfd_observations.observed_at(row)
     if at is None or not timedelta(0) <= observed-at <= timedelta(minutes=90): return None
     # Preserve the provider row/raw METAR as a small snapshot, not an invented
     # reference to a provider object that may not exist tomorrow.
     return dict(station='KRFD', provider='AviationWeather METAR shared cache',
-        observed_at_utc=at.isoformat(), retrieved_at_utc=fetched.isoformat() if fetched else None,
+        observed_at_utc=at.isoformat(), retrieved_at_utc=datetime.fromtimestamp(fetched, timezone.utc).isoformat() if fetched is not None else None,
         raw_metar=row['rawOb'], source_sha256=frost_vault.digest(frost_vault.canonical(row)),
         hash_contract='canonical provider row JSON, not original HTTP wire bytes',source=row)
 
