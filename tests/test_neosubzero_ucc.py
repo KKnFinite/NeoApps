@@ -534,9 +534,9 @@ class NeoSubZeroUccTest(unittest.TestCase):
                 },
             )
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b"WEATHER OPERATIONS", page.data)
+        self.assertIn(b"Time &amp; Weather - KRFD METAR", page.data)
         self.assertIn(b"KRFD", page.data)
-        self.assertIn(b"ACTIVE PRECIPITATION", page.data)
+        self.assertIn(b"Active Precipitation, human entered", page.data)
         self.assertIn(b"CURRENT SORT \xc2\xb7 HOURLY WEATHER", page.data)
         self.assertIn(b"2300", page.data)
         # Even a legacy HIGH/rising payload must never become a DUCC model alert.
@@ -1384,7 +1384,9 @@ class NeoSubZeroUccTest(unittest.TestCase):
                 "dewpoint": "25\u00b0F",
                 "spread": "3\u00b0F",
                 "relative_humidity": "88%",
-                "wind": "320\u00b0 12 kt G20 kt",
+                "wind": "320\u00b0 12 G28 kt",
+                "wind_parts": {"direction":"320°", "speed":"12", "gust":"G28", "units":"kt", "stage":1},
+                "metar_precip": "Light snow",
                 "visibility": "4 SM",
                 "conditions": "-SN",
                 "sky": "OVC 1,500",

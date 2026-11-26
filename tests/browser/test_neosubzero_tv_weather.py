@@ -2,13 +2,14 @@
 import copy
 from datetime import datetime
 import json
+import os
 import re
 import unittest
 from pathlib import Path
 
 from playwright.sync_api import expect
 from app.extensions import db
-from app.models import (NeoSubZeroDepartureDeiceEvent, NeoSubZeroSprayRecord, NeoSubZeroTruck, SortDateOperation,
+from app.models import (NeoSubZeroDepartureDeiceEvent, NeoSubZeroOperationContext, NeoSubZeroSprayRecord, NeoSubZeroTruck, SortDateOperation,
                         SortDateParkingAssignment, StaffingDailyAttendance, StaffingPerson, StaffingUnit)
 from app.services.live_screen_refresh import save_live_screen_refresh_override
 from app.services.neosubzero_spray import set_neosubzero_ucc_truck
@@ -16,7 +17,7 @@ from app.services.neosubzero_trucks import manage_truck
 from app.services.neosubzero_ucc import set_neosubzero_ucc_assignment
 from tests.browser import test_neosubzero_ucc as fixtures
 
-EVIDENCE = Path('instance/ducc-weather/browser')
+EVIDENCE = Path(os.environ.get('SUBZERO_WEATHER_EVIDENCE', 'instance/ducc-weather/browser'))
 ICON_COLORS = {
     'planned': '#876000', 'configured': '#176a44', 'deicing': '#12657d',
     'fin': '#285da8', 'radio-pending': '#b31977', 'negative': '#ab3045', 'gone': '#536472',
@@ -41,6 +42,7 @@ class DuccTvWeatherTest(unittest.TestCase):
         with case.app.app_context():
             operation = db.session.get(SortDateOperation, case.operation_id)
             save_live_screen_refresh_override(operation.gateway, "neosubzero.ucc_tv", "5")
+            db.session.add(NeoSubZeroOperationContext(sort_date_operation_id=operation.id, active_precipitation="Ice pellets"))
             crew, present, unmarked = [db.session.get(StaffingPerson, person_id) for person_id in case.people]
             crew.last_name, present.last_name, unmarked.last_name = "De la Cruz", "O'Neil", "Smith-Jones"
             db.session.flush()
@@ -78,9 +80,9 @@ class DuccTvWeatherTest(unittest.TestCase):
         expect(board).to_have_css('color', rgb('#122333'))
         text_colors = [
             ('.ucc-tv-ramp h2', '#12657d', '#ffffff'),
-            ('.ucc-tv-temperature > strong', '#122333', '#ffffff'),
+            ('.ucc-tv-observation .wx-primary dd', '#122333', '#ffffff'),
             ('.ucc-tv-observation dd', '#122333', '#ffffff'),
-            ('.ucc-tv-weather .ucc-tv-source', '#405567', '#ffffff'),
+            ('.ucc-tv-observation .wx-source', '#405567', '#ffffff'),
             ('.ucc-tv-weather article .ucc-tv-muted', '#405567', '#f3f7fa'),
             ('.ucc-tv-plane:not(.is-in-throat) .ucc-tv-plane-route', '#405567', '#e7eff5'),
         ]
@@ -146,6 +148,27 @@ class DuccTvWeatherTest(unittest.TestCase):
         expect(board.locator('.ucc-tv-ramp').nth(1).locator('.ucc-tv-crew')).to_have_count(0)
         expect(remote.locator('[data-ucc-tv-crew-field="flyer"]')).to_have_count(0)
 
+    def check_observation(self, panel, *, light=False):
+        expect(panel.get_by_role("heading", name="Time & Weather - KRFD METAR")).to_be_visible()
+        expect(panel.locator(".wx-primary dt")).to_have_text(["Local Time", "Zulu Time", "Temperature"])
+        expect(panel.locator("[data-weather-clock]")).to_have_text([re.compile(r"^\d{2}:\d{2}$")] * 2)
+        expect(panel.locator(".wx-wind")).to_have_text("320° 12 G28 kt")
+        expect(panel.locator(".wx-stage")).to_have_text("Stage 1")
+        expect(panel.locator(".wx-gust")).to_have_css("color", rgb("#735600" if light else "#f8df75"))
+        expect(panel.locator('[data-metric="metar-precip"] dd')).to_have_text("Light snow")
+        expect(panel.locator(".is-human-precip dd")).to_have_text("Ice pellets")
+        expect(panel.locator(".wx-source time")).to_have_text("2026-08-31 23:00Z")
+        info = panel.evaluate("""root => [...root.querySelectorAll(".wx-primary dd")].map(el => [
+            getComputedStyle(el).fontSize, getComputedStyle(el).fontWeight, el.scrollWidth <= el.clientWidth+1, el.scrollWidth, el.clientWidth, el.innerText])""")
+        self.assertEqual(len(set(row[0] for row in info)), 1, info)
+        self.assertTrue(all(row[1:3] == ["400", True] for row in info), info)
+        self.assertEqual(panel.evaluate("""el => [...el.querySelectorAll('.wx-facts dd,.wx-facts dt,.wx-source')].filter(n =>
+            n.scrollWidth > n.clientWidth+1).map(n => n.textContent)"""), [])
+        for stage, color in (("2", "#924300" if light else "#ffb36f"), ("3", "#a12637" if light else "#ff9e9b")):
+            panel.locator(".wx-gust").evaluate("(gust,stage) => gust.dataset.stage=stage", stage)
+            expect(panel.locator(".wx-gust")).to_have_css("color", rgb(color))
+        panel.locator(".wx-gust").evaluate("gust => gust.dataset.stage=1")
+
     def exercise(self, engine):
         case = fixtures.UccBrowserTest(); case.setUpClass(); browser = None
         EVIDENCE.mkdir(parents=True, exist_ok=True)
@@ -161,9 +184,31 @@ class DuccTvWeatherTest(unittest.TestCase):
             page = browser.new_page(viewport={'width':1920, 'height':1080})
             errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
             case.login(page); case.ready(page, '/neosubzero/ucc')
-            remote_truck = page.locator('[data-ucc-editor="Remote-1"] [data-ucc-crew-line="truck"] span')
+            main_weather = page.locator("#ucc-weather-current")
+            self.check_observation(main_weather)
+            main_weather.evaluate("""panel => {
+                const current = panel.querySelector(".neosubzero-weather-current");
+                current.dataset.observationStale = current.dataset.observationExpires = Date.now() - 1;
+                document.dispatchEvent(new Event("weather:updated"));
+            }""")
+            expect(main_weather.locator(".wx-stage")).to_be_hidden()
+            expect(main_weather.locator("[data-observation-unavailable]")).to_be_visible()
+            expect(main_weather.locator(".is-human-precip dd")).to_be_visible()
+            main_weather.evaluate("""panel => {
+                const current = panel.querySelector(".neosubzero-weather-current");
+                current.dataset.observationStale = current.dataset.observationExpires = Date.now() + 60000;
+                document.dispatchEvent(new Event("weather:updated"));
+            }""")
+            for width in (320, 375, 390, 430):
+                page.set_viewport_size({"width":width, "height":844})
+                self.check_observation(main_weather)
+                self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width+1)
+                main_weather.locator("header").evaluate("el => window.scrollBy(0, el.getBoundingClientRect().top - 65)")
+                page.screenshot(path=str(EVIDENCE/f"subzero-{engine}-mobile-{width}.png"))
+            page.set_viewport_size({"width":1920, "height":1080})
+            remote_truck = page.locator('[data-ucc-editor="Remote-1"] [data-ucc-crew-line="truck"] .ucc-crew-value')
             expect(remote_truck).to_be_visible()
-            expect(remote_truck).to_have_text('1. 123456')
+            expect(remote_truck).to_have_text('123456')
             empty_truck = page.locator('[data-ucc-editor="Remote-2"] [data-ucc-crew-form="truck"] select')
             expect(empty_truck).to_be_visible()
             expect(empty_truck).to_have_value('')
@@ -178,6 +223,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             theme = board.get_by_role('button', name='Light appearance')
             exit_tv = board.get_by_role('button', name='Exit TV Mode')
             expect(board).to_be_visible()
+            self.check_observation(board.locator('.ucc-tv-observation'))
             expect(board).to_have_attribute('data-ucc-tv-theme', 'dark')
             expect(theme).to_have_attribute('aria-pressed', 'false')
             expect(page.locator('[data-subzero-ucc]')).to_be_hidden()
@@ -242,6 +288,7 @@ class DuccTvWeatherTest(unittest.TestCase):
                 expect(theme).to_have_attribute('aria-pressed', 'true')
                 self.assertEqual(board.evaluate(measure), geometry)
                 self.check_light_palette(board)
+                self.check_observation(board.locator('.ucc-tv-observation'), light=True)
                 self.check_crew_colors(board, light=True)
                 page.screenshot(path=str(EVIDENCE/f'{engine}-{width}-light.png'))
                 theme.click()
@@ -259,6 +306,7 @@ class DuccTvWeatherTest(unittest.TestCase):
                 set_neosubzero_ucc_assignment(db.session.get(SortDateOperation, case.operation_id), 'Bravo', 2,
                                              'driver', db.session.get(StaffingPerson, case.people[1]))
                 db.session.commit()
+            board.locator('[data-ucc-tv-select-view="crew"]').click()
             expect(board.locator('.ucc-tv-ramp').filter(has=page.get_by_text('Bravo', exact=True))).to_contain_text("T. O'Neil", timeout=10000)
             expect(board.locator('.ucc-tv-early [data-ucc-tv-crew-field="driver"]')).to_have_css('color', rgb('#1d6b3c'))
             expect(cards.last).to_contain_text(sample['temperature_range'])

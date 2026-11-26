@@ -284,22 +284,6 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .blueprint-neosubzero:not(.neosubzero-ucc-tv-mode,.operational-board-view) .neosubzero-ucc {
         min-width:0; grid-template-columns:repeat(10,minmax(0,1fr)); gap:8px;
 
-        & .ucc-weather-heading:not([hidden]) {
-            grid-column:1 / -1; grid-row:3; display:flex; align-items:center; justify-content:space-between;
-            gap:8px; padding:3px 0; border-bottom:1px solid #294352;
-        }
-        & .ucc-weather-heading h2 {
-            margin:0; color:#b4e2f4; font:700 .78rem/1.2 NeoFontPlain,"Segoe UI",sans-serif;
-        }
-        & [data-ucc-weather-toggle] {
-            min-height:24px; padding:2px 8px; border:1px solid #36546b; border-radius:5px;
-            color:#dcecf5; background:#102330; font:500 .73rem/1.2 NeoFontPlain,"Segoe UI",sans-serif; cursor:pointer;
-        }
-        &:has(.ucc-weather-heading:not([hidden])) :is(.neosubzero-weather,.neosubzero-ucc-upcoming) { grid-row:4; }
-        &:has(.ucc-weather-heading:not([hidden])) > .neosubzero-ucc-fluid { grid-row:5; }
-        &[data-ucc-weather-collapsed="true"] :is(.neosubzero-weather,.neosubzero-ucc-upcoming) { display:none; }
-        &[data-ucc-weather-collapsed="true"] > .neosubzero-ucc-fluid { grid-row:4; }
-
         & :is(.neosubzero-weather,.neosubzero-ucc-upcoming) {
             min-width:0; padding:10px; background:#0c1b28; border:1px solid #294352;
             border-radius:8px; overflow-wrap:anywhere; font-family:NeoFontPlain,"Segoe UI",sans-serif;
@@ -489,9 +473,6 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
             & .neosubzero-ucc-upcoming { grid-column:1 / -1; grid-row:4; }
             & .neosubzero-ucc-upcoming .neosubzero-weather-forecast { grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
             & > .neosubzero-ucc-fluid { grid-row:5; }
-            &:has(.ucc-weather-heading:not([hidden])) .neosubzero-ucc-upcoming { grid-row:5; }
-            &:has(.ucc-weather-heading:not([hidden])) > .neosubzero-ucc-fluid { grid-row:6; }
-            &[data-ucc-weather-collapsed="true"] > .neosubzero-ucc-fluid { grid-row:4; }
         }
     }
 }
@@ -539,13 +520,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-weather > section + section { border-left:1px solid var(--tv-edge); padding-left:.8em; margin-left:.8em; }
     .ucc-tv-wallboard :is(.ucc-tv-source,.ucc-tv-muted) { color:var(--tv-muted); }
     .ucc-tv-wallboard .ucc-tv-source { font-size:.73em; margin:.35em 0 .55em; }
-    .ucc-tv-temperature { display:flex; align-items:center; gap:.6em; margin:.42em 0; }
-    .ucc-tv-temperature > strong { font-size:2.65em; line-height:.98; color:#f0f8ff; }
-    .ucc-tv-temperature :is(b,small) { display:block; }
-    .ucc-tv-temperature small { color:var(--tv-muted); font-size:.78em; }
     .ucc-tv-observation dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.58em .28em; }
-    .ucc-tv-observation dl > div:nth-child(4),
-    .ucc-tv-observation dl > div:last-child { grid-column:span 2; }
     .ucc-tv-observation dt { font-size:.66em; color:var(--tv-muted); font-weight:650; }
     .ucc-tv-observation dd { font-weight:650; font-size:.92em; overflow-wrap:anywhere; }
     .ucc-tv-hours, .ucc-tv-windows { display:grid; gap:.5em .26em; }
@@ -651,7 +626,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(.ucc-tv-exit,.ucc-tv-theme) {
         background:var(--tv-plane-surface); color:var(--tv-muted);
     }
-    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(h1,.ucc-tv-temperature > strong,.ucc-tv-hour-head,.ucc-tv-plane) {
+    .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(h1,.ucc-tv-hour-head,.ucc-tv-plane) {
         color:#122333;
     }
     .ucc-tv-wallboard[data-ucc-tv-theme="light"] :is(.ucc-tv-position,.ucc-tv-plane-route,.ucc-tv-plane-etd) {
@@ -809,4 +784,34 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
 @media (901px <= width <= 1450px) {
     .ucc-tv-wallboard[data-ucc-tv-view="crew"] { --ucc-crew-row:6.5em; }
     [data-ucc-tv-view="crew"] .ucc-tv-crew-column .ucc-tv-crew { font-size:1em; }
+}
+
+.neosubzero-ucc .neosubzero-weather > header {display:block; grid-column:1/-1; text-align:center}
+.neosubzero-ucc .neosubzero-weather > header h2 {font-weight:400; letter-spacing:normal}
+.neosubzero-ucc .neosubzero-weather-current {display:block; min-width:0}
+.neosubzero-ucc .neosubzero-weather-current .wx-primary,
+.ucc-tv-observation .neosubzero-weather-current .wx-primary {grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px}
+.neosubzero-ucc .neosubzero-weather-current .wx-primary > div {border:0; padding:0}
+.neosubzero-ucc .neosubzero-weather-current .wx-primary dd {font-size:clamp(.95rem,1.25vw,1.25rem); line-height:1.1}
+.neosubzero-ucc .neosubzero-weather-current .wx-facts {grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px}
+.neosubzero-ucc .wx-facts [data-metric="wind"] {grid-column:1/-1}
+.neosubzero-ucc .wx-facts dd {font-weight:400}
+.neosubzero-ucc .wx-source,.ucc-tv-observation .wx-source {margin-top:4px; overflow-wrap:anywhere}
+.neosubzero-ucc .wx-source {color:#a7bdcd; font-size:.66rem}
+.ucc-tv-observation h2 {text-align:center; font-weight:400}
+body.neosubzero-ucc-tv-mode .ucc-tv-observation .neosubzero-weather-current {display:block; min-width:0; padding:3px 0 0}
+.ucc-tv-observation .neosubzero-weather-current dl > div {padding:0; border:0; min-width:0}
+.ucc-tv-observation .neosubzero-weather-current :is(dt,dd) {font-weight:400; color:inherit; letter-spacing:normal}
+.ucc-tv-observation .wx-primary dd {font-size:1.32em; line-height:1}
+.ucc-tv-observation .neosubzero-weather-current .wx-facts {gap:3px; margin-top:.35em}
+.ucc-tv-observation .neosubzero-weather-current .wx-facts dd {font-size:.92em; line-height:1.1}
+.ucc-tv-observation .wx-facts [data-metric="wind"] {grid-column:span 2}
+.ucc-tv-observation .wx-source {color:var(--tv-muted); font-size:.72em}
+@media (max-width:900px) {
+    .neosubzero-ucc .neosubzero-weather-current .wx-facts {grid-template-columns:repeat(3,minmax(0,1fr))}
+    .neosubzero-ucc .wx-facts [data-metric="wind"] {grid-column:span 2}
+    .neosubzero-ucc .neosubzero-weather-current-sort {
+        display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,148px),1fr)); overflow:visible;
+    }
+    .neosubzero-ucc .neosubzero-weather-hour-priority :is(small,em) {white-space:normal; overflow-wrap:anywhere; letter-spacing:normal}
 }

@@ -1,18 +1,17 @@
-{% from 'neonodes/neoraiden/_mission.html' import val %}
+{% from 'neonodes/_observed_weather.html' import value as val, title, primary, wind, freshness %}
 {% set weather = board.weather %}
 {% set observation = weather.observation %}
 <section class="rd-overview-box rd-weather" aria-labelledby="rd-weather-heading"
-         {% if observation %}data-observation-stale="{{ observation.stale_at_ms }}" data-observation-expires="{{ observation.expires_at_ms }}"{% endif %}>
-  <h2 class="rd-section-heading" id="rd-weather-heading">Time &amp; Weather</h2>
-  <dl class="rd-weather-primary">
-    <div class="rd-metric"><dt>Local Time</dt><dd><time data-gateway-clock="{{ board.timezone }}"></time></dd></div>
-    <div class="rd-metric" data-metric="temperature"><dt>Temperature</dt><dd><span data-observation-value>{{ val(observation.temperature) }}</span></dd></div>
-  </dl>
+         {{ freshness(observation) }}>
+  <h2 class="rd-section-heading" id="rd-weather-heading">{{ title(weather.supported) }}</h2>
+  {{ primary(board.timezone, observation.temperature) }}
   {% if weather.allowed and (weather.supported or weather.precipitation) %}
   <dl class="rd-weather-details">
-    {% for field, label in (('dewpoint','Dew Point'),('spread','Spread'),('relative_humidity','RH'),('wind','Wind'),('visibility','Visibility')) %}
+    {% for field, label in (('dewpoint','Dew Point'),('spread','Spread'),('relative_humidity','RH'),('visibility','Visibility')) %}
     <div class="rd-metric" data-metric="{{ field }}"><dt>{{ label }}</dt><dd><span data-observation-value>{{ val(observation[field]) }}</span></dd></div>
     {% endfor %}
+    <div class="rd-metric" data-metric="wind"><dt>Wind</dt><dd>{{ wind(observation.wind_parts) }}</dd></div>
+    <div class="rd-metric" data-metric="metar-precip"><dt>METAR Precip.</dt><dd><span data-observation-value>{{ val(observation.metar_precip) }}</span></dd></div>
     <div class="rd-metric" data-metric="precipitation"><dt aria-label="Active Precipitation, human entered" title="Active Precipitation · human entered">Active Precip.</dt><dd>{{ val(weather.precipitation) }}</dd></div>
   </dl>
   {% endif %}
@@ -22,7 +21,7 @@
     {% else %}
     <span data-observation-value{% if not observation %} hidden{% endif %}>
       {%- if val(observation.conditions) %}{{ val(observation.conditions) }} · {% endif -%}
-      {% if observation %}KRFD METAR <time datetime="{{ observation.observed_at }}" title="{{ observation.observed_full_label }}">{{ observation.observed_label }}</time>{% endif -%}
+      {% if observation %}Observed <time datetime="{{ observation.observed_at }}" title="{{ observation.observed_full_label }}">{{ observation.observed_label }}</time>{% endif -%}
       <span class="rd-weather-stale" data-observation-old{% if not observation.stale %} hidden{% endif %}> · Stale</span>
     </span>
     <span data-observation-unavailable{% if observation %} hidden{% endif %}>Observation unavailable</span>

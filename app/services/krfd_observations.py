@@ -14,11 +14,14 @@ from flask import current_app, has_app_context
 KRFD = "KRFD"
 METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KRFD&format=json&hours=14"
 MAX_BYTES = 128 * 1024
-CADENCE = timedelta(minutes=5)
+CADENCE = timedelta(minutes=15)
+SLOT_WINDOW = timedelta(minutes=1)
+FRESHNESS = CADENCE + SLOT_WINDOW
+COLD_SLOT_GAP = timedelta(minutes=2)
 EXPIRY = timedelta(hours=6)
 UTC = timezone.utc
 _render_lock = Lock()
-_last_rendered = None
+_last_rendered = {}
 
 
 def enabled():
@@ -36,7 +39,7 @@ def _read():
             value = json.loads(file.read(2 * MAX_BYTES + 1))
         if not isinstance(value, dict) or any(
             type(value.get(key, 0)) not in (int, float) or not isfinite(value.get(key, 0))
-            for key in ("fetched_at", "retry_at", "failures")
+            for key in ("fetched_at", "retry_at", "attempted_at")
         ):
             return {}
         return value
@@ -85,16 +88,19 @@ def _try_lock(file):
 
 
 def observed_at(row):
+    # AWC's obsTime is the measured timestamp. reportTime can point to the
+    # next nominal hour even when the routine :54 observation is available.
+    try:
+        return datetime.fromtimestamp(float(row["obsTime"]), UTC)
+    except (TypeError, ValueError, KeyError, OverflowError, OSError):
+        pass
     try:
         value = datetime.fromisoformat(str(row.get("reportTime", "")).replace("Z", "+00:00"))
         if value.tzinfo is not None:
             return value.astimezone(UTC)
     except (ValueError, OverflowError):
         pass
-    try:
-        return datetime.fromtimestamp(float(row["obsTime"]), UTC)
-    except (TypeError, ValueError, KeyError, OverflowError, OSError):
-        return None
+    return None
 
 
 def latest(now):
@@ -111,7 +117,7 @@ def latest(now):
     return dict(value=[row], fetched_at=fetched)
 
 
-def source(now, *, max_age=CADENCE):
+def source(now, *, max_age=FRESHNESS):
     state = _read()
     fetched = state.get("fetched_at")
     if fetched is None or not 0 <= now.timestamp() - fetched < max_age.total_seconds():
@@ -119,32 +125,64 @@ def source(now, *, max_age=CADENCE):
     return b64decode(state["raw"], validate=True), state["receipt"]
 
 
-def next_deadline(schedule, now, *, not_before=None):
+def _slot(at):
+    """Most recent UTC :55, :10, :25 or :40 boundary."""
+    return at.replace(second=0, microsecond=0) - timedelta(minutes=(at.minute - 10) % 15)
+
+
+def _due(schedule, now, state, not_before=None):
     if schedule is None or not schedule.zone or not schedule.rows:
         return None
-    retry_at = _read().get("retry_at", 0)
-    due = max(now, datetime.fromtimestamp(retry_at, UTC), not_before or now)
+    earliest = max(now, datetime.fromtimestamp(state.get("retry_at", 0), UTC), not_before or now)
+    attempted = datetime.fromtimestamp(state.get("attempted_at", state.get("fetched_at", 0)), UTC)
     local_day = now.astimezone(schedule.zone).date()
-    candidates = [max(start, due) for offset in range(-1, 8)
-                  for start, end in schedule.windows(local_day + timedelta(days=offset)) if max(start, due) < end]
+    windows = sorted({window for offset in range(-1, 8)
+                      for window in schedule.windows(local_day + timedelta(days=offset))})
+    candidates = []
+    for start, end in windows:
+        first = max(start, earliest)
+        if first >= end:
+            continue
+        slot = _slot(first)
+        next_slot = slot + CADENCE
+        # One cold or Sort-start attempt if no active overlapping window has
+        # already attempted and it cannot crowd the next regular acquisition.
+        cold = (next_slot - first >= COLD_SLOT_GAP and
+                not any(a <= attempted <= first < b for a, b in windows))
+        candidate = first if first < slot + SLOT_WINDOW or cold else next_slot
+        if candidate < end:
+            candidates.append(candidate)
     return min(candidates, default=None)
 
 
+def next_deadline(schedule, now, *, not_before=None):
+    return _due(schedule, now, _read(), not_before)
+
+
 def note_raiden_render(observation, windows):
-    global _last_rendered
     if not enabled() or not observation or observation["stale"]:
         return
     current = datetime.now(UTC).timestamp() * 1000
     if not any(start <= current < end for start, end in windows):
         return
+    _note_render("NeoRaiden", observation)
+
+
+def note_subzero_render(weather):
+    current = weather["current"]
+    if enabled() and weather["station"] == KRFD and current["available"] and not current["stale"] and current["observed_at"]:
+        _note_render("NeoSubZero", current)
+
+
+def _note_render(node, observation):
     with _render_lock:
-        if observation["observed_at"] == _last_rendered:
+        if observation["observed_at"] == _last_rendered.get(node):
             return
-        _last_rendered = observation["observed_at"]
+        _last_rendered[node] = observation["observed_at"]
     print(
-        f'NeoRaiden served shared KRFD METAR: observed_utc={observation["observed_at"]} '
+        f'{node} served shared KRFD METAR: observed_utc={observation["observed_at"]} '
         f'temperature={observation["temperature"]} dewpoint={observation["dewpoint"]} '
-        f'wind={observation["wind"]} visibility={observation["visibility"]}',
+        f'wind={observation["wind"]} visibility={observation["visibility"]} metar_precip={observation["metar_precip"]}',
         file=sys.stderr, flush=True,
     )
 
@@ -163,11 +201,12 @@ def refresh(schedule, now, *, revision=None):
             return
         state = _read()
         at = now()
-        if (not schedule.eligible(at) or at.timestamp() < state.get("retry_at", 0)
+        if (_due(schedule, at, state) != at
                 or revision is not None and schedule_revision() != revision):
             return
-        # Retain the last good payload through a crash or interrupted attempt.
-        state["retry_at"] = at.timestamp() + 60
+        # Reserve this slot before transport. Errors and worker crashes retry
+        # at the next fixed slot while retaining the last good observation.
+        state.update(attempted_at=at.timestamp(), retry_at=(_slot(at) + CADENCE).timestamp())
         _write(directory, state)
         if not schedule.eligible(now()) or revision is not None and schedule_revision() != revision:
             return
@@ -186,14 +225,11 @@ def refresh(schedule, now, *, revision=None):
             prior = observed_at(state.get("latest", {}))
             if prior and observed < prior:
                 raise ValueError("KRFD observation is older than the last good report.")
-            state = dict(raw=b64encode(raw).decode("ascii"), receipt=receipt, latest=row,
-                         fetched_at=finished.timestamp(), retry_at=(finished + CADENCE).timestamp())
+            state.update(raw=b64encode(raw).decode("ascii"), receipt=receipt, latest=row,
+                         fetched_at=finished.timestamp())
             _write(directory, state)
-            print(f"Shared KRFD METAR acquired: provider_requests=1 observed_utc={observed.isoformat()}",
-                  file=sys.stderr, flush=True)
+            print(f"Shared KRFD METAR acquired: provider_requests=1 requested_utc={at.isoformat()} "
+                  f"observed_utc={observed.isoformat()}", file=sys.stderr, flush=True)
         except (OSError, ValueError, TypeError, KeyError) as error:
-            failures = min(state.get("failures", 0) + 1, 5)
-            state.update(failures=failures, retry_at=now().timestamp() + min(60 * 2 ** (failures - 1), 900))
-            _write(directory, state)
-            current_app.logger.warning("Shared KRFD METAR unavailable: provider_requests=1 error=%s",
-                                       type(error).__name__)
+            current_app.logger.warning("Shared KRFD METAR unavailable: provider_requests=1 requested_utc=%s error=%s",
+                                       at.isoformat(), type(error).__name__)

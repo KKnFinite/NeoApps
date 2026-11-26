@@ -96,40 +96,77 @@ class SharedKrfdTest(TestCase):
                 release.set()
             first.result(timeout=5)
             fetch.assert_called_once()
-        self.at += shared.CADENCE
+        self.at += timedelta(minutes=10)
         with patch.object(frost_auto, "fetch_weather_source", side_effect=OSError("Temporary outage")) as fetch:
             worker()
             worker()
-            self.at += timedelta(seconds=59)
+            self.at += timedelta(minutes=14, seconds=59)
             worker()
             fetch.assert_called_once()
             self.assertTrue(weather.cached_metar_observation(self.gateway, now=self.at)["stale"])
             self.at += timedelta(seconds=1)
             worker()
             self.assertEqual(fetch.call_count, 2)
-            self.assertEqual(shared.next_deadline(self.schedule, self.at), self.at + timedelta(minutes=2))
+            self.assertEqual(shared.next_deadline(self.schedule, self.at), self.at + shared.CADENCE)
 
-    def test_valid_epoch_fallback_and_invalid_or_foreign_report(self):
+    def test_fixed_slots_do_not_drift_with_transport_duration_and_restart(self):
+        self.at += timedelta(minutes=10)
+        starts = []
+        def transport(_url, _maximum):
+            starts.append(self.at.strftime("%H:%M:%S"))
+            self.at += timedelta(seconds=11)
+            return self.response(self.at)
+        with patch.object(frost_auto, "fetch_weather_source", side_effect=transport):
+            while self.at < datetime(2026, 4, 13, 3, tzinfo=timezone.utc):
+                with self.new_app().app_context():
+                    shared.refresh(self.schedule, self.clock)
+                    due = shared.next_deadline(self.schedule, self.at)
+                self.at = due
+        self.assertEqual(starts, ["02:10:00", "02:25:00", "02:40:00", "02:55:00"])
+
+    def test_cold_start_near_slot_skips_a_second_provider_request(self):
+        self.at += timedelta(minutes=8, seconds=1)
+        with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(self.at)) as fetch:
+            shared.refresh(self.schedule, self.clock)
+            fetch.assert_not_called()
+            self.at = shared.next_deadline(self.schedule, self.at)
+            self.assertEqual(self.at.minute, 10)
+            shared.refresh(self.schedule, self.clock)
+            fetch.assert_called_once()
+
+    def test_valid_observation_timestamp_and_invalid_or_foreign_report(self):
         with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(
                 self.at, icaoId="KORD")) as fetch:
             shared.refresh(self.schedule, self.clock)
             fetch.assert_called_once()
         self.assertIsNone(shared.latest(self.at))
-        self.at += timedelta(minutes=1)
+        self.at += timedelta(minutes=10)
         with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(self.at, reportTime="invalid")):
             shared.refresh(self.schedule, self.clock)
         self.assertEqual(weather.cached_metar_observation(self.gateway, now=self.at)["observed_at"], self.at.isoformat())
-        self.at += timedelta(minutes=5)
+        self.at += shared.CADENCE
         with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(
                 self.at + timedelta(minutes=1), reportTime="2030-01-01T00:00:00Z")):
             shared.refresh(self.schedule, self.clock)
+        self.at += timedelta(minutes=2)
         self.assertTrue(weather.cached_metar_observation(self.gateway, now=self.at)["stale"])
+
+    def test_55_acquisition_uses_54_observation_before_nominal_report_hour(self):
+        self.at = self.at.replace(minute=55)
+        observed = self.at - timedelta(minutes=1)
+        report_time = (self.at + timedelta(minutes=5)).isoformat()
+        with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(
+                observed, reportTime=report_time)) as fetch:
+            shared.refresh(self.schedule, self.clock)
+            fetch.assert_called_once()
+        self.assertEqual(weather.cached_metar_observation(self.gateway, now=self.at)["observed_at"],
+                         observed.isoformat())
 
     def test_forecast_and_frost_read_shared_bytes_without_second_metar_call(self):
         with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(self.at)) as fetch:
             shared.refresh(self.schedule, self.clock)
             from app.services.frost_inference import current_observations
-            self.assertTrue(current_observations(self.at))
+            self.assertTrue(current_observations(self.at + timedelta(minutes=14, seconds=59)))
             with patch.object(weather, "_fetch_forecast", return_value={}) as forecast:
                 observed = weather._weather_snapshot(gateway=self.gateway, now=self.at)["metar"]
                 self.assertEqual(observed["value"][0]["icaoId"], "KRFD")

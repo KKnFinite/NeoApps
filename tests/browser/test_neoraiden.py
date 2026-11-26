@@ -167,7 +167,7 @@ class CommandCenterBrowser(unittest.TestCase):
                     page.clock.fast_forward(61000)
                     page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true}))")
                     expect(page.locator("[data-refresh-status]")).to_have_text("Outside Sort hours")
-                    local_clock = page.locator("[data-gateway-clock]")
+                    local_clock = page.locator("[data-weather-clock]:not([data-weather-clock=UTC])")
                     expect(local_clock).to_have_text((start + timedelta(hours=8, minutes=1)).strftime("%H:%M"))
                     # A DST spring-forward discontinuity is a local display change only.
                     page.clock.set_system_time(datetime(2026, 3, 8, 7, 59, 50, tzinfo=timezone.utc))
@@ -175,6 +175,7 @@ class CommandCenterBrowser(unittest.TestCase):
                     expect(local_clock).to_have_text("01:59")
                     page.clock.fast_forward(10000)
                     expect(local_clock).to_have_text("03:00")
+                    expect(page.locator('[data-weather-clock="UTC"]')).to_have_text("08:00")
                     self.assertEqual(automatic_requests, [])
                     expect(page.locator(".rd-tv")).to_be_visible()
                     page.clock.set_system_time((start + timedelta(minutes=5)).replace(tzinfo=ZoneInfo("America/Chicago")))

@@ -317,30 +317,15 @@ class UccBrowserTest(unittest.TestCase):
                 if width == 1920:
                     page.screenshot(path=str(self.evidence / f"ucc-management-{engine}-1920x1080.png"))
             page.set_viewport_size({"width":1440,"height":1000})
-            weather_toggle = page.locator('[data-ucc-weather-toggle]')
+            expect(page.locator('[data-ucc-weather-toggle]')).to_have_count(0)
             current_weather = page.locator('#ucc-weather-current')
             upcoming = page.locator('#ucc-weather-upcoming')
-            expect(weather_toggle).to_have_attribute('aria-expanded', 'true')
+            expect(current_weather).to_be_visible()
             expect(upcoming.locator('article:visible')).to_have_count(4)
-            alpha = page.locator('[data-ucc-ramp="Alpha"]')
-            expanded_top = alpha.evaluate('el => el.getBoundingClientRect().top + scrollY')
-            weather_toggle.click()
-            expect(current_weather).to_be_hidden()
-            expect(upcoming).to_be_hidden()
-            self.assertLess(alpha.evaluate('el => el.getBoundingClientRect().top + scrollY'), expanded_top)
-            page.reload()
-            expect(weather_toggle).to_have_attribute('aria-expanded', 'false')
-            expect(current_weather).to_be_hidden()
-            expect(upcoming).to_be_hidden()
             self.weather_data["current"]["temperature"] = "29°F" if engine == "chromium" else "30°F"
             self.weather_data["revision"] = self.weather_revision_mock.return_value = f"weather-{engine}"
-            expect(current_weather.locator('.neosubzero-weather-primary > strong')).to_have_text(
+            expect(current_weather.locator('[data-metric="temperature"] dd')).to_have_text(
                 self.weather_data["current"]["temperature"], timeout=10000)
-            expect(current_weather).to_be_hidden()
-            expect(upcoming).to_be_hidden()
-            weather_toggle.click()
-            expect(current_weather.locator('.neosubzero-weather-current-sort')).to_be_visible()
-            expect(upcoming.locator('article:visible')).to_have_count(4)
             slot = page.locator('[data-ucc-editor="Alpha-2"]')
             for role, value in (('truck', '12'), ('driver', str(self.people[2])), ('flyer', str(self.people[1]))):
                 control = slot.locator(f'[data-ucc-crew-form="{role}"] select')
@@ -373,11 +358,9 @@ class UccBrowserTest(unittest.TestCase):
             # Device-local TV preference never changes a second browser context.
             page.evaluate("document.documentElement.requestFullscreen = undefined")
             page.set_viewport_size({"width":2560,"height":1440})
-            weather_toggle.click()
             page.locator('[data-ucc-tv-enter]').click()
             expect(page.locator('body')).to_have_class(re.compile('neosubzero-ucc-tv-mode'))
             expect(page.locator('[data-operational-topbar]')).to_be_hidden()
-            expect(weather_toggle).to_be_hidden()
             expect(page.locator('.ucc-tv-weather')).to_be_visible()
             page.screenshot(path=str(self.evidence / f"ucc-{engine}-tv.png"), full_page=True)
             other = browser.new_context(viewport={"width":390,"height":844})

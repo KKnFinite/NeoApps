@@ -416,6 +416,8 @@ def ucc():
         application_context=_application_context(operation),
         **neosubzero_ucc_context(gateway, operation),
     )
+    from app.services.krfd_observations import note_subzero_render
+    note_subzero_render(weather)
     return (html, {"Cache-Control": "no-store"}) if live_fragment else html
 
 

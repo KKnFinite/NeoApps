@@ -30,38 +30,33 @@
     </div>
     {% endif %}
 
-    {# Ambient presentation is paused; observations, services and saved preferences remain intact. #}
-    {% if not live_fragment %}
-    <div class="ucc-management-only ucc-weather-heading" data-ucc-weather-heading hidden>
-        <h2>WEATHER &amp; FORECAST</h2>
-        <button type="button" data-ucc-weather-toggle="{{ current_user.get_id() }}" aria-expanded="true" aria-controls="ucc-weather-current ucc-weather-upcoming">Collapse</button>
-    </div>
-    {% endif %}
+    {% from 'neonodes/_observed_weather.html' import title, primary, wind, value, freshness %}
+    {% set observed = weather.current %}
     <section id="ucc-weather-current" class="neosubzero-weather" aria-labelledby="subzero-weather-heading"
              data-frost-explanations="{{ 'on' if frost_risk_explanations_enabled else 'off' }}"
              data-frost-explanation-preference-url="{{ url_for('neosubzero.ucc_frost_explanation_preference') }}">
-        <header>
-            <div><p>KRFD · ACTUAL OBSERVATION</p><h2 id="subzero-weather-heading">WEATHER OPERATIONS</h2></div>
-            <div class="neosubzero-weather-source">
-                <span>{{ weather.sources.current }} · {{ weather.current.observed_at_label }}{% if weather.current.stale %} · STALE{% endif %}</span>
-            </div>
-        </header>
-        <div class="neosubzero-weather-current">
-            <div class="neosubzero-weather-primary">
-                <strong>{{ weather.current.temperature }}</strong>
-                <span>{{ weather.current.conditions }}</span>
-                <small>{{ weather.current.flight_category }} · {{ weather.current.sky }}</small>
-            </div>
-            <dl>
-                <div><dt>DEW POINT</dt><dd>{{ weather.current.dewpoint }}</dd></div>
-                <div><dt>SPREAD</dt><dd>{{ weather.current.spread }}</dd></div>
-                <div><dt>REL HUMIDITY</dt><dd>{{ weather.current.relative_humidity }}</dd></div>
-                <div><dt>WIND</dt><dd>{{ weather.current.wind }}</dd></div>
-                <div><dt>VISIBILITY</dt><dd>{{ weather.current.visibility }}</dd></div>
-                <div class="is-human-precip"><dt>ACTIVE PRECIPITATION · HUMAN SET</dt><dd>{{ application_context.active_precipitation or 'NOT SET' }}</dd></div>
+        <header><h2 id="subzero-weather-heading">{{ title(gateway.code == 'RFD') }}</h2></header>
+        <div class="neosubzero-weather-current" {{ freshness(observed) }}>
+            {{ primary(weather.timezone|default(config.DEFAULT_GATEWAY_TIMEZONE), observed.temperature) }}
+            <dl class="wx-facts">
+                {% for field, label in (('dewpoint','Dew Point'),('spread','Spread'),('relative_humidity','RH'),('visibility','Visibility')) %}
+                <div><dt>{{ label }}</dt><dd><span data-observation-value>{{ value(observed[field]) }}</span></dd></div>
+                {% endfor %}
+                <div data-metric="wind"><dt>Wind</dt><dd>{{ wind(observed.wind_parts) }}</dd></div>
+                <div data-metric="metar-precip"><dt>METAR Precip.</dt><dd><span data-observation-value>{{ value(observed.metar_precip) }}</span></dd></div>
+                <div class="is-human-precip"><dt aria-label="Active Precipitation, human entered" title="Human entered">Active Precip.</dt><dd>{{ value(application_context.active_precipitation) }}</dd></div>
             </dl>
+            <div class="wx-source">
+                <span data-observation-value{% if not observed.available %} hidden{% endif %}>
+                    {% if observed.observed_at_label and observed.observed_at_label != '-' %}Observed <time>{{ observed.observed_at_label }}</time>{% endif %}
+                    {% if value(observed.conditions) %} · {{ value(observed.conditions) }}{% endif %}
+                    {% if value(observed.flight_category) %} · {{ value(observed.flight_category) }}{% endif %}
+                    {% if value(observed.sky) %} · {{ value(observed.sky) }}{% endif %}
+                    <span data-observation-old{% if not observed.stale %} hidden{% endif %}> · Stale</span>
+                </span>
+                <span data-observation-unavailable{% if observed.available %} hidden{% endif %}>Observation unavailable</span>
+            </div>
         </div>
-        {% if weather.current.error %}<p class="neosubzero-weather-note">{{ weather.current.error }}</p>{% endif %}
 
         <div class="neosubzero-weather-forecast-head">
             <strong>CURRENT SORT · HOURLY WEATHER</strong>
@@ -115,7 +110,9 @@
     {% endif %}
 </section></div>
 {% if not live_fragment %}
-<script src="{{ url_for('static', live='20261122-staffing-grids', filename='js/neosubzero_ucc.js', hours='20261121', v=STATIC_ASSET_VERSION, ucc='20261112-mobile-ramp-v1') }}" defer></script>
-<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='ducc-tv-hour-label-v1') }}" defer></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/observed_weather.css', v='weather-117') }}">
+<script defer src="{{ url_for('static', filename='js/observed_weather.js', v='weather-117') }}"></script>
+<script src="{{ url_for('static', live='weather-117', filename='js/neosubzero_ucc.js', hours='20261121', v=STATIC_ASSET_VERSION, ucc='20261112-mobile-ramp-v1') }}" defer></script>
+<script src="{{ url_for('static', filename='js/neosubzero_board_view.js', v='weather-117') }}" defer></script>
 {% endif %}
 {% endblock %}

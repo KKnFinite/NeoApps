@@ -30,7 +30,7 @@ KRFD_LATITUDE = 42.1915
 KRFD_LONGITUDE = -89.0876
 AVIATION_WEATHER_METAR_URL = "https://aviationweather.gov/api/data/metar"
 NWS_POINTS_URL = "https://api.weather.gov/points/{latitude},{longitude}"
-METAR_TTL = timedelta(minutes=5)
+METAR_TTL = krfd_observations.FRESHNESS
 METAR_STALE_TTL = timedelta(hours=6)
 METAR_OBSERVATION_FRESHNESS = timedelta(minutes=90)
 FORECAST_TTL = timedelta(minutes=30)
@@ -88,12 +88,9 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
         tuple(card for card in forecast_cards if card["sort_date"] < forecast_end)
         if isinstance(forecast, dict) else ()
     )
-    current.update(
-        {
-            "stale": snapshot["metar"]["stale"],
-            "error": snapshot["metar"].get("error"),
-        }
-    )
+    current.update(stale=snapshot["metar"]["stale"], error=snapshot["metar"].get("error"))
+    if current["observed_at"] and snapshot["metar"].get("fetched_at") is not None:
+        current.update(_observation_times(current["observed_at"], snapshot["metar"]["fetched_at"]))
     forecast_status = {
         "stale": snapshot["forecast"]["stale"],
         "error": snapshot["forecast"].get("error"),
@@ -127,7 +124,8 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
         if forecast_scope is None or card["sort_date"] != forecast_scope.sort_date
     )
     return {
-        "station": KRFD_ICAO,
+        "station": KRFD_ICAO if gateway.code == "RFD" else None,
+        "timezone": gateway_timezone(gateway),
         "current": current,
         "theme": current_weather_theme(current),
         "current_sort": current_sort,
@@ -170,22 +168,27 @@ def cached_metar_observation(gateway, *, now=None):
     observed = krfd_observations.observed_at(row)
     if observed is None or observed > now:
         return None
-    fetched = datetime.fromtimestamp(cached["fetched_at"], timezone.utc)
-    expires = min(fetched, observed) + METAR_STALE_TTL
-    if now >= expires:
+    times = _observation_times(observed, cached["fetched_at"])
+    now_ms = now.timestamp() * 1000
+    if now_ms >= times["expires_at_ms"]:
         return None
-    stale_at = min(fetched + METAR_TTL, observed + METAR_OBSERVATION_FRESHNESS)
     current = parse_aviation_weather_metar(metar)
     return dict(
         temperature=current["temperature"], dewpoint=current["dewpoint"], spread=current["spread"],
         relative_humidity=current["relative_humidity"],
-        wind=current["wind"] if current["wind_speed_value"] is not None else None,
-        visibility="0 SM" if row.get("visib") == 0 else current["visibility"],
+        wind=current["wind"], wind_parts=current["wind_parts"], metar_precip=current["metar_precip"],
+        visibility=current["visibility"],
         conditions=str(row.get("wxString") or "").strip(), observed_at=observed.isoformat(),
         observed_label=observed.astimezone(timezone.utc).strftime("%H:%MZ"),
-        observed_full_label=_utc_label(observed), stale=now >= stale_at,
-        stale_at_ms=int(stale_at.timestamp() * 1000), expires_at_ms=int(expires.timestamp() * 1000),
+        observed_full_label=_utc_label(observed), stale=now_ms >= times["stale_at_ms"], **times,
     )
+
+
+def _observation_times(observed, fetched_at):
+    fetched = datetime.fromtimestamp(fetched_at, timezone.utc)
+    stale_at = min(fetched + METAR_TTL, observed + METAR_OBSERVATION_FRESHNESS)
+    expires = min(fetched, observed) + METAR_STALE_TTL
+    return dict(stale_at_ms=int(stale_at.timestamp() * 1000), expires_at_ms=int(expires.timestamp() * 1000))
 
 
 def clear_neosubzero_weather_cache():
@@ -221,6 +224,7 @@ def parse_aviation_weather_metar(payload):
     observed_at = krfd_observations.observed_at(row)
     wind_speed = _number(row.get("wspd"))
     wind_gust = _number(row.get("wgst"))
+    wind = _metar_wind(row, wind_speed, wind_gust)
     return {
         "available": True,
         "observed_at": observed_at,
@@ -233,7 +237,9 @@ def parse_aviation_weather_metar(payload):
         "spread_value": spread,
         "relative_humidity": _percent_label(humidity),
         "relative_humidity_value": humidity,
-        "wind": _metar_wind(row),
+        "wind": " ".join(wind[key] for key in ("direction", "speed", "gust", "units") if wind[key]),
+        "wind_parts": wind,
+        "metar_precip": _metar_precipitation(row) if observed_at else None,
         "wind_speed_value": wind_speed,
         "wind_gust_value": wind_gust,
         "visibility": _visibility_label(row.get("visib")),
@@ -304,7 +310,7 @@ def _weather_snapshot(*, gateway=None, now=None):
         if cached:
             stale = (now.timestamp() - cached["fetched_at"] >= METAR_TTL.total_seconds()
                      or now - krfd_observations.observed_at(cached["value"][0]) >= METAR_OBSERVATION_FRESHNESS)
-            metar = dict(value=cached["value"], stale=stale,
+            metar = dict(value=cached["value"], fetched_at=cached["fetched_at"], stale=stale,
                          error="Observation is stale; showing last good data." if stale else None)
     else:
         metar = _cached_fetch("krfd_metar", METAR_TTL, METAR_STALE_TTL, _fetch_metar, now=now)
@@ -693,7 +699,9 @@ def _unavailable_current():
         "spread_value": None,
         "relative_humidity": "-",
         "relative_humidity_value": None,
-        "wind": "-",
+        "wind": "",
+        "wind_parts": None,
+        "metar_precip": None,
         "wind_speed_value": None,
         "wind_gust_value": None,
         "visibility": "-",
@@ -704,23 +712,68 @@ def _unavailable_current():
     }
 
 
-def _metar_wind(row):
-    direction = row.get("wdir")
-    direction_label = (
-        f"{int(direction):03d}°"
-        if isinstance(direction, (int, float))
-        else str(direction or "VRB").strip().upper()
+def _wind_stage(gust):
+    if gust is None or gust < 25:
+        return None
+    return 1 if gust <= 30 else 2 if gust <= 44 else 3
+
+
+def _metar_wind(row, speed, gust):
+    raw_direction = row.get("wdir")
+    direction = _number(raw_direction)
+    direction_label = f"{int(direction):03d}°" if direction is not None and 0 <= direction <= 360 else (
+        "VRB" if str(raw_direction).upper() == "VRB" else ""
     )
-    speed = _number(row.get("wspd"))
-    gust = _number(row.get("wgst"))
-    pieces = [direction_label, f"{_rounded(speed)} kt" if speed is not None else "CALM"]
-    if gust is not None:
-        pieces.append(f"G{_rounded(gust)} kt")
-    return " ".join(pieces)
+    speed = speed if speed is not None and speed >= 0 and speed.is_integer() else None
+    gust = gust if gust is not None and gust >= 0 and gust.is_integer() else None
+    return dict(direction=direction_label, speed=str(int(speed)) if speed is not None else "",
+                gust=f"G{int(gust)}" if gust is not None else "",
+                units="kt" if speed is not None or gust is not None else "", stage=_wind_stage(gust))
+
+
+_PRECIPITATION = {
+    "DZ": "drizzle", "RA": "rain", "SN": "snow", "SG": "snow grains", "IC": "ice crystals",
+    "PL": "ice pellets", "GR": "hail", "GS": "small hail", "UP": "unknown precipitation",
+}
+_PRESENT_WEATHER = re.compile(
+    r"([+-]?)(VC)?(MI|PR|BC|DR|BL|SH|TS|FZ)?((?:DZ|RA|SN|SG|IC|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PY|PO|SQ|FC|SS|DS)+)"
+)
+
+
+def _metar_precipitation(row):
+    # Raw METAR fallback scans only the observation, never RMK, trends or forecast.
+    raw = str(row.get("rawOb") or "").upper().split()
+    for i, token in enumerate(raw):
+        if token in {"RMK", "TEMPO", "BECMG", "NOSIG"}:
+            raw = raw[:i]
+            break
+    groups = str(row.get("wxString") or "").upper().split() or raw
+    display = []
+    for group in groups:
+        match = _PRESENT_WEATHER.fullmatch(group)
+        if not match:
+            continue
+        intensity, vicinity, descriptor, codes = match.groups()
+        if vicinity or descriptor in {"DR", "BL", "MI", "PR", "BC"}:
+            continue
+        kinds = [_PRECIPITATION[code] for code in re.findall(r"..", codes) if code in _PRECIPITATION]
+        if not kinds:
+            continue
+        if descriptor == "FZ":
+            kinds = [f"freezing {kind}" if kind in {"rain", "drizzle"} else kind for kind in kinds]
+        if descriptor == "SH":
+            kinds = [f"{kind} showers" for kind in kinds]
+        prefix = {"-": "Light ", "+": "Heavy ",
+                  "": "Moderate " if "RA" in codes or "SN" in codes else ""}[intensity]
+        text = prefix + " + ".join(kinds)
+        text = text[0].upper() + text[1:]
+        if text not in display:
+            display.append(text)
+    return " · ".join(display) if display else "None reported"
 
 
 def _visibility_label(value):
-    text = str(value or "").strip()
+    text = str(value).strip() if value is not None else ""
     return f"{text} SM" if text else "-"
 
 
