@@ -24,7 +24,7 @@
   {% for row in report[side ~ '_rows'] %}
   <tr data-rainrock-flight="{{ row.mission_id }}">
     {% if row.cancelled %}
-    <td colspan="7">{{ row.flight }} — CANCELLED{% if row.delay_details %}<span data-rainrock-note-variant="full" hidden> — {{ row.delay_details }}</span>{% endif %}</td>
+    <td colspan="7" data-rainrock-mission-notes>{{ row.flight }} — CANCELLED{% if row.cancellation_notes %} — {{ row.cancellation_notes }}{% endif %}</td>
     {% else %}
     <td>{{ row.flight or '—' }}</td><td>{{ row.tail or '—' }}</td><td>{{ row.place or '—' }}</td>
     <td>{{ row.scheduled or '—' }}</td><td>{{ row.actual or '—' }}</td>

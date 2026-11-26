@@ -116,12 +116,13 @@ def _performance(missions, *, arrival):
     details, other, cancelled = [], [], []
     for mission in missions:
         entries = mission_delay_entries(mission)
+        if mission_cancelled(mission):
+            cancelled.append(dict(flight=mission.flight_number,
+                                  cancellation_notes=format_delay_details(entries, notes_only=True)))
+            continue
         row = dict(mission_id=mission.id, flight=flight_identity(mission.flight_number),
                    delay_details=format_delay_details(entries),
                    codes="/".join(dict.fromkeys(entry.code for entry in entries if entry.code)))
-        if mission_cancelled(mission):
-            cancelled.append({**row, "flight": mission.flight_number})
-            continue
         minutes = completed_variance_minutes(mission) if mission.id in eligible_ids else None
         if minutes is not None and minutes > 0:
             details.append(dict(row, origin=mission.origin, destination=mission.destination,
@@ -204,7 +205,7 @@ def format_briefing(context, *, include_delay_details=False):
             else:
                 result.append(line + (' ' + row['codes'] if row['codes'] else ''))
         for row in data.get('cancelled', []):
-            suffix = details(row) if include_delay_details else ''
+            suffix = f" — {row['cancellation_notes']}" if row["cancellation_notes"] else ""
             result.append(f"{row['flight']} — CANCELLED" + suffix)
         if include_delay_details:
             for row in data.get('other', []):

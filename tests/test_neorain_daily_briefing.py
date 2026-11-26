@@ -270,3 +270,46 @@ class DailyBriefingTest(TestCase):
         self.assertNotIn('N948UP +11', format_briefing(context, include_delay_details=True))
         self.assertIn('UPS948 — 11 RS - Late inbound', format_briefing(context, include_delay_details=True))
         self.assertEqual(NeoRainReportEntry.query.count(), 0)
+
+    def test_cancelled_report_lines_keep_only_saved_notes_and_preserve_performance(self):
+        from app.models import NeoRainMissionNote
+        from app.services.neorain_reports import briefing_text, report_context
+
+        baseline = briefing_context(self.operation)
+        baseline_report = report_context(self.operation)
+        for side, number in (("arrival", "UPS0097"), ("departure", "UPS0197")):
+            flight = SortDateMission(
+                sort_date_operation_id=self.operation.id, sort_date=self.operation.sort_date,
+                gateway_code="RFD", sort_name="night", mission_type=side, mission_source="manual",
+                flight_number=number, origin="PHX", destination="PHL", assigned_tail_number="N999UP",
+                planned_datetime_utc=datetime(2026, 8, 30, 4, 30),
+                actual_block_in_datetime_utc=datetime(2026, 8, 30, 7),
+                actual_block_out_datetime_utc=datetime(2026, 8, 30, 7),
+                late_metrics_included_override=True, wave="1",
+            )
+            setattr(flight, side + "_status", "cancelled")
+            db.session.add(flight)
+            db.session.flush()
+            db.session.add(NeoRainDelayInfo(sort_date_mission_id=flight.id, minutes=97, code="WX"))
+            if side == "arrival":
+                db.session.add_all([
+                    NeoRainDelayInfo(sort_date_mission_id=flight.id, minutes=11, code="RS",
+                                     notes="Replacement assigned", created_at=datetime(2026, 8, 30, 6)),
+                    NeoRainMissionNote(sort_date_mission_id=flight.id, text="Saved historical reason",
+                                       created_at=datetime(2026, 8, 30, 5)),
+                ])
+        db.session.commit()
+        report = report_context(self.operation)
+        result = briefing_context(self.operation)
+        for side in ("inbound", "outbound"):
+            self.assertEqual({k: v for k, v in result[side].items() if k != "cancelled"},
+                             {k: v for k, v in baseline[side].items() if k != "cancelled"})
+            for key in (side + "_late", "eligible_" + side, "recorded_" + side):
+                self.assertEqual(report[key], baseline_report[key])
+        expected = [
+            "UPS0097 — CANCELLED — Saved historical reason; Replacement assigned",
+            "UPS0197 — CANCELLED",
+        ]
+        for text in (format_briefing(result), format_briefing(result, include_delay_details=True),
+                     briefing_text(report)):
+            self.assertEqual([line for line in text.splitlines() if "CANCELLED" in line], expected)

@@ -89,3 +89,64 @@ class ReportsWorkspaceBrowserTest(unittest.TestCase):
                 expect(rainrock).to_have_attribute("aria-selected", "true")
                 host.fixture().ready(page, f"/neorain/daily-briefing?operation_id={host.operation_id}")
                 expect(briefing).to_have_attribute("aria-selected", "true")
+
+    def test_cancellation_notes_survive_both_report_modes_and_exports(self):
+        from app.models import NeoRainDelayInfo, NeoRainMissionNote, SortDateMission
+
+        host = fixtures.CompactRainBrowserTest
+        host.setUpClass()
+        self.addCleanup(host.tearDownClass)
+        with host.fixture.app.app_context():
+            for side, number in (("arrival", "UPS0097"), ("departure", "UPS0197")):
+                mission = db.session.get(SortDateMission, host.ids[side])
+                mission.flight_number = number
+                setattr(mission, side + "_status", "cancelled")
+                db.session.add(NeoRainDelayInfo(sort_date_mission_id=mission.id, minutes=97, code="WX",
+                                              notes="Crew reassigned" if side == "departure" else None))
+            db.session.add(NeoRainMissionNote(sort_date_mission_id=host.ids["arrival"],
+                                             text="Historical reason"))
+            db.session.commit()
+
+        expected = ["UPS0097 — CANCELLED — Historical reason",
+                    "UPS0197 — CANCELLED — Crew reassigned"]
+        for engine in ("chromium", "webkit"):
+            with getattr(host.fixture.pw, engine).launch() as browser:
+                for width in (1440, 390):
+                    with self.subTest(engine=engine, width=width):
+                        page = browser.new_page(viewport={"width": width, "height": 900},
+                                                accept_downloads=True, service_workers="block")
+                        try:
+                            host().login_for_sort(page)
+                            host.fixture().ready(page, f"/neorain/rainrock?operation_id={host.operation_id}")
+                            page.evaluate("""() => {
+                                const original = CanvasRenderingContext2D.prototype.fillText;
+                                window.pngText = [];
+                                CanvasRenderingContext2D.prototype.fillText = function (text, ...args) {
+                                    window.pngText.push(text);
+                                    return original.call(this, text, ...args);
+                                };
+                                navigator.clipboard.writeText = async text => { window.reportCopy = text; };
+                            }""")
+                            for enabled in (False, True):
+                                page.locator("[data-rainrock-notes]").set_checked(enabled)
+                                expect(page.locator("[data-rainrock-mission-notes]")).to_have_text(expected)
+                                page.evaluate("window.pngText = []")
+                                with page.expect_download() as receipt:
+                                    page.locator("[data-rainrock-download]").click()
+                                with open(receipt.value.path(), "rb") as image:
+                                    self.assertEqual(image.read(8), b"\x89PNG\r\n\x1a\n")
+                                raster_text = " ".join(page.evaluate("window.pngText"))
+                                for word in ("UPS0097", "UPS0197", "CANCELLED", "Historical", "reassigned"):
+                                    self.assertIn(word, raster_text)
+                                for forbidden in ("97 WX", "N123UP", " SDF "):
+                                    self.assertNotIn(forbidden, raster_text)
+                            page.get_by_role("tab", name="Daily Briefing").click()
+                            for enabled in (False, True):
+                                page.locator("#briefing-delay-details").set_checked(enabled)
+                                page.locator("#copy-briefing").click()
+                                expect(page.locator("#copy-briefing-status")).to_have_text("Copied.")
+                                copied = page.evaluate("window.reportCopy")
+                                self.assertEqual(copied, page.locator("#briefing-text").text_content())
+                                self.assertEqual([line for line in copied.splitlines() if "CANCELLED" in line], expected)
+                        finally:
+                            page.close()
