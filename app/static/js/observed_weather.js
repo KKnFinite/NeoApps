@@ -2,6 +2,10 @@
     "use strict";
     const formats = new Map();
     let timer;
+    function show(element, visible) {
+        if (element.hidden === visible) element.hidden = !visible;
+    }
+
     function update() {
         clearTimeout(timer);
         if (document.hidden) return;
@@ -26,9 +30,9 @@
             const stale = Number(weather.dataset.observationStale);
             const expires = Number(weather.dataset.observationExpires);
             const expired = now >= expires;
-            for (const value of weather.querySelectorAll("[data-observation-value]")) value.hidden = expired;
-            weather.querySelector("[data-observation-unavailable]").hidden = !expired;
-            weather.querySelector("[data-observation-old]").hidden = now < stale;
+            for (const value of weather.querySelectorAll("[data-observation-value]")) show(value, !expired);
+            show(weather.querySelector("[data-observation-unavailable]"), expired);
+            show(weather.querySelector("[data-observation-old]"), now >= stale);
             for (const deadline of [stale, expires]) {
                 if (deadline > now) delay = Math.min(delay, deadline - now);
             }

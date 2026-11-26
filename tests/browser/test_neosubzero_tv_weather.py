@@ -158,16 +158,30 @@ class DuccTvWeatherTest(unittest.TestCase):
         expect(panel.locator('[data-metric="metar-precip"] dd')).to_have_text("Light snow")
         expect(panel.locator(".is-human-precip dd")).to_have_text("Ice pellets")
         expect(panel.locator(".wx-source time")).to_have_text("2026-08-31 23:00Z")
-        info = panel.evaluate("""root => [...root.querySelectorAll(".wx-primary dd")].map(el => [
-            getComputedStyle(el).fontSize, getComputedStyle(el).fontWeight, el.scrollWidth <= el.clientWidth+1, el.scrollWidth, el.clientWidth, el.innerText])""")
+        for _ in range(4):  # A fast fixture refresh can replace the TV tree during a locator evaluation.
+            info = panel.evaluate("""root => [...root.querySelectorAll(".wx-primary dd")].map(el => [
+                getComputedStyle(el).fontSize, getComputedStyle(el).fontWeight, el.scrollWidth <= el.clientWidth+1,
+                el.scrollWidth, el.clientWidth, el.innerText])""")
+            if info and info[0][0]:
+                break
         self.assertEqual(len(set(row[0] for row in info)), 1, info)
         self.assertTrue(all(row[1:3] == ["400", True] for row in info), info)
         self.assertEqual(panel.evaluate("""el => [...el.querySelectorAll('.wx-facts dd,.wx-facts dt,.wx-source')].filter(n =>
             n.scrollWidth > n.clientWidth+1).map(n => n.textContent)"""), [])
-        for stage, color in (("2", "#924300" if light else "#ffb36f"), ("3", "#a12637" if light else "#ff9e9b")):
-            panel.locator(".wx-gust").evaluate("(gust,stage) => gust.dataset.stage=stage", stage)
-            expect(panel.locator(".wx-gust")).to_have_css("color", rgb(color))
-        panel.locator(".wx-gust").evaluate("gust => gust.dataset.stage=1")
+        color_probe = """gust => {
+            const colors = ["2", "3"].map(stage => {
+                gust.dataset.stage = stage;
+                return getComputedStyle(gust).color;
+            });
+            gust.dataset.stage = "1";
+            return colors;
+        }"""
+        for _ in range(4):
+            colors = panel.locator(".wx-gust").evaluate(color_probe)
+            if colors[0]:
+                break
+        self.assertEqual(colors, [rgb(color) for color in (
+            ("#924300", "#a12637") if light else ("#ffb36f", "#ff9e9b"))])
 
     def exercise(self, engine):
         case = fixtures.UccBrowserTest(); case.setUpClass(); browser = None
@@ -182,6 +196,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             case.weather_data['tv_forecast_extra'] = (dict(sample, date_label='MON NOV 16', hours=()),)
             browser = getattr(case.pw, engine).launch()
             page = browser.new_page(viewport={'width':1920, 'height':1080})
+            page.clock.install(time=case.sort_now)
             errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
             case.login(page); case.ready(page, '/neosubzero/ucc')
             main_weather = page.locator("#ucc-weather-current")
@@ -196,7 +211,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             expect(main_weather.locator(".is-human-precip dd")).to_be_visible()
             main_weather.evaluate("""panel => {
                 const current = panel.querySelector(".neosubzero-weather-current");
-                current.dataset.observationStale = current.dataset.observationExpires = Date.now() + 60000;
+                current.dataset.observationStale = current.dataset.observationExpires = Date.now() + 300000;
                 document.dispatchEvent(new Event("weather:updated"));
             }""")
             for width in (320, 375, 390, 430):
@@ -301,6 +316,7 @@ class DuccTvWeatherTest(unittest.TestCase):
             theme.click()
             expect(board).to_have_attribute('data-ucc-tv-theme', 'light')
             case.weather_data['tv_forecast_extra'] = (dict(sample, date_label='MON NOV 16'),)
+            case.weather_revision_mock.return_value = "weather-r2"
             with case.app.app_context():
                 StaffingDailyAttendance.query.filter_by(person_id=case.people[0]).one().status = 'here'
                 set_neosubzero_ucc_assignment(db.session.get(SortDateOperation, case.operation_id), 'Bravo', 2,
