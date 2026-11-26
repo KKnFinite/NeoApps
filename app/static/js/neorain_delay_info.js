@@ -6,8 +6,19 @@
         if (!root || root.dataset.neorainDelayEntryReady) return;
         root.dataset.neorainDelayEntryReady = 'true';
         const selector = '.neorain-delay-line-form, .neorain-delay-delete-form';
+        const lineSelector = '.neorain-delay-line-form';
+        const fields = ['minutes', 'code', 'notes'];
         const busy = new Set();
         const value = (form, name) => form.elements.namedItem(name)?.value || '';
+        const editorCopies = missionId => {
+            if (!/^\d+$/.test(missionId)) return [];
+            return Array.from(root.querySelectorAll(
+                `#delay-info-${missionId} [data-neorain-delay-editor], #mobile-flight-${missionId} [data-neorain-delay-editor]`));
+        };
+        const matchingForms = (form, scopes) => scopes.flatMap(scope =>
+            Array.from(scope.querySelectorAll(lineSelector)).filter(candidate =>
+                value(candidate, 'delay_id') === value(form, 'delay_id') &&
+                value(candidate, 'expected_version') === value(form, 'expected_version')));
         const message = (scope, text, error = false) => {
             let output = scope.querySelector(':scope > [data-neorain-delay-feedback]');
             if (!output) {
@@ -22,7 +33,17 @@
         };
         root.addEventListener('input', event => {
             const form = event.target.closest(selector);
-            if (form) form.dataset.neorainDelayDirty = 'true';
+            if (!form) return;
+            form.dataset.neorainDelayDirty = 'true';
+            // Keep a single draft across the desktop and mobile forms for the
+            // same record version. A stale form must still surface a conflict.
+            const name = event.target.name;
+            if (!fields.includes(name)) return;
+            for (const copy of matchingForms(form, editorCopies(value(form, 'mission_id')))) {
+                if (copy === form) continue;
+                copy.elements.namedItem(name).value = event.target.value;
+                copy.dataset.neorainDelayDirty = 'true';
+            }
         });
         root.addEventListener('submit', async event => {
             const form = event.target.closest(selector);
@@ -32,16 +53,21 @@
             if (busy.has(missionId) || !form.reportValidity()) return;
             const scope = form.parentElement.closest('[data-neorain-delay-editor]');
             if (!scope) return;
+            const scopes = editorCopies(missionId);
+            if (!scopes.includes(scope)) scopes.push(scope);
+            const copies = matchingForms(form, scopes);
             const data = new FormData(form);
             const action = value(form, 'action');
             const entry = form.closest('.neorain-delay-existing-row');
-            const controls = Array.from((entry || form).querySelectorAll('input:not([type="hidden"]), textarea, button'));
+            const containers = new Set([entry || form, ...copies.map(copy => copy.closest('.neorain-delay-existing-row') || copy)]);
+            const controls = Array.from(containers).flatMap(container =>
+                Array.from(container.querySelectorAll('input:not([type="hidden"]), textarea, button')));
             const disabled = controls.map(control => control.disabled);
             busy.add(missionId);
             form.dataset.neorainDelaySaving = 'true';
             form.dataset.neorainDelayDirty = 'true';
             controls.forEach(control => { control.disabled = true; });
-            message(scope, 'SAVING…');
+            for (const target of scopes) message(target, 'SAVING…');
             const controller = new AbortController();
             const timeout = window.setTimeout(() => controller.abort(), 20000);
             try {
@@ -56,14 +82,11 @@
                     throw new Error(result?.error || 'Save was not confirmed. Check your session and current delays before retrying. Your entry is kept.');
                 }
                 // Reconcile only the affected entry, never another unsaved delay.
-                const scopes = new Set(Array.from(root.querySelectorAll('.neorain-delay-line-form'))
-                    .filter(candidate => value(candidate, 'mission_id') === missionId)
-                    .map(candidate => candidate.closest('[data-neorain-delay-editor]')));
                 for (const target of scopes) {
-                    if (!target) continue;
                     const old = Array.from(target.querySelectorAll('.neorain-delay-existing-row'))
                         .find(row => row.querySelector('[name="delay_id"]')?.value === String(result.delay_id));
-                    if (old && old !== entry && old.querySelector('[data-neorain-delay-dirty="true"]')) continue;
+                    const oldForm = old?.querySelector(lineSelector);
+                    if (oldForm?.dataset.neorainDelayDirty === 'true' && old !== entry && !copies.includes(oldForm)) continue;
                     if (action === 'delete') {
                         old?.remove();
                     } else {
@@ -74,7 +97,10 @@
                     }
                 }
                 if (action === 'add') {
-                    for (const name of ['minutes', 'code', 'notes']) form.elements.namedItem(name).value = '';
+                    for (const copy of new Set([form, ...copies])) {
+                        for (const name of fields) copy.elements.namedItem(name).value = '';
+                        copy.removeAttribute('data-neorain-delay-dirty');
+                    }
                 }
                 form.removeAttribute('data-neorain-delay-dirty');
                 for (const toggle of root.querySelectorAll(`[aria-controls="delay-info-${missionId}"]`)) {
@@ -82,10 +108,10 @@
                 }
                 const mobile = root.querySelector(`#mobile-flight-${missionId} [data-neorain-mobile-delay] > summary`);
                 if (mobile) mobile.textContent = `DELAY INFO (${result.count})`;
-                message(scope, 'DELAY INFO SAVED.');
+                for (const target of scopes) message(target, 'DELAY INFO SAVED.');
             } catch (error) {
                 // No automatic retry: a lost response can follow a committed ADD.
-                message(scope, error.name === 'AbortError'
+                for (const target of scopes) message(target, error.name === 'AbortError'
                     ? 'Save timed out. Your entry is kept. Check current delays in a new tab before retrying.'
                     : (error.message || 'Unable to save. Your entry is kept.'), true);
             } finally {
