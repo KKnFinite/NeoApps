@@ -796,7 +796,7 @@ class RaidenTest(unittest.TestCase):
         self.app.config["NEOAPPS_METAR_CACHE_DIR"] = self.enterContext(TemporaryDirectory())
         raw = json.dumps([dict(icaoId="KRFD", obsTime=now.timestamp(), temp=-17.78, visib=0, wxString="SN")]).encode()
         path = f"/neoraiden/state?operation_id={op.id}"
-        with patch.object(frost_auto, "fetch", return_value=(raw, {})) as fetch, \
+        with patch.object(frost_auto, "fetch_weather_source", return_value=(raw, {})) as fetch, \
              patch.object(weather, "_utc_now", return_value=now), \
              patch.object(weather, "_weather_snapshot", side_effect=AssertionError("Raiden cannot fetch forecasts")):
             cold = self.client.get(path)

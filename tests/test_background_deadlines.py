@@ -199,7 +199,7 @@ class DeadlineTest(unittest.TestCase):
         engine = db.engine
         event.listen(engine, "before_cursor_execute", sql)
         self.addCleanup(event.remove, engine, "before_cursor_execute", sql)
-        with patch.object(auto, "fetch", side_effect=provider):
+        with patch.object(auto, "fetch_weather_source", side_effect=provider):
             self.simulate(seconds=670)
         self.assertEqual([(stamp - start).total_seconds() for stamp in requests], [10, 310, 610])
         self.assertEqual(sql_at_weather_wake, [])
@@ -219,7 +219,7 @@ class DeadlineTest(unittest.TestCase):
             with patch.object(scheduling, "notify_archive_worker"):
                 save_gateway_matrix(db.session.get(Gateway, self.gateway_id), [])
         raw = json.dumps([dict(icaoId="KRFD", obsTime=self.at.timestamp(), temp=0)]).encode()
-        with patch.object(auto, "fetch", return_value=(raw, {})) as fetch:
+        with patch.object(auto, "fetch_weather_source", return_value=(raw, {})) as fetch:
             self.simulate(seconds=700, actions={120:cancel})
         fetch.assert_called_once_with(metar.METAR_URL, metar.MAX_BYTES)
 

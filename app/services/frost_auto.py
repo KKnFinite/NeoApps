@@ -61,8 +61,13 @@ def unpack(value):
 
 
 def fetch(url, maximum):
-    """One bounded request, closed response; job-level retry, never hidden loops."""
+    """Research transfers yield to operational traffic."""
     priority.checkpoint()
+    return fetch_weather_source(url, maximum)
+
+
+def fetch_weather_source(url, maximum):
+    """One bounded request with original bytes and receipt."""
     allowed=(url==krfd_observations.METAR_URL or
         url=='https://api.weather.gov/points/42.1915,-89.0876' or
         re.fullmatch(r'https://api.weather.gov/gridpoints/LOT/\d+,\d+',url))
