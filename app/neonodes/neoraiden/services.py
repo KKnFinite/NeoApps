@@ -20,7 +20,9 @@ from app.services.account_authority import Scope
 from app.services.account_scope_runtime import authority
 from app.services.gateway_matrix import configured_sort_window_utc, current_gateway_local_datetime, gateway_timezone
 from app.services.neorain_fuel_authority import scorpion_board_fuel_by_mission
-from app.services.neorain_performance import average_lateness, completed_variance_minutes
+from app.services.neorain_performance import (
+    ARRIVAL_COMPLETE, average_lateness, completed_variance_minutes, mission_status,
+)
 from app.services.neoscorpion_fueling_status import STAGE_COLORS
 from app.services.neosektor_live_counts import native_uld_summary
 from app.services.permission_rules import user_can
@@ -89,24 +91,60 @@ def usable_pull_lineup(gateway, operation, window):
     return bool(start is not None and start <= local_now.replace(tzinfo=zone) < end)
 
 
+def _utc_instant(value):
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def _overnight_arrival_sta(instant, window):
+    zone, start, end = window
+    if start is None or instant >= start:
+        return instant
+    local = instant.astimezone(zone)
+    if local.date() != start.astimezone(zone).date():
+        return instant
+    # Legacy imports sometimes date a post-midnight STA on the Sort's first day.
+    next_day = local + timedelta(days=1)
+    shifted = _utc_instant(next_day)
+    alternate = _utc_instant(next_day.replace(fold=1))
+    if start <= shifted < end or start <= alternate < end:
+        return shifted if shifted == alternate else None
+    return instant
+
+
 def _arrival_sort_time(mission, planned, window):
     reported = mission.actual_block_in_datetime_utc or mission.eta_datetime_utc
     value = reported or planned
     if value is None or mission.origin.strip().upper() == "HOT":
         return None
-    instant = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
-    zone, start, end = window
-    if start is None or start <= instant < end:
-        return instant
-    if reported is None and instant < start:
-        local = instant.astimezone(zone)
-        # Legacy imported STAs can carry the Sort date for the after-midnight leg.
-        if local.date() == start.astimezone(zone).date():
-            next_day = local + timedelta(days=1)
-            shifted = next_day.astimezone(timezone.utc)
-            if start <= shifted < end and shifted.astimezone(zone) == next_day:
-                return shifted
-    return None
+    instant = _utc_instant(value)
+    if reported is None:
+        instant = _overnight_arrival_sta(instant, window)
+    _, start, end = window
+    return instant if start is None or (instant is not None and start <= instant < end) else None
+
+
+def _arrival_variance_minutes(mission, planned, window):
+    status = mission_status(mission)
+    if status == "en_route":
+        observed = mission.eta_datetime_utc
+    elif status == "on_ground":
+        observed = mission.actual_block_in_datetime_utc or mission.eta_datetime_utc
+    elif status in ARRIVAL_COMPLETE:
+        observed = mission.actual_block_in_datetime_utc
+    else:
+        return None
+    if planned is None or observed is None:
+        return None
+    if mission.planned_datetime_utc is None:
+        # A wall-clock-only STA in a DST gap or fold cannot identify an instant.
+        try:
+            local = mission.planned_datetime_local.replace(tzinfo=ZoneInfo(mission.timezone or "America/Chicago"), fold=0)
+        except ZoneInfoNotFoundError:
+            return None
+        if local.utcoffset() != local.replace(fold=1).utcoffset():
+            return None
+    sta = _overnight_arrival_sta(_utc_instant(planned), window)
+    return int((_utc_instant(observed) - sta).total_seconds() / 60) if sta is not None else None
 
 
 def board_sources(user, gateway, operation):
@@ -242,7 +280,10 @@ def snapshot(user, gateway, operation, *, sources=None):
                    planned=format_local_hhmm(planned,mission.timezone),
                    actual=format_local_hhmm(actual,mission.timezone),
                    status=mission.arrival_status if inbound else mission.departure_status,
-                   variance=completed_variance_minutes(mission) if "rain" in access else None)
+                   variance=None)
+        if "rain" in access:
+            row["variance"] = (_arrival_variance_minutes(mission, planned, window) if inbound
+                               else completed_variance_minutes(mission))
         if inbound:
             row["wave"] = normalize_wave(mission.wave)
             instant = _arrival_sort_time(mission, planned, window)

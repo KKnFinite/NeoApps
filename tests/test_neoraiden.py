@@ -136,6 +136,100 @@ class RaidenTest(unittest.TestCase):
         self.assertEqual([row["id"] for row in read()["arrivals"]][:6],
                          [m.id for m in (tied, actual, midnight, first_sta, eta, middle_sta)])
 
+    def test_arrival_variance_uses_authorized_status_and_sort_chronology(self):
+        from app.services.neorain_daily_briefing import briefing_context
+        from app.services.neorain_reports import report_context
+        from tests.test_neorain_sort_refresh import configure_sort_window
+
+        op = seed_sort(self.gateway)
+        configure_sort_window(self.gateway, op.sort_date)
+        sta = datetime(2026, 4, 13, 6)  # 01:00 local after midnight.
+        flight = SortDateMission(
+            sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
+            gateway_code=self.gateway.code, mission_type="arrival", flight_number="PROJECTED",
+            origin="SDF", destination=self.gateway.code, wave="1",
+            planned_datetime_utc=sta - timedelta(days=1), eta_datetime_utc=sta + timedelta(minutes=12),
+        )
+        finished = SortDateMission(
+            sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
+            gateway_code=self.gateway.code, mission_type="arrival", flight_number="FINISHED",
+            origin="SDF", destination=self.gateway.code, wave="2", arrival_status="arrived",
+            planned_datetime_utc=sta, actual_block_in_datetime_utc=sta + timedelta(minutes=7),
+        )
+        db.session.add_all([flight, finished])
+        db.session.commit()
+
+        def read(access=frozenset({"rain"})):
+            with self.app.test_request_context():
+                board = snapshot(self.user, self.gateway, op, sources=(access, None))
+            row = next(row for row in board["arrivals"] if row["id"] == flight.id)
+            return row["variance"], board["performance"].get("inbound")
+
+        baseline_report = report_context(op)
+        baseline_briefing = briefing_context(op)["inbound"]
+        self.assertEqual(read(), (None, {"overall": 7.0, "included": 7.0}))
+        before, after = sta - timedelta(minutes=2, seconds=59), sta + timedelta(minutes=12, seconds=29)
+        for status, eta, actual, expected in (
+            ("en_route", before, None, -2),
+            ("en_route", sta, None, 0),
+            ("en_route", after, None, 12),
+            ("on_ground", after, None, 12),
+            ("on_ground", after, before, -2),
+            ("on_ground", None, None, None),
+            ("en_route", None, None, None),
+            ("scheduled", after, before, None),
+            ("cancelled", after, before, None),
+            ("arrived", after, None, None),
+            ("arrived", after, before, -2),
+            ("unloaded", after, sta + timedelta(minutes=3), 3),
+        ):
+            with self.subTest(status=status, eta=eta, actual=actual):
+                flight.arrival_status, flight.eta_datetime_utc = status, eta
+                flight.actual_block_in_datetime_utc = actual
+                db.session.flush()
+                self.assertEqual(read()[0], expected)
+
+        flight.arrival_status, flight.actual_block_in_datetime_utc = "en_route", None
+        flight.eta_datetime_utc = after
+        db.session.commit()
+        self.assertEqual(read(), (12, {"overall": 7.0, "included": 7.0}))
+        self.assertEqual(read(set()), (None, None))
+        self.assertEqual(flight.planned_datetime_utc, sta - timedelta(days=1))
+        self.assertEqual(report_context(op)["inbound_late"], baseline_report["inbound_late"])
+        self.assertEqual(briefing_context(op)["inbound"], baseline_briefing)
+
+        flight.planned_datetime_utc = None
+        db.session.flush()
+        self.assertIsNone(read()[0])
+        flight.planned_datetime_local = datetime(2026, 4, 12, 1)
+        flight.timezone = "America/Chicago"
+        db.session.flush()
+        self.assertEqual(read()[0], 12)
+
+        # A correctly dated schedule and ETA on opposite sides of midnight.
+        flight.planned_datetime_utc = datetime(2026, 4, 13, 4, 58)
+        flight.eta_datetime_utc = datetime(2026, 4, 13, 5, 4)
+        db.session.flush()
+        self.assertEqual(read()[0], 6)
+
+    def test_arrival_variance_withholds_ambiguous_dst_sta(self):
+        from datetime import timezone
+        from types import SimpleNamespace
+        from zoneinfo import ZoneInfo
+        from app.neonodes.neoraiden.services import _arrival_variance_minutes
+
+        zone = ZoneInfo("America/Chicago")
+        start = datetime(2026, 11, 1, 2, tzinfo=timezone.utc)
+        window = zone, start, datetime(2026, 11, 1, 11, tzinfo=timezone.utc)
+        legacy = datetime(2026, 10, 31, 6, 30)  # Would move to the ambiguous 01:30.
+        flight = SimpleNamespace(mission_type="arrival", arrival_status="en_route",
+            eta_datetime_utc=datetime(2026, 11, 1, 7), planned_datetime_utc=legacy)
+        self.assertIsNone(_arrival_variance_minutes(flight, legacy, window))
+        flight.planned_datetime_utc = None
+        flight.planned_datetime_local = datetime(2026, 11, 1, 1, 30)
+        flight.timezone = "America/Chicago"
+        self.assertIsNone(_arrival_variance_minutes(flight, datetime(2026, 11, 1, 6, 30), window))
+
     def test_milestones_use_exact_missions_and_respect_node_access(self):
         from app.models import NeoScorpionFuelAssignment
         from tests.neoraiden_fixtures import record_departure_milestones, record_pull_roster
