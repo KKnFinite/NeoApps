@@ -6,7 +6,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
-from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest as fixture
+from tests.browser import test_mobile_drawer
 
 
 NODES = ("/motherbrain", "/neoermac", "/neosektor/settings", "/neoscorpion/fuel-dispatch",
@@ -37,6 +37,7 @@ class NeoNodeChromeBrowser(unittest.TestCase):
         }""")
 
     def test_sidebar_and_topbar(self):
+        fixture = test_mobile_drawer.MobileDrawerBrowserTest
         before = os.environ.get("NEO_CHROME_BASELINE") == "1"
         output = Path(os.environ.get("NEO_CHROME_EVIDENCE", "instance/browser-evidence/issue105/shell"))
         output.mkdir(parents=True, exist_ok=True)
