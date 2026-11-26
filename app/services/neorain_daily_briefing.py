@@ -8,6 +8,7 @@ from decimal import Decimal
 from app.extensions import db
 from app.models import NeoRainReportEntry, SortDateOperation
 from app.services.mission_identity import flight_identity
+from app.services.neorain_delay_info import format_delay_details, mission_delay_entries
 from app.services.neorain_reports import _mission_rows, _report_gateway_id, normalize_report_value
 from app.services.google_rain_integration_mode import rain_operation_is_native
 from app.services.neorain_performance import completed_actual, completed_variance_minutes, eligible_for_performance, mission_cancelled
@@ -114,18 +115,18 @@ def _performance(missions, *, arrival):
     recorded = sum(completed_actual(mission) is not None for mission in eligible)
     details, other, cancelled = [], [], []
     for mission in missions:
+        entries = mission_delay_entries(mission)
         row = dict(mission_id=mission.id, flight=flight_identity(mission.flight_number),
-                   notes=[note.text for note in mission.neorain_mission_notes])
+                   delay_details=format_delay_details(entries),
+                   codes="/".join(dict.fromkeys(entry.code for entry in entries if entry.code)))
         if mission_cancelled(mission):
             cancelled.append({**row, "flight": mission.flight_number})
             continue
         minutes = completed_variance_minutes(mission) if mission.id in eligible_ids else None
-        row['delays'] = [dict(code=delay.code, minutes=delay.minutes, notes=delay.notes or '')
-                         for delay in sorted(mission.delay_info_rows, key=lambda item: item.id)]
         if minutes is not None and minutes > 0:
             details.append(dict(row, origin=mission.origin, destination=mission.destination,
                 tail=mission.assigned_tail_number, late_minutes=minutes))
-        elif row['notes'] or row['delays']:
+        elif row['delay_details']:
             other.append(row)
     return dict(eligible=len(eligible) if missions else None, recorded=recorded,
         late_count=summary['aircraft_late'] if recorded else None,
@@ -193,31 +194,21 @@ def format_briefing(context, *, include_delay_details=False):
         result = [label, f"{count} out of {total} late for {average}-minutes avg"]
         if data['incomplete']:
             result.append(f"IN PROGRESS — actual timings recorded for {data['recorded']} of {data['eligible']} eligible flights")
-        def delay_details(row):
-            entries = [' '.join(str(value) for value in (delay['minutes'], delay['code'])
-                       if value is not None and value != '') for delay in row['delays']]
-            notes = '; '.join(delay['notes'] for delay in row['delays'] if delay['notes'])
-            text = ', '.join(entry for entry in entries if entry)
-            return text + ((' - ' if text else '') + notes if notes else '')
-
-        def mission_notes(row):
-            return ' — Mission Notes: ' + '; '.join(row['notes']) if row['notes'] else ''
+        def details(row):
+            return " — " + row["delay_details"] if row["delay_details"] else ""
 
         for row in data['details']:
-            codes = '/'.join(dict.fromkeys(delay['code'] for delay in row['delays'] if delay['code']))
             line = f"{row['origin'] or 'UNAVAILABLE'}-{row['destination'] or 'UNAVAILABLE'} {row['flight'] or 'UNAVAILABLE'} {row['tail'] or 'UNAVAILABLE'} +{row['late_minutes']}"
             if include_delay_details:
-                detail = delay_details(row)
-                result.append(line + (' — ' + detail if detail else '') + mission_notes(row))
+                result.append(line + details(row))
             else:
-                result.append(line + (' ' + codes if codes else ''))
+                result.append(line + (' ' + row['codes'] if row['codes'] else ''))
         for row in data.get('cancelled', []):
-            suffix = ' — ' + '; '.join(row['notes']) if include_delay_details and row['notes'] else ''
+            suffix = details(row) if include_delay_details else ''
             result.append(f"{row['flight']} — CANCELLED" + suffix)
         if include_delay_details:
             for row in data.get('other', []):
-                detail = delay_details(row)
-                result.append(row['flight'] + (' — Delay Info: ' + detail if detail else '') + mission_notes(row))
+                result.append(row['flight'] + details(row))
         return result
 
     counts = [fields[key]['value'] for key in ('briefing_inbound_missorts', 'briefing_libs')]

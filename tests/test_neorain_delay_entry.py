@@ -1,12 +1,13 @@
 """Delay entry obeys MotherBrain's gateway role and configurable edit rules."""
-from datetime import date
+from datetime import date, datetime
+from itertools import product
 import unittest
 from unittest.mock import patch
 
 from tests import test_neorain_routes as fixtures
 from app.extensions import db
 from app.models import (Gateway, GatewayMembership, GatewayNodeRole, NeoNode,
-    NeoRainDelayInfo, PermissionRule, PortalAppAccess, SortDateMission, SortDateOperation)
+    NeoRainDelayInfo, NeoRainMissionNote, PermissionRule, PortalAppAccess, SortDateMission, SortDateOperation)
 from app.services.live_collaboration import entity_version
 from app.services.request_cache import clear_request_cache
 
@@ -87,11 +88,54 @@ class RainDelayEntryTest(unittest.TestCase):
 
     def test_invalid_values_return_actionable_errors_without_records(self):
         for board in self.missions:
-            for values in ({'minutes':''}, {'minutes':'NaN'}, {'minutes':'-1'}, {'code':'LONG'}):
+            for values in ({'minutes':' ', 'code':'', 'notes':'\n '}, {'minutes':'NaN'},
+                           {'minutes':'-1'}, {'minutes':'2147483648'}, {'code':'LONG'}):
                 response = self.post(board, **values)
                 self.assertEqual(response.status_code, 400, response.data)
                 self.assertTrue(response.json['error'])
         self.assertEqual(NeoRainDelayInfo.query.count(), 0)
+
+    def test_all_optional_combinations_in_both_directions(self):
+        for board in self.missions:
+            for minutes, code, notes in product(("", "15"), ("", "wx"), ("", "Routing note")):
+                if not any((minutes, code, notes)):
+                    continue
+                response = self.post(board, minutes=minutes, code=code, notes=notes)
+                self.assertEqual(response.status_code, 200, response.data)
+                row = db.session.get(NeoRainDelayInfo, response.json["delay_id"])
+                self.assertEqual((row.minutes, row.code, row.notes),
+                                 (15 if minutes else None, "WX" if code else None, notes or None))
+                self.assertNotIn('value="None"', response.json["html"])
+
+    def test_unified_editor_keeps_legacy_identity_and_versions(self):
+        mission = self.missions["inbound"]
+        recorded = datetime(2026, 10, 23, 4, 5)
+        note = NeoRainMissionNote(sort_date_mission_id=mission.id, text="Aircraft reassigned\r\nto East ramp.",
+            created_at=recorded, updated_at=recorded, created_by_user_id=self.user.id,
+            updated_by_user_id=self.user.id, version=5)
+        mission.arrival_status = "cancelled"
+        db.session.add(note)
+        db.session.commit()
+        page = self.client.get("/neorain/inbound")
+        self.assertIn(f'value="note-{note.id}"', page.text)
+        self.assertNotIn('data-mission-notes', page.text)
+        entry = f"note-{note.id}"
+        prior = entity_version(note)
+        saved = self.post(action="update", delay_id=entry, expected_version=prior,
+                          minutes="15", code="", notes="Aircraft reassigned\nto East ramp.")
+        self.assertEqual(saved.status_code, 200, saved.data)
+        self.assertEqual((saved.json["delay_id"], saved.json["count"]), (entry, 1))
+        self.assertEqual((note.text, note.minutes, note.code, note.version, note.created_at, note.created_by_user_id),
+                         ("Aircraft reassigned\r\nto East ramp.", 15, None, 6, recorded, self.user.id))
+        self.assertGreater(note.updated_at, recorded)
+        self.assertEqual(NeoRainDelayInfo.query.count(), 0)
+        self.assertEqual(self.post(action="delete", delay_id=entry, expected_version=prior).status_code, 409)
+        stale_tab = self.client.post("/neorain/mission-notes", data=dict(board="inbound", mission_id=mission.id,
+                                                                      action="add", text="Duplicate"))
+        self.assertEqual(stale_tab.status_code, 409)
+        self.assertEqual(NeoRainMissionNote.query.count(), 1)
+        self.assertEqual(self.post(action="delete", delay_id=entry, expected_version=entity_version(note)).status_code, 200)
+        self.assertEqual(NeoRainMissionNote.query.count(), 0)
 
     def test_stale_delay_cannot_overwrite_newer_entry(self):
         self.assertEqual(self.post().status_code, 200)

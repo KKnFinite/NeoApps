@@ -12,8 +12,8 @@ class NeoRainDelayInfo(db.Model):
     sort_date_mission_id = db.Column(
         db.Integer, db.ForeignKey("sort_date_missions.id"), nullable=False, index=True
     )
-    minutes = db.Column(db.Integer, nullable=False)
-    code = db.Column(db.String(2), nullable=False, index=True)
+    minutes = db.Column(db.Integer)
+    code = db.Column(db.String(2), index=True)
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(

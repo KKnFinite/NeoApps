@@ -1,6 +1,7 @@
 from sqlalchemy import inspect, text
 
 from app.extensions import db
+from app.services.neorain_delay_info_schema import sync_neorain_delay_info_schema
 
 
 LOCAL_SQLITE_GATEWAY_COLUMNS = {
@@ -790,6 +791,7 @@ def sync_local_sqlite_schema(app):
     if "neoermac_building_lineups" in table_names:
         from app.services.neoermac_building_lineup import backfill_lineup_flight_identities
         backfill_lineup_flight_identities()
+    sync_neorain_delay_info_schema(db.session.connection())
     db.session.flush()
 
 
@@ -881,6 +883,7 @@ def sync_database_schema(app):
     sync_release2_schema()
     from app.services.neosubzero_schema import _upgrade_ucc_early_out
     _upgrade_ucc_early_out(db.session.connection())
+    sync_neorain_delay_info_schema(db.session.connection())
     db.session.flush()
 
 

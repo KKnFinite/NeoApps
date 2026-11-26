@@ -7,9 +7,10 @@
         <input type="hidden" name="mission_id" value="{{ mission_id }}">
         <input type="hidden" name="delay_id" value="{{ delay.id }}">
         <input type="hidden" name="expected_version" value="{{ delay.version }}">
-        <input required name="minutes" inputmode="numeric" value="{{ delay.minutes }}" aria-label="Minutes">
-        <input required name="code" maxlength="2" value="{{ delay.code }}" aria-label="Code">
-        <input name="notes" value="{{ delay.notes }}" aria-label="Notes">
+        <input name="minutes" inputmode="numeric" value="{{ delay.minutes if delay.minutes is not none else '' }}" aria-label="Minutes">
+        <input name="code" maxlength="2" value="{{ delay.code or '' }}" aria-label="Code">
+        <textarea name="notes" rows="1" aria-label="Notes">
+{{ delay.notes }}</textarea>
         <button type="submit">SAVE</button>
     </form>
     <form class="neorain-delay-delete-form" method="post" action="{{ url_for('neorain.delay_info') }}">

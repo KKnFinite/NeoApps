@@ -1,0 +1,28 @@
+<div data-neorain-delay-editor>
+    <div class="neorain-delay-existing-list">
+        {% for delay in row.delay_info %}
+            {% if can_edit %}{% include "neonodes/neorain/_delay_entry.html" %}
+            {% else %}
+            <div class="neorain-delay-existing-copy">
+                {% if delay.minutes is not none or delay.code %}<strong>{{ delay.minutes if delay.minutes is not none else '' }}{% if delay.minutes is not none and delay.code %} {% endif %}{{ delay.code or '' }}</strong>{% endif %}
+                {% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}
+            </div>
+            {% endif %}
+        {% else %}
+            {% if not can_edit %}<span class="neorain-delay-empty">—</span>{% endif %}
+        {% endfor %}
+    </div>
+    {% if can_edit %}
+    <form class="neorain-delay-line-form" method="post" action="{{ url_for('neorain.delay_info') }}">
+        {{ csrf_field() }}
+        <input type="hidden" name="board" value="{{ board }}">
+        <input type="hidden" name="action" value="add">
+        {% if mobile %}<input type="hidden" name="return_view" value="mobile">{% endif %}
+        <input type="hidden" name="mission_id" value="{{ mission_id }}">
+        <input name="minutes" inputmode="numeric" placeholder="Minutes" aria-label="Minutes">
+        <input name="code" maxlength="2" placeholder="Code" aria-label="Code">
+        <textarea name="notes" placeholder="Notes" aria-label="Notes" rows="1"></textarea>
+        <button type="submit">ADD</button>
+    </form>
+    {% endif %}
+</div>

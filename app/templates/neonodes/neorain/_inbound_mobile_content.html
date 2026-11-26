@@ -17,38 +17,7 @@
 {% macro delay_info_mobile(row) -%}
 <details class="neorain-mobile-detail-delay" data-neorain-mobile-delay>
     <summary>DELAY INFO ({{ row.delay_info|length }})</summary>
-    {% if can_edit %}
-    <div data-neorain-inbound-edit-protected {% if row.status == 'CANCELLED' %}hidden{% endif %}>
-        <div class="neorain-delay-existing-list">
-{% for delay in row.delay_info %}
-{% with mission_id=row.mission_id, board='inbound', mobile=true %}{% include "neonodes/neorain/_delay_entry.html" %}{% endwith %}
-{% endfor %}
-        </div>
-        <form class="neorain-delay-line-form" method="post" action="{{ url_for('neorain.delay_info') }}">
-            <input type="hidden" name="board" value="inbound">
-            <input type="hidden" name="action" value="add">
-            <input type="hidden" name="return_view" value="mobile">
-            <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
-            <input required name="minutes" inputmode="numeric" placeholder="Minutes">
-            <input required name="code" maxlength="2" placeholder="Code">
-            <input name="notes" placeholder="Notes">
-            <button type="submit">ADD</button>
-        </form>
-    </div>
-    <div data-neorain-inbound-edit-readonly {% if row.status != 'CANCELLED' %}hidden{% endif %}>
-        <div class="neorain-delay-existing-list">
-            {% for delay in row.delay_info %}
-            <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
-            {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
-        </div>
-    </div>
-    {% else %}
-    <div class="neorain-delay-existing-list">
-        {% for delay in row.delay_info %}
-        <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
-        {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
-    </div>
-    {% endif %}
+    {% with mission_id=row.mission_id, board="inbound", mobile=true %}{% include "neonodes/neorain/_delay_forms.html" %}{% endwith %}
 </details>
 {%- endmacro %}
 

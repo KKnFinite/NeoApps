@@ -11,7 +11,9 @@ function fixture() {
         .map(([name,value]) => [name,{value}]));
     const button = {disabled:false};
     const output = {dataset:{},textContent:'',setAttribute(){}};
-    const scope = {querySelector:()=>output};
+    const list = {append(){}};
+    const scope = {querySelector:selector=>selector === '.neorain-delay-existing-list' ? list : output,
+        querySelectorAll:()=>[],closest:()=>null};
     const form = {dataset:{},action:{value:'add'},getAttribute:()=>'/neorain/delay-info',
         elements:{namedItem:name=>fields[name]},
         reportValidity:()=>true,
@@ -21,7 +23,7 @@ function fixture() {
     const root = {dataset:{},contains:()=>true,addEventListener:(name,handler)=>{events[name]=handler;},
         querySelectorAll:()=>[],querySelector:()=>null};
     vm.runInNewContext(source, {
-        document:{readyState:'complete',querySelector:()=>root},
+        document:{readyState:'complete',querySelector:()=>root,createElement:()=>({content:{}})},
         window:{setTimeout:()=>1,clearTimeout(){}}, AbortController,
         FormData:class {constructor(){}},
         fetch:(_url, options)=>new Promise((resolve,reject)=>pending.push({options,resolve,reject})),

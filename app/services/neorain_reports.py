@@ -280,22 +280,24 @@ def _mission_rows(operation):
 
 
 def _report_row(mission, *, arrival):
+    from app.services.neorain_delay_info import format_delay_details, mission_delay_entries
+
+    entries = mission_delay_entries(mission)
     row = {
         "mission_id": mission.id,
         "flight": mission.flight_number,
         "cancelled": mission_cancelled(mission),
-        "mission_notes": tuple(note.text for note in mission.neorain_mission_notes),
+        "delay_details": format_delay_details(entries),
+        "default_delay_details": format_delay_details(entry for entry in entries if entry.minutes is not None or entry.code),
     }
     if row["cancelled"]:
         return row
     actual = completed_actual(mission)
     minutes = completed_variance_minutes(mission)
-    delays = tuple(sorted(mission.delay_info_rows, key=lambda item: item.id))
     return dict(row, tail=mission.assigned_tail_number, place=mission.origin if arrival else mission.destination,
         scheduled=format_local_hhmm(mission.planned_datetime_utc, mission.timezone or None),
         actual=format_local_hhmm(actual, mission.timezone or None),
-        variance="—" if minutes is None else f"+{minutes}" if minutes > 0 else str(minutes),
-        delay_details=delays, delays=tuple((item.code, item.notes or "") for item in delays))
+        variance="—" if minutes is None else f"+{minutes}" if minutes > 0 else str(minutes))
 
 
 def report_context(operation, *, current=False, missions=None):
@@ -334,15 +336,14 @@ def briefing_text(report):
         lines.append("    ○ IN PROGRESS — some actual Block-In/Block-Out times are not recorded")
     for row in report["inbound_rows"] + report["outbound_rows"]:
         if row["cancelled"]:
-            lines.append(f"{row['flight']} — CANCELLED")
+            details = f" — {row['delay_details']}" if row["delay_details"] else ""
+            lines.append(f"{row['flight']} — CANCELLED{details}")
     for row in report["outbound_rows"]:
         if row["cancelled"] or not row["actual"]:
             continue
         flight = re.sub(r"^UPS0+(?=\d)", "UPS", row["flight"] or "", flags=re.IGNORECASE)
         details = f"{flight} {report['operation'].gateway_code}-{row['place'] or '—'} ATD: {row['actual']}"
-        delays = [f"{code} {note}" if code and note else (code or note)
-                  for code, note in row["delays"] if code or note]
-        if delays:
-            details += ", " + "; ".join(delays)
+        if row["delay_details"]:
+            details += ", " + row["delay_details"]
         lines.append("        ▪ " + details)
     return "\n".join(lines)

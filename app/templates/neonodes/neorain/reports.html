@@ -2,9 +2,9 @@
 {% block title %}Reports | NeoRain{% endblock %}
 {% block content %}
 {% include "neonodes/neorain/_report_style.html" %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_rainrock.css', v='unified-reports-1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_rainrock.css', v='unified-delay-1') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_csp_daily_briefing.css', v='20261031-csp-v1') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_reports.css', v='unified-reports-1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_reports.css', v='unified-delay-1') }}">
 <section class="rainrock neorain-reports" data-neorain-reports data-operation="{{ operation.id if operation else '' }}"
     data-selected-tab="{{ selected_tab }}" data-explicit-tab="{{ 'true' if explicit_tab else 'false' }}"
     data-reports-url="{{ url_for('neorain.reports') }}"
@@ -61,7 +61,7 @@
   {% if rainrock_report %}
   <section id="report-panel-rainrock" role="tabpanel" aria-labelledby="report-tab-rainrock" data-report-panel="rainrock" data-rainrock {% if selected_tab != 'rainrock' %}hidden{% endif %}>
   {% set report = rainrock_report %}
-  <div class="rainrock-output-shell"><div class="rainrock-copy-tools"><label><input type="checkbox" autocomplete="off" data-rainrock-notes> INCLUDE MISSION NOTES</label><button type="button" data-rainrock-copy>COPY IMAGE</button><button type="button" data-rainrock-download title="Download complete report as a PNG image">↓ PNG</button><span data-rainrock-copy-status role="status"></span></div>
+  <div class="rainrock-output-shell"><div class="rainrock-copy-tools"><label><input type="checkbox" autocomplete="off" data-rainrock-notes> INCLUDE NOTES</label><button type="button" data-rainrock-copy>COPY IMAGE</button><button type="button" data-rainrock-download title="Download complete report as a PNG image">↓ PNG</button><span data-rainrock-copy-status role="status"></span></div>
     <div data-rainrock-live>{% include 'neonodes/neorain/_rainrock_report.html' %}</div>
   </div>
   <small class="rainrock-source">{{ report.google_status }} · Sources shown in field tooltips. Missing values are not zero.</small>
@@ -73,7 +73,7 @@
   <section class="rain-report-panel"><h2>Copy-ready nightly briefing</h2>
     <div class="briefing-copy-controls">
       <button type="button" id="copy-briefing">COPY BRIEFING</button>
-      <label class="briefing-delay-toggle" for="briefing-delay-details"><input type="checkbox" id="briefing-delay-details" autocomplete="off" aria-controls="briefing-text"> INCLUDE DELAY / MISSION NOTES <span class="briefing-delay-mode" data-briefing-delay-mode>OFF</span></label>
+      <label class="briefing-delay-toggle" for="briefing-delay-details"><input type="checkbox" id="briefing-delay-details" autocomplete="off" aria-controls="briefing-text"> INCLUDE DELAY DETAILS <span class="briefing-delay-mode" data-briefing-delay-mode>OFF</span></label>
       <span id="copy-briefing-status" role="status" aria-live="polite"></span>
     </div>
     <pre class="rain-report-briefing" id="briefing-text">{{ briefing.briefing }}</pre>
@@ -85,10 +85,10 @@
 </section>
 {% if rainrock_report %}
 <script src="{{ url_for('static',filename='vendor/html2canvas-1.4.1.min.js') }}" defer></script>
-<script src="{{ url_for('static',filename='js/neorain_board_live.js',v=config.STATIC_ASSET_VERSION) }}" defer></script>
+<script src="{{ url_for('static',filename='js/neorain_board_live.js',v=config.STATIC_ASSET_VERSION, rev='unified-delay-1') }}" defer></script>
 {% endif %}
-<script src="{{ url_for('static',filename='js/neorain_rainrock.js',v='unified-reports-1') }}" defer></script>
+<script src="{{ url_for('static',filename='js/neorain_rainrock.js',v='unified-delay-1') }}" defer></script>
 {% if briefing %}
-<script src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='unified-reports-1') }}" defer></script>
+<script src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='unified-delay-1') }}" defer></script>
 {% endif %}
 {% endblock %}

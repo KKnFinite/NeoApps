@@ -5,7 +5,7 @@
     const dirty = [
         "rain-override-dirty", "neorain-dirty", "neorain-saving", "neorain-no-return-saving",
         "neorain-late-inclusion-saving", "neorain-service-dirty", "neorain-service-saving",
-        "neorain-delay-dirty", "neorain-delay-saving", "mission-note-dirty", "mission-note-saving",
+        "neorain-delay-dirty", "neorain-delay-saving",
     ].map(name => `[data-${name}="true"]`).join(",");
     const missionId = el => el?.dataset.neorainMissionId || el?.dataset.neorainDelayMissionId;
     function editing(root) {
@@ -24,7 +24,7 @@
         if (el.hasAttribute("data-rainrock-flight")) return "report:" + el.dataset.rainrockFlight;
         if (missionId(el)) return "flight:" + missionId(el);
         if (el.matches("input,textarea,select")) return el.tagName + ":" + el.name;
-        if (el.matches(".neorain-mission-note, .neorain-delay-existing-row")) {
+        if (el.matches(".neorain-delay-existing-row")) {
             return el.querySelector("[name=note_id], [name=delay_id]")?.value || "";
         }
         return "";
@@ -128,13 +128,6 @@
                     if (pendingHtml) {
                         const fragment = parse(pendingHtml);
                         for (const id of editing(root)) held.add(id);
-                        // Inbound moves its single notes editor into expanded phone details.
-                        for (const notes of content.querySelectorAll("[data-neorain-inbound-row].neorain-mobile-mission [data-mission-notes]")) {
-                            const id = notes.dataset.missionNotes;
-                            const target = fragment.querySelector(`#mobile-flight-detail-${id}`);
-                            const fresh = fragment.querySelector(`[data-mission-notes="${id}"]`);
-                            if (target && fresh) target.append(fresh);
-                        }
                         let deferred = false;
                         const hold = el => {
                             if (el.nodeType !== 1) return false;

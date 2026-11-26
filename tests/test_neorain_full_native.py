@@ -3,7 +3,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from app.extensions import db
-from app.models import NeoRainMissionNote, NeoRainReportEntry, SortDateGoogleMissionLink, SortDateOperation
+from app.models import NeoRainDelayInfo, NeoRainMissionNote, NeoRainReportEntry, SortDateGoogleMissionLink, SortDateOperation
 from app.services.google_rain_integration_mode import set_rain_integration_mode, NEO_ONLY
 from app.services.neorain_fuel_authority import rain_fuel_data_source, set_rain_fuel_data_source
 from app.services.google_motherbrain_live_poll_execution import _run_google_rain_best_effort
@@ -27,10 +27,9 @@ class FullNativeRainTest(TestCase):
         set_rain_fuel_data_source(self.rain.gateway, self.operation.sort_name, "google")
         db.session.commit()
 
-    def notes(self, mission, action, **options):
-        return self.client.post("/neorain/mission-notes", data={
-            "operation_id": self.operation.id, "mission_id": mission.id,
-            "board": "inbound" if mission.mission_type == "arrival" else "outbound",
+    def delay(self, mission, action, **options):
+        return self.client.post("/neorain/delay-info", headers={"X-Requested-With": "XMLHttpRequest"}, data={
+            "mission_id": mission.id, "board": "inbound" if mission.mission_type == "arrival" else "outbound",
             "action": action, **options,
         })
 
@@ -39,35 +38,28 @@ class FullNativeRainTest(TestCase):
         self.departure.departure_status = "cancelled"
         self.arrival.actual_block_in_datetime_utc = self.arrival.planned_datetime_utc + timedelta(minutes=9)
         self.departure.actual_block_out_datetime_utc = self.departure.planned_datetime_utc + timedelta(minutes=9)
-        other = self.rain.fixture._mission(self.operation, "UPS825", self.departure.destination,
-                                          planned=self.departure.planned_datetime_utc, wave=None)
+        original = NeoRainMissionNote(sort_date_mission_id=self.departure.id, text="Original",
+            created_by_user_id=self.rain.actor.id, updated_by_user_id=self.rain.actor.id)
+        db.session.add(original)
         db.session.commit()
-        for mission in (self.arrival, self.departure, other):
-            self.assertEqual(self.notes(mission, "add", text=f"{mission.flight_number} note").status_code, 200)
-        note = NeoRainMissionNote.query.filter_by(sort_date_mission_id=self.departure.id).one()
-        self.assertEqual(note.created_by_user_id, self.rain.actor.id)
-        self.assertEqual(note.updated_by_user_id, self.rain.actor.id)
-        self.assertIsNotNone(note.created_at)
-        for mission in (self.arrival, other):
-            self.assertEqual(self.notes(mission, "update", note_id=note.id, version=1, text="Wrong mission").status_code, 409)
-        self.assertEqual(self.notes(self.departure, "update", note_id=note.id, version=1, text="Mechanical issue").status_code, 200)
-        self.assertEqual(self.notes(self.departure, "delete", note_id=note.id, version=1).status_code, 409)
+        self.assertEqual(self.delay(self.arrival, "add", notes="Inbound note").status_code, 200)
+        options = dict(delay_id=f"note-{original.id}", expected_version=entity_version(original))
+        self.assertEqual(self.delay(self.arrival, "update", notes="Wrong mission", **options).status_code, 409)
+        self.assertEqual(self.delay(self.departure, "update", notes="Mechanical issue", **options).status_code, 200)
+        self.assertEqual(self.delay(self.departure, "delete", **options).status_code, 409)
         context = dashboard_context(self.operation, current=True)
-        self.assertEqual(context["eligible_inbound"], 0)
-        self.assertEqual(context["eligible_outbound"], 0)
-        self.assertEqual(context["recorded_inbound"], 0)
-        self.assertEqual(context["recorded_outbound"], 0)
-        for mission in (self.arrival, self.departure):
-            report_row = next(row for row in context["inbound_rows"] + context["outbound_rows"] if row["mission_id"] == mission.id)
-            self.assertEqual(set(report_row), {"mission_id", "flight", "cancelled", "mission_notes"})
+        for key in ("eligible_inbound", "eligible_outbound", "recorded_inbound", "recorded_outbound"):
+            self.assertEqual(context[key], 0)
         state = self.client.get(f"/neorain/daily-briefing/state?operation_id={self.operation.id}").json
         self.assertIn("UPS948 — CANCELLED\n", state["briefing"])
         self.assertNotIn("Mechanical issue", state["briefing"])
         self.assertIn("UPS948 — CANCELLED — Mechanical issue", state["briefing_detailed"])
         self.assertNotIn("N948UP", state["briefing_detailed"])
-        self.assertEqual(self.notes(self.departure, "delete", note_id=note.id, version=2).status_code, 200)
-        self.assertIsNone(db.session.get(NeoRainMissionNote, note.id))
-        self.assertEqual(NeoRainMissionNote.query.count(), 2)
+        self.assertNotIn("Mission Notes", state["briefing_detailed"])
+        options["expected_version"] = entity_version(original)
+        self.assertEqual(self.delay(self.departure, "delete", **options).status_code, 200)
+        self.assertEqual(NeoRainMissionNote.query.count(), 0)
+        self.assertEqual(NeoRainDelayInfo.query.count(), 1)
 
     def test_native_writes_resets_reports_and_poll_never_call_google(self):
         self.departure.actual_block_out_datetime_utc = self.departure.planned_datetime_utc + timedelta(minutes=4)
@@ -105,16 +97,16 @@ class FullNativeRainTest(TestCase):
         watched = self.rain.fixture._user("rain_notes_watcher", "watcher", rain_role="watcher")
         db.session.commit()
         self.rain.fixture._login(watched)
-        self.assertEqual(self.notes(self.departure, "add", text="Forbidden").status_code, 403)
+        self.assertEqual(self.delay(self.departure, "add", notes="Forbidden").status_code, 403)
         self.rain.fixture._login(self.rain.actor)
-        self.assertEqual(self.notes(self.departure, "add", text="Historical note").status_code, 200)
+        self.assertEqual(self.delay(self.departure, "add", notes="Historical note").status_code, 200)
         historical = self.operation
         next_sort = SortDateOperation(gateway_id=historical.gateway_id, gateway_code=historical.gateway_code,
             sort_name=historical.sort_name, sort_date=historical.sort_date + timedelta(days=1))
         db.session.add(next_sort)
         db.session.commit()
         with patch("app.neonodes.neorain.routes.current_neorain_outbound_operation", return_value=next_sort):
-            self.assertEqual(self.notes(self.departure, "add", text="Stale board").status_code, 409)
+            self.assertEqual(self.delay(self.departure, "add", notes="Stale board").status_code, 409)
             old_state = self.client.get(f"/neorain/daily-briefing/state?operation_id={historical.id}").json
             new_state = self.client.get(f"/neorain/daily-briefing/state?operation_id={next_sort.id}").json
         self.assertIn("Historical note", old_state["briefing_detailed"])

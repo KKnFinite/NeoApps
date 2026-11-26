@@ -90,8 +90,6 @@ class RainDelayEntryBrowserTest(unittest.TestCase):
                     self.fixture().ready(page, '/neorain/' + board)
                     panel = self.open_panel(page, board, width)
                     add = self.add_form(panel)
-                    add.locator('[name="minutes"]').fill('10')
-                    add.locator('[name="code"]').fill('RS')
                     add.locator('[name="notes"]').fill('Master saved entry')
                     with page.expect_response(lambda r:'/delay-info' in r.url and r.request.method == 'POST') as response:
                         add.locator('button[type="submit"]').click()
@@ -109,10 +107,10 @@ class RainDelayEntryBrowserTest(unittest.TestCase):
                     expect(panel.locator('[data-neorain-delay-feedback]')).to_have_text('DELAY INFO SAVED.')
                     page.reload()
                     panel = self.open_panel(page, board, width)
-                    expect(panel.locator('[name="notes"][value="Corrected complete notes"]')).to_be_visible()
+                    expect(panel.locator('.neorain-delay-existing-row').first.locator('[name="notes"]')).to_have_value('Corrected complete notes')
                     self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'))
                     # Saving a second delay must not replace another entry's draft.
-                    first_notes = panel.locator('[name="notes"][value="Corrected complete notes"]')
+                    first_notes = panel.locator('.neorain-delay-existing-row').first.locator('[name="notes"]')
                     first_notes.fill('Independent unsaved correction')
                     add = self.add_form(panel)
                     add.locator('[name="minutes"]').fill('3')
@@ -123,7 +121,7 @@ class RainDelayEntryBrowserTest(unittest.TestCase):
                     self.assertEqual(second.value.status, 200)
                     expect(panel.locator('[data-neorain-delay-feedback]')).to_have_text('DELAY INFO SAVED.')
                     expect(first_notes).to_have_value('Independent unsaved correction')
-                    expect(panel.locator('[name="notes"][value="Second independent entry"]')).to_be_visible()
+                    expect(panel.locator('.neorain-delay-existing-row').last.locator('[name="notes"]')).to_have_value('Second independent entry')
                     page.screenshot(path=str(self.evidence / f'{engine}-{board}-{width}.png'), full_page=True)
                     for remaining in (1,0):
                         delete = panel.locator('form').filter(has=page.locator('[name="action"][value="delete"]')).first
@@ -135,11 +133,40 @@ class RainDelayEntryBrowserTest(unittest.TestCase):
         finally:
             browser.close()
 
-    def test_chromium_master_desktop_crud(self):
-        self.exercise('chromium', 1920)
+    def test_master_crud_desktop_and_mobile(self):
+        for engine in ("chromium", "webkit"):
+            for width in (1920, 390):
+                with self.subTest(engine=engine, width=width):
+                    self.exercise(engine, width)
 
-    def test_webkit_master_mobile_crud(self):
-        self.exercise('webkit', 390)
+    def test_drafts_follow_the_editor_across_viewport_changes(self):
+        for engine in ("chromium", "webkit"):
+            with self.subTest(engine=engine), getattr(self.fixture.pw, engine).launch() as browser:
+                context = browser.new_context(viewport={"width": 1440, "height": 900}, service_workers="block")
+                page = context.new_page()
+                self.fixture().login(page, 'rain-master')
+                self.fixture().ready(page, '/neorain/inbound')
+                desktop = self.add_form(self.open_panel(page, 'inbound', 1440))
+                context.set_offline(True)
+                desktop.locator('[name="notes"]').fill('Desktop note draft\nSecond line')
+                desktop.locator('[name="minutes"]').fill('12')
+                page.set_viewport_size({"width": 390, "height": 844})
+                mobile = self.add_form(self.open_panel(page, 'inbound', 390))
+                expect(mobile.locator('[name="notes"]')).to_have_value('Desktop note draft\nSecond line')
+                expect(mobile.locator('[name="minutes"]')).to_have_value('12')
+                mobile.locator('[name="code"]').fill('WX')
+                page.set_viewport_size({"width": 1440, "height": 900})
+                expect(desktop.locator('[name="code"]')).to_have_value('WX')
+                context.set_offline(False)
+                with page.expect_response(lambda response: '/delay-info' in response.url and response.request.method == 'POST') as saved:
+                    desktop.locator('button[type="submit"]').click()
+                self.assertEqual(saved.value.status, 200)
+                expect(desktop.locator('[name="notes"]')).to_have_value('')
+                page.set_viewport_size({"width": 390, "height": 844})
+                panel = self.open_panel(page, 'inbound', 390)
+                expect(self.add_form(panel).locator('[name="notes"]')).to_have_value('')
+                expect(panel.locator('.neorain-delay-existing-row textarea').last).to_have_value('Desktop note draft\nSecond line')
+                context.close()
 
     def test_failed_saves_preserve_drafts_and_recover(self):
         for engine, width in [('chromium',1920), ('webkit',390)]:
