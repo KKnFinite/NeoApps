@@ -37,7 +37,9 @@ def find_delay_entry_for_update(mission, entry_id):
     return model.query.filter_by(id=row_id, sort_date_mission_id=mission.id).populate_existing().with_for_update().one_or_none()
 
 
-def format_delay_details(entries):
+def format_delay_details(entries, *, notes_only=False):
+    if notes_only:
+        return "; ".join(entry.notes for entry in entries if entry.notes and entry.notes.strip())
     details = []
     for entry in entries:
         prefix = " ".join(str(value) for value in (entry.minutes, entry.code) if value is not None and value != "")

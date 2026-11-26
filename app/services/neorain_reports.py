@@ -287,11 +287,13 @@ def _report_row(mission, *, arrival):
         "mission_id": mission.id,
         "flight": mission.flight_number,
         "cancelled": mission_cancelled(mission),
-        "delay_details": format_delay_details(entries),
-        "default_delay_details": format_delay_details(entry for entry in entries if entry.minutes is not None or entry.code),
     }
     if row["cancelled"]:
-        return row
+        return dict(row, cancellation_notes=format_delay_details(entries, notes_only=True))
+    row["delay_details"] = format_delay_details(entries)
+    row["default_delay_details"] = format_delay_details(
+        entry for entry in entries if entry.minutes is not None or entry.code
+    )
     actual = completed_actual(mission)
     minutes = completed_variance_minutes(mission)
     return dict(row, tail=mission.assigned_tail_number, place=mission.origin if arrival else mission.destination,
@@ -336,7 +338,7 @@ def briefing_text(report):
         lines.append("    ○ IN PROGRESS — some actual Block-In/Block-Out times are not recorded")
     for row in report["inbound_rows"] + report["outbound_rows"]:
         if row["cancelled"]:
-            details = f" — {row['delay_details']}" if row["delay_details"] else ""
+            details = f" — {row['cancellation_notes']}" if row["cancellation_notes"] else ""
             lines.append(f"{row['flight']} — CANCELLED{details}")
     for row in report["outbound_rows"]:
         if row["cancelled"] or not row["actual"]:
