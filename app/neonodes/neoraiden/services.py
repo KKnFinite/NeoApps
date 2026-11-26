@@ -1,5 +1,5 @@
 """Gateway-scoped, read-only projections of committed operational facts."""
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -7,7 +7,7 @@ from sqlalchemy.orm import load_only
 
 from app.extensions import db
 from app.models import (
-    NeoErmacBuildingLineup, NeoErmacDoorPull, NeoNode, NeoSubZeroDepartureDeiceEvent,
+    NeoErmacBuildingLineup, NeoErmacDoorPull, NeoNode, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState,
     NeoScorpionAircraftFuelSetting, NeoScorpionDirectEntry, NeoScorpionFuelAssignment,
     NeoScorpionFuelAuditEntry, NeoScorpionFuelTankState, NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState, NeoScorpionFuelingEvent, NeoScorpionFuelingEventTankSnapshot,
@@ -24,12 +24,12 @@ from app.services.neorain_performance import average_lateness, completed_varianc
 from app.services.neoscorpion_fueling_status import STAGE_COLORS
 from app.services.neosektor_live_counts import native_uld_summary
 from app.services.permission_rules import user_can
-from app.services.neosubzero_evidence import SHARED_TAIL_REVIEW, normalized_tail, select_tail_event
-from app.services.neosubzero_operations import departure_presentation
-from app.services.neosubzero_radio import radio_complete, radio_pending
+from app.services.neosubzero_evidence import SHARED_TAIL_REVIEW, normalized_tail
+from app.services.neosubzero_radio import radio_pending
 from app.services.departure_labels import departure_occurrences, departure_order, destination_label, effective_departure_utc
 from app.services.time_display import format_local_hhmm
 from app.services.sort_date_operations import _planned_datetime_utc, normalize_wave
+from .deice import treatment_by_tail, treatment_label
 from .ermac import completed_pulls
 
 
@@ -146,6 +146,7 @@ def postgres_board_versions(gateway, operation, access):
         columns.extend((
             versions(NeoSubZeroDepartureDeiceEvent, NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == op_id,
                      NeoSubZeroDepartureDeiceEvent.reset_at_utc.is_(None)),
+            versions(NeoSubZeroPretreatState, NeoSubZeroPretreatState.sort_date_operation_id == op_id),
             versions(SortDateTailState, SortDateTailState.gateway_code == gateway.code,
                      SortDateTailState.sort_date == operation.sort_date, SortDateTailState.sort_name == operation.sort_name),
         ))
@@ -212,14 +213,10 @@ def snapshot(user, gateway, operation, *, sources=None):
     pulls = {}
     if "ermac" in access and usable_pull_lineup(gateway, operation, window):
         result["pull_roster"], pulls = completed_pulls(gateway, operation, departures)
-    events = defaultdict(list)
+    treatment, pretreats = {}, {}
     tail_states = {}
     if "subzero" in access:
-        e = NeoSubZeroDepartureDeiceEvent
-        for event in e.query.options(load_only(e.id, e.sort_date_mission_id, e.tail_number, e.status,
-                e.reset_at_utc, e.radio_state, e.radio_completed_at_utc, e.radio_completed_by_user_id,
-                e.cleared_at_utc, e.pass1_started_at_utc, e.configured_at_utc)).filter_by(sort_date_operation_id=op_id, reset_at_utc=None):
-            events[normalized_tail(event.tail_number)].append(event)
+        treatment, pretreats = treatment_by_tail(op_id)
         tail_states = {normalized_tail(s.tail_number): s for s in SortDateTailState.query.options(
             load_only(SortDateTailState.tail_number, SortDateTailState.deice_status)).filter_by(
             sort_date=operation.sort_date, gateway_code=gateway.code, sort_name=operation.sort_name)
@@ -228,7 +225,6 @@ def snapshot(user, gateway, operation, *, sources=None):
     departures.sort(key=lambda m: departure_order(m, operation))
     ranks = departure_occurrences(departures, operation)
     tails = Counter(normalized_tail(m.assigned_tail_number) for m in departures)
-    treatment = {tail: select_tail_event(candidates) for tail, candidates in events.items()}
     detached_radio = {event.sort_date_mission_id for tail, (event, _) in treatment.items()
                       if tail not in tails and radio_pending(event)}
     arrivals = []
@@ -266,9 +262,9 @@ def snapshot(user, gateway, operation, *, sources=None):
             review = "Review the former tail's pending radio call."
         deice_state = deice = None
         tail_state = tail_states.get(tail) if tails[tail] == 1 else None
-        if tail and (event or review or tail_state):
-            deice_state, deice = departure_presentation(dict(event=event, tail=tail, ownership_review=review,
-                radio_complete=radio_complete(event),radio_pending=radio_pending(event)), tail_state)
+        if tail:
+            deice_state, deice = treatment_label(mission, tail, event, review, tail_state,
+                                                pretreats.get(tail, ()), shared_tail=tails[tail] > 1)
         pure, mix = pulls.get(mission.id, (None, None))
         row.update(fuel_status=mission.fuel_status if "scorpion" in access else None,
                    planned_fuel=mission.planned_fuel_load if "scorpion" in access else None,

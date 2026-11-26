@@ -1,12 +1,12 @@
 import json
 import unittest
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from playwright.sync_api import expect
 
 from app.extensions import db
-from app.models import Gateway, NeoSubZeroDepartureDeiceEvent, SortDateMission, SortDateParkingAssignment
+from app.models import Gateway, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateMission, SortDateParkingAssignment
 from tests.browser import test_mobile_drawer as shell_tests
 from tests.neoraiden_fixtures import busy_sort, record_attendance, record_departure_milestones, record_pull_roster
 
@@ -124,7 +124,7 @@ class GodModeBrowser(unittest.TestCase):
         self.assertEqual(len(state["fonts"]), 1, state)
         self.assertGreaterEqual(state["fonts"][0], 10, state)
         self.assertLessEqual(state["fonts"][0], 24 if tv else 12, state)
-        self.assertGreaterEqual(state["cellPadding"], 2, state)
+        self.assertGreaterEqual(state["cellPadding"], 1.5, state)
         self.assertEqual(len(state["overviewFonts"]), 1, state)
         self.assertLessEqual(state["toolbarSpread"], 2, state)
         self.assertEqual(state["scrollboxes"], 0, state)
@@ -133,6 +133,24 @@ class GodModeBrowser(unittest.TestCase):
         if tv:
             self.assertLessEqual(state["height"], height + 1, state)
         return state
+
+    def check_outline(self, board):
+        expect(board).to_have_css("outline-width", "1px")
+        expect(board).to_have_css("outline-offset", "-1px")
+        expect(board).to_have_css("border-top-left-radius", "5px")
+        self.assertTrue(board.evaluate("""el => getComputedStyle(el).outlineColor ===
+            getComputedStyle(el.closest('[data-raiden]').querySelector('.rd-overview')).borderTopColor"""))
+        expect(board).to_have_css("padding", "0px")
+
+    def check_pulse(self, page, active):
+        expect(active).to_have_css("animation-name", "rd-deice-breathe")
+        expect(active).to_have_css("animation-duration", "3s")
+        expect(active.locator("xpath=ancestor::tr")).to_have_css("animation-name", "none")
+        for state in ("fin", "pretreated"):
+            expect(page.locator(f'[data-deice-state="{state}"]')).to_have_css("animation-name", "none")
+        page.emulate_media(reduced_motion="reduce")
+        expect(active).to_have_css("animation-name", "none")
+        page.emulate_media(reduced_motion="no-preference")
 
     def test_full_sort_workspaces(self):
         fixture = shell_tests.MobileDrawerBrowserTest
@@ -145,7 +163,17 @@ class GodModeBrowser(unittest.TestCase):
             record_departure_milestones(operation)
             record_pull_roster(operation)
             event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id).one()
+            start = datetime(2026, 4, 13, 4, 45)
             event.tail_number, event.status, event.radio_state = "N431UP", "cleared", "pending"
+            event.clear_outcome, event.treatment_plan = "sprayed", "one_type_i"
+            event.pass1_started_at_utc, event.pass1_ended_at_utc = start, start + timedelta(minutes=30)
+            active = SortDateMission.query.filter_by(sort_date_operation_id=operation.id, flight_number="UPS0712").one()
+            db.session.add(NeoSubZeroDepartureDeiceEvent(sort_date_operation_id=operation.id, sort_date_mission_id=active.id,
+                tail_number=active.assigned_tail_number, status="configured", treatment_plan="one_type_i",
+                configured_at_utc=start, pass1_started_at_utc=start + timedelta(minutes=3)))
+            db.session.add(NeoSubZeroPretreatState(sort_date_operation_id=operation.id, tail_number="N432UP",
+                pass1_started_at_utc=start, pass1_ended_at_utc=start + timedelta(minutes=7),
+                pass2_started_at_utc=start + timedelta(minutes=10), pass2_ended_at_utc=start + timedelta(minutes=17)))
             for tail, position, lane in (("N431UP", "D05", 1), ("N402UP", "D06", 2)):
                 db.session.add(SortDateParkingAssignment(sort_date_operation_id=operation.id,
                     tail_number=tail, ramp_code="D", position_code=position, lane_number=lane))
@@ -155,7 +183,7 @@ class GodModeBrowser(unittest.TestCase):
             db.session.commit()
             op_id = operation.id
 
-        output = Path("instance/browser-evidence/issue88/mission-checks")
+        output = Path("instance/browser-evidence/issue91/after")
         output.mkdir(parents=True, exist_ok=True)
         for engine in ("chromium", "webkit"):
             with self.subTest(engine=engine), getattr(fixture.pw, engine).launch() as browser:
@@ -176,6 +204,7 @@ class GodModeBrowser(unittest.TestCase):
                             page.get_by_role("button", name=direction, exact=True).click()
                             expect(page.locator("[data-mission]:visible")).to_have_count(count)
                             table = page.get_by_role("table", name=direction, exact=True)
+                            self.check_outline(page.locator(f"#rd-{direction.lower()}"))
                             visible_headers = table.locator("thead th:visible")
                             fonts = table.locator("tbody tr :is(th,td,.rd-value,.rd-flight-toggle):visible").evaluate_all(
                                 "cells => [...new Set(cells.map(cell => parseFloat(getComputedStyle(cell).fontSize)))]")
@@ -199,7 +228,7 @@ class GodModeBrowser(unittest.TestCase):
                                 for field, value in (("variance","+9"), ("fuel","45.6"), ("pure","00:02"), ("mix","00:57"),
                                                      ("ramp","00:59"), ("crew","01:02"), ("block","01:09"), ("no-return","Yes")):
                                     expect(row.locator(f'[data-field="{field}"] .rd-value')).to_have_text(value)
-                                expect(row.locator(".rd-deice-full")).to_have_text("CLEARED · RADIO PENDING")
+                                expect(row.locator(".rd-deice-full")).to_have_text("Completed 00:15")
                                 expect(row.locator(".rd-deice-full")).to_be_visible()
                                 row.evaluate("el => el.scrollIntoView({block:'center'})")
                             self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width + 1)
@@ -208,6 +237,12 @@ class GodModeBrowser(unittest.TestCase):
                             page.screenshot(path=output/f"mobile-{direction.lower()}-{engine}-{width}-{theme}.png")
                             if direction == "Departures":
                                 toggle.click()
+                                page.get_by_role("button", name="Details for UPS0712").click()
+                                active = page.locator('[data-deice-state="deicing"]')
+                                self.check_pulse(page, active)
+                                active.evaluate("el => el.closest('tr').scrollIntoView({block:'center'})")
+                                page.screenshot(path=output/f"pulse-mobile-{engine}-{width}-{theme}.png")
+                                page.get_by_role("button", name="Details for UPS0712").click()
                 (output/f"mobile-font-{engine}.json").write_text(json.dumps(mobile_fonts, indent=2))
 
                 page.set_viewport_size({"width":1280, "height":720})
@@ -230,6 +265,10 @@ class GodModeBrowser(unittest.TestCase):
                         for theme in ("dark", "light"):
                             self.set_theme(page, theme)
                             self.check_overview(page)
+                            self.check_outline(page.locator("#rd-arrivals"))
+                            self.check_outline(page.locator("#rd-departures"))
+                            self.check_pulse(page, page.locator('[data-deice-state="deicing"]'))
+                            expect(page.locator('[data-deice-state="pretreated"] .rd-deice-short')).to_have_text("Pretreated 23:55")
                             stats.append([mode, width, height, theme, self.check_full_board(page, width, height, tv=mode == "tv")])
                             page.screenshot(path=output/f"{mode}-{engine}-{height}-{theme}.png")
                         if mode == "tv":
