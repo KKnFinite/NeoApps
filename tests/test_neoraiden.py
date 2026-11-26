@@ -231,37 +231,119 @@ class RaidenTest(unittest.TestCase):
         op = seed_sort(self.gateway)
         a = SortDateMission.query.filter_by(flight_number="FX101").one()
         b = SortDateMission.query.filter_by(flight_number="FX202").one()
+        start = datetime(2026, 4, 13, 4, 55)
         event = NeoSubZeroDepartureDeiceEvent(sort_date_operation_id=op.id, sort_date_mission_id=a.id,
-            tail_number="N101", status="cleared", radio_state="pending")
+            tail_number="N101", status="finished", treatment_plan="one_type_i",
+            pass1_started_at_utc=start, pass1_ended_at_utc=start + timedelta(minutes=15))
         db.session.add(event)
         db.session.commit()
         with self.app.test_request_context():
             def statuses(sources=None):
                 return {r["flight"]: (r["deice_state"], r["deice"])
                         for r in snapshot(self.user, self.gateway, op, sources=sources)["departures"]}
-            self.assertEqual(statuses()["FX101"], ("radio-pending", "CLEARED · RADIO PENDING"))
+            completed = ("fin", "Completed 00:10")
+            self.assertEqual(statuses()["FX101"], completed)
             self.assertEqual(statuses()["FX202"], (None, None))
+            event.status, event.clear_outcome, event.radio_state = "cleared", "sprayed", "pending"
+            event.cleared_at_utc = start + timedelta(minutes=20)
             a.assigned_tail_number, b.assigned_tail_number = "N202", "N101"
             db.session.commit()
-            self.assertEqual(statuses()["FX202"][0], "radio-pending")
+            self.assertEqual(statuses()["FX202"], completed)
             self.assertEqual(statuses()["FX101"], (None, None))
             first = self.client.get(f"/neoraiden/state?operation_id={op.id}")
-            self.assertIn("CLEARED · RADIO PENDING", first.json["html"])
+            self.assertIn("Completed 00:10", first.json["html"])
+            self.assertNotIn("RADIO", first.json["html"])
             event.radio_state = "complete"
             event.radio_completed_at_utc = datetime(2026, 4, 13, 5, 30)
             event.radio_completed_by_user_id = self.user.id
+            b.departure_status = "departed"
             db.session.commit()
             reply = self.client.get(f"/neoraiden/state?operation_id={op.id}", headers={"If-None-Match": first.headers["ETag"]})
             self.assertEqual(reply.status_code, 200)
-            self.assertIn("GONE · RADIO COMPLETE", reply.json["html"])
+            self.assertIn("Completed 00:10", reply.json["html"])
+            self.assertNotIn("RADIO", reply.json["html"])
+            event.pass1_ended_at_utc += timedelta(minutes=2)
+            db.session.commit()
+            corrected = self.client.get(f"/neoraiden/state?operation_id={op.id}", headers={"If-None-Match": reply.headers["ETag"]})
+            self.assertIn("Completed 00:12", corrected.json["html"])
+            self.assertNotIn("Completed 00:10", corrected.json["html"])
             a.assigned_tail_number = "N101"
             db.session.commit()
             self.assertEqual(statuses()["FX202"], ("review", "TREATMENT OWNERSHIP REVIEW"))
-            self.assertEqual(statuses()["FX101"], ("gone", "GONE · RADIO COMPLETE"))
+            self.assertEqual(statuses()["FX101"], ("fin", "Completed 00:12"))
             self.assertEqual(statuses((set(), None))["FX101"], (None, None))
             event.reset_at_utc = datetime(2026, 4, 13, 5, 32)
             db.session.commit()
             self.assertEqual(set(statuses().values()), {(None, None)})
+
+    def test_pretreat_and_two_pass_display_follow_recorded_milestones(self):
+        from app.models import NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState
+
+        op = seed_sort(self.gateway)
+        mission = SortDateMission.query.filter_by(flight_number="FX101").one()
+        other = SortDateMission.query.filter_by(flight_number="FX202").one()
+        start = datetime(2026, 4, 13, 4, 30)
+        state = NeoSubZeroPretreatState(sort_date_operation_id=op.id, tail_number="N101", original_mission_id=mission.id,
+            pass1_started_at_utc=start, pass1_ended_at_utc=start + timedelta(minutes=10),
+            pass2_started_at_utc=start + timedelta(minutes=15))
+        db.session.add(state)
+        db.session.commit()
+        path = f"/neoraiden/state?operation_id={op.id}"
+        incomplete = self.client.get(path)
+        self.assertNotIn("Pretreated", incomplete.json["html"])
+        state.pass2_ended_at_utc = start + timedelta(minutes=19)
+        db.session.commit()
+        pretreat = self.client.get(path, headers={"If-None-Match": incomplete.headers["ETag"]})
+        self.assertEqual(pretreat.status_code, 200)
+        self.assertIn("Pretreated 23:45", pretreat.json["html"])
+
+        def label(flight="FX101"):
+            with self.app.test_request_context():
+                return next(r["deice"] for r in snapshot(self.user, self.gateway, op)["departures"] if r["flight"] == flight)
+
+        routine = NeoSubZeroDepartureDeiceEvent(sort_date_operation_id=op.id, sort_date_mission_id=mission.id,
+            tail_number="N101", status="cleared", clear_outcome="pretreated", cleared_at_utc=start + timedelta(minutes=20))
+        db.session.add(routine)
+        mission.departure_status = "departed"
+        db.session.commit()
+        self.assertEqual(label(), "Pretreated 23:45")
+        other.assigned_tail_number = "N101"
+        db.session.commit()
+        self.assertEqual(label("FX202"), "TREATMENT OWNERSHIP REVIEW")
+        mission.assigned_tail_number = "N202"
+        db.session.commit()
+        self.assertIsNone(label())
+        self.assertEqual(label("FX202"), "Pretreated 23:45")
+
+        event = NeoSubZeroDepartureDeiceEvent(sort_date_operation_id=op.id, sort_date_mission_id=other.id,
+            tail_number="N101", status="deice_planned", treatment_plan="type_i_type_iv")
+        db.session.add(event)
+        db.session.commit()
+        self.assertEqual(label("FX202"), "PLANNED")
+        event.status, event.configured_at_utc = "configured", start + timedelta(minutes=22)
+        db.session.commit()
+        self.assertEqual(label("FX202"), "CONFIGURED")
+        event.pass1_started_at_utc = start + timedelta(minutes=24)
+        db.session.commit()
+        self.assertEqual(label("FX202"), "DEICING")
+        event.status, event.pass1_ended_at_utc = "finished", start + timedelta(minutes=28)
+        db.session.commit()
+        self.assertEqual(label("FX202"), "FIN")
+        event.pass2_started_at_utc = start + timedelta(minutes=32)
+        event.pass2_ended_at_utc = start + timedelta(minutes=44)
+        db.session.commit()
+        self.assertEqual(label("FX202"), "Completed 00:14")
+        for outcome, description in (("negative", "NEGATIVE DEICE"), ("not_sprayed", "NOT SPRAYED")):
+            event.status, event.clear_outcome = "cleared", outcome
+            event.cleared_at_utc = start + timedelta(minutes=45)
+            db.session.commit()
+            self.assertEqual(label("FX202"), description)
+        event.reset_at_utc = start + timedelta(minutes=50)
+        db.session.commit()
+        self.assertEqual(label("FX202"), "Pretreated 23:45")
+        state.pass2_ended_at_utc = None
+        db.session.commit()
+        self.assertEqual(label("FX202"), "GONE · CLEARED")
 
     def test_recorded_uld_projection_and_wave_lifecycle(self):
         from datetime import timedelta

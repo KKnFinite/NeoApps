@@ -96,16 +96,22 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-deice[data-deice-state="configured"] {--rd-deice-color:#278756}
 .rd-deice[data-deice-state="deicing"] {--rd-deice-color:#d9edf0}
 .raiden[data-theme="light"] .rd-deice[data-deice-state="deicing"] {--rd-deice-color:#12657d}
-.rd-deice[data-deice-state="fin"] {--rd-deice-color:#285da8}
+.rd-deice:is([data-deice-state="fin"],[data-deice-state="pretreated"]) {--rd-deice-color:#285da8}
 .rd-deice[data-deice-state="review"] {--rd-deice-color:#e0be6e}
-.rd-deice[data-deice-state="radio-pending"] {--rd-deice-color:#f02d9f}
 .rd-deice[data-deice-state="negative"] {--rd-deice-color:#c34854}
 .rd-deice[data-deice-state="gone"] {--rd-deice-color:#687480}
 .rd-deice[data-deice-state="not-sprayed"] {--rd-deice-color:#956579}
+@media (prefers-reduced-motion:no-preference) {
+    .rd-deice[data-deice-state="deicing"] {animation:rd-deice-breathe 3s ease-in-out infinite}
+}
+@keyframes rd-deice-breathe {
+    0%,100% {text-shadow:0 0 0 transparent; border-inline-start-color:color-mix(in srgb,var(--rd-deice-color) 70%,var(--surface))}
+    50% {text-shadow:0 0 6px color-mix(in srgb,var(--rd-deice-color) 46%,transparent); border-inline-start-color:var(--rd-deice-color)}
+}
 .rd-workspace {min-width:0}
 .rd-mobile-views,.raiden .rd-flight-toggle,.rd-detail-label {display:none}
 .rd-mission-groups {display:grid; grid-template-columns:minmax(min-content,34fr) minmax(min-content,66fr); gap:clamp(8px,.85cqw,18px)}
-.rd-mission-group {min-width:0}
+.rd-mission-group {min-width:0; border-radius:5px; outline:1px solid var(--line); outline-offset:-1px; overflow:clip}
 .rd-mission-group h2 {padding:3px 5px; background:var(--accent-bg); color:var(--accent)}
 .raiden .rd-missions {width:100%; margin:0; border:0; border-collapse:collapse; background:var(--surface); color:var(--ink); font:var(--rd-operational-font)/1.17 system-ui,sans-serif; font-variant-numeric:tabular-nums}
 .rd-missions :is(th,td) {height:auto; padding:.04em clamp(2px,.20cqw,8px); text-align:left; white-space:nowrap; color:inherit; background:transparent; border:0; font:inherit}
@@ -134,7 +140,9 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .raiden-wordmark {font:650 1.5rem system-ui,sans-serif}
 .operational-sidebar-collapsed .raiden-wordmark {font-size:.66rem}
 @container (min-width:941px) and (max-width:1100px) {
-    #rd-departures .rd-extra {padding-inline:1px}
+    .rd-missions :is(th,td) {padding-inline:1.5px}
+    #rd-departures .rd-extra {padding-inline:.5px}
+    .rd-deice {border-inline-start-width:2px; padding-inline-start:2px}
 }
 @media(max-width:800px) {
     .raiden:not(.rd-tv) {padding:4px; font-size:12px}

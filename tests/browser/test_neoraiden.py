@@ -24,11 +24,12 @@ class CommandCenterBrowser(unittest.TestCase):
             record_pull_roster(op)
             mission = SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="FX101").one()
             mission_id = mission.id
-            db.session.add(NeoSubZeroDepartureDeiceEvent(sort_date_operation_id=op_id, sort_date_mission_id=mission_id,
-                tail_number=mission.assigned_tail_number, status="cleared", radio_state="pending"))
             _, start = configure_sort_window(gateway, op.sort_date)
             db.session.add(LiveScreenRefreshSetting(gateway_id=gateway.id, screen_key="neoraiden.index", interval_seconds=15))
             start_utc = start.replace(tzinfo=ZoneInfo("America/Chicago")).astimezone(timezone.utc).replace(tzinfo=None)
+            db.session.add(NeoSubZeroDepartureDeiceEvent(sort_date_operation_id=op_id, sort_date_mission_id=mission_id,
+                tail_number=mission.assigned_tail_number, status="configured", treatment_plan="one_type_i",
+                pass1_started_at_utc=start_utc))
             changing = SortDateMission(sort_date_operation_id=op.id, sort_date=op.sort_date, sort_name=op.sort_name,
                 gateway_code=gateway.code, mission_type="arrival", flight_number="UPS1361",
                 origin="SDF", destination=gateway.code, planned_datetime_utc=start_utc + timedelta(minutes=55))
@@ -64,7 +65,8 @@ class CommandCenterBrowser(unittest.TestCase):
                     expect(arrivals.last).to_contain_text("STA 01:00")
                     departure = page.locator(f'#rd-mission-{mission_id}')
                     expect(departure.locator('[data-field="pure"] .rd-value')).to_have_text("00:02")
-                    expect(departure.locator(".rd-deice")).to_have_attribute("data-deice-state", "radio-pending")
+                    expect(departure.locator(".rd-deice")).to_have_attribute("data-deice-state", "deicing")
+                    expect(departure.locator(".rd-deice")).to_have_css("animation-name", "rd-deice-breathe")
                     expect(page.locator("[data-countdown],[data-refresh],[data-interval]")).to_have_count(0)
                     expect(page.locator("[data-raiden]")).to_have_attribute("data-interval-ms", "15000")
                     expect(page.locator("[data-refresh-status]")).to_be_empty()
@@ -79,8 +81,10 @@ class CommandCenterBrowser(unittest.TestCase):
                         m.eta_datetime_utc = start_utc + timedelta(hours=4, minutes=15)
                         NeoErmacDoorPull.query.filter_by(sort_date_mission_id=mission_id, door="D4").one().actual_pure_pull_time_local = None
                         event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mission_id).one()
+                        event.status, event.clear_outcome = "cleared", "sprayed"
+                        event.pass1_ended_at_utc = start_utc + timedelta(minutes=4)
                         event.radio_state = "complete"
-                        event.radio_completed_at_utc = start_utc
+                        event.radio_completed_at_utc = start_utc + timedelta(minutes=9)
                         event.radio_completed_by_user_id = User.query.filter_by(username="drawer-watcher").one().id
                         db.session.commit()
                     page.evaluate("window.raidenRefreshMarker = true")
@@ -94,7 +98,8 @@ class CommandCenterBrowser(unittest.TestCase):
                     expect(arrivals.last).to_contain_text("ETA 01:15")
                     expect(departure.locator('[data-field="pure"] .rd-value')).to_be_empty()
                     expect(departure.locator('[data-field="mix"] .rd-value')).to_have_text("00:57")
-                    expect(departure.locator(".rd-deice")).to_have_attribute("data-deice-state", "gone")
+                    expect(departure.locator(".rd-deice")).to_have_attribute("title", "Completed 21:04")
+                    expect(departure.locator(".rd-deice")).to_have_css("animation-name", "none")
                     self.assertTrue(page.evaluate("window.raidenRefreshMarker"))
                     for w,h in ((1366,768),(1920,1080),(1024,768),(768,1024),(390,844)):
                         page.set_viewport_size(dict(width=w,height=h))
@@ -136,6 +141,7 @@ class CommandCenterBrowser(unittest.TestCase):
                         SortDateMission.query.filter_by(sort_date_operation_id=op_id, flight_number="UPS1361").one().eta_datetime_utc = None
                         NeoErmacDoorPull.query.filter_by(sort_date_mission_id=mission_id, door="D4").one().actual_pure_pull_time_local = time(0, 2)
                         event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=mission_id).one()
-                        event.radio_state = "pending"
+                        event.status = "configured"
+                        event.clear_outcome = event.pass1_ended_at_utc = event.radio_state = None
                         event.radio_completed_at_utc = event.radio_completed_by_user_id = None
                         db.session.commit()
