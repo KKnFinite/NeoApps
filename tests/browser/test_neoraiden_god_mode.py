@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -98,9 +99,11 @@ class GodModeBrowser(unittest.TestCase):
                 }),
                 overflowingCells: fields.filter(cell => cell.scrollWidth > cell.clientWidth + 1)
                     .map(cell => [cell.dataset.field, cell.innerText, cell.clientWidth, cell.scrollWidth]),
-                oneLine: rows.every(row => row.getBoundingClientRect().height <=
-                    parseFloat(getComputedStyle(row).lineHeight) + 4 &&
-                    [...row.cells].every(cell => getComputedStyle(cell).whiteSpace === 'nowrap')),
+                oneLine: rows.every(row => [...row.cells].every(cell => {
+                    const style = getComputedStyle(cell);
+                    return style.whiteSpace === 'nowrap' && cell.getBoundingClientRect().height <=
+                        parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + 1.25;
+                })),
                 headers: boxes.map(box => [...box.querySelectorAll('thead th')].map(cell => cell.textContent)),
                 cellsMatchHeaders: boxes.every(box => {
                     const keys = [...box.querySelectorAll('thead th')].map(cell => cell.dataset.field).join();
@@ -111,6 +114,9 @@ class GodModeBrowser(unittest.TestCase):
                 cellPadding: parseFloat(getComputedStyle(fields[0]).paddingInlineStart),
                 overviewFonts: [...new Set([...document.querySelectorAll('.rd-overview :is(tbody th,tbody td,dd)')]
                     .map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
+                overviewLabels: [...new Set([...document.querySelectorAll('.rd-overview :is(thead th,dt,.rd-performance h2)')]
+                    .map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
+                overviewHeight: document.querySelector('.rd-overview').getBoundingClientRect().height,
                 toolbarSpread: Math.max(...verticalCenters) - Math.min(...verticalCenters),
                 scrollboxes: boxes.filter(box => /auto|scroll/.test(getComputedStyle(box).overflow)).length,
                 width:document.documentElement.scrollWidth, height:document.documentElement.scrollHeight,
@@ -183,7 +189,7 @@ class GodModeBrowser(unittest.TestCase):
             db.session.commit()
             op_id = operation.id
 
-        output = Path("instance/browser-evidence/issue91/after")
+        output = Path(os.environ.get("RAIDEN_SPACING_EVIDENCE", "instance/browser-evidence/issue91-spacing/after"))
         output.mkdir(parents=True, exist_ok=True)
         for engine in ("chromium", "webkit"):
             with self.subTest(engine=engine), getattr(fixture.pw, engine).launch() as browser:
@@ -195,11 +201,17 @@ class GodModeBrowser(unittest.TestCase):
                 expect(page.locator(".rd-staff")).to_have_attribute("open", "")
                 page.locator(".rd-staff summary").click()
                 mobile_fonts = {}
+                mobile_metrics = {}
                 for width in (390, 430):
                     page.set_viewport_size({"width":width, "height":844})
                     for theme in ("dark", "light"):
                         self.set_theme(page, theme)
                         self.check_overview(page)
+                        mobile_metrics[f"{width}-{theme}"] = page.locator(".rd-overview").evaluate("""el => ({
+                            overviewHeight: el.getBoundingClientRect().height,
+                            overviewFont: parseFloat(getComputedStyle(el.querySelector('dd')).fontSize),
+                            overviewLabel: parseFloat(getComputedStyle(el.querySelector('dt')).fontSize)
+                        })""")
                         for direction, flight, count in (("Arrivals", "UPS0403", 29), ("Departures", "FX101", 31)):
                             page.get_by_role("button", name=direction, exact=True).click()
                             expect(page.locator("[data-mission]:visible")).to_have_count(count)
@@ -211,6 +223,10 @@ class GodModeBrowser(unittest.TestCase):
                             self.assertEqual(len(fonts), 1, fonts)
                             self.assertTrue(10 <= fonts[0] <= 11.5, fonts)
                             mobile_fonts[width] = fonts[0]
+                            mobile_metrics[f"{width}-{theme}"][direction] = {
+                                "font": fonts[0],
+                                "rowHeight": table.locator("tbody tr").first.bounding_box()["height"],
+                            }
                             if direction == "Arrivals":
                                 expect(visible_headers).to_have_text(HEADINGS[0])
                                 row = table.locator("[data-mission]").filter(has_text=flight)
@@ -244,6 +260,7 @@ class GodModeBrowser(unittest.TestCase):
                                 page.screenshot(path=output/f"pulse-mobile-{engine}-{width}-{theme}.png")
                                 page.get_by_role("button", name="Details for UPS0712").click()
                 (output/f"mobile-font-{engine}.json").write_text(json.dumps(mobile_fonts, indent=2))
+                (output/f"mobile-metrics-{engine}.json").write_text(json.dumps(mobile_metrics, indent=2))
 
                 page.set_viewport_size({"width":1280, "height":720})
                 page.get_by_label("Gateway", exact=True).focus()
