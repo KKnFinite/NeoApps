@@ -8,7 +8,7 @@ from itsdangerous import URLSafeTimedSerializer,BadSignature
 from app.extensions import db
 from app.models import (User,Gateway,GatewayMembership,GatewayNodeRole,PortalAppAccess,NeoNode,AccountScopedRole,PermissionRule,AccountScopedPolicy)
 from app.models.user import ROLE_LEVELS
-from app.services.account_authority import Scope
+from app.services.account_authority import DEFAULT_NODE_ROLE, Scope
 from app.services.account_foundation import atomic_account_change,AccountConflict,FoundationNotActivated
 from app.services.account_scope_runtime import scoped_active,authority,can_administer,can_configure,owner_scope,protected_rule
 from app.services.account_security import lock_administration,platform_grandmaster,record_security_change
@@ -38,7 +38,7 @@ def role_guard(actor,target,scope,existing,selected,*,granting=True,commissionin
     if selected not in ROLE_LEVELS and selected!='disabled':raise ValueError('Choose a valid scoped role.')
     evidence=authority(actor)
     if not evidence.can_administer(scope):raise ValueError('No administration authority in this scope.')
-    prior=existing.role if existing else None
+    prior = existing.role if existing else DEFAULT_NODE_ROLE if scope.kind == "node" else None
     active=bool(existing and getattr(existing,'is_active',True) and getattr(existing,'status','approved')=='approved')
     if target.id==actor.id and not (active and granting and selected==prior):raise ValueError('Self role changes require a separate protected procedure.')
     platform=platform_grandmaster(actor)
@@ -91,6 +91,8 @@ def set_role(user_id,scope,selected,token,reason):
     role_guard(actor,target,scope,existing,selected)
     if scope.kind=='application':raise ValueError('Application roles use the application approval/revocation action.')
     before=None if existing is None else dict(role=existing.role,active=bool(getattr(existing,'is_active',True)))
+    if scope.kind == "node" and existing is None:
+        before = dict(role=DEFAULT_NODE_ROLE, active=True, source="default")
     if scope.kind=='neoapps':
         if selected=='disabled':raise ValueError('Account suspension is separate from its platform role.')
         target.role=selected

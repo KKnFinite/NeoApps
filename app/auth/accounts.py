@@ -362,7 +362,7 @@ def account_action(user_id, action):
                 raise ValueError("Active gateway membership and node are required.")
             existing = GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id, node_id=node.id).with_for_update().first()
             role = request.form.get("role", "")
-            effective = existing or legacy.SimpleNamespace(role=legacy._neogateway_seed_role_for_membership(target, membership), is_active=True)
+            effective = existing or legacy.SimpleNamespace(role=legacy.DEFAULT_NODE_ROLE, is_active=True)
             guard_node_change(actor, target, node, effective, role)
             if role != "disabled":
                 legacy._guard_role_assignment_allowed(role, existing, node=node)

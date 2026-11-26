@@ -11,7 +11,8 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 
 from app.extensions import db
-from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User
+from app.models import (AccountAuthorizationState, AccountSecurityEvent, Gateway, GatewayMembership, GatewayNodeRole,
+                        NeoNode, NeoScorpionVendorAccount, PortalAppAccess, User)
 from app.services import access_control as access
 
 URI = os.environ.get('NEOSTAFFING_TEST_POSTGRES_URL')
@@ -31,7 +32,8 @@ class AuthorizationProvisioningPostgresTest(unittest.TestCase):
             SQLALCHEMY_ENGINE_OPTIONS={'connect_args':{'options':f'-csearch_path={self.schema} -clock_timeout=10000 -cstatement_timeout=15000'}})
         db.init_app(self.app)
         with self.app.app_context():
-            db.metadata.create_all(db.engine,tables=[m.__table__ for m in (User,Gateway,NeoNode,GatewayMembership,GatewayNodeRole,PortalAppAccess)])
+            db.metadata.create_all(db.engine,tables=[m.__table__ for m in (User, Gateway, NeoNode, GatewayMembership, GatewayNodeRole, PortalAppAccess,
+                NeoScorpionVendorAccount, AccountSecurityEvent, AccountAuthorizationState)])
             user=User(username='race-user',password_hash='isolated-test-only',role='master')
             db.session.add(user);db.session.flush()
             membership=access.backfill_default_gateway_node_roles(user,'master');db.session.commit()
@@ -84,13 +86,13 @@ class AuthorizationProvisioningPostgresTest(unittest.TestCase):
             self.assertEqual(GatewayMembership.query.count(),1)
             self.assertEqual(GatewayMembership.query.one().status,'pending')
 
-    def test_concurrent_missing_node_seeding_creates_one_role(self):
+    def test_concurrent_missing_node_reads_do_not_write_grants(self):
         with self.app.app_context():
             node=NeoNode.query.filter_by(code='rain').one();self.node_id=node.id
             GatewayNodeRole.query.filter_by(node_id=node.id).delete();db.session.commit()
-        self.assertEqual(self.race(GatewayNodeRole,lambda user:access.get_user_node_role(user,'RFD','rain')),['master','master'])
+        self.assertEqual(self.race(GatewayNodeRole,lambda user:access.get_user_node_role(user,'RFD','rain')),['watcher','watcher'])
         with self.app.app_context():
-            self.assertEqual(GatewayNodeRole.query.filter_by(node_id=self.node_id).count(),1)
+            self.assertEqual(GatewayNodeRole.query.filter_by(node_id=self.node_id).count(),0)
 
     def test_race_winner_disabled_app_is_not_overwritten(self):
         with self.app.app_context():

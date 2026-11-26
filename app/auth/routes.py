@@ -13,6 +13,8 @@ from app.extensions import db
 from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, PortalAppAccess, User
 from app.models.user import MANAGEMENT_LEVELS, ROLE_LEVELS
 from app.services import email_service
+from app.services.account_authority import DEFAULT_NODE_ROLE
+from app.services.node_watcher_provisioning import provision_watcher_nodes
 from app.services.access_control import (
     ensure_user_app_access,
     ensure_user_gateway_membership,
@@ -26,7 +28,6 @@ from app.services.access_control import (
     prime_user_node_roles_for_request,
     request_app_access_for_user,
     request_default_gateway_access_for_user,
-    seed_gateway_node_roles,
     user_has_app_access,
     user_has_gateway_access,
 )
@@ -1299,7 +1300,7 @@ def _approve_portal_app_access(
         if not membership:
             membership = ensure_user_gateway_membership(access.user, gateway)
         _approve_membership(
-            membership, notes, seed_role=role,
+            membership, notes, seed_role=role, provision_nodes=is_active,
             bypass_email_verification=bypass_email_verification,
         )
 
@@ -1613,7 +1614,7 @@ def _apply_gateway_membership_edit_form(
             _approve_membership(
                 membership,
                 request.form.get("approval_notes", "").strip() or None,
-                bypass_email_verification=bypass_email_verification,
+                bypass_email_verification=bypass_email_verification, provision_nodes=is_active,
             )
         membership.is_active = is_active
         if was_inactive and membership.is_active:
@@ -1687,14 +1688,6 @@ def _gateway_memberships_by_user_id(gateway):
 
 def _node_roles_by_user_id(gateway):
     memberships = GatewayMembership.query.filter_by(gateway_id=gateway.id).all()
-    for membership in memberships:
-        if _membership_is_approved_active(membership):
-            seed_gateway_node_roles(
-                membership,
-                _neogateway_seed_role_for_membership(membership.user, membership),
-                overwrite_existing=False,
-            )
-
     membership_ids = [membership.id for membership in memberships]
     user_id_by_membership_id = {
         membership.id: membership.user_id for membership in memberships
@@ -1888,8 +1881,7 @@ def _node_role_rows(user, membership):
     nodes = NeoNode.query.filter_by(is_active=True).order_by(
         NeoNode.sort_order.asc(), NeoNode.name.asc(),
     ).all()
-    prime_user_node_roles_for_request(user, get_current_gateway().code, [node.code for node in nodes])
-    seed_role = _neogateway_seed_role_for_membership(user, membership)
+    effective_roles = prime_user_node_roles_for_request(user, get_current_gateway().code, [node.code for node in nodes])
     existing_roles = {}
     if membership:
         existing_roles = {
@@ -1901,15 +1893,14 @@ def _node_role_rows(user, membership):
     rows = []
     for node in nodes:
         override = existing_roles.get(node.id)
-        effective_role = (override.role if override.is_active else "disabled") if override else seed_role
+        effective_role = effective_roles.get(node.code)
+        source = ("Explicit grant" if override else "Default Watcher") if effective_role else (
+            "Disabled" if override and not override.is_active else "Gateway access required"
+        )
         rows.append({
-            "node": node, "override": override, "effective_role": effective_role,
-            "source_label": "Disabled" if effective_role == "disabled" else (
-                override.role if override else (
-                    "Seeded from NeoGateway approval" if seed_role != "watcher" else "Watcher fallback"
-                )
-            ),
-            "role_choices": _role_choices_for_node(override, effective_role=effective_role, node=node),
+            "node": node, "override": override, "effective_role": effective_role or "disabled",
+            "source_label": source,
+            "role_choices": _role_choices_for_node(override, effective_role=effective_role or "disabled", node=node),
         })
     return rows
 
@@ -1928,34 +1919,12 @@ def _approval_node_role_rows():
     ]
 
 
-def _neogateway_seed_role_for_membership(user, membership):
-    from app.services.account_scope_runtime import scoped_active
-    if scoped_active():return 'watcher'
-    if not _membership_is_approved_active(membership):
-        return "watcher"
-
-    access = get_user_app_access(user, "neogateway")
-    if access and access.status == "approved" and access.is_active and access.role in ROLE_CHOICES:
-        return access.role
-
-    return "watcher"
-
-
 def _apply_node_role_form(target_user, membership):
     if target_user.scorpion_vendor:
         raise ValueError("Fuel Truck Driver accounts cannot receive NeoNode roles.")
     if not _membership_is_approved_active(membership):
         raise ValueError("User must have approved RFD gateway access before assigning node roles.")
 
-    # A role edit must work for every canonical approved membership, including
-    # one approved by the explicit email-verification override.  Seed any
-    # missing active NeoNodes before applying independent changes.
-    if platform_grandmaster(current_user):
-        seed_gateway_node_roles(
-            membership,
-            _neogateway_seed_role_for_membership(target_user, membership),
-            overwrite_existing=False,
-        )
     nodes = NeoNode.query.filter_by(is_active=True).all()
     prime_user_node_roles_for_request(target_user, get_current_gateway().code, [node.code for node in nodes])
     existing_roles = {
@@ -1973,11 +1942,16 @@ def _apply_node_role_form(target_user, membership):
         selected_role = request.form.get(field_name, "").strip().lower()
         existing_role = existing_roles.get(node.id)
         effective_existing = existing_role or SimpleNamespace(
-            role=_neogateway_seed_role_for_membership(target_user, membership), is_active=True,
+            role=DEFAULT_NODE_ROLE, is_active=True,
         )
         guard_node_change(current_user, target_user, node, effective_existing, selected_role)
         if selected_role == "disabled":
-            if existing_role and existing_role.is_active:
+            if existing_role is None:
+                db.session.add(GatewayNodeRole(gateway_membership_id=membership.id, node_id=node.id,
+                                               role=DEFAULT_NODE_ROLE, is_active=False))
+                record_security_change("node_role_changed", target_user, node=node.code,
+                                       previous_role=DEFAULT_NODE_ROLE, new_role="disabled")
+            elif existing_role.is_active:
                 if _would_remove_last_grandmaster(node, selected_role, existing_role):
                     raise ValueError("Cannot remove the last active Grandmaster MotherBrain access.")
                 existing_role.is_active = False
@@ -1997,7 +1971,7 @@ def _apply_node_role_form(target_user, membership):
 
         if not existing_role:
             record_security_change("node_role_changed", target_user, node=node.code,
-                                   previous_role=None, new_role=selected_role)
+                                   previous_role=DEFAULT_NODE_ROLE, new_role=selected_role)
             db.session.add(
                 GatewayNodeRole(
                     gateway_membership_id=membership.id,
@@ -2204,7 +2178,7 @@ def _restore_approved_membership_operational_state(membership):
     app_access.is_active = True
     if app_access.role not in ROLE_CHOICES:
         app_access.role = "watcher"
-    seed_gateway_node_roles(membership, app_access.role, overwrite_existing=False)
+    provision_watcher_nodes(membership)
 
 
 def _change_driver_account_type(gateway, target_user, account_type):
@@ -2286,6 +2260,7 @@ def _approve_membership(
     seed_role="watcher",
     node_role_values=None,
     bypass_email_verification=False,
+    provision_nodes=True,
 ):
     if not membership:
         raise ValueError("Gateway membership request was not found.")
@@ -2296,6 +2271,10 @@ def _approve_membership(
         raise ValueError("Fuel Truck Driver accounts cannot receive full NeoApps access.")
     if seed_role not in ROLE_CHOICES:
         raise ValueError("Unsupported node role selected.")
+    if node_role_values:
+        from app.services.account_scope_runtime import scoped_active
+        if scoped_active():
+            raise ValueError("Assign node roles separately after application approval.")
     prior_app = PortalAppAccess.query.filter_by(user_id=membership.user_id, app_code="neogateway").first()
     guard_app_role_change(membership.user, prior_app, seed_role)
     if not membership.user.email_verified_at and not bypass_email_verification:
@@ -2324,8 +2303,12 @@ def _approve_membership(
         app_access.denied_by_user_id = None
         app_access.denied_at = None
         app_access.denial_notes = None
-        seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
-        if node_role_values is not None:
+        existing_node_ids = {
+            node_id for (node_id,) in db.session.query(GatewayNodeRole.node_id).filter_by(gateway_membership_id=membership.id)
+        } if node_role_values else set()
+        if provision_nodes:
+            provision_watcher_nodes(membership)
+        if node_role_values:
             node_roles = {
                 role.node_id: role
                 for role in GatewayNodeRole.query.filter_by(
@@ -2333,6 +2316,8 @@ def _approve_membership(
                 ).all()
             }
             for node_id, selected_role in node_role_values.items():
+                if node_id in existing_node_ids:
+                    continue
                 node_role = node_roles.get(node_id)
                 if not node_role:
                     continue
@@ -2344,6 +2329,9 @@ def _approve_membership(
                 else:
                     node_role.role = selected_role
                     node_role.is_active = True
+
+    elif provision_nodes:
+        provision_watcher_nodes(membership)
 
     if not was_approved:
         send_result = email_service.send_access_approved(membership.user, membership.gateway)

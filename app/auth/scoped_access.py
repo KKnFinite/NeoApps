@@ -133,7 +133,10 @@ def scoped_roles(owner):
             try:management.role_guard(current_user,user,scope,existing,choice)
             except ValueError:continue
             choices.append(choice)
-        rows.append(dict(user=user,existing=existing,choices=choices,review=review_token(user)))
+        selected = (existing.role if existing.is_active else "disabled") if existing else (
+            management.DEFAULT_NODE_ROLE if scope.kind == "node" else None
+        )
+        rows.append(dict(user=user,existing=existing,selected=selected,choices=choices,review=review_token(user)))
     return render_template('auth/accounts/scoped_roles.html',scoped_workspace=True,owner=owner,scope=scope,rows=rows,page=page,
         active=scoped_active(),scope_links=scope_links(),browser_tab_title=f'{owner} Roles | NeoApps')
 
