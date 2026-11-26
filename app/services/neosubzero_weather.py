@@ -665,14 +665,18 @@ def _grid_value_at(intervals, target):
 
 
 def _weather_revision(snapshot):
-    metar = snapshot["metar"].get("value") or ()
+    metar_state = snapshot["metar"]
+    metar = metar_state.get("value") or ()
     metar_row = metar[0] if isinstance(metar, list) and metar else {}
+    observed = krfd_observations.observed_at(metar_row) if isinstance(metar_row, dict) else None
+    fetched = metar_state.get("fetched_at")
     forecast = snapshot["forecast"].get("value") or {}
     hourly_properties = (forecast.get("hourly") or {}).get("properties") or {}
     payload = {
         "metar": metar_row if isinstance(metar_row, dict) else None,
         "forecast": hourly_properties.get("generatedAt") or hourly_properties.get("updateTime"),
-        "metar_stale": snapshot['metar']['stale'],
+        "metar_stale": metar_state["stale"],
+        "metar_deadlines": _observation_times(observed, fetched) if observed and fetched is not None else None,
         "forecast_stale": snapshot['forecast']['stale'],
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()

@@ -172,3 +172,17 @@ class SharedKrfdTest(TestCase):
                 self.assertEqual(observed["value"][0]["icaoId"], "KRFD")
                 forecast.assert_called_once()
             fetch.assert_called_once()
+
+    def test_same_observation_renews_ducc_freshness_revision(self):
+        observed = self.at
+        with patch.object(frost_auto, "fetch_weather_source", return_value=self.response(observed)), \
+                patch.object(weather, "_fetch_forecast", return_value={}):
+            shared.refresh(self.schedule, self.clock)
+            first = weather._weather_snapshot(gateway=self.gateway, now=self.at)
+            self.at += timedelta(minutes=10)
+            shared.refresh(self.schedule, self.clock)
+            second = weather._weather_snapshot(gateway=self.gateway, now=self.at)
+        self.assertEqual(first["metar"]["value"], second["metar"]["value"])
+        self.assertFalse(first["metar"]["stale"])
+        self.assertFalse(second["metar"]["stale"])
+        self.assertNotEqual(weather._weather_revision(first), weather._weather_revision(second))
