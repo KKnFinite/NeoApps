@@ -798,7 +798,7 @@ body.neosubzero-ucc-tv-mode .neosubzero-ucc .ucc-team-readonly { display:grid; }
 .neosubzero-ucc .wx-facts dd {font-weight:400}
 .neosubzero-ucc .wx-source,.ucc-tv-observation .wx-source {margin-top:4px; overflow-wrap:anywhere}
 .neosubzero-ucc .wx-source {color:#a7bdcd; font-size:.66rem}
-.ucc-tv-observation h2 {text-align:center; font-weight:400}
+.ucc-tv-observation h2 {text-align:center; font-weight:400; text-transform:none; letter-spacing:normal}
 body.neosubzero-ucc-tv-mode .ucc-tv-observation .neosubzero-weather-current {display:block; min-width:0; padding:3px 0 0}
 .ucc-tv-observation .neosubzero-weather-current dl > div {padding:0; border:0; min-width:0}
 .ucc-tv-observation .neosubzero-weather-current :is(dt,dd) {font-weight:400; color:inherit; letter-spacing:normal}

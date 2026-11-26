@@ -149,7 +149,9 @@ class DuccTvWeatherTest(unittest.TestCase):
         expect(remote.locator('[data-ucc-tv-crew-field="flyer"]')).to_have_count(0)
 
     def check_observation(self, panel, *, light=False):
-        expect(panel.get_by_role("heading", name="Time & Weather - KRFD METAR")).to_be_visible()
+        heading = panel.get_by_role("heading", name="Time & Weather - KRFD METAR")
+        expect(heading).to_be_visible()
+        expect(heading).to_have_css("text-transform", "none")
         expect(panel.locator(".wx-primary dt")).to_have_text(["Local Time", "Zulu Time", "Temperature"])
         expect(panel.locator("[data-weather-clock]")).to_have_text([re.compile(r"^\d{2}:\d{2}$")] * 2)
         expect(panel.locator(".wx-wind")).to_have_text("320° 12 G28 kt")
