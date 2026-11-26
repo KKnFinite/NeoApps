@@ -22,10 +22,9 @@
 </section>
 {% endmacro %}
 {% macro average(value) -%}{{ '%.1f'|format(value) if value is not none else '' }}{%- endmacro %}
-{% if not board.operation_id %}
-<p class="rd-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
-{% else %}
-<div class="rd-overview" data-sort-context="{{ board.sort_label }}">
+<div class="rd-overview"{% if board.operation_id %} data-sort-context="{{ board.sort_label }}"{% endif %}>
+  {% include "neonodes/neoraiden/_weather.html" %}
+  {% if board.operation_id %}
   <section class="rd-overview-box rd-uld" aria-labelledby="rd-uld-heading">
     <h2 class="rd-section-heading" id="rd-uld-heading">Inbound ULD Counts</h2>
     {% if board.uld %}{% set u = board.uld %}
@@ -87,7 +86,11 @@
       {{ metric('shift-staffing','Shift Staffing',board.marked_here) }}{{ metric('ramp-staffing','Ramp Staffing',none) }}
     </dl>
   </section>
+  {% endif %}
 </div>
+{% if not board.operation_id %}
+<p class="rd-empty">No active Sort in {{ board.gateway }}. Select a recorded Sort to view its operations.</p>
+{% else %}
 <section class="rd-workspace" aria-label="Mission board">
   <div class="rd-mobile-views" role="group" aria-label="Mission direction">
     <button type="button" data-show-missions="arrivals" aria-controls="rd-arrivals" aria-pressed="true">Arrivals</button>

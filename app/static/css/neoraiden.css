@@ -7,7 +7,7 @@
     --fuel-teal:#77ddd3; --fuel-green:#94e0aa; --fuel-red:#ff919c;
     --rd-operational-font:clamp(10px,.90cqw,12px);
     --rd-section-gap:8px;
-    --rd-metric-font:18px; --rd-label-font:14px;
+    --rd-metric-font:17px; --rd-label-font:14px;
     --rd-mission-heading-font:clamp(16px,1.8vh,24px);
     --rd-overview-heading-font:calc(var(--rd-label-font) + 1px);
     box-sizing:border-box; min-width:0; background:var(--canvas); color:var(--ink);
@@ -62,7 +62,7 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-tv-notice {color:var(--hold); font-size:.85em}
 .rd-overview {
     --rd-label-color:color-mix(in srgb,var(--muted) 55%,var(--ink));
-    display:grid; grid-template-columns:minmax(0,34fr) minmax(0,54fr) minmax(0,12fr);
+    display:grid; grid-template-columns:minmax(0,28fr) minmax(0,23fr) minmax(0,39fr) minmax(0,10fr);
     align-items:stretch; gap:var(--rd-section-gap);
 }
 .rd-overview + .rd-workspace {margin-block-start:var(--rd-section-gap)}
@@ -88,8 +88,19 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-overview :is(dl,dd) {margin:0}
 .rd-overview dd {min-block-size:1.08em}
 .rd-short-label {display:none}
+.rd-weather :is(.rd-weather-primary,.rd-weather-details) {display:grid; gap:1px 4px; padding:1px 4px}
+.rd-weather-primary {grid-template-columns:repeat(2,minmax(0,1fr))}
+.rd-weather .rd-metric {gap:0; overflow-wrap:anywhere; align-content:start}
+.rd-weather-details {grid-template-columns:minmax(0,1.4fr) minmax(0,.75fr) minmax(0,1fr); border-top:1px solid var(--line)}
+.rd-weather .rd-weather-meta {color:var(--rd-label-color); font-size:var(--rd-label-font); line-height:1.1; padding:1px 4px; text-align:center; overflow-wrap:anywhere}
+.rd-weather-stale {color:var(--hold)}
 .rd-uld table {margin-top:2px}
 .rd-progress .rd-metric {display:flex; justify-content:center; align-items:baseline; padding-block:3px}
+.rd-performance {container:rd-flight / inline-size}
+@container rd-flight (max-width:540px) {
+    .rd-performance .rd-full-label {display:none}
+    .rd-performance .rd-short-label {display:inline}
+}
 .rd-performance [data-performance="inbound"] .rd-direction {color:var(--ready)}
 .rd-performance [data-performance="outbound"] .rd-direction {color:var(--danger)}
 .rd-performance [scope="colgroup"] {padding-block:.5px}
@@ -185,6 +196,9 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     .raiden:not(.rd-tv) .rd-header [data-search] {width:100%}
     .raiden:not(.rd-tv) .rd-refresh {grid-column:2}
 }
+@container (max-width:940px) {
+    .raiden:not(.rd-tv) .rd-overview {grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
 @container (max-width:780px) {
     .raiden:not(.rd-tv) .rd-overview {grid-template-columns:minmax(0,1fr)}
     .raiden:not(.rd-tv) .rd-totals {grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -236,16 +250,17 @@ body.rd-projecting > :not(.rd-tv) {display:none!important}
     .raiden .rd-performance :is(th,td) {padding-block:0; line-height:1}
     .raiden .rd-performance :is(dt,dd,.rd-mission-count,.rd-count-label) {line-height:1}
     .raiden .rd-performance dd {min-block-size:1em}
+    .rd-tv .rd-weather :is(.rd-weather-primary,.rd-weather-details,.rd-weather-meta) {padding-block:0}
 }
 @media (min-height:1080px) {
     .raiden.rd-tv {
-        --rd-metric-font:24px;
+        --rd-metric-font:23px;
         --rd-label-font:16px;
     }
 }
 @media (min-height:2160px) {
     .raiden.rd-tv {
-        --rd-metric-font:32px;
+        --rd-metric-font:31px;
         --rd-label-font:22px;
     }
 }

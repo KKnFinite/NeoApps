@@ -1,13 +1,16 @@
 import json
 import os
+import re
 import unittest
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from playwright.sync_api import expect
 
 from app.extensions import db
-from app.models import Gateway, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState, SortDateMission, SortDateParkingAssignment
+from app.models import Gateway, NeoSubZeroDepartureDeiceEvent, NeoSubZeroOperationContext, NeoSubZeroPretreatState, SortDateMission, SortDateParkingAssignment
+from app.services import neosubzero_weather
 from tests.browser import test_mobile_drawer as shell_tests
 from tests.neoraiden_fixtures import busy_sort, record_attendance, record_departure_milestones, record_pull_roster
 
@@ -51,7 +54,20 @@ class GodModeBrowser(unittest.TestCase):
             expect(averages).to_have_text(["5.6", "10.0"])
         else:
             expect(averages).to_have_text(["5.0", "0.0"])
-        expect(overview.locator(".rd-section-heading")).to_have_text(["Inbound ULD Counts", "Flight Data", "Staffing"])
+        expect(overview.locator(".rd-section-heading")).to_have_text(["Time & Weather", "Inbound ULD Counts", "Flight Data", "Staffing"])
+        weather = overview.locator(".rd-weather")
+        clock = weather.locator("[data-gateway-clock]")
+        expect(clock).to_have_text(re.compile(r"^\d{2}:\d{2}$"))
+        expect(weather.locator('[data-metric="temperature"] dd')).to_have_text("0°F")
+        expect(weather.locator('[data-metric="precipitation"] dd')).to_have_text("Light snow")
+        expect(weather.locator('[data-metric="dewpoint"] dd')).to_have_text("-4°F")
+        expect(weather.locator('[data-metric="spread"] dd')).to_have_text("4°F")
+        expect(weather.locator('[data-metric="relative_humidity"] dd')).to_have_text(re.compile(r"^\d+%$"))
+        expect(weather.locator('[data-metric="wind"] dd')).to_have_text("300° 12 kt G20 kt")
+        expect(weather.locator('[data-metric="visibility"] dd')).to_have_text("0 SM")
+        expect(weather.locator(".rd-weather-meta")).to_contain_text("Mist · KRFD METAR")
+        self.assertEqual(clock.evaluate("el => getComputedStyle(el).fontSize"),
+                         weather.locator('[data-metric="temperature"] dd').evaluate("el => getComputedStyle(el).fontSize"))
         expect(overview.locator(".rd-mission-count")).to_have_text(["29", "31"])
         expect(overview.locator(".rd-count-line")).to_have_text(["29 Arrivals", "31 Departures"])
         for group in overview.locator("[data-performance]").all():
@@ -251,7 +267,7 @@ class GodModeBrowser(unittest.TestCase):
         self.assertGreaterEqual(state["fonts"][0], 10, state)
         self.assertLessEqual(state["fonts"][0], 24 if tv else 12, state)
         self.assertGreaterEqual(state["cellPadding"], 1.5, state)
-        expected = (32, 22) if tv and height >= 2160 else (24, 16) if tv and height >= 1080 else (18, 14)
+        expected = (31, 22) if tv and height >= 2160 else (23, 16) if tv and height >= 1080 else (17, 14)
         self.assertEqual(state["overviewFonts"], [expected[0]], state)
         self.assertEqual(state["overviewLabels"], [expected[1]], state)
         self.assertLessEqual(state["toolbarSpread"], 2, state)
@@ -284,9 +300,17 @@ class GodModeBrowser(unittest.TestCase):
         fixture = shell_tests.MobileDrawerBrowserTest
         fixture.setUpClass()
         self.addCleanup(fixture.tearDownClass)
+        observed = datetime.now(timezone.utc) - timedelta(minutes=10)
+        cache = {"krfd_metar": dict(value=[dict(icaoId="KRFD", reportTime=observed.isoformat(),
+                 temp=-17.78, dewp=-20, wdir=300, wspd=12, wgst=20, visib=0, wxString="Mist")],
+                 fetched_at=datetime.now(timezone.utc).timestamp())}
+        self.enterContext(patch.object(neosubzero_weather, "_CACHE", cache))
+        self.enterContext(patch.object(neosubzero_weather, "_request_json", side_effect=AssertionError("Weather I/O")))
+        fixture.app.config["NEOSUBZERO_WEATHER_ENABLED"] = True
         with fixture.app.app_context():
             operation = busy_sort(Gateway.query.one(), extra_arrivals=29, extra_departures=29)
             fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(operation.sort_date, time(21))
+            db.session.add(NeoSubZeroOperationContext(sort_date_operation_id=operation.id, active_precipitation="Light snow"))
             record_attendance(operation)
             record_departure_milestones(operation)
             record_pull_roster(operation)
@@ -334,7 +358,7 @@ class GodModeBrowser(unittest.TestCase):
                         metrics = mobile_metrics[f"{width}-{theme}"]
                         metrics.update(overview_metrics)
                         self.assertEqual((metrics["overviewFont"], metrics["overviewLabel"]), (13, 11), metrics)
-                        self.assertLess(metrics["overviewHeight"], 295, metrics)
+                        self.assertLess(metrics["overviewHeight"], 415, metrics)
                         expect(page.locator(".rd-performance thead .rd-short-label:visible")).to_have_text(
                             ["Late", "Min", "Avg", "Late", "Min", "Avg"])
                         page.locator(".rd-overview").screenshot(path=output/f"overview-mobile-{engine}-{width}-{theme}.png")
@@ -413,7 +437,7 @@ class GodModeBrowser(unittest.TestCase):
                             self.check_outline(page.locator("#rd-departures"))
                             self.check_pulse(page, page.locator('.rd-wide-departures [data-deice-state="deicing"]'))
                             expect(page.locator('.rd-wide-departures [data-deice-state="pretreated"] .rd-deice-short')).to_have_text("Pretreated 23:55")
-                            self.assertGreater(overview_metrics["boxWidths"][1], max(overview_metrics["boxWidths"][0], overview_metrics["boxWidths"][2]))
+                            self.assertGreater(overview_metrics["boxWidths"][2], max(overview_metrics["boxWidths"][:2] + overview_metrics["boxWidths"][3:]))
                             expect(page.locator('.rd-wide-departures [data-value-color="no-return"]').first).to_have_text("✓")
                             page.screenshot(path=output/f"{mode}-{engine}-{height}-{theme}.png")
                             geometry = self.check_full_board(page, width, height, tv=mode == "tv")
