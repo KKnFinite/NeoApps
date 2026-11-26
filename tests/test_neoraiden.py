@@ -37,6 +37,60 @@ class RaidenTest(unittest.TestCase):
     setUp = fixtures.GatewayShellTest.setUp
     tearDown = fixtures.GatewayShellTest.tearDown
 
+    def test_wave_stats_use_canonical_eligibility_and_weighted_two_wave_total(self):
+        from types import SimpleNamespace
+        from app.neonodes.neorain.services import _late_summary
+        from app.neonodes.neoraiden.services import _flight_performance
+
+        sta = datetime(2026, 4, 13, 5)
+        def arrival(wave, minutes, *, include=None, status="arrived"):
+            return SimpleNamespace(mission_type="arrival", arrival_status=status, wave=wave,
+                planned_datetime_utc=sta, eta_datetime_utc=sta + timedelta(hours=1),
+                actual_block_in_datetime_utc=sta + timedelta(minutes=minutes) if minutes is not None else None,
+                late_metrics_included_override=include)
+
+        pending = arrival("2", None, status="en_route")
+        zero = arrival("2", 0)
+        self.assertIsNone(_flight_performance([pending])["combined"])
+        self.assertEqual(_flight_performance([zero])["combined"], dict(aircraft_late=0, late_minutes=0, average="0"))
+        rows = [arrival("1", 8), arrival("1", 12), arrival("2", 40),
+                arrival("2", 90, include=False), arrival("1", 65, status="cancelled"),
+                arrival("3", 120, include=True), pending, zero]
+        projection = _flight_performance(rows)
+        summary = _late_summary(rows)
+        self.assertEqual(projection["first_wave"], summary["first_wave"])
+        self.assertEqual(projection["second_wave"], summary["second_wave"])
+        self.assertEqual(projection["combined"], dict(aircraft_late=3, late_minutes=60, average="20"))
+        self.assertEqual(summary["total"]["aircraft_late"], 4)
+
+        from flask import render_template
+        from app.services.neorain_performance import average_lateness
+        with self.app.test_request_context():
+            html = render_template("neonodes/neoraiden/_board.html", board=dict(
+                operation_id=1, sort_label="Night", arrivals=[], departures=[], uld=None, marked_here=None,
+                wave_performance={"inbound": projection}, performance={"inbound": average_lateness(rows)},
+            ))
+        self.assertIn("<dt>Overall</dt><dd>54.0</dd>", html)
+        self.assertIn("<dt>With Removed</dt><dd>45.0</dd>", html)
+
+    def test_load_complete_mismatch_compares_instants_and_respects_rain_access(self):
+        op = seed_sort(self.gateway)
+        departure = SortDateMission.query.filter_by(flight_number="FX101").one()
+        ramp = datetime(2026, 4, 13, 4, 59)
+        departure.ramp_load_completed_at_utc = ramp
+        with self.app.test_request_context():
+            for interval, expected in ((None, False), (0, False), (60, False), (61, True), (-61, True), (86400, True)):
+                with self.subTest(interval=interval):
+                    departure.crew_load_completed_at_utc = ramp + timedelta(seconds=interval) if interval is not None else None
+                    db.session.flush()
+                    board = snapshot(self.user, self.gateway, op, sources=({"rain"}, None))
+                    row = next(row for row in board["departures"] if row["id"] == departure.id)
+                    self.assertIs(row["load_mismatch"], expected)
+            restricted = snapshot(self.user, self.gateway, op, sources=(set(), None))
+            for row in restricted["departures"]:
+                self.assertNotIn("load_mismatch", row)
+                self.assertNotIn("no_return", row)
+
     def test_native_staffing_distinguishes_missing_zero_and_here(self):
         from app.models import StaffingDailyAttendance
         from tests.neoraiden_fixtures import record_attendance
