@@ -52,6 +52,26 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
+    def test_reported_gust_stage_and_precipitation_boundaries(self):
+        for gust, stage in ((24,None),(25,1),(30,1),(31,2),(44,2),(45,3),(70,3),(None,None)):
+            with self.subTest(gust=gust):
+                current = parse_aviation_weather_metar([dict(icaoId="KRFD", wdir=270, wspd=18, wgst=gust)])
+                self.assertEqual(current["wind_parts"]["stage"], stage)
+                self.assertEqual(current["wind"], f"270° 18 G{gust} kt" if gust is not None else "270° 18 kt")
+        self.assertEqual(parse_aviation_weather_metar([{}])["wind"], "")
+        self.assertEqual(parse_aviation_weather_metar([dict(wdir=0,wspd=0)])["wind"], "000° 0 kt")
+        for token, label in (("-RA","Light rain"),("RA","Moderate rain"),("+RA","Heavy rain"),
+                             ("-SN","Light snow"),("SN","Moderate snow"),("+SN","Heavy snow"),
+                             ("FZRA","Moderate freezing rain"),("-FZDZ","Light freezing drizzle"),
+                             ("PL","Ice pellets"),("+RASN","Heavy rain + snow"),
+                             ("-RA PL","Light rain · Ice pellets"),("VCSH FG HZ","None reported")):
+            with self.subTest(token=token):
+                row = dict(icaoId="KRFD", reportTime="2026-11-26T06:54:00Z", wxString=token)
+                self.assertEqual(parse_aviation_weather_metar([row])["metar_precip"], label)
+        raw = dict(reportTime="2026-11-26T06:54:00Z", rawOb="METAR KRFD 260654Z 27018G28KT 10SM -RASN OVC012 RMK +PL")
+        self.assertEqual(parse_aviation_weather_metar([raw])["metar_precip"], "Light rain + snow")
+        self.assertIsNone(parse_aviation_weather_metar(None)["metar_precip"])
+
     def test_aviation_weather_metar_parsing(self):
         current = parse_aviation_weather_metar(
             [
@@ -79,7 +99,7 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         self.assertEqual(current["dewpoint"], "28°F")
         self.assertEqual(current["spread"], "4°F")
         self.assertEqual(current["relative_humidity"], "86%")
-        self.assertEqual(current["wind"], "240° 12 kt G20 kt")
+        self.assertEqual(current["wind"], "240° 12 G20 kt")
         self.assertEqual(current["visibility"], "10+ SM")
         self.assertEqual(current["conditions"], "-SN")
         self.assertEqual(current["sky"], "BKN 1,800 · OVC 3,500")

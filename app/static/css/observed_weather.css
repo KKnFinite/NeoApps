@@ -1,0 +1,12 @@
+/* Current METAR only. These colors apply to the gust token, never the reading. */
+.wx-wind {white-space:nowrap}
+.wx-stage {display:block; font-size:.8em; line-height:1; font-weight:400}
+.wx-gust[data-stage="1"] {color:#f8df75}
+.wx-gust[data-stage="2"] {color:#ffb36f}
+.wx-gust[data-stage="3"] {color:#ff9e9b}
+:is(.raiden[data-theme="light"],.ucc-tv-wallboard[data-ucc-tv-theme="light"]) .wx-gust[data-stage="1"] {color:#735600}
+:is(.raiden[data-theme="light"],.ucc-tv-wallboard[data-ucc-tv-theme="light"]) .wx-gust[data-stage="2"] {color:#924300}
+:is(.raiden[data-theme="light"],.ucc-tv-wallboard[data-ucc-tv-theme="light"]) .wx-gust[data-stage="3"] {color:#a12637}
+:is(.wx-wind,.wx-stage,[data-observation-value],[data-observation-old],[data-observation-unavailable])[hidden] {display:none!important}
+.wx-primary {display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); text-align:center}
+.wx-primary :is(dd,time) {font-weight:400; font-variant-numeric:tabular-nums; white-space:nowrap}

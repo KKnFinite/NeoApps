@@ -5,7 +5,8 @@ import unittest
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
+from zoneinfo import ZoneInfo
+from app.services.frost_schedule import Schedule
 from unittest.mock import patch
 
 from playwright.sync_api import expect
@@ -56,18 +57,26 @@ class GodModeBrowser(unittest.TestCase):
             expect(averages).to_have_text(["5.6", "10.0"])
         else:
             expect(averages).to_have_text(["5.0", "0.0"])
-        expect(overview.locator(".rd-section-heading")).to_have_text(["Time & Weather", "Inbound ULD Counts", "Flight Data", "Staffing"])
+        expect(overview.locator(".rd-section-heading")).to_have_text(["Time & Weather - KRFD METAR", "Inbound ULD Counts", "Flight Data", "Staffing"])
         weather = overview.locator(".rd-weather")
-        clock = weather.locator("[data-gateway-clock]")
+        clock = weather.locator("[data-weather-clock]:not([data-weather-clock=UTC])")
         expect(clock).to_have_text(re.compile(r"^\d{2}:\d{2}$"))
         expect(weather.locator('[data-metric="temperature"] dd')).to_have_text("0°F")
         expect(weather.locator('[data-metric="precipitation"] dd')).to_have_text("Light snow")
         expect(weather.locator('[data-metric="dewpoint"] dd')).to_have_text("-4°F")
         expect(weather.locator('[data-metric="spread"] dd')).to_have_text("4°F")
         expect(weather.locator('[data-metric="relative_humidity"] dd')).to_have_text(re.compile(r"^\d+%$"))
-        expect(weather.locator('[data-metric="wind"] dd')).to_have_text("300° 12 kt G20 kt")
+        expect(weather.locator('[data-metric="wind"] dd')).to_have_text("300° 12 G28 kt Stage 1")
         expect(weather.locator('[data-metric="visibility"] dd')).to_have_text("0 SM")
-        expect(weather.locator(".rd-weather-meta")).to_contain_text("Mist · KRFD METAR")
+        expect(weather.locator(".rd-weather-meta")).to_contain_text("-RASN · Observed")
+        expect(weather.locator('[data-metric="metar-precip"] dd')).to_have_text("Light rain + snow")
+        zulu = weather.locator('[data-weather-clock="UTC"]')
+        expect(zulu).to_have_text(re.compile(r"^\d{2}:\d{2}$"))
+        expect(weather.locator(".wx-gust")).to_have_css("color", "rgb(115, 86, 0)" if page.locator("[data-raiden]").get_attribute("data-theme") == "light" else "rgb(248, 223, 117)")
+        self.assertEqual(weather.locator(".wx-speed").evaluate("el => getComputedStyle(el).color"),
+                         weather.locator(".wx-units").evaluate("el => getComputedStyle(el).color"))
+        self.assertFalse(weather.evaluate("""el => [...el.querySelectorAll('dl,dt,dd,h2,.wx-wind')].some(node =>
+            node.clientWidth && node.scrollWidth > node.clientWidth + 1)"""))
         self.assertEqual(clock.evaluate("el => getComputedStyle(el).fontSize"),
                          weather.locator('[data-metric="temperature"] dd').evaluate("el => getComputedStyle(el).fontSize"))
         expect(overview.locator(".rd-mission-count")).to_have_text(["29", "31"])
@@ -302,15 +311,21 @@ class GodModeBrowser(unittest.TestCase):
         fixture = shell_tests.MobileDrawerBrowserTest
         fixture.setUpClass()
         self.addCleanup(fixture.tearDownClass)
-        observed = datetime.now(timezone.utc) - timedelta(minutes=10)
+        observed = datetime.now(timezone.utc) - timedelta(minutes=20)
         payload = [dict(icaoId="KRFD", reportTime=observed.isoformat(),
-            temp=-17.78, dewp=-20, wdir=300, wspd=12, wgst=20, visib=0, wxString="Mist")]
+            temp=-17.78, dewp=-20, wdir=300, wspd=12, wgst=28, visib=0, wxString="-RASN")]
         self.enterContext(patch.object(neosubzero_weather, "_request_json", side_effect=AssertionError("Per-viewer weather I/O")))
         fixture.app.config["NEOSUBZERO_WEATHER_ENABLED"] = True
         fixture.app.config["NEOAPPS_METAR_CACHE_DIR"] = self.enterContext(TemporaryDirectory())
         with fixture.app.app_context():
             with patch.object(frost_auto, "fetch_weather_source", return_value=(json.dumps(payload).encode(), {})) as fetch:
-                krfd_observations.refresh(SimpleNamespace(eligible=lambda _at: True), lambda: datetime.now(timezone.utc))
+                now = datetime.now(timezone.utc)
+                opening = now.replace(minute=0,second=0,microsecond=0) - timedelta(hours=1)
+                fixture_schedule = Schedule(ZoneInfo("UTC"), ((opening.strftime("%A").lower(), opening.time(),
+                    (opening + timedelta(hours=3)).time()),))
+                # A fixture clock falls on a slot and never depends on the host minute.
+                fetch_time = now.replace(second=0,microsecond=0) - timedelta(minutes=(now.minute-10)%15)
+                krfd_observations.refresh(fixture_schedule, lambda: fetch_time)
                 fetch.assert_called_once()
             operation = busy_sort(Gateway.query.one(), extra_arrivals=29, extra_departures=29)
             fixture.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(operation.sort_date, time(21))
@@ -349,6 +364,15 @@ class GodModeBrowser(unittest.TestCase):
                 expect(page.locator(".operational-mobile-header .node-word")).to_have_css("color", RAIDEN_BLUE)
                 mobile_fonts = {}
                 mobile_metrics = {}
+                for width in (320, 375):
+                    page.set_viewport_size({"width":width, "height":844})
+                    for theme in ("dark", "light"):
+                        self.set_theme(page, theme)
+                        self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width+1)
+                        weather_box = page.locator(".rd-weather")
+                        self.assertFalse(weather_box.evaluate("""el => [...el.querySelectorAll('dl,dt,dd,h2')].some(n =>
+                            n.scrollWidth > n.clientWidth + 1)"""))
+                        weather_box.screenshot(path=output/f"weather-mobile-{engine}-{width}-{theme}.png")
                 for width in (390, 430):
                     page.set_viewport_size({"width":width, "height":844})
                     for theme in ("dark", "light"):

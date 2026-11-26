@@ -194,16 +194,16 @@ class DeadlineTest(unittest.TestCase):
 
         sql_at_weather_wake = []
         def sql(_conn, _cursor, stmt, *_args):
-            if self.at in requests[1:]:
+            if self.at in requests[1:] and self.at.minute % 10:
                 sql_at_weather_wake.append(stmt)
         engine = db.engine
         event.listen(engine, "before_cursor_execute", sql)
         self.addCleanup(event.remove, engine, "before_cursor_execute", sql)
         with patch.object(auto, "fetch_weather_source", side_effect=provider):
-            self.simulate(seconds=670)
-        self.assertEqual([(stamp - start).total_seconds() for stamp in requests], [10, 310, 610])
+            self.simulate(seconds=3600)
+        self.assertEqual([(stamp - start).total_seconds() for stamp in requests], [10, 600, 1500, 2400, 3300])
         self.assertEqual(sql_at_weather_wake, [])
-        self.assertEqual(metar.latest(start + timedelta(seconds=670))["value"][0]["temp"], 0)
+        self.assertEqual(metar.latest(start + timedelta(seconds=3600))["value"][0]["temp"], 0)
 
     def test_shared_schedule_cancellation_fences_cross_worker_weather_only_wake(self):
         import json

@@ -1,0 +1,33 @@
+{% macro value(item) -%}
+{{ item if item is defined and item is not none and item not in ('', '—', '–', '-') else '' }}
+{%- endmacro %}
+
+{% macro title(is_krfd) -%}
+Time &amp; Weather{% if is_krfd %} - KRFD METAR{% endif %}
+{%- endmacro %}
+
+{% macro primary(zone, temperature) %}
+<dl class="wx-primary">
+  <div><dt>Local Time</dt><dd><time data-weather-clock="{{ zone }}"></time></dd></div>
+  <div><dt>Zulu Time</dt><dd><time data-weather-clock="UTC"></time></dd></div>
+  <div data-metric="temperature"><dt>Temperature</dt><dd><span data-observation-value>{{ value(temperature) }}</span></dd></div>
+</dl>
+{% endmacro %}
+
+{% macro wind(parts) -%}
+{% if parts %}
+<span class="wx-wind" data-observation-value>
+  {%- if parts.direction %}<span class="wx-direction">{{ parts.direction }}</span>{% endif -%}
+  {%- if parts.speed %}{% if parts.direction %} {% endif %}<span class="wx-speed">{{ parts.speed }}</span>{% endif -%}
+  {%- if parts.gust %}{% if parts.direction or parts.speed %} {% endif %}<span class="wx-gust"{% if parts.stage %} data-stage="{{ parts.stage }}"{% endif %}>{{ parts.gust }}</span>{% endif -%}
+  {%- if parts.units %} <span class="wx-units">{{ parts.units }}</span>{% endif -%}
+</span>
+{% if parts.stage %}<span class="wx-stage" data-observation-value title="Informational stage from the reported METAR gust">Stage {{ parts.stage }}</span>{% endif %}
+{% endif %}
+{%- endmacro %}
+
+{% macro freshness(observation) -%}
+{% if observation.expires_at_ms is defined %}
+data-observation-stale="{{ observation.stale_at_ms }}" data-observation-expires="{{ observation.expires_at_ms }}"
+{% endif %}
+{%- endmacro %}

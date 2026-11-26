@@ -167,25 +167,6 @@
 
     const field = (form, name) => form.querySelector(`[name="${name}"]`);
     const normalDesktop = () => tvDesktop.matches && !tvMode && !document.body.classList.contains("operational-board-view");
-    const weatherToggle = root.querySelector("[data-ucc-weather-toggle]");
-    const weatherStorageKey = `neoapps.neosubzero.ucc.weather-collapsed.${weatherToggle?.dataset.uccWeatherToggle}`;
-    const setWeatherCollapsed = (collapsed) => {
-        root.dataset.uccWeatherCollapsed = String(collapsed);
-        weatherToggle.setAttribute("aria-expanded", String(!collapsed));
-        weatherToggle.textContent = collapsed ? "Expand" : "Collapse";
-    };
-    if (weatherToggle) {
-        try { setWeatherCollapsed(localStorage.getItem(weatherStorageKey) === "1"); }
-        catch (_error) { setWeatherCollapsed(false); }
-        weatherToggle.closest("[data-ucc-weather-heading]").hidden = false;
-        weatherToggle.addEventListener("click", () => {
-            const collapsed = weatherToggle.getAttribute("aria-expanded") === "true";
-            setWeatherCollapsed(collapsed);
-            try { localStorage.setItem(weatherStorageKey, collapsed ? "1" : "0"); }
-            catch (_error) { /* The control still works when browser storage is blocked. */ }
-        });
-    }
-
     function copyAttendance(target, source) {
         if (!target) return;
         const status = source?.dataset.uccAttendance;
@@ -746,8 +727,7 @@
                 const hourly = weather.querySelector(".neosubzero-weather-current-sort");
                 if (hourly) hourly.scrollLeft = hourlyScroll;
                 weather.querySelectorAll(".is-frost-reason").forEach((element) => { element.hidden = !frostExplanationsEnabled; });
-                const stamp = weather.querySelector(".neosubzero-weather-source > span");
-                if (stamp) stamp.textContent = newWeather.querySelector(".neosubzero-weather-source > span").textContent;
+                document.dispatchEvent(new Event("weather:updated"));
             }
             applyMobileView();
             showAircraft(selectedMission);

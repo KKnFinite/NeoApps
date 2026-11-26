@@ -173,15 +173,8 @@
     function weatherView() {
         const weather = tvSource.querySelector(".neosubzero-weather");
         const current = weather?.querySelector(".neosubzero-weather-current");
-        const primary = current?.querySelector(".neosubzero-weather-primary");
-        const facts = Array.from(current?.querySelectorAll("dl > div") || [], fact =>
-            element("div", "", element("dt", "", content(fact, "dt")), element("dd", "", content(fact, "dd"))));
-        const observation = element("section", "ucc-tv-observation", heading("KRFD · CURRENT WEATHER"),
-            element("div", "ucc-tv-temperature", element("strong", "", content(primary, "strong") || "—"),
-                element("div", "", element("b", "", content(primary, "span")), element("small", "", content(primary, "small")))),
-            element("dl", "", ...facts),
-            element("p", "ucc-tv-source", content(weather, ".neosubzero-weather-source > span")),
-            content(weather, ":scope > .neosubzero-weather-note"));
+        const observation = element("section", "ucc-tv-observation",
+            heading(content(weather, "header h2") || "Time & Weather"), current?.cloneNode(true));
 
         const hours = Array.from(weather?.querySelectorAll(".neosubzero-weather-current-sort > article") || [], hour => {
             const priority = hour.querySelectorAll(".neosubzero-weather-hour-priority > span");
@@ -286,6 +279,7 @@
         if (wallboard) wallboard.replaceWith(next);
         else root.after(next);
         wallboard = next;
+        document.dispatchEvent(new Event("weather:updated"));
         if (scrollTop) next.querySelector(".ucc-tv-ramps").scrollTop = scrollTop;
         if (nextFocus) nextFocus.focus({preventScroll:true});
     }

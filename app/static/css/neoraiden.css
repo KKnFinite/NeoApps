@@ -88,10 +88,13 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-overview :is(dl,dd) {margin:0}
 .rd-overview dd {min-block-size:1.08em}
 .rd-short-label {display:none}
-.rd-weather :is(.rd-weather-primary,.rd-weather-details) {display:grid; gap:1px 4px; padding:1px 4px}
-.rd-weather-primary {grid-template-columns:repeat(2,minmax(0,1fr))}
+.rd-weather :is(.wx-primary,.rd-weather-details) {display:grid; gap:1px 4px; padding:1px 4px}
 .rd-weather .rd-metric {gap:0; overflow-wrap:anywhere; align-content:start}
-.rd-weather-details {grid-template-columns:minmax(0,1.4fr) minmax(0,.75fr) minmax(0,1fr); border-top:1px solid var(--line)}
+.rd-weather-details {grid-template-columns:repeat(12,minmax(0,1fr)); border-top:1px solid var(--line)}
+.rd-weather-details > div {grid-column:span 3}
+.rd-weather-details [data-metric="wind"] {grid-column:span 5}
+.rd-weather-details [data-metric="metar-precip"] {grid-column:span 4}
+.rd-weather .wx-stage {font-size:var(--rd-label-font)}
 .rd-weather .rd-weather-meta {color:var(--rd-label-color); font-size:var(--rd-label-font); line-height:1.1; padding:1px 4px; text-align:center; overflow-wrap:anywhere}
 .rd-weather-stale {color:var(--hold)}
 .rd-uld table {margin-top:2px}
@@ -250,7 +253,9 @@ body.rd-projecting > :not(.rd-tv) {display:none!important}
     .raiden .rd-performance :is(th,td) {padding-block:0; line-height:1}
     .raiden .rd-performance :is(dt,dd,.rd-mission-count,.rd-count-label) {line-height:1}
     .raiden .rd-performance dd {min-block-size:1em}
-    .rd-tv .rd-weather :is(.rd-weather-primary,.rd-weather-details,.rd-weather-meta) {padding-block:0}
+    .rd-tv .rd-weather :is(.wx-primary,.rd-weather-details,.rd-weather-meta) {padding-block:0}
+    .rd-tv .rd-weather :is(dt,dd) {line-height:1}
+    .rd-tv .rd-weather dd {min-block-size:1em}
 }
 @media (min-height:1080px) {
     .raiden.rd-tv {
