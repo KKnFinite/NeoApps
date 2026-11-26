@@ -31,6 +31,39 @@
         for (const button of all("[data-show-missions]"))
             button.setAttribute("aria-pressed", String(button.dataset.showMissions === direction));
     }
+    let clockTimer;
+    let clockZone;
+    let clockFormat;
+    function updateClock() {
+        clearTimeout(clockTimer);
+        const clock = one("[data-gateway-clock]");
+        if (!clock || document.hidden) return;
+        const zone = clock.dataset.gatewayClock;
+        if (zone !== clockZone) {
+            clockZone = zone;
+            try {
+                clockFormat = new Intl.DateTimeFormat("en-GB", {
+                    timeZone: zone, hourCycle: "h23", hour: "2-digit", minute: "2-digit",
+                });
+            } catch (error) {
+                if (!(error instanceof RangeError)) throw error;
+                clockFormat = null;
+            }
+        }
+        const now = Date.now();
+        clock.textContent = clockFormat ? clockFormat.format(now) : "";
+        const weather = one("[data-observation-expires]");
+        if (weather) {
+            const expired = now >= Number(weather.dataset.observationExpires);
+            for (const value of weather.querySelectorAll("[data-observation-value]")) value.hidden = expired;
+            weather.querySelector("[data-observation-unavailable]").hidden = !expired;
+            weather.querySelector("[data-observation-old]").hidden = now < Number(weather.dataset.observationStale);
+        }
+        // Display-only. Recompute at the next wall-clock minute without requesting data.
+        clockTimer = setTimeout(updateClock, 60000 - now % 60000);
+    }
+    document.addEventListener("visibilitychange", updateClock);
+    window.addEventListener("pageshow", updateClock);
     function updateContext() {
         const sort = one("[data-sort-context]")?.dataset.sortContext;
         const context = one("[data-tv-context]");
@@ -185,9 +218,11 @@
     root.addEventListener("raiden:before-update", () => { if (!tv) remembered = capture(); });
     root.addEventListener("raiden:updated", () => {
         updateContext();
+        updateClock();
         if (tv) fitTV(); else restore(remembered);
     });
     applyTheme(normalTheme);
     updateContext();
+    updateClock();
     normalView();
 })();

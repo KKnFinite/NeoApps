@@ -71,6 +71,7 @@ class RaidenTest(unittest.TestCase):
         with self.app.test_request_context():
             html = render_template("neonodes/neoraiden/_board.html", board=dict(
                 operation_id=1, sort_label="Night", arrivals=[], departures=[], uld=None, marked_here=None,
+                weather={"allowed": False, "observation": None}, timezone="America/Chicago",
                 wave_performance={"inbound": projection}, performance={"inbound": average_lateness(rows)},
             ))
         self.assertIn("<dt>Overall</dt><dd>54.0</dd>", html)
@@ -690,6 +691,92 @@ class RaidenTest(unittest.TestCase):
             GatewayMembership.query.filter_by(user_id=self.user.id).update({"is_active": False})
             db.session.commit()
             self.assertEqual(self.client.get(path,headers={"If-None-Match":changed.headers["ETag"]}).status_code,403)
+
+    def test_weather_revision_reads_authorized_local_evidence_without_fetching(self):
+        from datetime import timezone
+        from app.models import NeoSubZeroOperationContext
+        from app.services import neosubzero_weather
+
+        self.app.config["NEOSUBZERO_WEATHER_ENABLED"] = True
+        self.app.config["DEFAULT_GATEWAY_TIMEZONE"] = "America/Denver"
+        now = datetime(2026, 4, 13, 4, tzinfo=timezone.utc)
+        op = seed_sort(self.gateway)
+        context = NeoSubZeroOperationContext(sort_date_operation_id=op.id, active_precipitation="Human-entered snow")
+        db.session.add(context)
+        db.session.commit()
+        path = f"/neoraiden/state?operation_id={op.id}"
+        with patch.object(neosubzero_weather, "_CACHE", {}) as cache, \
+             patch.object(neosubzero_weather, "_utc_now", return_value=now) as clock, \
+             patch.object(neosubzero_weather, "_cached_fetch", side_effect=AssertionError("Provider access")) as fetch:
+            cold = self.client.get(path)
+            self.assertIn("Observation unavailable", cold.json["html"])
+            self.assertIn("Human-entered snow", cold.json["html"])
+            observation = dict(icaoId="KRFD", reportTime=now.isoformat(), temp=-17.78,
+                               dewp=None, wspd=None, visib=0, wxString="FG")
+            cache["krfd_metar"] = dict(value=[observation], fetched_at=now.timestamp())
+
+            def after(response, url=path):
+                return self.client.get(url, headers={"If-None-Match": response.headers["ETag"]})
+
+            fresh = after(cold)
+            self.assertEqual(fresh.status_code, 200)
+            self.assertIn('data-gateway-clock="America/Denver"', fresh.json["html"])
+            self.assertIn("0°F", fresh.json["html"])
+            self.assertIn("0 SM", fresh.json["html"])
+            self.assertIn("FG · KRFD METAR", fresh.json["html"])
+            self.assertNotIn("CALM", fresh.json["html"])
+            fetch.assert_not_called()
+            self.assertEqual(after(fresh).status_code, 304)
+
+            context.active_precipitation = None
+            db.session.commit()
+            cleared = after(fresh)
+            self.assertEqual(cleared.status_code, 200)
+            self.assertNotIn("Human-entered snow", cleared.json["html"])
+            self.assertIn("FG · KRFD METAR", cleared.json["html"])
+
+            clock.return_value = now + timedelta(minutes=6)
+            stale = after(cleared)
+            self.assertEqual(stale.status_code, 200)
+            self.assertIn("0°F", stale.json["html"])
+            self.assertIn("data-observation-old>", stale.json["html"])
+            clock.return_value = now + timedelta(hours=6)
+            expired = after(stale)
+            self.assertIn("Observation unavailable", expired.json["html"])
+            self.assertNotIn("0°F", expired.json["html"])
+
+            clock.return_value = now
+            observation["reportTime"] = "2026-04-13T04:00:00"
+            self.assertIn("Observation unavailable", self.client.get(path).json["html"])
+            observation["reportTime"] = now.isoformat()
+            observation["icaoId"] = "KDEN"
+            self.assertNotIn("0°F", self.client.get(path).json["html"])
+            observation["icaoId"] = "KRFD"
+            foreign = Gateway(code="DEN", name="Denver")
+            db.session.add(foreign)
+            db.session.flush()
+            subzero = NeoNode.query.filter_by(code="subzero").one()
+            membership = GatewayMembership(user_id=self.user.id, gateway_id=foreign.id, status="approved", is_active=True)
+            db.session.add(GatewayNodeRole(gateway_membership=membership, node=subzero, role="watcher"))
+            foreign_op = seed_sort(foreign)
+            db.session.add(NeoSubZeroOperationContext(sort_date_operation_id=foreign_op.id, active_precipitation="DEN rain"))
+            db.session.commit()
+            isolated = self.client.get(f"/neoraiden/state?gateway=DEN&operation_id={foreign_op.id}").json["html"]
+            self.assertIn("Weather unavailable for DEN", isolated)
+            self.assertIn("DEN rain", isolated)
+            self.assertNotIn("KRFD", isolated)
+            self.assertNotIn("0°F", isolated)
+
+            home_membership = GatewayMembership.query.filter_by(user_id=self.user.id, gateway_id=self.gateway.id).one()
+            GatewayNodeRole.query.filter_by(gateway_membership_id=home_membership.id, node_id=subzero.id).update({"is_active": False})
+            context.active_precipitation = "Source revoked"
+            db.session.commit()
+            denied = after(fresh)
+            self.assertEqual(denied.status_code, 200)
+            self.assertIn("NeoSubZero access required", denied.json["html"])
+            self.assertNotIn("0°F", denied.json["html"])
+            self.assertNotIn("Source revoked", denied.json["html"])
+            fetch.assert_not_called()
 
     def test_gateway_and_sort_isolation_and_read_only_current(self):
         foreign = Gateway(code="DEN",name="Denver")

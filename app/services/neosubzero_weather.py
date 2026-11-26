@@ -31,6 +31,7 @@ AVIATION_WEATHER_METAR_URL = "https://aviationweather.gov/api/data/metar"
 NWS_POINTS_URL = "https://api.weather.gov/points/{latitude},{longitude}"
 METAR_TTL = timedelta(minutes=5)
 METAR_STALE_TTL = timedelta(hours=6)
+METAR_OBSERVATION_FRESHNESS = timedelta(minutes=90)
 FORECAST_TTL = timedelta(minutes=30)
 FORECAST_STALE_TTL = timedelta(hours=24)
 FORECAST_CALENDAR_DAYS = 7
@@ -149,6 +150,38 @@ def neosubzero_weather_revision(*, gateway=None, now=None):
     if gateway is None:return base
     from app.services.frost_ducc import revision
     return hashlib.sha256((base+revision(gateway,now=now)).encode()).hexdigest()
+
+
+def cached_metar_observation(gateway, *, now=None):
+    """Read the existing KRFD observation without contacting any provider."""
+    if gateway.code != "RFD" or not _weather_enabled():
+        return None
+    now = _utc_now(now)
+    with _CACHE_LOCK:
+        cached = _CACHE.get("krfd_metar")
+    metar = cached["value"] if cached else None
+    row = metar[0] if isinstance(metar, list) and metar else None
+    if not isinstance(row, dict) or row.get("icaoId") != KRFD_ICAO:
+        return None
+    observed = _parse_datetime(row.get("reportTime"))
+    if observed is None or observed.tzinfo is None or observed > now:
+        return None
+    fetched = datetime.fromtimestamp(cached["fetched_at"], timezone.utc)
+    expires = min(fetched, observed) + METAR_STALE_TTL
+    if now >= expires:
+        return None
+    stale_at = min(fetched + METAR_TTL, observed + METAR_OBSERVATION_FRESHNESS)
+    current = parse_aviation_weather_metar(metar)
+    return dict(
+        temperature=current["temperature"], dewpoint=current["dewpoint"], spread=current["spread"],
+        relative_humidity=current["relative_humidity"],
+        wind=current["wind"] if current["wind_speed_value"] is not None else None,
+        visibility="0 SM" if row.get("visib") == 0 else current["visibility"],
+        conditions=str(row.get("wxString") or "").strip(), observed_at=observed.isoformat(),
+        observed_label=observed.astimezone(timezone.utc).strftime("%H:%MZ"),
+        observed_full_label=current["observed_at_label"], stale=now >= stale_at,
+        stale_at_ms=int(stale_at.timestamp() * 1000), expires_at_ms=int(expires.timestamp() * 1000),
+    )
 
 
 def clear_neosubzero_weather_cache():

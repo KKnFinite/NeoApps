@@ -7,7 +7,7 @@ from sqlalchemy.orm import load_only
 
 from app.extensions import db
 from app.models import (
-    NeoErmacBuildingLineup, NeoErmacDoorPull, NeoNode, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState,
+    NeoErmacBuildingLineup, NeoErmacDoorPull, NeoNode, NeoSubZeroDepartureDeiceEvent, NeoSubZeroOperationContext, NeoSubZeroPretreatState,
     NeoScorpionAircraftFuelSetting, NeoScorpionDirectEntry, NeoScorpionFuelAssignment,
     NeoScorpionFuelAuditEntry, NeoScorpionFuelTankState, NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState, NeoScorpionFuelingEvent, NeoScorpionFuelingEventTankSnapshot,
@@ -29,6 +29,7 @@ from app.services.neosektor_live_counts import native_uld_summary
 from app.services.permission_rules import user_can
 from app.services.neosubzero_evidence import SHARED_TAIL_REVIEW, normalized_tail
 from app.services.neosubzero_radio import radio_pending
+from app.services.neosubzero_weather import cached_metar_observation
 from app.services.departure_labels import departure_occurrences, departure_order, destination_label, effective_departure_utc
 from app.services.time_display import format_local_hhmm
 from app.services.sort_date_operations import _planned_datetime_utc, normalize_wave
@@ -150,8 +151,23 @@ def _arrival_variance_minutes(mission, planned, window):
 
 def board_sources(user, gateway, operation):
     access = _source_access(user, gateway)
-    uld = native_uld_summary(gateway, operation.sort_date, operation.sort_name) if "sektor" in access else None
+    uld = native_uld_summary(gateway, operation.sort_date, operation.sort_name) if operation and "sektor" in access else None
     return access, uld
+
+
+def board_weather(gateway, access):
+    allowed = "subzero" in access
+    return dict(
+        allowed=allowed, supported=gateway.code == "RFD",
+        observation=cached_metar_observation(gateway) if allowed else None,
+        precipitation=None,
+    )
+
+
+def _active_precipitation(operation_id):
+    return db.select(NeoSubZeroOperationContext.active_precipitation).where(
+        NeoSubZeroOperationContext.sort_date_operation_id == operation_id
+    ).scalar_subquery()
 
 
 def postgres_board_versions(gateway, operation, access):
@@ -211,7 +227,10 @@ def postgres_board_versions(gateway, operation, access):
         if 'subzero' not in access:
             columns.append(versions(SortDateTailState, SortDateTailState.gateway_code == gateway.code,
                 SortDateTailState.sort_date == operation.sort_date, SortDateTailState.sort_name == operation.sort_name))
-    return tuple(str(value) for value in db.session.execute(select(*columns)).one())
+    # Read the human-set value in the existing revision statement, including on 304s.
+    precipitation = _active_precipitation(op_id) if "subzero" in access else db.null()
+    *versions, active_precipitation = db.session.execute(select(*columns, precipitation)).one()
+    return tuple(map(str, versions)), active_precipitation
 
 
 def _flight_performance(missions):
@@ -271,18 +290,21 @@ def _live_arrival_performance(evidence):
     )
 
 
-def snapshot(user, gateway, operation, *, sources=None):
+def snapshot(user, gateway, operation, *, sources=None, weather=None):
+    if operation is not None and (operation.gateway_code != gateway.code or operation.gateway_id not in (None, gateway.id)):
+        raise ValueError("Sort does not belong to the selected gateway.")
+    access, uld = sources if sources is not None else board_sources(user, gateway, operation)
+    weather_from_revision = weather is not None
+    if not weather_from_revision:
+        weather = board_weather(gateway, access)
     result = dict(gateway=gateway.code, operation_id=operation.id if operation else None,
                   sort_label=None, arrivals=[], departures=[], staffing=[], marked_here=None, window=None,
-                  uld=None, performance={}, pull_roster={})
+                  uld=uld, performance={}, pull_roster={}, weather=weather, timezone=gateway_timezone(gateway))
     if operation is None:
         return result
-    if operation.gateway_code != gateway.code or operation.gateway_id not in (None, gateway.id):
-        raise ValueError("Sort does not belong to the selected gateway.")
     op_id = operation.id
     result.update(sort_label=f"{operation.sort_date} · {operation.sort_name.title()}",
                   window=operation.window_minutes)
-    access, result["uld"] = sources if sources is not None else board_sources(user, gateway, operation)
     m = SortDateMission
     query = m.query.filter_by(sort_date_operation_id=op_id,
         gateway_code=gateway.code, sort_date=operation.sort_date, sort_name=operation.sort_name
@@ -382,9 +404,15 @@ def snapshot(user, gateway, operation, *, sources=None):
         result["wave_performance"] = dict(inbound=waves, outbound=_flight_performance(departures))
     # Attendance marks are distinct people, independent of the finalized payroll summary.
     attendance = StaffingDailyAttendance
-    marked, here = (db.session.query(db.func.count(db.distinct(attendance.person_id)),
+    attendance_read = db.session.query(db.func.count(db.distinct(attendance.person_id)),
         db.func.count(db.distinct(db.case((attendance.status == "here", attendance.person_id)))))
-        .filter(attendance.sort_date_operation_id == op_id, attendance.attendance_date == operation.sort_date).one())
+    read_precipitation = not weather_from_revision and weather["allowed"]
+    if read_precipitation:
+        attendance_read = attendance_read.add_columns(_active_precipitation(op_id))
+    marked, here, *precipitation = attendance_read.filter(
+        attendance.sort_date_operation_id == op_id, attendance.attendance_date == operation.sort_date).one()
+    if read_precipitation:
+        weather["precipitation"], = precipitation
     result["marked_here"] = here if marked else None
     result["staffing"] = [dict(area=name, payroll=payroll, worked=worked)
         for name, payroll, worked in db.session.query(StaffingUnit.name,
