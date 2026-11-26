@@ -40,7 +40,7 @@ class RaidenTest(unittest.TestCase):
     def test_wave_stats_use_canonical_eligibility_and_weighted_two_wave_total(self):
         from types import SimpleNamespace
         from app.neonodes.neorain.services import _late_summary
-        from app.neonodes.neoraiden.services import _flight_performance
+        from app.neonodes.neoraiden.services import _flight_performance, _live_arrival_performance
 
         sta = datetime(2026, 4, 13, 5)
         def arrival(wave, minutes, *, include=None, status="arrived"):
@@ -62,6 +62,9 @@ class RaidenTest(unittest.TestCase):
         self.assertEqual(projection["second_wave"], summary["second_wave"])
         self.assertEqual(projection["combined"], dict(aircraft_late=3, late_minutes=60, average="20"))
         self.assertEqual(summary["total"]["aircraft_late"], 4)
+        live_average, live_waves = _live_arrival_performance(zip(rows, (8, 12, 40, 90, None, 120, None, 0), strict=True))
+        self.assertEqual(live_waves, projection)
+        self.assertEqual(live_average, {"overall": 54.0, "included": 45.0})
 
         from flask import render_template
         from app.services.neorain_performance import average_lateness
@@ -217,11 +220,13 @@ class RaidenTest(unittest.TestCase):
             with self.app.test_request_context():
                 board = snapshot(self.user, self.gateway, op, sources=(access, None))
             row = next(row for row in board["arrivals"] if row["id"] == flight.id)
-            return row["variance"], board["performance"].get("inbound")
+            return (row["variance"], board["performance"].get("inbound"),
+                    board.get("wave_performance", {}).get("inbound", {}))
 
         baseline_report = report_context(op)
         baseline_briefing = briefing_context(op)["inbound"]
-        self.assertEqual(read(), (None, {"overall": 7.0, "included": 7.0}))
+        self.assertEqual(read()[:2], (None, {"overall": 7.0, "included": 7.0}))
+        self.assertIsNone(read()[2]["first_wave"])
         before, after = sta - timedelta(minutes=2, seconds=59), sta + timedelta(minutes=12, seconds=29)
         for status, eta, actual, expected in (
             ("en_route", before, None, -2),
@@ -241,13 +246,20 @@ class RaidenTest(unittest.TestCase):
                 flight.arrival_status, flight.eta_datetime_utc = status, eta
                 flight.actual_block_in_datetime_utc = actual
                 db.session.flush()
-                self.assertEqual(read()[0], expected)
+                variance, _, waves = read()
+                self.assertEqual(variance, expected)
+                if expected is None:
+                    self.assertIsNone(waves["first_wave"])
+                else:
+                    self.assertEqual(waves["first_wave"]["aircraft_late"], int(expected > 0))
+                    self.assertEqual(waves["first_wave"]["late_minutes"], max(0, expected))
 
         flight.arrival_status, flight.actual_block_in_datetime_utc = "en_route", None
         flight.eta_datetime_utc = after
         db.session.commit()
-        self.assertEqual(read(), (12, {"overall": 7.0, "included": 7.0}))
-        self.assertEqual(read(set()), (None, None))
+        self.assertEqual(read()[:2], (12, {"overall": 9.5, "included": 9.5}))
+        self.assertEqual(read()[2]["combined"], dict(aircraft_late=2, late_minutes=19, average="9.5"))
+        self.assertEqual(read(set()), (None, None, {}))
         self.assertEqual(flight.planned_datetime_utc, sta - timedelta(days=1))
         self.assertEqual(report_context(op)["inbound_late"], baseline_report["inbound_late"])
         self.assertEqual(briefing_context(op)["inbound"], baseline_briefing)
@@ -283,6 +295,17 @@ class RaidenTest(unittest.TestCase):
         flight.planned_datetime_local = datetime(2026, 11, 1, 1, 30)
         flight.timezone = "America/Chicago"
         self.assertIsNone(_arrival_variance_minutes(flight, datetime(2026, 11, 1, 6, 30), window))
+
+    def test_missing_display_values_are_blank_and_zero_and_no_pull_are_literal(self):
+        from flask import render_template_string
+
+        with self.app.test_request_context():
+            html = render_template_string(
+                "{% from 'neonodes/neoraiden/_mission.html' import val %}"
+                "{% for value in values %}[{{ val(value) }}]{% endfor %}",
+                values=[None, "", "-", "—", "–", 0, "0.0", "-5", "+5", "NO PURE", "NO MIX"],
+            )
+        self.assertEqual(html, "[][][][][][0][0.0][-5][+5][NO PURE][NO MIX]")
 
     def test_fuel_labels_format_both_mission_layouts_without_changing_fuel_color(self):
         from flask import render_template_string
@@ -370,7 +393,7 @@ class RaidenTest(unittest.TestCase):
                                    headers={"X-Raiden-Automatic": "1"})
         self.assertEqual(response.status_code, 204)
 
-    def test_performance_uses_completed_late_only_cases_and_native_exclusions(self):
+    def test_live_inbound_performance_uses_native_exclusions_without_changing_rain(self):
         from app.neonodes.neorain.services import _inbound_late_summary
 
         op = seed_sort(self.gateway)
@@ -393,12 +416,13 @@ class RaidenTest(unittest.TestCase):
         with self.app.test_request_context():
             def performance():
                 return snapshot(self.user, self.gateway, op)["performance"]
-            self.assertEqual(performance(), {"inbound": {"overall": 20.0, "included": 10.0},
+            self.assertEqual(performance(), {"inbound": {"overall": 30.0, "included": 30.0},
                                             "outbound": {"overall": None, "included": None}})
-            self.assertEqual(performance()["inbound"]["included"], float(_inbound_late_summary(arrivals)["total"]["average"]))
+            self.assertEqual(_inbound_late_summary(arrivals)["total"]["average"], "10")
             arrivals[0].late_metrics_included_override = False
             db.session.commit()
-            self.assertEqual(performance()["inbound"]["included"], 0.0)
+            self.assertEqual(performance()["inbound"]["included"], 50.0)
+            self.assertEqual(_inbound_late_summary(arrivals)["total"]["average"], "0")
             self.assertEqual(snapshot(self.user, self.gateway, op, sources=(set(), None))["performance"], {})
 
     def test_deice_revision_follows_physical_tail_and_requires_ownership_evidence(self):

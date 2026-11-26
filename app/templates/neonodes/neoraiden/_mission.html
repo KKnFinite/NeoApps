@@ -16,7 +16,7 @@
   'GONE · CLEARED':'CLEARED', 'NEGATIVE DEICE':'NEG DEICE',
 } %}
 
-{% macro val(v) -%}{{ v if v is defined and v is not none and v != '' else '—' }}{%- endmacro %}
+{% macro val(v) -%}{{ v if v is defined and v is not none and v not in ('', '-', '—', '–') else '' }}{%- endmacro %}
 {% macro metric(key,label,value) %}
 <div class="rd-metric" data-metric="{{ key }}"><dt>{{ label }}</dt><dd>{{ val(value) }}</dd></div>
 {% endmacro %}
@@ -55,7 +55,8 @@
   {%- else -%}
     {%- if key == 'fuel' and m.fuel_color -%}{%- set tone = m.fuel_color -%}{%- endif -%}
     {%- if key in ('ramp','crew') and m.load_mismatch -%}{%- set tone = 'load-mismatch' -%}{%- endif -%}
-    <span class="rd-value{% if key == 'flight' %} rd-flight{% endif %}"{% if value is defined and value is not none and value not in ('', '—') and tone %} data-value-color="{{ tone }}"{% endif %}>{{ (value or '') if key in ('pure', 'mix') else val(value) }}</span>
+    {%- set display = val(value) -%}
+    <span class="rd-value{% if key == 'flight' %} rd-flight{% endif %}"{% if display and tone %} data-value-color="{{ tone }}"{% endif %}>{{ display }}</span>
   {%- endif -%}
 {%- endmacro %}
 
@@ -75,7 +76,7 @@
     {% set top = 'block' if block else upper %}
     {% set bottom = 'variance' if block else lower %}
     <{{ 'th' if loop.first else 'td' }} role="{{ 'rowheader' if loop.first else 'cell' }}"{% if loop.first %} scope="row"{% endif %} data-pair="{{ upper }}">
-      <span class="rd-pair-value" data-field="{{ top }}"{% if upper == 'time' %} aria-label="{{ 'Block' if block else 'ETD' }} {{ val(values[top]) }}"{% endif %}>{% if block %}<small class="rd-time-kind" aria-hidden="true">B</small> {% endif %}{{ cell_value(m, top, values[top], true) }}</span>
+      <span class="rd-pair-value" data-field="{{ top }}"{% if upper == 'time' and val(values[top]) %} aria-label="{{ 'Block' if block else 'ETD' }} {{ val(values[top]) }}"{% endif %}>{% if block %}<small class="rd-time-kind" aria-hidden="true">B</small> {% endif %}{{ cell_value(m, top, values[top], true) }}</span>
       {% if bottom %}<span class="rd-pair-value" data-field="{{ bottom }}">{{ cell_value(m, bottom, values[bottom], true) }}</span>{% endif %}
     </{{ 'th' if loop.first else 'td' }}>
   {% endfor %}
@@ -87,7 +88,7 @@
       <th scope="row" role="rowheader" data-field="flight">{{ cell_value(m, key, values[key]) }}</th>
     {% else %}
       <td role="cell" data-field="{{ key }}"{% if not inbound and loop.index > 6 %} class="rd-extra"{% endif %}>
-        {% if key == 'time' and estimated %}
+        {% if key == 'time' and val(estimated) %}
           {% if inbound %}<small>{{ 'ACT' if m.actual else 'ETA' if m.eta else 'STA' }}</small> {% endif %}<time{% if not inbound %} aria-label="{{ 'Estimated departure' if m.etd else 'Scheduled departure' }} {{ estimated }}"{% endif %}>{{ cell_value(m, key, estimated) }}</time>
         {% else %}{{ cell_value(m, key, values[key]) }}{% endif %}
       </td>

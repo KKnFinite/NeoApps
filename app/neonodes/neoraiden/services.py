@@ -22,7 +22,7 @@ from app.services.gateway_matrix import configured_sort_window_utc, current_gate
 from app.services.neorain_fuel_authority import scorpion_board_fuel_by_mission
 from app.services.neorain_performance import (
     ARRIVAL_COMPLETE, average_lateness, completed_actual, completed_variance_minutes,
-    eligible_for_performance, mission_status,
+    eligible_for_performance, late_inclusion, mission_status,
 )
 from app.services.neoscorpion_fueling_status import STAGE_COLORS
 from app.services.neosektor_live_counts import native_uld_summary
@@ -233,6 +233,44 @@ def _flight_performance(missions):
     }
 
 
+def _live_arrival_performance(evidence):
+    from app.neonodes.neorain.services import _late_average_display
+
+    overall, included = [], []
+    waves = {"1": [], "2": []}
+    for mission, minutes in evidence:
+        if minutes is None:
+            continue
+        overall.append(minutes)
+        if late_inclusion(mission)["included"]:
+            included.append(minutes)
+            wave = normalize_wave(mission.wave)
+            if wave in waves:
+                waves[wave].append(minutes)
+
+    def late_totals(values):
+        late = [value for value in values if value > 0]
+        return len(late), sum(late)
+
+    def wave_summary(values):
+        if not values:
+            return None
+        count, minutes = late_totals(values)
+        return dict(aircraft_late=count, late_minutes=minutes, average=_late_average_display(minutes, count))
+
+    def comparison_average(values):
+        if not values:
+            return None
+        count, minutes = late_totals(values)
+        return minutes / count if count else 0.0
+
+    return (
+        dict(overall=comparison_average(overall), included=comparison_average(included)),
+        dict(first_wave=wave_summary(waves["1"]), second_wave=wave_summary(waves["2"]),
+             combined=wave_summary(waves["1"] + waves["2"])),
+    )
+
+
 def snapshot(user, gateway, operation, *, sources=None):
     result = dict(gateway=gateway.code, operation_id=operation.id if operation else None,
                   sort_label=None, arrivals=[], departures=[], staffing=[], marked_here=None, window=None,
@@ -266,9 +304,7 @@ def snapshot(user, gateway, operation, *, sources=None):
     inbound_missions = [m for m in missions if m.mission_type == "arrival"]
     departures = [m for m in missions if m.mission_type == "departure"]
     window = arrival_sort_window(gateway, operation)
-    if "rain" in access:
-        result["performance"] = dict(inbound=average_lateness(inbound_missions), outbound=average_lateness(departures))
-        result["wave_performance"] = dict(inbound=_flight_performance(inbound_missions), outbound=_flight_performance(departures))
+    arrival_evidence = []
     pulls = {}
     if "ermac" in access and usable_pull_lineup(gateway, operation, window):
         result["pull_roster"], pulls = completed_pulls(gateway, operation, departures)
@@ -306,6 +342,8 @@ def snapshot(user, gateway, operation, *, sources=None):
             row["variance"] = (_arrival_variance_minutes(mission, planned, window) if inbound
                                else completed_variance_minutes(mission))
         if inbound:
+            if "rain" in access:
+                arrival_evidence.append((mission, row["variance"]))
             row["wave"] = normalize_wave(mission.wave)
             instant = _arrival_sort_time(mission, planned, window)
             arrivals.append(((instant is None, instant, mission.id), row))
@@ -338,6 +376,10 @@ def snapshot(user, gateway, operation, *, sources=None):
                    pure=pure, mix=mix, deice=deice, deice_state=deice_state)
         result["departures"].append(row)
     result["arrivals"] = [row for _, row in sorted(arrivals, key=lambda arrival: arrival[0])]
+    if "rain" in access:
+        averages, waves = _live_arrival_performance(arrival_evidence)
+        result["performance"] = dict(inbound=averages, outbound=average_lateness(departures))
+        result["wave_performance"] = dict(inbound=waves, outbound=_flight_performance(departures))
     # Attendance marks are distinct people, independent of the finalized payroll summary.
     attendance = StaffingDailyAttendance
     marked, here = (db.session.query(db.func.count(db.distinct(attendance.person_id)),

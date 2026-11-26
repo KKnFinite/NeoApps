@@ -41,16 +41,16 @@ class GodModeBrowser(unittest.TestCase):
         expect(shift.locator("dt")).to_have_text("Shift Staffing")
         expect(shift.locator("dd")).to_have_text("1")
         expect(ramp.locator("dt")).to_have_text("Ramp Staffing")
-        expect(ramp.locator("dd")).to_have_text("—")
+        expect(ramp.locator("dd")).to_be_empty()
         expect(overview.get_by_role("table", name="CAN / ULD counts").locator("thead th")).to_have_text(
             ["Wave", "East", "West", "Left to arrive", "Left to unload"])
         expect(overview.locator(".rd-uld tbody th")).to_have_text(["1st", "2nd", "Openings"])
         expect(overview.locator("tr[data-openings] td")).to_have_text(["2", "3", "", ""])
         averages = overview.locator(".rd-averages dd")
         if comparison:
-            expect(averages).to_have_text(["10.0", "10.0"])
+            expect(averages).to_have_text(["5.6", "10.0"])
         else:
-            expect(averages).to_have_count(0)
+            expect(averages).to_have_text(["5.0", "0.0"])
         expect(overview.locator(".rd-section-heading")).to_have_text(["Inbound ULD Counts", "Flight Data", "Staffing"])
         expect(overview.locator(".rd-mission-count")).to_have_text(["29", "31"])
         expect(overview.locator(".rd-count-line")).to_have_text(["29 Arrivals", "31 Departures"])
@@ -61,10 +61,23 @@ class GodModeBrowser(unittest.TestCase):
             self.assertAlmostEqual(direction["x"] + direction["width"] / 2,
                                    count["x"] + count["width"] / 2, delta=.5)
             expect(group.locator(".rd-count-line")).to_have_css("text-align", "center")
-        expect(overview.locator(".rd-performance tbody th")).to_have_text(["1st Wave", "2nd Wave", "Total"])
+        expect(overview.get_by_role("rowheader", name="1st Wave", exact=True)).to_be_visible()
+        expect(overview.get_by_role("rowheader", name="2nd Wave", exact=True)).to_be_visible()
+        expect(overview.locator('[data-performance-wave="first_wave"] td')).to_have_text(["", "", "", "1", "9", "9"])
         expect(overview.locator('[data-performance-wave="combined"] td')).to_have_text(
             ["0", "0", "0", "1", "9", "9"])
         expect(page.locator("[data-raiden] details, [data-mission-details]")).to_have_count(0)
+        audit = page.locator("[data-raiden]").evaluate("""root => {
+            const visible = el => el.getBoundingClientRect().width > 1 && !el.closest('[hidden]');
+            const bold = [...root.querySelectorAll('*')].filter(el => visible(el) &&
+                (el.matches('input,button,select') ||
+                 [...el.childNodes].some(child => child.nodeType === 3 && child.textContent.trim())) &&
+                getComputedStyle(el).fontWeight !== '400').map(el => [el.tagName, el.className]);
+            const placeholders = [...root.querySelectorAll('td,dd,.rd-pair-value')].filter(el =>
+                visible(el) && /^[-–—]$/.test(el.textContent.trim())).map(el => el.outerHTML);
+            return {bold, placeholders};
+        }""")
+        self.assertEqual(audit, {"bold": [], "placeholders": []})
         metrics = overview.evaluate("""el => {
             const ctx = document.createElement('canvas').getContext('2d', {willReadFrequently: true});
             function luminance(color) {
@@ -109,7 +122,7 @@ class GodModeBrowser(unittest.TestCase):
             pairs.push(...[...el.querySelectorAll('.rd-totals .rd-metric')].map(metric =>
                 [metric.querySelector('dt'), metric.querySelector('dd')]));
             for (const [label, value] of pairs) {
-                const a = textRect(label), b = textRect(value);
+                const a = textRect(label), b = value.textContent.trim() ? textRect(value) : value.getBoundingClientRect();
                 const overlap = label.getBoundingClientRect().bottom - value.getBoundingClientRect().top;
                 if (!centered(a, b) || overlap > 1) {
                     misaligned.push([label.textContent, value.textContent, center(a) - center(b), overlap]);
@@ -320,7 +333,10 @@ class GodModeBrowser(unittest.TestCase):
                         })""")
                         metrics = mobile_metrics[f"{width}-{theme}"]
                         metrics.update(overview_metrics)
-                        self.assertEqual((metrics["overviewFont"], metrics["overviewLabel"]), (16, 13), metrics)
+                        self.assertEqual((metrics["overviewFont"], metrics["overviewLabel"]), (13, 11), metrics)
+                        self.assertLess(metrics["overviewHeight"], 295, metrics)
+                        expect(page.locator(".rd-performance thead .rd-short-label:visible")).to_have_text(
+                            ["Late", "Min", "Avg", "Late", "Min", "Avg"])
                         page.locator(".rd-overview").screenshot(path=output/f"overview-mobile-{engine}-{width}-{theme}.png")
                         for direction, flight, count in (("Arrivals", "UPS0403", 29), ("Departures", "FX101", 31)):
                             page.get_by_role("button", name=direction, exact=True).click()
