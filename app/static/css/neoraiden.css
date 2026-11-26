@@ -63,8 +63,10 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     border-radius:6px; margin-bottom:4px; padding-block:3px;
 }
 .raiden:not(.rd-measuring-tv) .rd-overview {
-    --rd-metric-font:clamp(13px,1.25cqw,19px);
-    padding-block:4px;
+    --rd-metric-font:18px;
+    --rd-label-font:14px;
+    --rd-label-color:color-mix(in srgb,var(--muted) 55%,var(--ink));
+    padding-block:5px;
 }
 .rd-overview > * {padding-inline:clamp(4px,.7cqw,14px); min-width:0}
 .rd-overview > :not(:first-child) {border-inline-start:1px solid var(--line)}
@@ -72,11 +74,14 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 .rd-uld table {width:100%; border-collapse:collapse; font:inherit; color:inherit}
 .rd-uld :is(th,td) {padding:1px 2px; border:0; background:transparent; text-align:center; color:var(--ink)}
 .rd-uld thead th,.rd-overview dt,.rd-performance h2 {
-    font-size:.85em; font-weight:600; line-height:1.1; color:var(--muted);
+    font-size:var(--rd-label-font,.85em); font-weight:600; line-height:1.1;
+    color:var(--rd-label-color,var(--muted));
 }
-.raiden:not(.rd-measuring-tv) .rd-overview :is(thead th,dt,.rd-performance h2) {font-size:.91em}
 .rd-uld tbody :is(th,td),.rd-overview dd {
     font-size:var(--rd-metric-font); font-weight:650; line-height:1.08; color:var(--ink);
+}
+.raiden:not(.rd-measuring-tv) .rd-uld tbody th {
+    font-size:var(--rd-label-font); color:var(--rd-label-color);
 }
 .rd-progress,.rd-performance dl,.rd-totals,.rd-overview dd {margin:0}
 .rd-progress {flex:none}
@@ -152,6 +157,10 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
 }
 @media(max-width:800px) {
     .raiden:not(.rd-tv) {padding:4px; font-size:12px}
+    .raiden:not(.rd-tv):not(.rd-measuring-tv) .rd-overview {
+        --rd-metric-font:16px;
+        --rd-label-font:13px;
+    }
     .raiden:not(.rd-tv) .rd-header {
         display:grid; grid-template-columns:minmax(0,1fr) auto; gap:3px 5px;
     }
@@ -159,6 +168,11 @@ body.blueprint-neoraiden .raiden select:not([multiple]) {
     .raiden:not(.rd-tv) .rd-context {grid-column:1/-1}
     .raiden:not(.rd-tv) .rd-header [data-search] {width:100%}
     .raiden:not(.rd-tv) .rd-refresh {grid-column:2}
+}
+@container (781px <= width <= 1050px) {
+    .raiden:not(.rd-tv):not(.rd-measuring-tv) .rd-overview {
+        grid-template-columns:minmax(0,1.46fr) minmax(0,1fr) minmax(0,1fr);
+    }
 }
 @container (max-width:780px) {
     .raiden:not(.rd-tv) .rd-overview {grid-template-columns:1fr; padding:0}
@@ -208,7 +222,19 @@ body.rd-projecting > :not(.rd-tv) {display:none!important}
 .rd-tv-context {flex:1; text-align:center}
 .rd-tv .rd-tv-context {display:block}
 .rd-tv .rd-overview {--rd-metric-font:clamp(13px,1.52vh,22px)}
-.rd-tv:not(.rd-measuring-tv) .rd-overview {--rd-metric-font:clamp(14px,1.66vh,24px)}
+/* The measurement pass keeps its original banner geometry to preserve TV mission sizing. */
+@media (min-height:1080px) {
+    .raiden.rd-tv:not(.rd-measuring-tv) .rd-overview {
+        --rd-metric-font:24px;
+        --rd-label-font:16px;
+    }
+}
+@media (min-height:2160px) {
+    .raiden.rd-tv:not(.rd-measuring-tv) .rd-overview {
+        --rd-metric-font:32px;
+        --rd-label-font:22px;
+    }
+}
 .rd-tv {--rd-row-space:clamp(.75px,.095vh,1.4px)}
 .rd-tv .rd-mission-group h2 {padding-block:2px}
 .rd-tv .rd-workspace {flex:none}

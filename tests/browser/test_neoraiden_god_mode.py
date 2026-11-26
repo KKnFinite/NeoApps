@@ -47,6 +47,31 @@ class GodModeBrowser(unittest.TestCase):
         expect(overview.locator("tbody th")).to_have_text(["1st", "2nd", "Openings"])
         expect(overview.locator("tr[data-openings] td")).to_have_text(["2", "3", "", ""])
         expect(overview.locator("[data-performance] dd")).to_have_text(["0.0", "0.0", "9.0", "9.0"])
+        metrics = overview.evaluate("""el => {
+            const ctx = document.createElement('canvas').getContext('2d', {willReadFrequently: true});
+            function luminance(color) {
+                ctx.fillStyle = color;
+                ctx.fillRect(0, 0, 1, 1);
+                const [r,g,b] = [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).map(value => {
+                    const c = value / 255;
+                    return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
+                });
+                return .2126 * r + .7152 * g + .0722 * b;
+            }
+            const background = luminance(getComputedStyle(el).backgroundColor);
+            const ordinary = el.querySelector('dt');
+            const muted = luminance(getComputedStyle(el).getPropertyValue('--muted').trim());
+            const contrast = l => (Math.max(l, background) + .05) / (Math.min(l, background) + .05);
+            return {
+                labelContrast: contrast(luminance(getComputedStyle(ordinary).color)),
+                mutedContrast: contrast(muted),
+                clipped: [...el.querySelectorAll('th,td,dt,dd,h2')].filter(cell =>
+                    cell.scrollWidth > cell.clientWidth + 1).map(cell => cell.textContent),
+            };
+        }""")
+        self.assertGreater(metrics["labelContrast"], metrics["mutedContrast"], metrics)
+        self.assertGreaterEqual(metrics["labelContrast"], 4.5, metrics)
+        self.assertEqual(metrics["clipped"], [], metrics)
         self.assertAlmostEqual(shift.bounding_box()["y"], ramp.bounding_box()["y"], delta=1)
         self.assertLess(shift.bounding_box()["x"], ramp.bounding_box()["x"])
         misaligned = overview.evaluate("""el => {
@@ -74,6 +99,7 @@ class GodModeBrowser(unittest.TestCase):
             return misaligned;
         }""")
         self.assertEqual(misaligned, [])
+        return metrics
 
     def check_full_board(self, page, width, height, *, tv=False):
         page.evaluate("() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))")
@@ -93,6 +119,7 @@ class GodModeBrowser(unittest.TestCase):
                 columnWidths: boxes.map(box => [box.querySelector('table').getBoundingClientRect().width, box.clientWidth]),
                 fitsColumns: boxes.every(box => box.querySelector('table').getBoundingClientRect().width <= box.clientWidth + 1),
                 fitsAll: rows.every(row => row.getBoundingClientRect().bottom <= innerHeight + 1),
+                lastMissionBottom: Math.max(...rows.map(row => row.getBoundingClientRect().bottom)),
                 noClipping: fields.every(cell => {
                     const rect = cell.getBoundingClientRect();
                     return rect.width > 0 && rect.right <= bounds.right + 1 && cell.scrollWidth <= cell.clientWidth + 1;
@@ -112,9 +139,9 @@ class GodModeBrowser(unittest.TestCase):
                 }),
                 fonts: [...new Set(values.map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
                 cellPadding: parseFloat(getComputedStyle(fields[0]).paddingInlineStart),
-                overviewFonts: [...new Set([...document.querySelectorAll('.rd-overview :is(tbody th,tbody td,dd)')]
+                overviewFonts: [...new Set([...document.querySelectorAll('.rd-overview :is(tbody td,dd)')]
                     .map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
-                overviewLabels: [...new Set([...document.querySelectorAll('.rd-overview :is(thead th,dt,.rd-performance h2)')]
+                overviewLabels: [...new Set([...document.querySelectorAll('.rd-overview :is(thead th,tbody th,dt,.rd-performance h2)')]
                     .map(cell => parseFloat(getComputedStyle(cell).fontSize)))],
                 overviewHeight: document.querySelector('.rd-overview').getBoundingClientRect().height,
                 toolbarSpread: Math.max(...verticalCenters) - Math.min(...verticalCenters),
@@ -131,7 +158,9 @@ class GodModeBrowser(unittest.TestCase):
         self.assertGreaterEqual(state["fonts"][0], 10, state)
         self.assertLessEqual(state["fonts"][0], 24 if tv else 12, state)
         self.assertGreaterEqual(state["cellPadding"], 1.5, state)
-        self.assertEqual(len(state["overviewFonts"]), 1, state)
+        expected = (32, 22) if tv and height >= 2160 else (24, 16) if tv and height >= 1080 else (18, 14)
+        self.assertEqual(state["overviewFonts"], [expected[0]], state)
+        self.assertEqual(state["overviewLabels"], [expected[1]], state)
         self.assertLessEqual(state["toolbarSpread"], 2, state)
         self.assertEqual(state["scrollboxes"], 0, state)
         self.assertLessEqual(state["width"], width + 1, state)
@@ -206,12 +235,16 @@ class GodModeBrowser(unittest.TestCase):
                     page.set_viewport_size({"width":width, "height":844})
                     for theme in ("dark", "light"):
                         self.set_theme(page, theme)
-                        self.check_overview(page)
+                        overview_metrics = self.check_overview(page)
                         mobile_metrics[f"{width}-{theme}"] = page.locator(".rd-overview").evaluate("""el => ({
                             overviewHeight: el.getBoundingClientRect().height,
                             overviewFont: parseFloat(getComputedStyle(el.querySelector('dd')).fontSize),
                             overviewLabel: parseFloat(getComputedStyle(el.querySelector('dt')).fontSize)
                         })""")
+                        metrics = mobile_metrics[f"{width}-{theme}"]
+                        metrics.update(overview_metrics)
+                        self.assertEqual((metrics["overviewFont"], metrics["overviewLabel"]), (16, 13), metrics)
+                        page.locator(".rd-overview").screenshot(path=output/f"overview-mobile-{engine}-{width}-{theme}.png")
                         for direction, flight, count in (("Arrivals", "UPS0403", 29), ("Departures", "FX101", 31)):
                             page.get_by_role("button", name=direction, exact=True).click()
                             expect(page.locator("[data-mission]:visible")).to_have_count(count)
@@ -281,13 +314,14 @@ class GodModeBrowser(unittest.TestCase):
                             expect(page.locator(".operational-node-identity .node-word")).to_have_css("color", RAIDEN_BLUE)
                         for theme in ("dark", "light"):
                             self.set_theme(page, theme)
-                            self.check_overview(page)
+                            overview_metrics = self.check_overview(page)
                             self.check_outline(page.locator("#rd-arrivals"))
                             self.check_outline(page.locator("#rd-departures"))
                             self.check_pulse(page, page.locator('[data-deice-state="deicing"]'))
                             expect(page.locator('[data-deice-state="pretreated"] .rd-deice-short')).to_have_text("Pretreated 23:55")
-                            stats.append([mode, width, height, theme, self.check_full_board(page, width, height, tv=mode == "tv")])
                             page.screenshot(path=output/f"{mode}-{engine}-{height}-{theme}.png")
+                            geometry = self.check_full_board(page, width, height, tv=mode == "tv")
+                            stats.append([mode, width, height, theme, {**geometry, **overview_metrics}])
                         if mode == "tv":
                             page.keyboard.press("Escape")
                             page.wait_for_function("document.fullscreenElement === null")
